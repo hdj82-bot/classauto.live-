@@ -9,9 +9,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-import deepl
-from google.cloud import translate_v2 as google_translate
-
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -65,14 +62,7 @@ def translate_text(
     target_lang: str,
     source_lang: str = "ko",
 ) -> TranslationResult:
-    """텍스트를 번역한다. DeepL 우선, 미지원 시 Google Translate 폴백.
-
-    Parameters
-    ----------
-    text : 번역할 원문
-    target_lang : 타겟 언어 (ISO 639-1 소문자: en, vi, zh, ja ...)
-    source_lang : 소스 언어 (기본 ko)
-    """
+    """텍스트를 번역한다. DeepL 우선, 미지원 시 Google Translate 폴백."""
     if not text.strip():
         return TranslationResult(text="", source_lang=source_lang, target_lang=target_lang, provider="none")
 
@@ -113,6 +103,8 @@ def translate_batch(
 
 def _translate_deepl(text: str, target_lang: str, source_lang: str) -> TranslationResult:
     """DeepL API 단건 번역."""
+    import deepl
+
     translator = deepl.Translator(settings.deepl_api_key)
     deepl_target = DEEPL_TARGET_LANGUAGES[target_lang]
     deepl_source = source_lang.upper()
@@ -136,6 +128,8 @@ def _translate_deepl_batch(
     texts: list[str], target_lang: str, source_lang: str
 ) -> list[TranslationResult]:
     """DeepL API 배치 번역."""
+    import deepl
+
     translator = deepl.Translator(settings.deepl_api_key)
     deepl_target = DEEPL_TARGET_LANGUAGES[target_lang]
     deepl_source = source_lang.upper()
@@ -164,6 +158,8 @@ def _translate_deepl_batch(
 
 def _translate_google(text: str, target_lang: str, source_lang: str) -> TranslationResult:
     """Google Cloud Translation API v2 단건 번역."""
+    from google.cloud import translate_v2 as google_translate
+
     client = google_translate.Client()
 
     result = client.translate(
