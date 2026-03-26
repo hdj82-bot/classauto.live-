@@ -61,11 +61,7 @@ async def google_login(
 
 # ── 2. Google OAuth 콜백 ──────────────────────────────────────────────────────
 
-@router.get(
-    "/google/callback",
-    summary="Google OAuth 콜백",
-    response_model=TokenResponse | NeedsProfileResponse,
-)
+@router.get("/google/callback", summary="Google OAuth 콜백")
 async def google_callback(
     code: str = Query(...),
     state: str = Query(...),
@@ -74,24 +70,19 @@ async def google_callback(
     """
     Google에서 Authorization Code와 state를 받아 처리합니다.
 
-    - **기존 유저**: Access/Refresh Token 즉시 발급
-    - **신규 유저**: `needs_profile: true` + temp_token 반환
-      → 프론트엔드에서 추가 정보 입력 후 `/api/auth/complete-profile` 호출
+    - **기존 유저**: 프론트엔드 `/auth/callback?access_token=...&refresh_token=...` 로 리다이렉트
+    - **신규 유저**: 프론트엔드 `/auth/complete-profile?temp_token=...&email=...&name=...&role=...` 로 리다이렉트
     """
+    frontend = settings.FRONTEND_URL
+
     role_str = await pop_oauth_state(state)
     if not role_str:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="유효하지 않거나 만료된 state입니다. 다시 로그인해주세요.",
-        )
+        return RedirectResponse(f"{frontend}/auth/login?error=invalid_state")
 
     try:
         userinfo = await exchange_google_code(code)
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Google 인증 서버와의 통신에 실패했습니다.",
-        )
+        return RedirectResponse(f"{frontend}/auth/login?error=google_failed")
 
     google_sub: str = userinfo["id"]
     email: str = userinfo["email"]
@@ -99,16 +90,22 @@ async def google_callback(
 
     existing_user = await get_user_by_google_sub(db, google_sub)
     if existing_user:
-        return await issue_tokens(existing_user)
+        tokens = await issue_tokens(existing_user)
+        params = urlencode({
+            "access_token": tokens.access_token,
+            "refresh_token": tokens.refresh_token,
+        })
+        return RedirectResponse(f"{frontend}/auth/callback?{params}")
 
     # 신규 유저: 추가 정보 입력 필요
     temp_token = create_temp_token(google_sub, email, name, role_str)
-    return NeedsProfileResponse(
-        temp_token=temp_token,
-        email=email,
-        name=name,
-        role=role_str,
-    )
+    params = urlencode({
+        "temp_token": temp_token,
+        "email": email,
+        "name": name,
+        "role": role_str,
+    })
+    return RedirectResponse(f"{frontend}/auth/complete-profile?{params}")
 
 
 # ── 3. 프로필 완성 (신규 유저 전용) ──────────────────────────────────────────
