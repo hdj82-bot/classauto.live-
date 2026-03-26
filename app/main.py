@@ -4,11 +4,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.qa import router as qa_router
 from app.api.routes import router
 from app.database import Base, engine
 
 # 모든 모델 import → create_all 시 테이블 생성 보장
 from app.models.embedding import SlideEmbedding  # noqa: F401
+from app.models.qa import QALog  # noqa: F401
 from app.models.video import Script, Slide, Video  # noqa: F401
 
 
@@ -26,6 +28,7 @@ app = FastAPI(
 )
 
 app.include_router(router)
+app.include_router(qa_router)
 
 
 @app.get("/health")
