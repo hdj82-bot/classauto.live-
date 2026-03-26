@@ -1,60 +1,69 @@
-"""S3 파일 업로드 서비스."""
+"""IFL HeyGen — S3 업로드 서비스."""
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+import time
+import uuid
 
 import boto3
+import httpx
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 
-def upload_to_s3(
-    file_path: str | None = None,
-    file_bytes: bytes | None = None,
-    s3_key: str = "",
-    content_type: str = "video/mp4",
-) -> str:
-    """파일을 S3에 업로드하고 URL을 반환한다.
-
-    Parameters
-    ----------
-    file_path : 로컬 파일 경로 (file_bytes와 택 1)
-    file_bytes : 파일 바이트 데이터
-    s3_key : S3 오브젝트 키
-    content_type : MIME 타입
-
-    Returns
-    -------
-    str : S3 URL
-    """
-    s3 = boto3.client(
+def get_s3_client():
+    return boto3.client(
         "s3",
         aws_access_key_id=settings.aws_access_key_id,
         aws_secret_access_key=settings.aws_secret_access_key,
         region_name=settings.aws_region,
     )
 
-    if file_bytes:
-        s3.put_object(
-            Bucket=settings.s3_bucket,
-            Key=s3_key,
-            Body=file_bytes,
-            ContentType=content_type,
-        )
-    elif file_path:
-        s3.upload_file(
-            file_path,
-            settings.s3_bucket,
-            s3_key,
-            ExtraArgs={"ContentType": content_type},
-        )
-    else:
-        raise ValueError("file_path 또는 file_bytes 중 하나는 필수입니다.")
 
-    url = f"https://{settings.s3_bucket}.s3.{settings.aws_region}.amazonaws.com/{s3_key}"
-    logger.info("S3 업로드 완료: %s", url)
-    return url
+async def upload_from_url(source_url: str, lecture_id: str, slide_number: int | None = None) -> tuple[str, float]:
+    """원격 URL의 비디오를 다운로드하여 S3에 업로드한다.
+
+    Returns:
+        (s3_url, elapsed_seconds)
+    """
+    # 다운로드
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        resp = await client.get(source_url)
+        resp.raise_for_status()
+    video_bytes = resp.content
+
+    # S3 키 생성
+    suffix = f"_slide{slide_number}" if slide_number else ""
+    filename = f"{lecture_id}{suffix}_{uuid.uuid4().hex[:8]}.mp4"
+    s3_key = f"{settings.s3_prefix}{lecture_id}/{filename}"
+
+    # 업로드
+    start = time.monotonic()
+    s3 = get_s3_client()
+    s3.put_object(
+        Bucket=settings.s3_bucket,
+        Key=s3_key,
+        Body=video_bytes,
+        ContentType="video/mp4",
+    )
+    elapsed = time.monotonic() - start
+
+    s3_url = f"https://{settings.s3_bucket}.s3.{settings.aws_region}.amazonaws.com/{s3_key}"
+    logger.info("S3 업로드 완료: %s (%.1f초)", s3_url, elapsed)
+    return s3_url, elapsed
+
+
+def upload_audio_bytes(audio_bytes: bytes, render_id: str, ext: str = "mp3") -> str:
+    """TTS 오디오 바이트를 S3에 업로드하고 URL을 반환한다."""
+    s3_key = f"{settings.s3_prefix}audio/{render_id}.{ext}"
+    s3 = get_s3_client()
+    s3.put_object(
+        Bucket=settings.s3_bucket,
+        Key=s3_key,
+        Body=audio_bytes,
+        ContentType=f"audio/{ext}",
+    )
+    return f"https://{settings.s3_bucket}.s3.{settings.aws_region}.amazonaws.com/{s3_key}"

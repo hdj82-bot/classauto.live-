@@ -52,7 +52,7 @@ services:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
-  # ── Pipeline 마이크로서비스 (feat/pipeline) ──────────────────────────────────
+  # ── Pipeline / HeyGen 마이크로서비스 (feat/pipeline + feat/heygen) ────────────
   pipeline:
     build:
       context: .

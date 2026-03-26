@@ -1,100 +1,160 @@
-"""HeyGen 웹훅 수신 API."""
+"""IFL HeyGen — 웹훅 수신 엔드포인트.
+
+POST /api/webhooks/heygen
+
+처리 흐름:
+1. HeyGen 웹훅 시그니처 검증
+2. video_id로 VideoRender 조회
+3. completed → S3 업로드 → CostLog → Video.status=READY → 교수자 알림
+4. failed → 에러 기록 → 교수자 알림
+"""
 
 from __future__ import annotations
 
-import json
+import hashlib
+import hmac
 import logging
+from datetime import datetime, timezone
 
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.models.session_log import CostLog
-from app.models.video import Video, VideoStatus
-from app.services.notification import notify_video_ready
-from app.services.s3 import upload_to_s3
+from app.models.video import CostLog, VideoRender
+from app.services import s3
+from app.services.notification import notify_instructor
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
+webhook_router = APIRouter(tags=["webhooks"])
 
 
-# --------------------------------------------------------------------------
-# 스키마
-# --------------------------------------------------------------------------
+def _verify_signature(payload: bytes, signature: str | None) -> bool:
+    """HeyGen 웹훅 HMAC 시그니처를 검증한다."""
+    if not settings.heygen_webhook_secret:
+        return True  # 시크릿 미설정 시 검증 스킵 (개발 환경)
+    if not signature:
+        return False
+    expected = hmac.new(
+        settings.heygen_webhook_secret.encode(),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
 
-class HeyGenWebhookPayload(BaseModel):
-    event_type: str               # "avatar_video.success", "avatar_video.fail"
-    event_data: dict              # {"video_id": "...", "url": "...", "status": "..."}
+
+@webhook_router.post("/api/webhooks/heygen")
+async def heygen_webhook(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    x_heygen_signature: str | None = Header(default=None),
+):
+    """HeyGen 비디오 생성 완료/실패 웹훅을 처리한다."""
+    raw_body = await request.body()
+
+    # 시그니처 검증
+    if not _verify_signature(raw_body, x_heygen_signature):
+        logger.warning("HeyGen 웹훅 시그니처 검증 실패")
+        raise HTTPException(status_code=401, detail="Invalid signature")
+
+    body = await request.json()
+    event_type = body.get("event_type", "")
+    event_data = body.get("event_data", {})
+    video_id = event_data.get("video_id")
+
+    if not video_id:
+        logger.warning("웹훅에 video_id 없음: %s", body)
+        return {"status": "ignored", "reason": "no video_id"}
+
+    # VideoRender 조회
+    stmt = select(VideoRender).where(VideoRender.heygen_job_id == video_id)
+    result = await db.execute(stmt)
+    render = result.scalar_one_or_none()
+
+    if not render:
+        logger.warning("video_id에 해당하는 렌더 없음: %s", video_id)
+        return {"status": "ignored", "reason": "unknown video_id"}
+
+    # 이미 완료된 작업은 스킵
+    if render.status in ("READY", "FAILED"):
+        logger.info("이미 처리된 렌더: render_id=%s, status=%s", render.id, render.status)
+        return {"status": "already_processed"}
+
+    heygen_status = event_data.get("status", "")
+
+    if heygen_status == "completed" or event_type == "avatar_video.success":
+        await _handle_completed(db, render, event_data)
+    elif heygen_status == "failed" or event_type == "avatar_video.fail":
+        await _handle_failed(db, render, event_data)
+    else:
+        logger.info("무시된 웹훅 이벤트: event_type=%s, status=%s", event_type, heygen_status)
+        return {"status": "ignored", "reason": f"unhandled event: {event_type}"}
+
+    await db.commit()
+    return {"status": "ok", "render_id": str(render.id)}
 
 
-# --------------------------------------------------------------------------
-# POST /api/webhooks/heygen — HeyGen 렌더링 완료 웹훅
-# --------------------------------------------------------------------------
+async def _handle_completed(db: AsyncSession, render: VideoRender, event_data: dict) -> None:
+    """렌더링 완료: S3 업로드 → CostLog → 상태 READY → 교수자 알림."""
+    heygen_video_url = event_data.get("url")
+    if not heygen_video_url:
+        logger.error("completed 웹훅인데 url 없음: render_id=%s", render.id)
+        render.status = "FAILED"
+        render.error_message = "웹훅에 video URL 없음"
+        return
 
-@router.post("/heygen")
-async def heygen_webhook(payload: HeyGenWebhookPayload, db: Session = Depends(get_db)):
-    """HeyGen 영상 렌더링 완료 웹훅을 수신한다.
+    render.heygen_video_url = heygen_video_url
+    render.status = "UPLOADING"
+    await db.flush()
 
-    처리 순서:
-    1. Video 조회
-    2. 영상 다운로드 → S3 업로드
-    3. CostLog 기록
-    4. Video.status = READY
-    5. 교수자 알림
-    """
-    heygen_video_id = payload.event_data.get("video_id", "")
-    logger.info("[HeyGen 웹훅] event=%s, heygen_video_id=%s", payload.event_type, heygen_video_id)
-
-    # Video 조회
-    video = db.query(Video).filter(Video.heygen_job_id == heygen_video_id).first()
-    if not video:
-        raise HTTPException(status_code=404, detail=f"heygen_job_id={heygen_video_id}에 해당하는 Video 없음")
-
-    # 실패 이벤트 처리
-    if payload.event_type != "avatar_video.success":
-        error_msg = payload.event_data.get("error", payload.event_type)
-        video.status = VideoStatus.FAILED
-        video.error_message = f"HeyGen 렌더링 실패: {error_msg}"
-        db.commit()
-        logger.error("[HeyGen] 렌더링 실패: video_id=%d, error=%s", video.id, error_msg)
-        return {"status": "fail_recorded"}
-
-    # 1. 영상 다운로드
-    video_url = payload.event_data.get("url", "")
-    if not video_url:
-        raise HTTPException(status_code=400, detail="영상 URL이 웹훅 페이로드에 없습니다.")
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.get(video_url)
-        resp.raise_for_status()
-        video_bytes = resp.content
-
-    # 2. S3 업로드
-    s3_key = f"videos/{video.task_id}/v{video.version}/output.mp4"
-    s3_url = upload_to_s3(file_bytes=video_bytes, s3_key=s3_key, content_type="video/mp4")
-
-    # 3. CostLog 기록
-    cost_amount = payload.event_data.get("cost", 0.0)
-    cost_log = CostLog(
-        video_id=video.id,
-        service="heygen",
-        operation="render_video",
-        amount_usd=float(cost_amount),
-        detail=json.dumps(payload.event_data, ensure_ascii=False),
+    # S3 업로드
+    s3_url, upload_duration = await s3.upload_from_url(
+        heygen_video_url, str(render.lecture_id), render.slide_number
     )
-    db.add(cost_log)
+    render.s3_video_url = s3_url
+    render.status = "READY"
+    render.completed_at = datetime.now(timezone.utc)
 
-    # 4. Video 상태 업데이트
-    video.status = VideoStatus.READY
-    video.s3_url = s3_url
-    db.commit()
+    # 비용 로그 (async session이므로 직접 추가)
+    db.add(CostLog(
+        video_render_id=render.id,
+        service="heygen",
+        operation="video_render",
+        duration_seconds=event_data.get("duration"),
+        metadata_json=str({"video_url": heygen_video_url}),
+    ))
+    db.add(CostLog(
+        video_render_id=render.id,
+        service="s3",
+        operation="upload_video",
+        duration_seconds=upload_duration,
+    ))
 
-    # 5. 교수자 알림
-    notify_video_ready(video.task_id, video.filename, s3_url)
+    # 교수자 알림
+    await notify_instructor(
+        instructor_id=render.instructor_id,
+        lecture_id=render.lecture_id,
+        status="READY",
+        video_url=s3_url,
+    )
 
-    logger.info("[HeyGen] 처리 완료: video_id=%d → READY, s3=%s", video.id, s3_url)
-    return {"status": "ok", "s3_url": s3_url}
+    logger.info("웹훅 완료 처리: render_id=%s, s3_url=%s", render.id, s3_url)
+
+
+async def _handle_failed(db: AsyncSession, render: VideoRender, event_data: dict) -> None:
+    """렌더링 실패 처리."""
+    error_msg = event_data.get("error", "HeyGen 렌더링 실패 (웹훅)")
+    render.status = "FAILED"
+    render.error_message = error_msg
+    render.completed_at = datetime.now(timezone.utc)
+
+    await notify_instructor(
+        instructor_id=render.instructor_id,
+        lecture_id=render.lecture_id,
+        status="FAILED",
+        error_message=error_msg,
+    )
+
+    logger.error("웹훅 실패 처리: render_id=%s, error=%s", render.id, error_msg)
