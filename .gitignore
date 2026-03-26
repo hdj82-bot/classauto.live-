@@ -13,6 +13,9 @@ venv/
 dist/
 .mypy_cache/
 
+# Pipeline 업로드 폴더
+uploads/
+
 # Node.js / TypeScript
 node_modules/
 .next/
