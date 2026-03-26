@@ -23,6 +23,15 @@ class Settings(BaseSettings):
     # DeepL
     deepl_api_key: str = ""
 
+    # HeyGen
+    heygen_api_key: str = ""
+
+    # AWS S3
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "ap-northeast-2"
+    s3_bucket: str = "ifl-platform-videos"
+
     # File storage
     upload_dir: Path = Path("uploads")
     max_file_size_mb: int = 50

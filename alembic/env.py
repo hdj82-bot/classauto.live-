@@ -8,7 +8,8 @@ from app.database import Base
 from app.models.embedding import SlideEmbedding  # noqa: F401
 from app.models.qa import QALog  # noqa: F401
 from app.models.translation import ScriptTranslation  # noqa: F401
-from app.models.video import Video, Slide, Script  # noqa: F401
+from app.models.session_log import SessionLog, CostLog  # noqa: F401
+from app.models.video import Video, Slide, Script, VideoVersion  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

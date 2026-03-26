@@ -26,3 +26,14 @@ def notify_script_ready(task_id: str, video_filename: str, total_slides: int) ->
         video_filename,
         total_slides,
     )
+
+
+def notify_video_ready(task_id: str, video_filename: str, s3_url: str) -> None:
+    """교수자에게 '영상 준비 완료' 알림을 발송한다."""
+    # TODO: 실제 알림 채널 연동
+    logger.info(
+        "[알림] 영상 준비 완료 — task_id=%s, 파일=%s, url=%s",
+        task_id,
+        video_filename,
+        s3_url,
+    )
