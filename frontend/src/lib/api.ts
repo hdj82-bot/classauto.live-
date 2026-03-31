@@ -44,6 +44,22 @@ api.interceptors.response.use(
   }
 );
 
+// 네트워크/서버 에러 시 커스텀 이벤트 발행 → ToastProvider가 수신
+api.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (typeof window !== "undefined") {
+      const msg = !error.response
+        ? "서버에 연결할 수 없습니다."
+        : error.response.status >= 500
+          ? "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+          : null;
+      if (msg) window.dispatchEvent(new CustomEvent("api-error", { detail: msg }));
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const authApi = {
   completeProfile: (body: {
     temp_token: string;

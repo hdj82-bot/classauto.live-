@@ -154,7 +154,7 @@ export default function LectureViewerPage() {
           </div>
 
           {/* Q&A 패널 */}
-          <div className="bg-gray-800 rounded-xl flex flex-col h-[600px]">
+          <div className="bg-gray-800 rounded-xl flex flex-col h-[400px] lg:h-[600px]">
             <div className="px-4 py-3 border-b border-gray-700 text-sm font-semibold">Q&A</div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {qaMessages.length === 0 && (

@@ -120,7 +120,7 @@ export default function AssessmentPage() {
 
                 {/* 객관식 */}
                 {q.options && q.options.length > 0 ? (
-                  <div className="space-y-2 ml-10">
+                  <div className="space-y-2 ml-0 sm:ml-10">
                     {q.options.map((opt, oi) => {
                       const selected = answers[q.id] === String(oi);
                       const resultItem = results?.find((r) => r.question_id === q.id);
@@ -146,7 +146,7 @@ export default function AssessmentPage() {
                     })}
                   </div>
                 ) : (
-                  <div className="ml-10">
+                  <div className="ml-0 sm:ml-10">
                     <input
                       type="text"
                       value={answers[q.id] || ""}
