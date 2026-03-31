@@ -66,8 +66,15 @@ class FakeRedis:
         if ex:
             self._ttls[key] = ex
 
+    async def setex(self, key: str, ttl: int, value: str) -> None:
+        self._store[key] = value
+        self._ttls[key] = ttl
+
     async def get(self, key: str) -> str | None:
         return self._store.get(key)
+
+    async def getdel(self, key: str) -> str | None:
+        return self._store.pop(key, None)
 
     async def delete(self, key: str) -> int:
         return 1 if self._store.pop(key, None) is not None else 0
@@ -162,7 +169,7 @@ async def course(db: AsyncSession, professor: User) -> Course:
         instructor_id=professor.id,
         title="통합테스트 강좌",
         description="테스트용 강좌",
-        is_active=True,
+        is_published=True,
     )
     db.add(c)
     await db.flush()
