@@ -112,3 +112,25 @@ async def upload_ppt(
         "s3_url": s3_url,
         "message": "S3 업로드 완료, 파이프라인이 시작되었습니다.",
     }
+
+
+@router.get("/avatars", summary="HeyGen 아바타 목록 조회")
+async def list_avatars(user: User = Depends(require_professor)):
+    from app.services.pipeline.heygen import list_avatars as heygen_list_avatars, HeyGenError
+
+    try:
+        avatars = await heygen_list_avatars()
+        return {"avatars": avatars, "total": len(avatars)}
+    except HeyGenError as e:
+        raise HTTPException(status_code=502, detail=f"HeyGen API 오류: {e}")
+
+
+@router.get("/quota", summary="HeyGen 잔여 크레딧 조회")
+async def get_quota(user: User = Depends(require_professor)):
+    from app.services.pipeline.heygen import get_remaining_quota, HeyGenError
+
+    try:
+        quota = await get_remaining_quota()
+        return quota
+    except HeyGenError as e:
+        raise HTTPException(status_code=502, detail=f"HeyGen API 오류: {e}")
