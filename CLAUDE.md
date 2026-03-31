@@ -89,13 +89,42 @@ docker-compose exec backend alembic upgrade head
 
 ## 프로덕션 배포
 
+### 신규 서버 설정 (Ubuntu)
 ```bash
-cp .env.production .env
-# 모든 CHANGE_ME_ 값 변경!
-DOMAIN=example.com EMAIL=admin@example.com ./scripts/init-ssl.sh
-docker compose -f docker-compose.prod.yml up -d
-docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+# 1. 서버 초기 설정 (Docker, 방화벽, 프로젝트 클론)
+sudo ./scripts/setup-server.sh
+
+# 2. 환경변수 설정
+vi /opt/ifl-platform/.env   # CHANGE_ME 값 모두 수정
+
+# 3. DNS 설정: A 레코드로 도메인 → 서버 IP
+
+# 4. 배포
+cd /opt/ifl-platform
+DOMAIN=your-domain.com EMAIL=admin@your-domain.com ./scripts/deploy.sh init
 ```
+
+### 배포 명령어
+```bash
+./scripts/deploy.sh init       # 최초 배포 (SSL 포함)
+./scripts/deploy.sh update     # 업데이트 배포
+./scripts/deploy.sh rollback   # 직전 버전 롤백
+./scripts/deploy.sh status     # 서비스 상태 확인
+./scripts/deploy.sh logs backend  # 로그 조회
+```
+
+### DB 백업/복원
+```bash
+./scripts/backup.sh backup              # 백업 생성
+./scripts/backup.sh list                # 백업 목록
+./scripts/backup.sh restore backup.sql  # 복원
+```
+
+### GitHub Actions CD
+main 브랜치 push 시 자동 배포. GitHub Secrets에 설정 필요:
+- `DEPLOY_HOST`: 서버 IP
+- `DEPLOY_USER`: SSH 사용자
+- `DEPLOY_SSH_KEY`: SSH 개인키
 
 ---
 
@@ -103,7 +132,8 @@ docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
 
 ```bash
 cd backend
-pip install -r requirements.txt -r requirements-test.txt
+pip install -r requirements.txt
+pip install pytest pytest-asyncio pytest-cov aiosqlite httpx python-pptx
 pytest --tb=short --cov=app -q
 ```
 
