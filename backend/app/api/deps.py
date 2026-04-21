@@ -68,3 +68,12 @@ async def require_student(user: User = Depends(get_current_user)) -> User:
             detail="학습자 권한이 필요합니다.",
         )
     return user
+
+
+async def require_admin(user: User = Depends(get_current_user)) -> User:
+    if user.role.value != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자 권한이 필요합니다.",
+        )
+    return user

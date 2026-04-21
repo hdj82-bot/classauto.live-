@@ -11,6 +11,7 @@ from app.db.base import Base
 class UserRole(str, enum.Enum):
     professor = "professor"
     student = "student"
+    admin = "admin"
 
 
 class User(Base):

@@ -14,7 +14,7 @@ interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: "professor" | "student";
+  role: "professor" | "student" | "admin";
 }
 
 interface AuthContextValue {
@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: payload.sub as string,
           email: "",
           name: "",
-          role: payload.role as "professor" | "student",
+          role: payload.role as "professor" | "student" | "admin",
         });
       }
     }
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         id: payload.sub as string,
         email: "",
         name: "",
-        role: payload.role as "professor" | "student",
+        role: payload.role as "professor" | "student" | "admin",
       });
     }
   }, []);

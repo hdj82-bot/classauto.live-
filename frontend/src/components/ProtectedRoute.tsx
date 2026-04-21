@@ -7,7 +7,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 interface Props {
   children: React.ReactNode;
-  allowedRoles?: ("professor" | "student")[];
+  allowedRoles?: ("professor" | "student" | "admin")[];
 }
 
 export default function ProtectedRoute({ children, allowedRoles }: Props) {

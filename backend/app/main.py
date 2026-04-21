@@ -28,6 +28,7 @@ from app.api.v1.subscription import router as subscription_router
 from app.api.v1.qa import router as qa_router
 from app.api.v1.translate import router as translate_router
 from app.api.v1.payment import router as payment_router
+from app.api.v1.admin import router as admin_router
 
 
 @asynccontextmanager
@@ -88,6 +89,7 @@ app.include_router(subscription_router)
 app.include_router(qa_router)
 app.include_router(translate_router)
 app.include_router(payment_router)
+app.include_router(admin_router)
 
 
 @app.get("/metrics", include_in_schema=False)
