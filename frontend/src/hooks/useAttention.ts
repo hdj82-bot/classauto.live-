@@ -3,13 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 
-interface UseAttentionOptions {
-  sessionId: string;
-  heartbeatInterval?: number;
-  noResponseTimeout?: number;
+// 기본값 (API 호출 실패 시 폴백)
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
+const DEFAULT_NO_RESPONSE_TIMEOUT_MS = 30_000;
+
+interface AttentionConfig {
+  heartbeat_interval_ms: number;
+  no_response_timeout_ms: number;
 }
 
-export function useAttention({ sessionId, heartbeatInterval = 10_000, noResponseTimeout = 30_000 }: UseAttentionOptions) {
+interface UseAttentionOptions {
+  sessionId: string;
+}
+
+export function useAttention({ sessionId }: UseAttentionOptions) {
   const [warningLevel, setWarningLevel] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -17,6 +24,26 @@ export function useAttention({ sessionId, heartbeatInterval = 10_000, noResponse
   const lastResponseRef = useRef(Date.now());
   const heartbeatTimer = useRef<ReturnType<typeof setInterval>>(undefined);
   const noResponseTimer = useRef<ReturnType<typeof setInterval>>(undefined);
+  const configRef = useRef<AttentionConfig>({
+    heartbeat_interval_ms: DEFAULT_HEARTBEAT_INTERVAL_MS,
+    no_response_timeout_ms: DEFAULT_NO_RESPONSE_TIMEOUT_MS,
+  });
+  const configLoaded = useRef(false);
+
+  // 서버에서 설정 로드 (한 번만)
+  useEffect(() => {
+    if (configLoaded.current) return;
+    configLoaded.current = true;
+
+    api
+      .get<AttentionConfig>("/api/v1/attention/config")
+      .then(({ data }) => {
+        configRef.current = data;
+      })
+      .catch(() => {
+        // 실패 시 기본값 유지
+      });
+  }, []);
 
   const setProgress = useCallback((seconds: number) => {
     progressRef.current = seconds;
@@ -34,17 +61,17 @@ export function useAttention({ sessionId, heartbeatInterval = 10_000, noResponse
           is_network_unstable: !navigator.onLine,
         });
       } catch { /* 네트워크 오류 무시 */ }
-    }, heartbeatInterval);
+    }, configRef.current.heartbeat_interval_ms);
 
     return () => clearInterval(heartbeatTimer.current);
-  }, [sessionId, heartbeatInterval, isPaused]);
+  }, [sessionId, isPaused]);
 
   // 무반응 감지
   useEffect(() => {
     noResponseTimer.current = setInterval(async () => {
       if (isPaused) return;
       const elapsed = Date.now() - lastResponseRef.current;
-      if (elapsed > noResponseTimeout) {
+      if (elapsed > configRef.current.no_response_timeout_ms) {
         try {
           const { data } = await api.post("/api/v1/attention/no-response", { session_id: sessionId });
           setWarningLevel(data.warning_level);
@@ -56,7 +83,7 @@ export function useAttention({ sessionId, heartbeatInterval = 10_000, noResponse
     }, 5_000);
 
     return () => clearInterval(noResponseTimer.current);
-  }, [sessionId, noResponseTimeout, isPaused]);
+  }, [sessionId, isPaused]);
 
   const resume = useCallback(async () => {
     try {

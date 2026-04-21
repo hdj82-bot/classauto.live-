@@ -68,7 +68,8 @@ async def _try_heygen_thumbnail(video_url: str) -> str | None:
                 resp = await client.head(url)
                 if resp.status_code == 200 and "image" in resp.headers.get("content-type", ""):
                     return url
-            except Exception:
+            except Exception as exc:
+                logger.debug("썸네일 URL 확인 실패: url=%s, error=%s", url, exc)
                 continue
 
     return None

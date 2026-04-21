@@ -52,8 +52,10 @@ def translate_batch(texts: list[str], target_lang: str, source_lang: str = "ko")
 
 def _translate_deepl(text: str, target_lang: str, source_lang: str) -> TranslationResult:
     import deepl
+    logger.info("DeepL 번역 요청: %s→%s, text_length=%d", source_lang, target_lang, len(text))
     translator = deepl.Translator(settings.DEEPL_API_KEY)
     result = translator.translate_text(text, source_lang=source_lang.upper(), target_lang=DEEPL_TARGET_LANGUAGES[target_lang])
+    logger.debug("DeepL 번역 완료: result_length=%d", len(result.text))
     return TranslationResult(text=result.text, source_lang=source_lang, target_lang=target_lang, provider="deepl")
 
 
@@ -66,6 +68,8 @@ def _translate_deepl_batch(texts: list[str], target_lang: str, source_lang: str)
 
 def _translate_google(text: str, target_lang: str, source_lang: str) -> TranslationResult:
     from google.cloud import translate_v2 as google_translate
+    logger.info("Google Translate 요청: %s→%s, text_length=%d", source_lang, target_lang, len(text))
     client = google_translate.Client()
     result = client.translate(text, target_language=target_lang, source_language=source_lang, format_="text")
+    logger.debug("Google Translate 완료: result_length=%d", len(result["translatedText"]))
     return TranslationResult(text=result["translatedText"], source_lang=source_lang, target_lang=target_lang, provider="google")

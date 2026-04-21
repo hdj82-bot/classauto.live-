@@ -91,14 +91,17 @@ async def create_video(
         "callback_url": settings.HEYGEN_CALLBACK_URL,
     }
 
+    logger.info("HeyGen 비디오 생성 요청: avatar=%s, callback_id=%s", avatar, callback_id)
     resp = await _request_with_retry("POST", url, json=payload)
 
     if resp.status_code != 200:
+        logger.error("HeyGen 비디오 생성 실패: status=%d, body=%s", resp.status_code, resp.text[:500])
         raise HeyGenError(f"HeyGen API 오류 [{resp.status_code}]: {resp.text}")
 
     data = resp.json().get("data", {})
     video_id = data.get("video_id")
     if not video_id:
+        logger.error("HeyGen 응답에 video_id 없음: %s", resp.text[:500])
         raise HeyGenError(f"HeyGen 응답에 video_id 없음: {resp.text}")
 
     logger.info("HeyGen 비디오 생성 요청 완료: video_id=%s", video_id)
@@ -116,11 +119,14 @@ async def get_video_status(video_id: str) -> dict:
     resp = await _request_with_retry("GET", url, params=params, timeout=30.0)
 
     if resp.status_code != 200:
+        logger.error("HeyGen 상태 조회 실패: video_id=%s, status=%d", video_id, resp.status_code)
         raise HeyGenError(f"HeyGen 상태 조회 오류 [{resp.status_code}]: {resp.text}")
 
     data = resp.json().get("data", {})
+    status = data.get("status", "unknown")
+    logger.debug("HeyGen 상태 조회: video_id=%s, status=%s", video_id, status)
     return {
-        "status": data.get("status", "unknown"),
+        "status": status,
         "video_url": data.get("video_url"),
         "duration": data.get("duration"),
         "error": data.get("error"),

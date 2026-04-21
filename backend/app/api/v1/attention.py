@@ -4,10 +4,20 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.services import session as session_svc
 
 router = APIRouter(prefix="/api/v1/attention", tags=["attention"])
+
+
+@router.get("/config", summary="집중도 모니터링 설정 조회")
+async def get_attention_config():
+    """클라이언트에 필요한 집중도 모니터링 설정값을 반환. 인증 불필요."""
+    return {
+        "heartbeat_interval_ms": settings.ATTENTION_HEARTBEAT_INTERVAL_SECONDS * 1000,
+        "no_response_timeout_ms": settings.ATTENTION_NO_RESPONSE_TIMEOUT_SECONDS * 1000,
+    }
 
 
 @router.post("/start", summary="집중도 추적 시작")

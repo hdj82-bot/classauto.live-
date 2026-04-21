@@ -10,16 +10,17 @@ class JSONFormatter(logging.Formatter):
     """프로덕션용 JSON 로그 포매터."""
 
     def format(self, record: logging.LogRecord) -> str:
+        from app.core.middleware import request_id_var
+
         log = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "msg": record.getMessage(),
+            "request_id": getattr(record, "request_id", None) or request_id_var.get("-"),
         }
         if record.exc_info and record.exc_info[1]:
             log["exc"] = self.formatException(record.exc_info)
-        if hasattr(record, "request_id"):
-            log["request_id"] = record.request_id
         # 한 줄 JSON
         import json
         return json.dumps(log, ensure_ascii=False)
@@ -27,14 +28,19 @@ class JSONFormatter(logging.Formatter):
 
 def setup_logging() -> None:
     """앱 시작 시 로깅 초기화."""
+    from app.core.middleware import RequestIDFilter
+
     is_prod = settings.ENVIRONMENT == "production"
     level = logging.INFO if is_prod else logging.DEBUG
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JSONFormatter() if is_prod else logging.Formatter(
-        "%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
+        "%(asctime)s %(levelname)-8s [%(name)s] [%(request_id)s] %(message)s",
         datefmt="%H:%M:%S",
     ))
+
+    # request_id 필터를 핸들러에 추가 — 모든 로그에 request_id 포함
+    handler.addFilter(RequestIDFilter())
 
     root = logging.getLogger()
     root.setLevel(level)

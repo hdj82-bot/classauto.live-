@@ -1,4 +1,5 @@
 """요청 로깅 + 메트릭 + Rate Limiting 미들웨어."""
+import contextvars
 import logging
 import time
 import uuid
@@ -9,25 +10,41 @@ from starlette.responses import JSONResponse, Response
 
 logger = logging.getLogger("ifl.access")
 
+# ── request_id contextvars (모든 로그에서 참조 가능) ─────────────────────────
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+
+
+class RequestIDFilter(logging.Filter):
+    """모든 로거에 request_id를 자동 주입하는 필터."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.request_id = request_id_var.get("-")
+        return True
+
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
+        rid = request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
+        token = request_id_var.set(rid)
+
         start = time.perf_counter()
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            elapsed_ms = (time.perf_counter() - start) * 1000
+            logger.info(
+                "%s %s %d %.1fms [%s]",
+                request.method,
+                request.url.path,
+                response.status_code if "response" in dir() else 500,
+                elapsed_ms,
+                rid,
+                extra={"request_id": rid},
+            )
+            request_id_var.reset(token)
 
-        elapsed_ms = (time.perf_counter() - start) * 1000
-        logger.info(
-            "%s %s %d %.1fms",
-            request.method,
-            request.url.path,
-            response.status_code,
-            elapsed_ms,
-            extra={"request_id": request_id},
-        )
-
-        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Request-ID"] = rid
         return response
 
 

@@ -49,6 +49,7 @@ async def synthesize(text: str, output_path: Path | None = None) -> TTSResult:
 
 async def _elevenlabs_synthesize(text: str) -> TTSResult:
     """ElevenLabs TTS API 호출 (exponential backoff 재시도 포함)."""
+    logger.info("ElevenLabs TTS 요청: text_length=%d, voice_id=%s", len(text), settings.ELEVENLABS_VOICE_ID)
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{settings.ELEVENLABS_VOICE_ID}"
     headers = {
         "xi-api-key": settings.ELEVENLABS_API_KEY,
@@ -99,6 +100,7 @@ async def _elevenlabs_synthesize(text: str) -> TTSResult:
 
 
 def _google_tts_synthesize(text: str) -> TTSResult:
+    logger.info("Google Cloud TTS 요청: text_length=%d, voice=%s", len(text), settings.GOOGLE_TTS_VOICE_NAME)
     if settings.GOOGLE_TTS_CREDENTIALS_JSON:
         credentials_info = json.loads(settings.GOOGLE_TTS_CREDENTIALS_JSON)
         client = texttospeech.TextToSpeechClient.from_service_account_info(credentials_info)
