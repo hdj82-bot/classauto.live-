@@ -1,0 +1,30 @@
+version: "3.9"
+
+# 통합 테스트용 Docker Compose — PostgreSQL 16 + pgvector
+# 사용법: docker-compose -f docker-compose.test.yml up -d
+#         pytest -m integration --tb=short
+
+services:
+  test_db:
+    image: pgvector/pgvector:pg16
+    container_name: ifl_test_db
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+      POSTGRES_DB: ifl_test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d ifl_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    command: >
+      postgres
+        -c shared_preload_libraries=''
+        -c max_connections=50
+        -c fsync=off
+        -c synchronous_commit=off
+        -c full_page_writes=off

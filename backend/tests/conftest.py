@@ -1,8 +1,10 @@
 """테스트 공통 픽스처.
 
-DB: SQLite in-memory (aiosqlite)
+DB: SQLite in-memory (aiosqlite) — 기본
+    PostgreSQL (asyncpg) — @pytest.mark.integration 전용
 Redis: 인메모리 dict mock
 """
+import os
 import uuid
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock
@@ -10,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import JSON
+from sqlalchemy import JSON, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -257,3 +259,79 @@ async def video_pending(db: AsyncSession, lecture: Lecture, professor: User) -> 
     db.add(script)
     await db.flush()
     return v
+
+
+# ── PostgreSQL (pgvector) 통합 테스트 픽스처 ────────────────────────────────────
+
+TEST_PG_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql+asyncpg://test_user:test_pass@localhost:5433/ifl_test",
+)
+
+
+@pytest_asyncio.fixture(scope="session")
+async def pg_engine():
+    """PostgreSQL + pgvector 엔진 (docker-compose.test.yml 필요)."""
+    _engine = create_async_engine(TEST_PG_URL, echo=False)
+    async with _engine.begin() as conn:
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    yield _engine
+    async with _engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await _engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def pg_db(pg_engine) -> AsyncGenerator[AsyncSession, None]:
+    """PostgreSQL 세션 (SAVEPOINT 기반 격리)."""
+    async with pg_engine.connect() as conn:
+        trans = await conn.begin()
+        session = AsyncSession(bind=conn, expire_on_commit=False)
+
+        @event.listens_for(session.sync_session, "after_transaction_end")
+        def restart_savepoint(session_sync, transaction):
+            if transaction.nested and not transaction._parent.nested:
+                session_sync.begin_nested()
+
+        await conn.begin_nested()
+        yield session
+
+        await session.close()
+        await trans.rollback()
+
+
+# ── 외부 API 테스트 자동 skip ────────────────────────────────────────────────────
+
+def _skip_if_missing(envvar: str, service_name: str):
+    """환경변수 미설정 시 skip하는 헬퍼."""
+    val = os.environ.get(envvar, "")
+    if not val:
+        pytest.skip(f"{service_name} 테스트: {envvar} 환경변수 미설정")
+    return val
+
+
+@pytest.fixture
+def heygen_api_key():
+    return _skip_if_missing("HEYGEN_API_KEY", "HeyGen")
+
+
+@pytest.fixture
+def elevenlabs_api_key():
+    return _skip_if_missing("ELEVENLABS_API_KEY", "ElevenLabs")
+
+
+@pytest.fixture
+def openai_api_key():
+    return _skip_if_missing("OPENAI_API_KEY", "OpenAI")
+
+
+@pytest.fixture
+def stripe_api_key():
+    return _skip_if_missing("STRIPE_SECRET_KEY", "Stripe")
+
+
+@pytest.fixture
+def deepl_api_key():
+    return _skip_if_missing("DEEPL_API_KEY", "DeepL")
