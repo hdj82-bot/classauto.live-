@@ -4,10 +4,12 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
+import { useI18n } from "@/contexts/I18nContext";
 
 export default function NewLecturePage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { t } = useI18n();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState("");
@@ -23,7 +25,7 @@ export default function NewLecturePage() {
     setDragOver(false);
     const f = e.dataTransfer.files[0];
     if (f && (f.name.endsWith(".pptx") || f.name.endsWith(".ppt"))) setFile(f);
-    else setError(".pptx 파일만 업로드 가능합니다.");
+    else setError(t("professor.pptError"));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -33,7 +35,6 @@ export default function NewLecturePage() {
     setError("");
 
     try {
-      // 1. 강좌가 없으면 생성
       let cId = courseId;
       if (!cId) {
         const { data: course } = await api.post("/api/courses", { title: `${title} 강좌` });
@@ -41,12 +42,10 @@ export default function NewLecturePage() {
         setCourseId(cId);
       }
 
-      // 2. 강의 생성
       const { data: lecture } = await api.post("/api/lectures", {
         course_id: cId, title, description: description || undefined,
       });
 
-      // 3. PPT 업로드 (파이프라인 시작)
       if (file) {
         const formData = new FormData();
         formData.append("file", file);
@@ -55,43 +54,47 @@ export default function NewLecturePage() {
         });
       }
 
-      toast("강의가 생성되었습니다.", "success");
+      toast(t("professor.createSuccess"), "success");
       router.push(`/professor/lecture/${lecture.id}`);
     } catch {
-      setError("강의 생성에 실패했습니다. 다시 시도해주세요.");
-      toast("강의 생성에 실패했습니다.", "error");
+      setError(t("professor.createError"));
+      toast(t("professor.createError"), "error");
     }
     setSubmitting(false);
   };
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">새 강의 만들기</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">{t("professor.newTitle")}</h1>
 
-      <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl p-8 space-y-6">
-        {error && <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{error}</div>}
+      <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl p-8 space-y-6" aria-label={t("professor.newTitle")}>
+        {error && <div role="alert" className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{error}</div>}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">강의 제목</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required
+          <label htmlFor="lecture-title" className="block text-sm font-medium text-gray-700 mb-1.5">{t("professor.lectureTitle")}</label>
+          <input id="lecture-title" value={title} onChange={(e) => setTitle(e.target.value)} required
             className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            placeholder="예) 파이썬 프로그래밍 기초" />
+            placeholder={t("professor.lectureTitlePlaceholder")} />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">설명 (선택)</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
+          <label htmlFor="lecture-desc" className="block text-sm font-medium text-gray-700 mb-1.5">{t("professor.description")}</label>
+          <textarea id="lecture-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
             className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none"
-            placeholder="강의에 대한 간단한 설명" />
+            placeholder={t("professor.descriptionPlaceholder")} />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">PPT 파일 (선택)</label>
+          <label htmlFor="ppt-upload" className="block text-sm font-medium text-gray-700 mb-1.5">{t("professor.pptFile")}</label>
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
+            aria-label={t("professor.pptDragDrop")}
             className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition ${
               dragOver ? "border-indigo-500 bg-indigo-50" : "border-gray-300 hover:border-gray-400"
             }`}
@@ -103,18 +106,18 @@ export default function NewLecturePage() {
               </div>
             ) : (
               <div>
-                <p className="text-sm text-gray-500">PPT 파일을 드래그하거나 클릭하여 업로드</p>
-                <p className="text-xs text-gray-400 mt-1">.pptx 형식만 지원</p>
+                <p className="text-sm text-gray-500">{t("professor.pptDragDrop")}</p>
+                <p className="text-xs text-gray-400 mt-1">{t("professor.pptFormat")}</p>
               </div>
             )}
-            <input ref={fileInputRef} type="file" accept=".pptx,.ppt" className="hidden"
+            <input ref={fileInputRef} id="ppt-upload" type="file" accept=".pptx,.ppt" className="hidden"
               onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])} />
           </div>
         </div>
 
         <button type="submit" disabled={submitting || !title.trim()}
           className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl py-3 text-sm font-semibold transition">
-          {submitting ? "생성 중..." : "강의 생성"}
+          {submitting ? t("professor.creating") : t("professor.createLectureBtn")}
         </button>
       </form>
     </div>

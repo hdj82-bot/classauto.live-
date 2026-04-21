@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/Toast";
+import { useI18n } from "@/contexts/I18nContext";
 import { useAttention } from "@/hooks/useAttention";
 import Header from "@/components/Header";
 import AttentionPauseOverlay from "@/components/AttentionPauseOverlay";
@@ -28,6 +29,7 @@ export default function LectureViewerPage() {
   const { slug } = useParams<{ slug: string }>();
   const { user } = useAuth();
   const router = useRouter();
+  const { t } = useI18n();
 
   const [lecture, setLecture] = useState<LectureData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +47,6 @@ export default function LectureViewerPage() {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // 강의 로드
   useEffect(() => {
     (async () => {
       try {
@@ -57,7 +58,6 @@ export default function LectureViewerPage() {
     })();
   }, [slug, router]);
 
-  // 세션 시작 (duration이 결정된 후)
   useEffect(() => {
     if (!lecture || !user || !duration) return;
     (async () => {
@@ -73,10 +73,8 @@ export default function LectureViewerPage() {
     })();
   }, [lecture, user, duration]);
 
-  // 집중도 추적
-  const attention = useAttention({ sessionId: sessionId || "", heartbeatInterval: 10_000, noResponseTimeout: 30_000 });
+  const attention = useAttention({ sessionId: sessionId || "" });
 
-  // 비디오 진행
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
     const sec = Math.floor(videoRef.current.currentTime);
@@ -85,9 +83,7 @@ export default function LectureViewerPage() {
   };
 
   const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-    }
+    if (videoRef.current) setDuration(videoRef.current.duration);
   };
 
   const formatTime = (sec: number) => {
@@ -96,7 +92,6 @@ export default function LectureViewerPage() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
-  // Q&A 전송
   const handleQASend = async () => {
     if (!qaInput.trim() || !sessionId) return;
     const question = qaInput.trim();
@@ -110,29 +105,28 @@ export default function LectureViewerPage() {
       });
       setQaMessages((prev) => [...prev, { role: "assistant", text: data.answer }]);
     } catch {
-      setQaMessages((prev) => [...prev, { role: "assistant", text: "답변 생성에 실패했습니다. 잠시 후 다시 시도해주세요." }]);
+      setQaMessages((prev) => [...prev, { role: "assistant", text: t("lecture.qaError") }]);
     }
     setQaLoading(false);
     setTimeout(() => qaEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
-  if (loading) return <LoadingSpinner fullScreen label="강의 불러오는 중..." />;
+  if (loading) return <LoadingSpinner fullScreen label={t("lecture.loadingLecture")} />;
   if (!lecture) return null;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       <Header />
 
-      {/* 집중도 경고 오버레이 */}
       {attention.isPaused && (
         <AttentionPauseOverlay warningLevel={attention.warningLevel} onResume={attention.resume} />
       )}
 
-      <div className="max-w-7xl mx-auto px-4 py-4">
+      <main className="max-w-7xl mx-auto px-4 py-4">
         <h1 className="text-xl font-bold mb-4">{lecture.title}</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* 비디오 영역 */}
+          {/* Video area */}
           <div className="lg:col-span-2">
             <div className="aspect-video bg-black rounded-xl overflow-hidden">
               {lecture.video_url ? (
@@ -143,22 +137,23 @@ export default function LectureViewerPage() {
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
                   className="w-full h-full"
+                  aria-label={lecture.title}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-gray-500">
                   <div className="text-center">
-                    <svg className="w-12 h-12 mx-auto mb-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-12 h-12 mx-auto mb-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
-                    <p>영상이 아직 준비되지 않았습니다</p>
-                    <p className="text-sm text-gray-600 mt-1">렌더링이 완료되면 자동으로 표시됩니다</p>
+                    <p>{t("lecture.videoNotReady")}</p>
+                    <p className="text-sm text-gray-600 mt-1">{t("lecture.videoNotReadyDesc")}</p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* 진행 바 */}
-            <div className="mt-2 flex items-center gap-2">
+            {/* Progress bar */}
+            <div className="mt-2 flex items-center gap-2" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={duration || 100} aria-label="Video progress">
               <span className="text-xs text-gray-400 tabular-nums w-10">{formatTime(progress)}</span>
               <div className="flex-1 bg-gray-700 rounded-full h-1.5">
                 <div className="bg-indigo-500 h-1.5 rounded-full transition-all" style={{ width: duration > 0 ? `${Math.min((progress / duration) * 100, 100)}%` : "0%" }} />
@@ -171,7 +166,7 @@ export default function LectureViewerPage() {
                 onClick={() => router.push(`/lecture/${slug}/assess`)}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition"
               >
-                평가 시작
+                {t("lecture.startAssess")}
               </button>
               {lecture.description && (
                 <p className="text-sm text-gray-400 flex-1">{lecture.description}</p>
@@ -179,12 +174,12 @@ export default function LectureViewerPage() {
             </div>
           </div>
 
-          {/* Q&A 패널 */}
-          <div className="bg-gray-800 rounded-xl flex flex-col h-[400px] lg:h-[600px]">
-            <div className="px-4 py-3 border-b border-gray-700 text-sm font-semibold">Q&A</div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {/* Q&A panel */}
+          <section className="bg-gray-800 rounded-xl flex flex-col h-[400px] lg:h-[600px]" aria-label={t("lecture.qa")}>
+            <div className="px-4 py-3 border-b border-gray-700 text-sm font-semibold">{t("lecture.qa")}</div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3" aria-live="polite">
               {qaMessages.length === 0 && (
-                <p className="text-gray-500 text-sm text-center mt-10">강의 내용에 대해 질문해보세요</p>
+                <p className="text-gray-500 text-sm text-center mt-10">{t("lecture.qaEmpty")}</p>
               )}
               {qaMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -197,32 +192,35 @@ export default function LectureViewerPage() {
               ))}
               {qaLoading && (
                 <div className="flex justify-start">
-                  <div className="bg-gray-700 rounded-xl px-3 py-2 text-sm text-gray-400">답변 생성 중...</div>
+                  <div className="bg-gray-700 rounded-xl px-3 py-2 text-sm text-gray-400">{t("lecture.qaGenerating")}</div>
                 </div>
               )}
               <div ref={qaEndRef} />
             </div>
             <div className="p-3 border-t border-gray-700">
               <div className="flex gap-2">
+                <label htmlFor="qa-input" className="sr-only">{t("lecture.qaPlaceholder")}</label>
                 <input
+                  id="qa-input"
                   value={qaInput}
                   onChange={(e) => setQaInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleQASend()}
-                  placeholder="질문을 입력하세요..."
+                  placeholder={t("lecture.qaPlaceholder")}
                   className="flex-1 bg-gray-700 border border-gray-600 rounded-xl px-3 py-2 text-sm text-white placeholder-gray-400 outline-none focus:border-indigo-500"
                 />
                 <button
                   onClick={handleQASend}
                   disabled={qaLoading || !qaInput.trim()}
+                  aria-label={t("lecture.qaSend")}
                   className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl px-4 py-2 text-sm font-medium transition"
                 >
-                  전송
+                  {t("lecture.qaSend")}
                 </button>
               </div>
             </div>
-          </div>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

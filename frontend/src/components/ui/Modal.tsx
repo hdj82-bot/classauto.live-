@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { useI18n } from "@/contexts/I18nContext";
 
 interface Props {
   open: boolean;
@@ -12,6 +13,7 @@ interface Props {
 
 export default function Modal({ open, onClose, closable = true, children, title }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   // body scroll lock
   useEffect(() => {
@@ -24,6 +26,21 @@ export default function Modal({ open, onClose, closable = true, children, title 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape" && closable && onClose) onClose();
+
+      // Focus trap
+      if (e.key === "Tab" && panelRef.current) {
+        const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+      }
     },
     [closable, onClose],
   );
@@ -34,7 +51,7 @@ export default function Modal({ open, onClose, closable = true, children, title 
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, handleKeyDown]);
 
-  // focus trap: auto-focus panel on open
+  // Auto-focus panel on open
   useEffect(() => {
     if (open) panelRef.current?.focus();
   }, [open]);
@@ -43,7 +60,7 @@ export default function Modal({ open, onClose, closable = true, children, title 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby={title ? "modal-title" : undefined}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={closable ? onClose : undefined} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={closable ? onClose : undefined} aria-hidden="true" />
       <div
         ref={panelRef}
         tabIndex={-1}
@@ -53,7 +70,7 @@ export default function Modal({ open, onClose, closable = true, children, title 
           <div className="flex items-center justify-between px-6 pt-5 pb-2">
             {title && <h3 id="modal-title" className="text-lg font-semibold text-gray-900">{title}</h3>}
             {closable && onClose && (
-              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition text-xl leading-none" aria-label="닫기">&times;</button>
+              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition text-xl leading-none" aria-label={t("common.close")}>&times;</button>
             )}
           </div>
         )}
