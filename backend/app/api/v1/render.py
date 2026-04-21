@@ -95,8 +95,16 @@ async def upload_ppt(
     from app.services.pipeline import s3 as s3_svc
     from app.tasks.pipeline import start_pipeline
 
-    if not file.filename or not file.filename.endswith(".pptx"):
+    if not file.filename or not file.filename.lower().endswith(".pptx"):
         raise HTTPException(status_code=400, detail=".pptx 파일만 업로드 가능합니다.")
+
+    # Content-Type 검증
+    allowed_types = {
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/octet-stream",  # 일부 브라우저에서 전송
+    }
+    if file.content_type and file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"허용되지 않는 Content-Type: {file.content_type}")
 
     # 파일 크기 제한 (100MB)
     MAX_FILE_SIZE = 100 * 1024 * 1024
@@ -107,8 +115,11 @@ async def upload_ppt(
         raise HTTPException(status_code=400, detail="빈 파일은 업로드할 수 없습니다.")
     task_id = str(uuid.uuid4())
 
-    # S3에 PPT 업로드
-    s3_url, s3_key = s3_svc.upload_ppt(content, str(lecture_id), file.filename)
+    # S3에 PPT 업로드 (매직바이트 검증 포함)
+    try:
+        s3_url, s3_key = s3_svc.upload_ppt(content, str(lecture_id), file.filename)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     result = start_pipeline(task_id, s3_key, str(user.id), str(lecture_id))
 

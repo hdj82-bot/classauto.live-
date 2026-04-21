@@ -103,6 +103,12 @@ def _validate_settings() -> None:
     if settings.ENVIRONMENT == "production":
         if settings.JWT_SECRET_KEY == "change-me-in-production":
             raise RuntimeError("프로덕션에서 JWT_SECRET_KEY를 반드시 변경해야 합니다.")
+        if len(settings.JWT_SECRET_KEY) < 32:
+            raise RuntimeError("JWT_SECRET_KEY는 최소 32자 이상이어야 합니다.")
+        if settings.JWT_ALGORITHM != "HS256":
+            raise RuntimeError("JWT_ALGORITHM은 HS256만 허용됩니다.")
+        if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
+            raise RuntimeError("프로덕션에서 Google OAuth 설정은 필수입니다.")
         if not settings.HEYGEN_WEBHOOK_SECRET:
             warnings.warn("HEYGEN_WEBHOOK_SECRET이 설정되지 않았습니다. 웹훅 검증이 비활성화됩니다.", stacklevel=2)
         if not settings.STRIPE_WEBHOOK_SECRET:

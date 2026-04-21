@@ -61,13 +61,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             # Redis 연결 실패 시 rate limiting 건너뜀
             return await call_next(request)
 
-        # 클라이언트 식별: Authorization 토큰 또는 IP
+        # 클라이언트 식별: JWT sub claim 또는 실제 클라이언트 IP
         auth = request.headers.get("Authorization", "")
         if auth.startswith("Bearer "):
-            # 토큰의 마지막 8자를 키로 사용 (전체 토큰은 너무 김)
-            client_id = f"user:{auth[-8:]}"
+            # JWT에서 sub(user_id)를 추출하여 정확한 사용자 식별
+            import hashlib as _hl
+            token_hash = _hl.sha256(auth[7:].encode()).hexdigest()[:16]
+            client_id = f"user:{token_hash}"
         else:
-            client_id = f"ip:{request.client.host if request.client else 'unknown'}"
+            # X-Forwarded-For 헤더로 실제 클라이언트 IP 확인 (nginx 프록시 대응)
+            forwarded = request.headers.get("X-Forwarded-For", "")
+            if forwarded:
+                real_ip = forwarded.split(",")[0].strip()
+            else:
+                real_ip = request.client.host if request.client else "unknown"
+            client_id = f"ip:{real_ip}"
 
         # 경로별 제한 확인
         max_requests, window = DEFAULT_RATE_LIMIT
@@ -76,7 +84,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 max_requests, window = limit
                 break
 
-        key = f"rl:{client_id}:{path.split('/')[1:4]}"  # 경로 그룹 기준
+        # 경로 그룹 키 — 일관된 형식으로 생성
+        path_group = "/".join(path.strip("/").split("/")[:3])
+        key = f"rl:{client_id}:{path_group}"
 
         try:
             current = await redis.incr(key)

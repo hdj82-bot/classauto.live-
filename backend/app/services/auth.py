@@ -55,7 +55,7 @@ async def pop_oauth_state(state: str) -> str | None:
 
 async def exchange_google_code(code: str) -> dict:
     """Authorization Code → Google UserInfo 딕셔너리 반환."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=10.0) as client:
         token_resp = await client.post(
             GOOGLE_TOKEN_URL,
             data={
@@ -67,14 +67,23 @@ async def exchange_google_code(code: str) -> dict:
             },
         )
         token_resp.raise_for_status()
-        access_token = token_resp.json()["access_token"]
+        token_data = token_resp.json()
+        access_token = token_data.get("access_token")
+        if not access_token:
+            raise ValueError("Google token response에 access_token이 없습니다.")
 
         userinfo_resp = await client.get(
             GOOGLE_USERINFO_URL,
             headers={"Authorization": f"Bearer {access_token}"},
         )
         userinfo_resp.raise_for_status()
-        return userinfo_resp.json()
+        userinfo = userinfo_resp.json()
+
+        # 필수 필드 검증
+        if not userinfo.get("id") or not userinfo.get("email"):
+            raise ValueError("Google userinfo에 필수 필드(id, email)가 없습니다.")
+
+        return userinfo
 
 
 # ── 토큰 발급 ─────────────────────────────────────────────────────────────────

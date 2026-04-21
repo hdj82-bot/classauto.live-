@@ -39,16 +39,28 @@ app = FastAPI(
     description="Interactive Flipped Learning Platform — 통합 백엔드",
     version="1.0.0",
     lifespan=lifespan,
+    # 프로덕션에서는 Swagger UI / ReDoc 비활성화
+    docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
+    redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
+    openapi_url="/openapi.json" if settings.ENVIRONMENT != "production" else None,
 )
 
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(RateLimitMiddleware)
+
+# CORS — 프로덕션에서는 명시적 origin만 허용
+_cors_origins = [settings.FRONTEND_URL]
+if settings.ENVIRONMENT == "development":
+    _cors_origins.append("http://localhost:3000")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
+    max_age=600,
 )
 
 # 기존 라우터 등록

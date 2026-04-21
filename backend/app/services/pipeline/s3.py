@@ -84,9 +84,33 @@ def file_exists(s3_key: str) -> bool:
 # ── PPT 업로드 ───────────────────────────────────────────────────────────────
 
 
+def _sanitize_filename(filename: str) -> str:
+    """Path traversal 및 특수문자 방지를 위한 파일명 정규화."""
+    import os
+    import re
+    # 디렉토리 순회 문자 제거
+    basename = os.path.basename(filename)
+    # 허용: 알파벳, 숫자, 한글, 하이픈, 언더스코어, 점
+    safe = re.sub(r"[^\w\-.]", "_", basename)
+    # 연속 점 제거 (hidden file 생성 방지)
+    safe = re.sub(r"\.{2,}", ".", safe)
+    return safe or "upload.pptx"
+
+
+# PPTX ZIP 매직 바이트 (PK\x03\x04)
+_PPTX_MAGIC = b"PK\x03\x04"
+
+
+def validate_pptx_content(file_bytes: bytes) -> None:
+    """PPTX 파일의 매직 바이트를 검증."""
+    if len(file_bytes) < 4 or file_bytes[:4] != _PPTX_MAGIC:
+        raise ValueError("유효한 PPTX 파일이 아닙니다 (ZIP 형식이 아님).")
+
+
 def upload_ppt(file_bytes: bytes, lecture_id: str, filename: str) -> tuple[str, str]:
     """PPT 파일을 S3에 업로드. (s3_url, s3_key) 반환."""
-    safe_name = filename.replace(" ", "_")
+    validate_pptx_content(file_bytes)
+    safe_name = _sanitize_filename(filename)
     s3_key = f"{settings.S3_PPT_PREFIX}{lecture_id}/{uuid.uuid4().hex[:8]}_{safe_name}"
     s3_url = upload_file(
         file_bytes, s3_key,
@@ -95,11 +119,37 @@ def upload_ppt(file_bytes: bytes, lecture_id: str, filename: str) -> tuple[str, 
     return s3_url, s3_key
 
 
+# ── SSRF 방지 ──────────────────────────────────────────────────────────────
+
+
+def _validate_external_url(url: str) -> None:
+    """SSRF 방지: 내부 네트워크 주소 접근 차단."""
+    from urllib.parse import urlparse
+    import ipaddress
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"허용되지 않는 프로토콜: {parsed.scheme}")
+
+    hostname = parsed.hostname or ""
+    blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "metadata.google.internal"}
+    if hostname in blocked_hosts or hostname.endswith(".internal"):
+        raise ValueError(f"내부 네트워크 접근 차단: {hostname}")
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local:
+            raise ValueError(f"사설 IP 접근 차단: {hostname}")
+    except ValueError:
+        pass  # 호스트명이 도메인인 경우 통과
+
+
 # ── 기존 함수 (호환 유지) ────────────────────────────────────────────────────
 
 
 async def upload_from_url(source_url: str, lecture_id: str, slide_number: int | None = None) -> tuple[str, float]:
     """원격 URL의 비디오를 다운로드하여 S3에 업로드. (s3_url, elapsed) 반환."""
+    _validate_external_url(source_url)
     async with httpx.AsyncClient(timeout=300.0) as client:
         resp = await client.get(source_url)
         resp.raise_for_status()
