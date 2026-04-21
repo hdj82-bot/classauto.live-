@@ -6,7 +6,9 @@ from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.exceptions import register_exception_handlers
 from app.core.logging import setup_logging
+from app.core.metrics import PrometheusMiddleware, init_app_info, metrics_response
 from app.core.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 
 # 기존 라우터
@@ -31,6 +33,9 @@ from app.api.v1.payment import router as payment_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
+    from app.core.sentry import init_sentry
+    init_sentry()
+    init_app_info(version="1.0.0", environment=settings.ENVIRONMENT)
     yield
 
 
@@ -45,8 +50,11 @@ app = FastAPI(
     openapi_url="/openapi.json" if settings.ENVIRONMENT != "production" else None,
 )
 
+register_exception_handlers(app)
+
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(PrometheusMiddleware)
 
 # CORS — 프로덕션에서는 명시적 origin만 허용
 _cors_origins = [settings.FRONTEND_URL]
@@ -80,6 +88,12 @@ app.include_router(subscription_router)
 app.include_router(qa_router)
 app.include_router(translate_router)
 app.include_router(payment_router)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def prometheus_metrics():
+    """Prometheus 스크래핑용 메트릭 엔드포인트."""
+    return metrics_response()
 
 
 @app.get("/health")

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+
 export default function GlobalError({
   error,
   unstable_retry,
@@ -7,6 +9,12 @@ export default function GlobalError({
   error: Error & { digest?: string };
   unstable_retry: () => void;
 }) {
+  useEffect(() => {
+    // Sentry가 로드된 경우 에러 캡처
+    import("@sentry/nextjs")
+      .then((Sentry) => Sentry.captureException(error))
+      .catch(() => {});
+  }, [error]);
   return (
     <html lang="ko">
       <body className="min-h-screen flex items-center justify-center bg-gray-50 px-4">

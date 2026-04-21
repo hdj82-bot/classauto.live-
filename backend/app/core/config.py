@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     # ── pgvector ──────────────────────────────────────────────────
     SIMILARITY_THRESHOLD: float = 0.7
 
+    # ── Sentry ──────────────────────────────────────────────────
+    SENTRY_DSN: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 프로덕션 트레이싱 10%
+
     # ── Frontend ────────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:3000"
 
