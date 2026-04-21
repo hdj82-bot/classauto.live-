@@ -19,6 +19,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "IFL Platform",
   description: "Interactive Flipped Learning Platform",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "IFL Platform",
+  },
 };
 
 export const viewport: Viewport = {
@@ -26,6 +31,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
+  themeColor: "#4F46E5",
 };
 
 export default function RootLayout({
@@ -45,6 +51,17 @@ export default function RootLayout({
             </AuthProvider>
           </ToastProvider>
         </I18nProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js');
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );
