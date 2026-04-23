@@ -44,6 +44,8 @@ class SessionScore(BaseModel):
 
 class SessionResponsesResult(BaseModel):
     """GET /api/responses/{session_id} 응답."""
+    model_config = ConfigDict(from_attributes=True)
+
     session_id: uuid.UUID
     score: SessionScore
     responses: list[ResponseResult]

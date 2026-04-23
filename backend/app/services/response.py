@@ -126,10 +126,17 @@ async def submit_responses(
     for ar in assessment_records:
         db.add(ar)
 
+    # commit 전에 ID 수집 — commit 후 ORM 객체가 expired됨
+    saved_ids = [r.id for r in saved]
     await db.commit()
-    for r in saved:
-        await db.refresh(r)
-    return saved
+
+    # question 관계 포함 일괄 재조회 (N번 refresh 대신 단일 쿼리)
+    reloaded = await db.execute(
+        select(Response)
+        .where(Response.id.in_(saved_ids))
+        .options(selectinload(Response.question))
+    )
+    return list(reloaded.scalars().all())
 
 
 # ── 결과 조회 ─────────────────────────────────────────────────────────────────
