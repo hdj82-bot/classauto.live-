@@ -64,7 +64,9 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
           params.set("is_network_unstable", "true");
         }
         await api.post(`/api/v1/attention/heartbeat?${params}`);
+        // heartbeat 성공: 연속 실패 카운터 리셋 + no-response 타이머 리셋
         consecutiveFailuresRef.current = 0;
+        lastResponseRef.current = Date.now();
       } catch { /* 네트워크 오류 무시 */ consecutiveFailuresRef.current += 1; }
     }, configRef.current.heartbeat_interval_ms);
 

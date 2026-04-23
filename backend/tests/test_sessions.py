@@ -154,6 +154,28 @@ async def test_list_sessions(client, student, lecture, db):
 
 
 @pytest.mark.asyncio
+async def test_session_completed_resume_forbidden(client, student, lecture, db):
+    """COMPLETED 상태에서 in_progress 전이 시도 → 400 또는 409."""
+    session = LearningSession(
+        id=uuid.uuid4(),
+        user_id=student.id,
+        lecture_id=lecture.id,
+        status=SessionStatus.completed,
+        total_sec=600,
+        watched_sec=590,
+    )
+    db.add(session)
+    await db.flush()
+
+    resp = await client.patch(
+        f"/api/v1/sessions/{session.id}",
+        params={"status": "in_progress"},
+        headers=make_auth_header(student),
+    )
+    assert resp.status_code in (400, 409)
+
+
+@pytest.mark.asyncio
 async def test_get_session_other_user_returns_404(client, student, lecture, db):
     """타인의 세션 ID로 조회 시 404 반환 — 존재 여부 노출 방지."""
     from app.models.user import UserRole

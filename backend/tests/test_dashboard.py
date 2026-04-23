@@ -133,3 +133,30 @@ async def test_get_cost(client, professor, lecture):
         headers=make_auth_header(professor),
     )
     assert resp.status_code == 200
+
+
+# ── 소유권 검증 ──────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_professor_cannot_access_other_lecture_dashboard(client, db, lecture):
+    """다른 교수자가 소유한 강의 대시보드에 접근 시 404 반환."""
+    from app.models.user import User, UserRole
+
+    other_prof = User(
+        id=uuid.uuid4(),
+        google_sub="google-prof-other",
+        email="other_prof@test.ac.kr",
+        name="다른 교수",
+        role=UserRole.professor,
+        school="다른대학교",
+        department="수학과",
+        is_active=True,
+    )
+    db.add(other_prof)
+    await db.flush()
+
+    resp = await client.get(
+        f"/api/v1/dashboard/{lecture.id}/attendance",
+        headers=make_auth_header(other_prof),
+    )
+    assert resp.status_code == 404
