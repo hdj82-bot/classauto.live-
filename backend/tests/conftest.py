@@ -137,6 +137,8 @@ async def client(db: AsyncSession, fake_redis: FakeRedis) -> AsyncGenerator:
     app.dependency_overrides[get_db] = override_get_db
     redis_module.get_redis = override_get_redis
     auth_svc.get_redis = override_get_redis  # auth service 내부 참조도 패치
+    import app.api.deps as deps_module
+    deps_module.get_redis = override_get_redis  # blacklist 검사용
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"

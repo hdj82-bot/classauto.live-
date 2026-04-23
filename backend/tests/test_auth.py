@@ -125,3 +125,49 @@ async def test_protected_with_invalid_token(client):
         headers={"Authorization": "Bearer totally.fake.token"},
     )
     assert resp.status_code == 401
+
+
+# ── Access Token 블랙리스트 ───────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_logout_blacklists_access_token(client, fake_redis, professor):
+    """로그아웃 시 Authorization 헤더의 Access Token이 Redis 블랙리스트에 등록된다."""
+    from app.core.security import create_access_token, decode_token
+
+    refresh_token, jti = create_refresh_token(str(professor.id), professor.role.value)
+    await fake_redis.set(f"rt:{jti}", str(professor.id))
+
+    access_token = create_access_token(str(professor.id), professor.role.value)
+    at_payload = decode_token(access_token)
+    at_jti = at_payload["jti"]
+
+    resp = await client.request(
+        "DELETE",
+        "/api/auth/logout",
+        content=f'{{"refresh_token": "{refresh_token}"}}',
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}",
+        },
+    )
+    assert resp.status_code == 204
+    assert await fake_redis.exists(f"bl:{at_jti}") == 1
+
+
+@pytest.mark.asyncio
+async def test_blacklisted_access_token_rejected(client, fake_redis, professor):
+    """블랙리스트에 등록된 Access Token으로 보호된 엔드포인트 접근 시 401 반환."""
+    from app.core.security import create_access_token, decode_token
+
+    access_token = create_access_token(str(professor.id), professor.role.value)
+    at_payload = decode_token(access_token)
+    at_jti = at_payload["jti"]
+
+    # 블랙리스트에 직접 등록
+    await fake_redis.setex(f"bl:{at_jti}", 900, "1")
+
+    resp = await client.get(
+        "/api/courses",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    assert resp.status_code == 401

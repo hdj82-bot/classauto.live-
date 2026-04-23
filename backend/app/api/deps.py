@@ -6,11 +6,14 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redis import get_redis
 from app.core.security import decode_token
 from app.db.session import get_db
 from app.models.user import User
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+_BL_PREFIX = "bl:"
 
 
 async def get_current_user(
@@ -38,6 +41,16 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Access Token이 아닙니다.",
         )
+
+    jti = payload.get("jti")
+    if jti:
+        r = get_redis()
+        if await r.exists(f"{_BL_PREFIX}{jti}"):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="로그아웃된 토큰입니다.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     result = await db.execute(
         select(User).where(User.id == uuid.UUID(payload["sub"]))
