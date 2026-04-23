@@ -1,14 +1,53 @@
 import uuid
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.user import User, UserRole
+from app.models.video import Video
 from app.schemas.lecture import LectureCreate, LecturePublicResponse, LectureUpdate
 from app.utils.slug import slugify
+
+
+# ── 소유권 검증 헬퍼 ───────────────────────────────────────────────────────────
+
+async def assert_professor_owns_lecture(
+    db: AsyncSession, lecture_id: uuid.UUID, user_id: uuid.UUID
+) -> Lecture:
+    """Lecture JOIN Course로 course.instructor_id == user_id 검증. 없으면 404."""
+    stmt = (
+        select(Lecture)
+        .join(Course, Lecture.course_id == Course.id)
+        .where(Lecture.id == lecture_id, Course.instructor_id == user_id)
+    )
+    result = await db.execute(stmt)
+    lecture = result.scalar_one_or_none()
+    if not lecture:
+        raise HTTPException(status_code=404, detail="강의를 찾을 수 없습니다.")
+    return lecture
+
+
+async def assert_professor_owns_video(
+    db: AsyncSession, video_id: uuid.UUID, user_id: uuid.UUID
+) -> Video:
+    """Video → Lecture → Course 체인으로 instructor_id 검증. 없으면 404."""
+    stmt = (
+        select(Video)
+        .options(selectinload(Video.script))
+        .join(Lecture, Video.lecture_id == Lecture.id)
+        .join(Course, Lecture.course_id == Course.id)
+        .where(Video.id == video_id, Course.instructor_id == user_id)
+    )
+    result = await db.execute(stmt)
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
+    return video
 
 
 # ── 조회 ──────────────────────────────────────────────────────────────────────
