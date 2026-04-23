@@ -73,6 +73,26 @@ export default function LectureViewerPage() {
     })();
   }, [lecture, user, duration]);
 
+  // 페이지 언마운트 또는 언로드 시 세션을 paused로 정리.
+  // sendBeacon은 POST만 지원하므로 keepalive fetch(PATCH)를 사용한다.
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const pauseSession = () => {
+      // completed 상태는 서버가 전이 거부하므로 안전하게 호출 가능
+      fetch(`/api/v1/sessions/${sessionId}?status=paused`, {
+        method: "PATCH",
+        keepalive: true,
+      }).catch(() => {/* 언로드 중 에러는 무시 */});
+    };
+
+    window.addEventListener("beforeunload", pauseSession);
+    return () => {
+      window.removeEventListener("beforeunload", pauseSession);
+      pauseSession(); // 라우터 이동(언마운트) 시에도 호출
+    };
+  }, [sessionId]);
+
   const attention = useAttention({ sessionId: sessionId || "" });
 
   const handleTimeUpdate = () => {

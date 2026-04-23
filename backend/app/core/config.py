@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     SUMMATIVE_SERVE_COUNT: int = 5
     TIMESTAMP_TOLERANCE_SECONDS: int = 120
 
+    # ── 출석 판단 기준 ───────────────────────────────────────────
+    DEFAULT_LIVE_DEADLINE_MINUTES: int = 30  # 강의별 설정이 없을 때 사용
+
     # ── HeyGen ──────────────────────────────────────────────────
     HEYGEN_API_KEY: str = ""
     HEYGEN_BASE_URL: str = "https://api.heygen.com"

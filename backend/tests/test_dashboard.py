@@ -1,6 +1,12 @@
 """교수자 대시보드 API 통합 테스트."""
-import pytest
+import uuid
 
+import pytest
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.lecture import Lecture
+from app.models.course import Course
 from tests.conftest import make_auth_header
 
 
@@ -28,6 +34,41 @@ async def test_get_attendance_student_forbidden(client, student, lecture):
 async def test_get_attendance_unauthorized(client, lecture):
     resp = await client.get(f"/api/v1/dashboard/{lecture.id}/attendance")
     assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_get_attendance_explicit_deadline_override(client, professor, lecture):
+    """live_deadline_min 쿼리 파라미터로 기준을 명시적으로 덮어쓸 수 있다."""
+    resp = await client.get(
+        f"/api/v1/dashboard/{lecture.id}/attendance",
+        params={"live_deadline_min": 60},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_get_attendance_per_lecture_deadline(
+    client, professor, db: AsyncSession, course: Course
+):
+    """강의에 live_deadline_minutes가 설정된 경우 해당 값이 사용된다."""
+    lec = Lecture(
+        id=uuid.uuid4(),
+        course_id=course.id,
+        title="마감 45분 강의",
+        slug="deadline-45-test-xyz9999",
+        order=2,
+        is_published=True,
+        live_deadline_minutes=45,
+    )
+    db.add(lec)
+    await db.flush()
+
+    resp = await client.get(
+        f"/api/v1/dashboard/{lec.id}/attendance",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
 
 
 # ── 정답률 분석 ──────────────────────────────────────────────────────────────
