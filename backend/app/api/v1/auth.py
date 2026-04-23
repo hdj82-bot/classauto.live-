@@ -1,13 +1,16 @@
 import uuid
+from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.redis import get_redis
 from app.core.security import GOOGLE_AUTH_URL, create_temp_token, decode_token
 from app.db.session import get_db
 from app.models.user import UserRole
@@ -32,6 +35,9 @@ from app.services.auth import (
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 _GOOGLE_SCOPES = "openid email profile"
+_BL_PREFIX = "bl:"
+
+_optional_bearer = HTTPBearer(auto_error=False)
 
 
 # ── 1. Google OAuth 시작 ──────────────────────────────────────────────────────
@@ -185,15 +191,33 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
 # ── 5. 로그아웃 ───────────────────────────────────────────────────────────────
 
 @router.delete("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="로그아웃")
-async def logout(body: LogoutRequest):
+async def logout(
+    body: LogoutRequest,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+):
     """
-    Refresh Token을 Redis에서 즉시 삭제합니다.
-    Access Token은 만료(15분)까지 유효하므로 프론트엔드에서 폐기해야 합니다.
+    Refresh Token을 Redis에서 즉시 삭제하고,
+    Authorization 헤더의 Access Token을 Redis 블랙리스트에 등록합니다.
+    Access Token TTL은 토큰 만료까지의 남은 시간으로 설정됩니다.
     """
+    # Access Token 블랙리스트 등록
+    if credentials:
+        try:
+            at_payload = decode_token(credentials.credentials)
+            if at_payload.get("type") == "access":
+                jti: str = at_payload["jti"]
+                exp: int = at_payload["exp"]
+                now = int(datetime.now(timezone.utc).timestamp())
+                ttl = max(1, exp - now)
+                r = get_redis()
+                await r.setex(f"{_BL_PREFIX}{jti}", ttl, "1")
+        except JWTError:
+            pass  # 만료된 access token이어도 로그아웃 진행
+
+    # Refresh Token 무효화
     try:
         payload = decode_token(body.refresh_token)
     except JWTError:
-        # 이미 만료된 토큰이어도 로그아웃 성공으로 처리
         return
 
     if payload.get("type") == "refresh":

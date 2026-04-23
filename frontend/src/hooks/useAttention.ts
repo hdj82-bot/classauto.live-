@@ -29,6 +29,7 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
     no_response_timeout_ms: DEFAULT_NO_RESPONSE_TIMEOUT_MS,
   });
   const configLoaded = useRef(false);
+  const consecutiveFailuresRef = useRef(0);
 
   // 서버에서 설정 로드 (한 번만)
   useEffect(() => {
@@ -55,12 +56,16 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
     heartbeatTimer.current = setInterval(async () => {
       if (isPaused) return;
       try {
-        await api.post("/api/v1/attention/heartbeat", {
+        const params = new URLSearchParams({
           session_id: sessionId,
-          progress_seconds: progressRef.current,
-          is_network_unstable: !navigator.onLine,
+          progress_seconds: String(progressRef.current),
         });
-      } catch { /* 네트워크 오류 무시 */ }
+        if (consecutiveFailuresRef.current >= 2) {
+          params.set("is_network_unstable", "true");
+        }
+        await api.post(`/api/v1/attention/heartbeat?${params}`);
+        consecutiveFailuresRef.current = 0;
+      } catch { /* 네트워크 오류 무시 */ consecutiveFailuresRef.current += 1; }
     }, configRef.current.heartbeat_interval_ms);
 
     return () => clearInterval(heartbeatTimer.current);
