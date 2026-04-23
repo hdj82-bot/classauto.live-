@@ -83,7 +83,10 @@ services:
     volumes:
       - ./backend:/app
     depends_on:
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   frontend:
     build:

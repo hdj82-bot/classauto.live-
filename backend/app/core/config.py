@@ -110,6 +110,16 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+_REQUIRED_IN_PROD = [
+    "HEYGEN_WEBHOOK_SECRET",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+    "STRIPE_PRICE_BASIC",
+    "STRIPE_PRICE_PRO",
+    "ANTHROPIC_API_KEY",
+]
+
+
 def _validate_settings() -> None:
     """프로덕션 환경에서 필수 설정값 검증."""
     if settings.ENVIRONMENT == "production":
@@ -121,10 +131,10 @@ def _validate_settings() -> None:
             raise RuntimeError("JWT_ALGORITHM은 HS256만 허용됩니다.")
         if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
             raise RuntimeError("프로덕션에서 Google OAuth 설정은 필수입니다.")
-        if not settings.HEYGEN_WEBHOOK_SECRET:
-            warnings.warn("HEYGEN_WEBHOOK_SECRET이 설정되지 않았습니다. 웹훅 검증이 비활성화됩니다.", stacklevel=2)
-        if not settings.STRIPE_WEBHOOK_SECRET:
-            warnings.warn("STRIPE_WEBHOOK_SECRET이 설정되지 않았습니다.", stacklevel=2)
+
+        missing = [k for k in _REQUIRED_IN_PROD if not getattr(settings, k)]
+        if missing:
+            raise RuntimeError(f"프로덕션 필수 환경변수 누락: {missing}")
 
     # 개발/프로덕션 공통: 핵심 API 키 경고
     missing_keys = []
