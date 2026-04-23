@@ -127,6 +127,37 @@ async def update_user(
     }
 
 
+# ── DELETE /api/v1/admin/users/{user_id} ────────────────────────────────────
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_200_OK)
+async def delete_user(
+    user_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """사용자 소프트 삭제 (is_active=False). 자기 자신은 삭제 불가."""
+    if user_id == _admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="자기 자신의 계정은 삭제할 수 없습니다.",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
+
+    user.is_active = False
+    await db.flush()
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "is_active": user.is_active,
+        "detail": "사용자가 비활성화되었습니다.",
+    }
+
+
 # ── GET /api/v1/admin/costs ──────────────────────────────────────────────────
 
 
