@@ -12,9 +12,6 @@ from app.services.pipeline.retriever import RetrievalResult, is_in_scope, search
 
 logger = logging.getLogger(__name__)
 
-INPUT_COST_PER_TOKEN = 3.0 / 1_000_000
-OUTPUT_COST_PER_TOKEN = 15.0 / 1_000_000
-
 OUT_OF_SCOPE_MESSAGE = (
     "죄송합니다. 해당 질문은 현재 강의 자료의 범위를 벗어납니다. "
     "강의 내용과 관련된 질문을 부탁드립니다."
@@ -58,7 +55,7 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
 
     try:
         response = client.messages.create(
-            model=settings.CLAUDE_MODEL, max_tokens=1024, system=QA_SYSTEM_PROMPT,
+            model=settings.QA_MODEL, max_tokens=1024, system=QA_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": f"## 참고 슬라이드 내용\n{context}\n\n## 학습자 질문\n{question}"}],
         )
     except anthropic.APIError as exc:
@@ -82,7 +79,7 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
 
     input_tokens = response.usage.input_tokens
     output_tokens = response.usage.output_tokens
-    cost = input_tokens * INPUT_COST_PER_TOKEN + output_tokens * OUTPUT_COST_PER_TOKEN
+    cost = (input_tokens * settings.CLAUDE_INPUT_COST_PER_M + output_tokens * settings.CLAUDE_OUTPUT_COST_PER_M) / 1_000_000
 
     return QAResult(
         answer=answer, in_scope=True, top_slides=results,
