@@ -16,8 +16,36 @@ logger = logging.getLogger(__name__)
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/app/uploads")
 
 
+def _revert_videos_to_draft(lecture_id: str) -> None:
+    """파이프라인 실패 시 해당 강의의 pending_review Video를 draft로 롤백."""
+    from sqlalchemy import select
+    from app.models.video import Video, VideoStatus
+
+    db = SyncSessionLocal()
+    try:
+        videos = db.execute(
+            select(Video).where(
+                Video.lecture_id == uuid.UUID(lecture_id),
+                Video.status == VideoStatus.pending_review,
+            )
+        ).scalars().all()
+        for video in videos:
+            video.status = VideoStatus.draft
+        if videos:
+            db.commit()
+            logger.warning(
+                "파이프라인 실패로 Video %d개를 draft로 롤백: lecture_id=%s",
+                len(videos), lecture_id,
+            )
+    except Exception as db_exc:
+        db.rollback()
+        logger.error("Video 롤백 실패: lecture_id=%s, error=%s", lecture_id, db_exc)
+    finally:
+        db.close()
+
+
 class PipelineTask(celery.Task):
-    """파이프라인 공통 베이스 — 실패 시 상태를 FAILED로 마킹."""
+    """파이프라인 공통 베이스 — 실패 시 Video 상태를 draft로 롤백."""
     abstract = True
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
@@ -36,6 +64,8 @@ class PipelineTask(celery.Task):
             "파이프라인 태스크 실패: celery_task_id=%s, pipeline_task_id=%s, lecture_id=%s, error=%s",
             task_id, pipeline_task_id, lecture_id, exc,
         )
+        if lecture_id:
+            _revert_videos_to_draft(lecture_id)
 
 
 @celery.task(base=PipelineTask, bind=True, max_retries=2, default_retry_delay=30)

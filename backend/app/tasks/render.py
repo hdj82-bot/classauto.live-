@@ -12,6 +12,34 @@ from app.services.pipeline import cost_log, s3 as s3_svc
 logger = logging.getLogger(__name__)
 
 
+def _archive_videos_for_lecture(lecture_id: uuid.UUID) -> None:
+    """렌더 최종 실패 시 해당 강의의 rendering 상태 Video를 archived로 마킹."""
+    from sqlalchemy import select
+    from app.models.video import Video, VideoStatus
+
+    db = SyncSessionLocal()
+    try:
+        videos = db.execute(
+            select(Video).where(
+                Video.lecture_id == lecture_id,
+                Video.status == VideoStatus.rendering,
+            )
+        ).scalars().all()
+        for video in videos:
+            video.status = VideoStatus.archived
+        if videos:
+            db.commit()
+            logger.warning(
+                "렌더 최종 실패로 Video %d개를 archived로 마킹: lecture_id=%s",
+                len(videos), lecture_id,
+            )
+    except Exception as db_exc:
+        db.rollback()
+        logger.error("Video archived 마킹 실패: lecture_id=%s, error=%s", lecture_id, db_exc)
+    finally:
+        db.close()
+
+
 @celery.task(bind=True, max_retries=2, default_retry_delay=30)
 def render_slide(self, render_id: str, script_text: str) -> dict:
     """TTS 합성 → S3 업로드 → HeyGen 비디오 생성 요청."""
@@ -57,13 +85,17 @@ def render_slide(self, render_id: str, script_text: str) -> dict:
         db.rollback()
         is_final_failure = self.request.retries >= self.max_retries
         if is_final_failure:
+            lecture_id = None
             try:
                 render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
                 render.status = RenderStatus.failed
                 render.error_message = str(exc)
+                lecture_id = render.lecture_id
                 db.commit()
             except Exception:
                 db.rollback()
+            if lecture_id:
+                _archive_videos_for_lecture(lecture_id)
         logger.error(
             "렌더 실패: render_id=%s, retries=%d/%d, error=%s",
             render_id, self.request.retries, self.max_retries, exc,
