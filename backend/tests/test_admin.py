@@ -233,6 +233,58 @@ async def test_update_user_unauthorized(client, student):
     assert resp.status_code in (401, 403)
 
 
+@pytest.mark.asyncio
+async def test_patch_user_persists(client, admin, student):
+    """role 변경이 DB에 실제 반영되어 이후 GET 조회에서도 유지된다 (commit 검증)."""
+    resp = await client.patch(
+        f"/api/v1/admin/users/{student.id}",
+        params={"role": "professor"},
+        headers=make_auth_header(admin),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "professor"
+
+    # 별도 GET 요청으로 변경값이 DB에 저장됐는지 검증
+    list_resp = await client.get(
+        "/api/v1/admin/users",
+        params={"role": "professor"},
+        headers=make_auth_header(admin),
+    )
+    assert list_resp.status_code == 200
+    user_ids = [u["id"] for u in list_resp.json()["users"]]
+    assert str(student.id) in user_ids
+
+
+@pytest.mark.asyncio
+async def test_delete_user_deactivates(client, admin, student):
+    """DELETE 후 재조회 시 is_active=False가 DB에 반영돼 있다 (commit 검증)."""
+    resp = await client.delete(
+        f"/api/v1/admin/users/{student.id}",
+        headers=make_auth_header(admin),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["is_active"] is False
+
+    # 이후 PATCH(no-op)로 재조회해 비활성화 상태가 유지되는지 확인
+    verify = await client.patch(
+        f"/api/v1/admin/users/{student.id}",
+        params={"is_active": False},
+        headers=make_auth_header(admin),
+    )
+    assert verify.status_code == 200
+    assert verify.json()["is_active"] is False
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_delete_self(client, admin):
+    """어드민은 자기 자신의 계정을 삭제할 수 없다."""
+    resp = await client.delete(
+        f"/api/v1/admin/users/{admin.id}",
+        headers=make_auth_header(admin),
+    )
+    assert resp.status_code == 400
+
+
 # ── GET /api/v1/admin/costs ──────────────────────────────────────────────────
 
 
