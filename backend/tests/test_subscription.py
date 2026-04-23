@@ -48,7 +48,30 @@ async def test_get_subscription_unauthorized(client):
 # ── 플랜 변경 ────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_change_plan(client, student, db):
+async def test_change_plan_to_free_allowed(client, professor, db):
+    """유료 플랜 → FREE 다운그레이드는 허용."""
+    sub = Subscription(
+        id=uuid.uuid4(),
+        user_id=professor.id,
+        plan=PlanType.pro,
+    )
+    db.add(sub)
+    await db.flush()
+
+    resp = await client.post(
+        "/api/v1/subscription",
+        params={"plan": "FREE"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["plan"] == "FREE"
+    assert data["monthly_limit"] == 2
+
+
+@pytest.mark.asyncio
+async def test_change_plan_to_basic_rejected(client, student, db):
+    """BASIC 업그레이드 직접 시도 → 400 (결제 필요)."""
     sub = Subscription(
         id=uuid.uuid4(),
         user_id=student.id,
@@ -62,14 +85,13 @@ async def test_change_plan(client, student, db):
         params={"plan": "BASIC"},
         headers=make_auth_header(student),
     )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["plan"] == "BASIC"
-    assert data["monthly_limit"] == 10
+    assert resp.status_code == 400
+    assert "payment/checkout" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
-async def test_change_plan_to_pro(client, professor, db):
+async def test_change_plan_to_pro_rejected(client, professor, db):
+    """PRO 업그레이드 직접 시도 → 400 (결제 필요)."""
     sub = Subscription(
         id=uuid.uuid4(),
         user_id=professor.id,
@@ -83,9 +105,15 @@ async def test_change_plan_to_pro(client, professor, db):
         params={"plan": "PRO"},
         headers=make_auth_header(professor),
     )
-    assert resp.status_code == 200
-    assert resp.json()["plan"] == "PRO"
-    assert resp.json()["monthly_limit"] == 20
+    assert resp.status_code == 400
+    assert "payment/checkout" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_change_plan_unauthorized(client):
+    """미인증 플랜 변경 시도 → 401."""
+    resp = await client.post("/api/v1/subscription", params={"plan": "FREE"})
+    assert resp.status_code in (401, 403)
 
 
 # ── 사용량 조회 ──────────────────────────────────────────────────────────────

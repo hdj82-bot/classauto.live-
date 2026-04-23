@@ -43,14 +43,24 @@ export default function SubscriptionPage() {
     if (!confirmPlan) return;
     setChanging(true);
     try {
-      await api.post(`/api/v1/subscription?plan=${confirmPlan}`);
-      await fetchData();
-      toast("플랜이 변경되었습니다.", "success");
+      if (confirmPlan === "FREE") {
+        // FREE 다운그레이드: 직접 처리
+        await api.post(`/api/v1/subscription?plan=FREE`);
+        await fetchData();
+        toast("무료 플랜으로 변경되었습니다.", "success");
+        setConfirmPlan(null);
+      } else {
+        // BASIC/PRO 업그레이드: Stripe Checkout으로 이동
+        const { data } = await api.post(`/api/v1/payment/checkout?plan=${confirmPlan}`);
+        window.location.href = data.checkout_url;
+        // 리다이렉트 후에는 아래 코드가 실행되지 않음
+      }
     } catch {
       toast("플랜 변경에 실패했습니다.", "error");
+      setChanging(false);
+      setConfirmPlan(null);
     }
     setChanging(false);
-    setConfirmPlan(null);
   };
 
   if (loading) return <LoadingSpinner fullScreen label="구독 정보 불러오는 중..." />;
@@ -107,7 +117,7 @@ export default function SubscriptionPage() {
               ) : (
                 <button onClick={() => setConfirmPlan(plan.name)} disabled={changing}
                   className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-medium transition">
-                  변경하기
+                  {plan.name === "FREE" ? "다운그레이드" : "업그레이드"}
                 </button>
               )}
             </div>
@@ -122,10 +132,16 @@ export default function SubscriptionPage() {
             <p className="text-sm text-gray-600">
               <span className="font-medium text-gray-900">{confirmPlanInfo.label}</span> 플랜({confirmPlanInfo.price})으로 변경하시겠습니까?
             </p>
-            {confirmPlanInfo.name === "FREE" && (
+            {confirmPlanInfo.name === "FREE" ? (
               <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
                 <p className="text-sm text-amber-700">
                   무료 플랜으로 변경하면 월 렌더링 한도가 2편으로 줄어듭니다.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
+                <p className="text-sm text-indigo-700">
+                  Stripe 결제 페이지로 이동합니다.
                 </p>
               </div>
             )}
@@ -136,7 +152,7 @@ export default function SubscriptionPage() {
               </button>
               <button onClick={handleChangePlan} disabled={changing}
                 className="text-sm bg-indigo-600 text-white rounded-xl px-4 py-2 hover:bg-indigo-700 disabled:opacity-50 transition">
-                {changing ? "변경 중..." : "변경하기"}
+                {changing ? "처리 중..." : confirmPlanInfo.name === "FREE" ? "다운그레이드" : "결제하기"}
               </button>
             </div>
           </div>
