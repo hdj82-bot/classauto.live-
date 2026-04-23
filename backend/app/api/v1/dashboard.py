@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 @router.get("/{lecture_id}/attendance", summary="출석 분석")
 async def get_attendance(
     lecture_id: uuid.UUID,
-    live_deadline_min: int | None = Query(None, description="실시간 출석 판단 기준(분). 생략 시 강의별 설정 → 전역 기본값 순으로 적용"),
+    live_deadline_min: int | None = Query(None, ge=1, le=300, description="출석 판정 기준 시간(분), 1~300 범위"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
