@@ -185,6 +185,21 @@ async def student(db: AsyncSession) -> User:
     return user
 
 
+@pytest_asyncio.fixture
+async def admin(db: AsyncSession) -> User:
+    user = User(
+        id=uuid.uuid4(),
+        google_sub="google-admin-001",
+        email="admin@test.ac.kr",
+        name="테스트 관리자",
+        role=UserRole.admin,
+        is_active=True,
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
 # ── 토큰 헬퍼 ────────────────────────────────────────────────────────────────
 
 def make_auth_header(user: User) -> dict:
