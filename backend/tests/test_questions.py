@@ -281,6 +281,12 @@ async def test_get_session_results(client, student, lecture, db, _formative_ques
     assert data["score"]["total"] == 1
     assert data["score"]["correct"] == 1
     assert len(data["responses"]) == 1
+    # selectinload(Response.question) 동작 검증: question 필드가 eager load돼야 함
+    response_item = data["responses"][0]
+    assert "question" in response_item
+    q = response_item["question"]
+    for field in ("id", "content", "question_type", "assessment_type", "correct_answer"):
+        assert field in q, f"question 필드 누락: {field}"
 
 
 @pytest.mark.asyncio
