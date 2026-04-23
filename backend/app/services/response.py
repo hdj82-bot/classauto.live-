@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
+from app.models.assessment_result import AssessmentResult
 from app.models.question import Question, QuestionType
 from app.models.response import Response
 from app.models.session import LearningSession
@@ -81,6 +82,7 @@ async def submit_responses(
 
     skipped_ids: list[str] = []
     saved: list[Response] = []
+    assessment_records: list[AssessmentResult] = []
     for item in responses:
         question = questions_map.get(item.question_id)
         if question is None:
@@ -105,8 +107,24 @@ async def submit_responses(
         db.add(resp)
         saved.append(resp)
 
+        # AssessmentResult는 자동 채점된 응답(객관식)만 기록 — is_correct nullable 제약 때문
+        if is_correct is not None:
+            assessment_records.append(AssessmentResult(
+                lecture_id=session.lecture_id,
+                session_id=session_id,
+                user_id=user_id,
+                question_type=question.question_type.value,
+                question_text=question.content,
+                correct_answer=question.correct_answer or "",
+                user_answer=item.user_answer,
+                is_correct=is_correct,
+            ))
+
     if skipped_ids:
         logger.warning("존재하지 않는 question_id 건너뜀: %s", skipped_ids)
+
+    for ar in assessment_records:
+        db.add(ar)
 
     await db.commit()
     for r in saved:
