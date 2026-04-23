@@ -9,7 +9,7 @@ from app.api.deps import require_professor
 from app.db.session import get_db
 from app.models.translation import ScriptTranslation
 from app.models.user import User
-from app.models.video import Video
+from app.services.lecture import assert_professor_owns_video
 from app.services.pipeline.translator import translate_text
 
 router = APIRouter(prefix="/api/v1/translate", tags=["translate"])
@@ -22,10 +22,7 @@ async def translate_video_script(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
-    result = await db.execute(select(Video).where(Video.id == video_id))
-    video = result.scalar_one_or_none()
-    if not video:
-        raise HTTPException(status_code=404, detail="영상을 찾을 수 없습니다.")
+    video = await assert_professor_owns_video(db, video_id, user.id)
 
     existing = await db.execute(
         select(ScriptTranslation).where(
@@ -59,6 +56,8 @@ async def get_translations(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
+    await assert_professor_owns_video(db, video_id, user.id)
+
     result = await db.execute(
         select(ScriptTranslation).where(ScriptTranslation.video_id == video_id)
     )

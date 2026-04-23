@@ -9,6 +9,7 @@ from app.api.deps import require_professor
 from app.db.session import get_db
 from app.models.user import User
 from app.models.video_render import VideoRender
+from app.services.lecture import assert_professor_owns_lecture
 
 router = APIRouter(prefix="/api/v1/render", tags=["render"])
 
@@ -24,6 +25,8 @@ async def create_render_request(
 ):
     from app.services.pipeline.subscription import check_limit, PlanLimitExceeded
     from app.tasks.render import render_slide
+
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
 
     try:
         await check_limit(db, user.id, requested=len(scripts))
@@ -58,6 +61,8 @@ async def get_lecture_render_status(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+
     result = await db.execute(
         select(VideoRender).where(VideoRender.lecture_id == lecture_id).order_by(VideoRender.slide_number)
     )
@@ -94,6 +99,8 @@ async def upload_ppt(
 ):
     from app.services.pipeline import s3 as s3_svc
     from app.tasks.pipeline import start_pipeline
+
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
 
     if not file.filename or not file.filename.lower().endswith(".pptx"):
         raise HTTPException(status_code=400, detail=".pptx 파일만 업로드 가능합니다.")

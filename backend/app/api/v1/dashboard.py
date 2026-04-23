@@ -11,6 +11,7 @@ from app.api.deps import require_professor
 from app.db.session import get_db
 from app.models.user import User
 from app.services import dashboard as dashboard_svc
+from app.services.lecture import assert_professor_owns_lecture
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
@@ -22,6 +23,7 @@ async def get_attendance(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await dashboard_svc.get_attendance(db, lecture_id, live_deadline_min)
 
 
@@ -31,6 +33,7 @@ async def get_scores(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await dashboard_svc.get_scores(db, lecture_id)
 
 
@@ -40,6 +43,7 @@ async def get_engagement(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await dashboard_svc.get_engagement(db, lecture_id)
 
 
@@ -51,6 +55,7 @@ async def get_qa_logs(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await dashboard_svc.get_qa_logs(db, lecture_id, page, limit)
 
 
@@ -60,6 +65,7 @@ async def get_cost(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_professor),
 ):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await dashboard_svc.get_cost(db, lecture_id)
 
 
@@ -70,6 +76,7 @@ async def export_csv(
     user: User = Depends(require_professor),
 ):
     """출석/진도/참여도를 종합한 CSV 파일을 다운로드합니다."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
     attendance = await dashboard_svc.get_attendance(db, lecture_id)
     engagement = await dashboard_svc.get_engagement(db, lecture_id)
 
@@ -80,7 +87,7 @@ async def export_csv(
 
     buf = io.StringIO()
     # BOM for Excel 한글 호환
-    buf.write("\ufeff")
+    buf.write("﻿")
     writer = csv.writer(buf)
 
     writer.writerow([
