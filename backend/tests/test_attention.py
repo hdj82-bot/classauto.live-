@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.models.session import LearningSession, SessionStatus
+from tests.conftest import make_auth_header
 
 
 # ── 집중도 추적 시작 ─────────────────────────────────────────────────────────
@@ -25,14 +26,37 @@ async def test_start_attention_tracking(client, student, lecture, db):
         "/api/v1/attention/start",
         params={
             "session_id": str(session.id),
-            "user_id": str(student.id),
             "lecture_id": str(lecture.id),
         },
+        headers=make_auth_header(student),
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["session_id"] == str(session.id)
     assert "warning_level" in data
+
+
+@pytest.mark.asyncio
+async def test_start_attention_tracking_unauthenticated(client, student, lecture, db):
+    """인증 없이 /start 호출 시 401."""
+    session = LearningSession(
+        id=uuid.uuid4(),
+        user_id=student.id,
+        lecture_id=lecture.id,
+        status=SessionStatus.in_progress,
+        total_sec=600,
+    )
+    db.add(session)
+    await db.flush()
+
+    resp = await client.post(
+        "/api/v1/attention/start",
+        params={
+            "session_id": str(session.id),
+            "lecture_id": str(lecture.id),
+        },
+    )
+    assert resp.status_code == 401
 
 
 # ── 하트비트 ─────────────────────────────────────────────────────────────────
@@ -129,5 +153,5 @@ async def test_resume_session(client, student, lecture, db):
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["message"] == "영상이 재개되었습니다."
     assert data["is_paused"] is False
+    assert "message" not in data

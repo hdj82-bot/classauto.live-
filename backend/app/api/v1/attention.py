@@ -4,8 +4,10 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.user import User
 from app.services import session as session_svc
 
 router = APIRouter(prefix="/api/v1/attention", tags=["attention"])
@@ -23,11 +25,13 @@ async def get_attention_config():
 @router.post("/start", summary="집중도 추적 시작")
 async def start_session(
     session_id: uuid.UUID,
-    user_id: uuid.UUID,
     lecture_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await session_svc.start_attention_tracking(db, session_id, user_id, lecture_id)
+    session = await session_svc.start_attention_tracking(
+        db, session_id, current_user.id, lecture_id
+    )
     return {"session_id": str(session.id), "warning_level": session.warning_level}
 
 
@@ -60,5 +64,4 @@ async def resume(
         "session_id": str(session.id),
         "warning_level": session.warning_level,
         "is_paused": session.is_paused,
-        "message": "영상이 재개되었습니다.",
     }
