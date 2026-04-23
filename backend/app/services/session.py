@@ -13,12 +13,6 @@ from app.models.session import (
     get_allowed_transitions,
 )
 
-WARNING_MESSAGES: dict[int, str] = {
-    1: "집중해 주세요!",
-    2: "대면 수업 때 혼나요!",
-    3: "이러면 점수 드릴 수가 없어요",
-}
-
 
 # ── 세션 CRUD ────────────────────────────────────────────────────────────────
 
@@ -172,7 +166,6 @@ async def handle_no_response(
         return {
             "session_id": session.id,
             "warning_level": session.warning_level,
-            "message": None,
             "should_pause": False,
             "no_response_cnt": session.no_response_cnt,
         }
@@ -190,7 +183,6 @@ async def handle_no_response(
     return {
         "session_id": session.id,
         "warning_level": session.warning_level,
-        "message": WARNING_MESSAGES.get(session.warning_level),
         "should_pause": should_pause,
         "no_response_cnt": session.no_response_cnt,
     }
@@ -231,11 +223,12 @@ async def _find_owned_session(
     db: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID
 ) -> LearningSession:
     result = await db.execute(
-        select(LearningSession).where(LearningSession.id == session_id)
+        select(LearningSession).where(
+            LearningSession.id == session_id,
+            LearningSession.user_id == user_id,
+        )
     )
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
-    if session.user_id != user_id:
-        raise HTTPException(status_code=403, detail="본인의 세션만 접근할 수 있습니다.")
     return session
