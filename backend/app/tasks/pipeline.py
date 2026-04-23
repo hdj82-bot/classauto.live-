@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import os
-import tempfile
 import uuid
 
 from celery import chain
@@ -160,7 +159,7 @@ def step5_notify(self, prev_result: dict) -> dict:
 def start_pipeline(task_id: str, s3_key: str, instructor_id: str | None = None, lecture_id: str | None = None):
     """5단계 Celery 체인 파이프라인을 시작. s3_key: S3에 업로드된 PPT 파일 키."""
     pipeline = chain(
-        step1_parse.s(task_id, s3_key, instructor_id, lecture_id),
+        step1_parse.s(task_id, s3_key, instructor_id=instructor_id, lecture_id=lecture_id),
         step2_embed.s(),
         step3_generate_scripts.s(),
         step4_mark_pending_review.s(),
