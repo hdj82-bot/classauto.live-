@@ -4,6 +4,24 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
+function parseJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    return JSON.parse(atob(token.split(".")[1]));
+  } catch {
+    return null;
+  }
+}
+
+function redirectByRole(role: string | undefined, router: ReturnType<typeof useRouter>) {
+  if (role === "admin") {
+    router.replace("/admin");
+  } else if (role === "professor") {
+    router.replace("/professor/dashboard");
+  } else {
+    router.replace("/dashboard");
+  }
+}
+
 export default function CallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -21,7 +39,9 @@ export default function CallbackContent() {
     login(access, refresh);
     // URL에서 토큰 제거 (보안)
     window.history.replaceState(null, "", "/auth/callback");
-    router.replace("/dashboard");
+
+    const payload = parseJwtPayload(access);
+    redirectByRole(payload?.role as string | undefined, router);
   }, [searchParams, login, router]);
 
   return (

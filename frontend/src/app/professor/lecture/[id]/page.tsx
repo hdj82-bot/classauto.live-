@@ -43,7 +43,8 @@ export default function ScriptEditorPage() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get(`/api/videos/${id}/script`);
+        const { data: videoData } = await api.get(`/api/lectures/${id}/video`);
+        const { data } = await api.get(`/api/videos/${videoData.id}/script`);
         setScript(data);
         setSegments(data.segments || []);
       } catch { /* script not generated */ }

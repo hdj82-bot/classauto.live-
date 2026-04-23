@@ -1,18 +1,22 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_professor
 from app.db.session import get_db
 from app.models.user import User
+from app.models.video import Video
 from app.schemas.lecture import (
     LectureCreate,
     LecturePublicResponse,
     LectureResponse,
     LectureUpdate,
 )
+from app.schemas.video import VideoStatusResponse
 from app.services.lecture import (
+    assert_professor_owns_lecture,
     create_lecture,
     get_public_lecture_by_slug,
     list_course_lectures,
@@ -91,6 +95,36 @@ async def patch_lecture(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+# ── 강의의 영상 조회 (교수자 전용) ───────────────────────────────────────────
+
+@router.get(
+    "/api/lectures/{lecture_id}/video",
+    response_model=VideoStatusResponse,
+    summary="강의에 연결된 영상 조회 (교수자 전용)",
+)
+async def get_lecture_video(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """lecture_id로 연결된 Video의 id·status를 반환합니다."""
+    await assert_professor_owns_lecture(db, lecture_id, professor.id)
+    result = await db.execute(
+        select(Video).where(Video.lecture_id == lecture_id)
+    )
+    video = result.scalars().first()
+    if video is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="이 강의에 연결된 영상이 아직 생성되지 않았습니다.",
+        )
+    return VideoStatusResponse(
+        id=video.id,
+        status=video.status.value,
+        updated_at=video.updated_at,
+    )
 
 
 # ── 공개 강의 조회 (인증 불필요) ──────────────────────────────────────────────
