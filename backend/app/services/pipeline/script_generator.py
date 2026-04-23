@@ -68,8 +68,8 @@ def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) ->
 
     try:
         response = client.messages.create(
-            model=settings.CLAUDE_MODEL,
-            max_tokens=1024,
+            model=settings.SCRIPT_MODEL,
+            max_tokens=settings.SCRIPT_MAX_TOKENS,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content_blocks}],
         )

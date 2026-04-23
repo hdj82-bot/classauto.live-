@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # ── Anthropic ───────────────────────────────────────────────
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL: str = "claude-opus-4-6"
+    SCRIPT_MODEL: str = "claude-sonnet-4-6"
+    QA_MODEL: str = "claude-opus-4-6"
+    SCRIPT_MAX_TOKENS: int = 2048
+    CLAUDE_INPUT_COST_PER_M: float = 3.00
+    CLAUDE_OUTPUT_COST_PER_M: float = 15.00
 
     # ── OpenAI (임베딩) ─────────────────────────────────────────
     OPENAI_API_KEY: str = ""
