@@ -62,6 +62,7 @@ async def heygen_webhook(
         )
         render = result.scalar_one_or_none()
         if not render:
+            logger.warning("알 수 없는 video_id 웹훅 수신: video_id=%s, event_type=%s", video_id, event_type)
             return {"status": "ignored", "reason": "unknown video_id"}
 
         # 멱등성: 이미 처리 완료된 렌더는 무시
