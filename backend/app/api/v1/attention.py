@@ -40,26 +40,31 @@ async def heartbeat(
     session_id: uuid.UUID,
     progress_seconds: int,
     is_network_unstable: bool = False,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await session_svc.process_heartbeat(db, session_id, progress_seconds, is_network_unstable)
+    session = await session_svc.process_heartbeat(
+        db, current_user.id, session_id, progress_seconds, is_network_unstable
+    )
     return {"session_id": str(session.id), "progress_seconds": session.progress_seconds}
 
 
 @router.post("/no-response", summary="무반응 이벤트")
 async def no_response(
     session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await session_svc.handle_no_response(db, session_id)
+    return await session_svc.handle_no_response(db, current_user.id, session_id)
 
 
 @router.post("/resume", summary="세션 재개")
 async def resume(
     session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await session_svc.resume_session(db, session_id)
+    session = await session_svc.resume_session(db, current_user.id, session_id)
     return {
         "session_id": str(session.id),
         "warning_level": session.warning_level,
