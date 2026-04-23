@@ -118,6 +118,7 @@ async def update_user(
         user.is_active = is_active
 
     await db.flush()
+    await db.commit()
     return {
         "id": str(user.id),
         "email": user.email,
@@ -150,6 +151,7 @@ async def delete_user(
 
     user.is_active = False
     await db.flush()
+    await db.commit()
     return {
         "id": str(user.id),
         "email": user.email,
