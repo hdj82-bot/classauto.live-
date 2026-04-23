@@ -1,5 +1,4 @@
 """HeyGen 서비스 및 API 엔드포인트 테스트."""
-import uuid
 from unittest.mock import patch, AsyncMock, MagicMock
 
 import httpx

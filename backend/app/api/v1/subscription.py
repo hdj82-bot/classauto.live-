@@ -1,5 +1,4 @@
 """구독 플랜 API (app/api/subscription.py 흡수)."""
-import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status

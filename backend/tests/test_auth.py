@@ -2,13 +2,10 @@
 
 실제 Google OAuth 호출 없이 토큰 발급·갱신·로그아웃만 검증한다.
 """
-import uuid
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.core.security import create_refresh_token
-from tests.conftest import make_auth_header
 
 
 # ── GET /api/auth/google ───────────────────────────────────────────────────────

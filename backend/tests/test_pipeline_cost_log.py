@@ -1,9 +1,8 @@
 """cost_log 서비스 단위 테스트."""
 import json
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import pytest
 
 from app.services.pipeline.cost_log import record
 

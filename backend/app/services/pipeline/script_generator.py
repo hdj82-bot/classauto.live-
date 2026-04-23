@@ -59,7 +59,7 @@ def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) ->
     if slide.speaker_notes:
         prompt_parts.append(f"\n### 발표자 노트 (1순위 참고)\n{slide.speaker_notes}")
     if slide.texts:
-        prompt_parts.append(f"\n### 슬라이드 텍스트\n" + "\n".join(slide.texts))
+        prompt_parts.append("\n### 슬라이드 텍스트\n" + "\n".join(slide.texts))
     if not slide.speaker_notes and not slide.texts and not slide.image_paths:
         prompt_parts.append("\n(빈 슬라이드입니다. 간단한 전환 멘트만 작성하세요.)")
     prompt_parts.append("\n위 내용을 바탕으로 발화 스크립트를 작성해주세요.")

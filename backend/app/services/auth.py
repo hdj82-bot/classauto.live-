@@ -13,7 +13,6 @@ from app.core.security import (
     GOOGLE_USERINFO_URL,
     create_access_token,
     create_refresh_token,
-    create_temp_token,
     decode_token,
 )
 from app.models.user import User, UserRole

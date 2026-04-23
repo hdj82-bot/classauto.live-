@@ -1,7 +1,6 @@
 """HeyGen 웹훅 API (app/api/webhooks.py 흡수)."""
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import hmac
 import logging

@@ -1,5 +1,4 @@
 """SlideEmbedding 모델 (app/ embedding 흡수)."""
-from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, DateTime, Integer, String, Text, func

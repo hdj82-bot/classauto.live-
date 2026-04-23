@@ -7,7 +7,6 @@ docker-compose.test.yml 실행 필요:
 import uuid
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 

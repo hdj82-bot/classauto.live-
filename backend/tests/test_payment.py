@@ -1,10 +1,9 @@
 """Stripe 결제 서비스 및 API 테스트."""
-import uuid
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-from app.models.subscription import PlanType, Subscription
+from app.models.subscription import PlanType
 from app.services.payment import (
     PaymentError,
     create_checkout_session,

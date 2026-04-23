@@ -1,6 +1,5 @@
 """parser 서비스 단위 테스트."""
 import base64
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch, MagicMock
 
 import httpx
 import pytest
-import pytest_asyncio
 
 
 @pytest.mark.asyncio

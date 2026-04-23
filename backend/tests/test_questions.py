@@ -1,11 +1,10 @@
 """평가 시스템 API 통합 테스트."""
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.models.question import AssessmentType, Difficulty, Question, QuestionType
-from app.models.session import LearningSession, SessionStatus
 from tests.conftest import make_auth_header
 
 

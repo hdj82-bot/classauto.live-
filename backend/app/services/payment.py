@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.subscription import PLAN_PRICES, PlanType, Subscription
+from app.models.subscription import PlanType, Subscription
 from app.services.pipeline.subscription import get_or_create_subscription
 
 logger = logging.getLogger(__name__)

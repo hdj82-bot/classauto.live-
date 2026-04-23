@@ -125,7 +125,6 @@ def test_upload_audio_bytes():
 
 @pytest.mark.asyncio
 async def test_upload_from_url():
-    import httpx
 
     mock_client = MagicMock()
     mock_response = MagicMock()

@@ -1,5 +1,4 @@
 """embedding 서비스 단위 테스트."""
-import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -41,7 +40,7 @@ class TestGetEmbeddings:
     @patch("app.services.pipeline.embedding.openai.OpenAI")
     def test_batch_splitting(self, mock_openai_cls):
         """MAX_BATCH_SIZE(100)를 초과하면 배치 분할 확인."""
-        from app.services.pipeline.embedding import MAX_BATCH_SIZE, get_embeddings
+        from app.services.pipeline.embedding import get_embeddings
 
         mock_client = MagicMock()
         mock_openai_cls.return_value = mock_client
