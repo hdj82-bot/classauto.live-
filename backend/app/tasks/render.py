@@ -6,7 +6,7 @@ import uuid
 
 from app.celery_app import celery
 from app.db.session import SyncSessionLocal
-from app.models.video_render import VideoRender
+from app.models.video_render import RenderStatus, VideoRender
 from app.services.pipeline import cost_log, s3 as s3_svc
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ def render_slide(self, render_id: str, script_text: str) -> dict:
     db = SyncSessionLocal()
     try:
         render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
-        render.status = "TTS_PROCESSING"
+        render.status = RenderStatus.tts_processing
         db.commit()
 
         # TTS 합성
@@ -41,7 +41,7 @@ def render_slide(self, render_id: str, script_text: str) -> dict:
         db.commit()
 
         # HeyGen 비디오 생성
-        render.status = "RENDERING"
+        render.status = RenderStatus.rendering
         db.commit()
 
         heygen_job_id = loop.run_until_complete(
@@ -57,7 +57,7 @@ def render_slide(self, render_id: str, script_text: str) -> dict:
     except Exception as exc:
         db.rollback()
         render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
-        render.status = "FAILED"
+        render.status = RenderStatus.failed
         render.error_message = str(exc)
         db.commit()
         logger.error("렌더 실패: render_id=%s, error=%s", render_id, exc)
