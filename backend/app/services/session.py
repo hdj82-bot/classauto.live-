@@ -132,16 +132,11 @@ async def start_attention_tracking(
 
 
 async def process_heartbeat(
-    db: AsyncSession, session_id: uuid.UUID, progress_seconds: int,
+    db: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID, progress_seconds: int,
     is_network_unstable: bool = False,
 ) -> LearningSession:
     """하트비트 수신 — 진행 시간 및 네트워크 상태 업데이트."""
-    result = await db.execute(
-        select(LearningSession).where(LearningSession.id == session_id)
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+    session = await _find_owned_session(db, user_id, session_id)
 
     session.progress_seconds = progress_seconds
     session.is_network_unstable = is_network_unstable
@@ -152,15 +147,10 @@ async def process_heartbeat(
 
 
 async def handle_no_response(
-    db: AsyncSession, session_id: uuid.UUID
+    db: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID
 ) -> dict:
     """무반응 이벤트 처리 — 경고 레벨 증가."""
-    result = await db.execute(
-        select(LearningSession).where(LearningSession.id == session_id)
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+    session = await _find_owned_session(db, user_id, session_id)
 
     if session.is_network_unstable:
         return {
@@ -188,14 +178,9 @@ async def handle_no_response(
     }
 
 
-async def resume_session(db: AsyncSession, session_id: uuid.UUID) -> LearningSession:
+async def resume_session(db: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID) -> LearningSession:
     """일시 정지된 세션 재개."""
-    result = await db.execute(
-        select(LearningSession).where(LearningSession.id == session_id)
-    )
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+    session = await _find_owned_session(db, user_id, session_id)
 
     # 완료된 세션은 재개 불가
     if session.status == SessionStatus.completed:

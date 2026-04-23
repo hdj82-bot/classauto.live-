@@ -80,6 +80,7 @@ async def test_heartbeat(client, student, lecture, db):
             "session_id": str(session.id),
             "progress_seconds": 120,
         },
+        headers=make_auth_header(student),
     )
     assert resp.status_code == 200
     data = resp.json()
@@ -106,8 +107,29 @@ async def test_heartbeat_network_unstable(client, student, lecture, db):
             "progress_seconds": 120,
             "is_network_unstable": True,
         },
+        headers=make_auth_header(student),
     )
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_unauthenticated(client, student, lecture, db):
+    """인증 없이 /heartbeat 호출 시 401."""
+    session = LearningSession(
+        id=uuid.uuid4(),
+        user_id=student.id,
+        lecture_id=lecture.id,
+        status=SessionStatus.in_progress,
+        total_sec=600,
+    )
+    db.add(session)
+    await db.flush()
+
+    resp = await client.post(
+        "/api/v1/attention/heartbeat",
+        params={"session_id": str(session.id), "progress_seconds": 60},
+    )
+    assert resp.status_code == 401
 
 
 # ── 무반응 이벤트 ────────────────────────────────────────────────────────────
@@ -127,8 +149,29 @@ async def test_no_response(client, student, lecture, db):
     resp = await client.post(
         "/api/v1/attention/no-response",
         params={"session_id": str(session.id)},
+        headers=make_auth_header(student),
     )
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_no_response_unauthenticated(client, student, lecture, db):
+    """인증 없이 /no-response 호출 시 401."""
+    session = LearningSession(
+        id=uuid.uuid4(),
+        user_id=student.id,
+        lecture_id=lecture.id,
+        status=SessionStatus.in_progress,
+        total_sec=600,
+    )
+    db.add(session)
+    await db.flush()
+
+    resp = await client.post(
+        "/api/v1/attention/no-response",
+        params={"session_id": str(session.id)},
+    )
+    assert resp.status_code == 401
 
 
 # ── 세션 재개 ────────────────────────────────────────────────────────────────
@@ -150,8 +193,30 @@ async def test_resume_session(client, student, lecture, db):
     resp = await client.post(
         "/api/v1/attention/resume",
         params={"session_id": str(session.id)},
+        headers=make_auth_header(student),
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["is_paused"] is False
     assert "message" not in data
+
+
+@pytest.mark.asyncio
+async def test_resume_unauthenticated(client, student, lecture, db):
+    """인증 없이 /resume 호출 시 401."""
+    session = LearningSession(
+        id=uuid.uuid4(),
+        user_id=student.id,
+        lecture_id=lecture.id,
+        status=SessionStatus.in_progress,
+        total_sec=600,
+        is_paused=True,
+    )
+    db.add(session)
+    await db.flush()
+
+    resp = await client.post(
+        "/api/v1/attention/resume",
+        params={"session_id": str(session.id)},
+    )
+    assert resp.status_code == 401
