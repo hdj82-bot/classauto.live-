@@ -163,7 +163,7 @@ export default function LectureViewerPage() {
 
             <div className="mt-4 flex gap-3">
               <button
-                onClick={() => router.push(`/lecture/${slug}/assess`)}
+                onClick={() => router.push(`/lecture/${slug}/assess${sessionId ? `?session_id=${sessionId}` : ""}`)}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition"
               >
                 {t("lecture.startAssess")}

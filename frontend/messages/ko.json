@@ -218,7 +218,10 @@
     "submitSuccess": "채점이 완료되었습니다.",
     "submitError": "제출에 실패했습니다. 다시 시도해주세요.",
     "accuracy": "정답률 {pct}%",
-    "backToLecture": "강의로 돌아가기"
+    "backToLecture": "강의로 돌아가기",
+    "questionCount": "{current} / {total}",
+    "complete": "평가 완료!",
+    "completeDesc": "세션이 완료되었습니다. 수고하셨습니다!"
   },
   "attention": {
     "level1": "집중해 주세요!",
@@ -229,7 +232,11 @@
     "level3Desc": "세 번째 경고입니다. 계속 시청하려면 아래 버튼을 눌러주세요.",
     "warningLevel": "경고 {level}단계",
     "resume": "영상 재개하기",
-    "resumeHint": "ESC 또는 Enter 키를 눌러도 재개됩니다"
+    "resumeHint": "ESC 또는 Enter 키를 눌러도 재개됩니다",
+    "warning1": "집중해 주세요!",
+    "warning2": "계속 이러시면 안 됩니다!",
+    "warning3": "이러면 점수를 드릴 수 없어요",
+    "paused": "세션이 일시정지되었습니다"
   },
   "expired": {
     "title": "시청 기간이 만료되었습니다",

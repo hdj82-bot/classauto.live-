@@ -218,7 +218,10 @@
     "submitSuccess": "Grading complete.",
     "submitError": "Submission failed. Please try again.",
     "accuracy": "Accuracy {pct}%",
-    "backToLecture": "Back to Lecture"
+    "backToLecture": "Back to Lecture",
+    "questionCount": "{current} / {total}",
+    "complete": "Assessment Complete!",
+    "completeDesc": "Session completed. Well done!"
   },
   "attention": {
     "level1": "Please pay attention!",
@@ -229,7 +232,11 @@
     "level3Desc": "This is your third warning. Press the button below to continue.",
     "warningLevel": "Warning level {level}",
     "resume": "Resume Video",
-    "resumeHint": "Press ESC or Enter to resume"
+    "resumeHint": "Press ESC or Enter to resume",
+    "warning1": "Please pay attention!",
+    "warning2": "Please stay focused!",
+    "warning3": "Your score may be affected",
+    "paused": "Session paused"
   },
   "expired": {
     "title": "Viewing Period Expired",
