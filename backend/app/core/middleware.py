@@ -28,6 +28,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         token = request_id_var.set(rid)
 
         start = time.perf_counter()
+        response = None
 
         try:
             response = await call_next(request)
@@ -37,13 +38,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 "%s %s %d %.1fms [%s]",
                 request.method,
                 request.url.path,
-                response.status_code if "response" in dir() else 500,
+                response.status_code if response is not None else 500,
                 elapsed_ms,
                 rid,
                 extra={"request_id": rid},
             )
             request_id_var.reset(token)
 
+        if response is None:
+            return JSONResponse({"detail": "internal server error"}, status_code=500)
         response.headers["X-Request-ID"] = rid
         return response
 

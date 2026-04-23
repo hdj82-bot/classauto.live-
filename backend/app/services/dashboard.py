@@ -174,7 +174,7 @@ async def get_engagement(db: AsyncSession, lecture_id: uuid.UUID) -> dict:
         entry = student_map.setdefault(s.user_id, {
             "userId": str(s.user_id),
             "name": s.user.name,
-            "studentNumber": s.user.student_number,
+            "student_number": s.user.student_number,
             "qaCount": 0,
             "respondedCount": 0,
             "noResponseCnt": 0,
