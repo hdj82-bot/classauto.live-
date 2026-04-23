@@ -236,7 +236,8 @@
     "warning1": "Please pay attention!",
     "warning2": "Please stay focused!",
     "warning3": "Your score may be affected",
-    "paused": "Session paused"
+    "paused": "Session paused",
+    "resumed": "Video resumed."
   },
   "expired": {
     "title": "Viewing Period Expired",
