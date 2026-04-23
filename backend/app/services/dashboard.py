@@ -7,17 +7,34 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.models.assessment_result import AssessmentResult
 from app.models.cost_log import CostLog
+from app.models.lecture import Lecture
 from app.models.qa_log import QALog
 from app.models.session import LearningSession
 from app.models.user import User
 
 
 async def get_attendance(
-    db: AsyncSession, lecture_id: uuid.UUID, live_deadline_min: int = 30
+    db: AsyncSession,
+    lecture_id: uuid.UUID,
+    live_deadline_min: int | None = None,
 ) -> dict:
-    """출석 분석 (실시간 vs 사후 시청)."""
+    """출석 분석 (실시간 vs 사후 시청).
+
+    live_deadline_min 우선순위:
+      1. 호출자가 명시적으로 전달한 값
+      2. Lecture.live_deadline_minutes (강의별 설정)
+      3. settings.DEFAULT_LIVE_DEADLINE_MINUTES (전역 기본값)
+    """
+    if live_deadline_min is None:
+        lecture_row = await db.get(Lecture, lecture_id)
+        if lecture_row is not None and lecture_row.live_deadline_minutes is not None:
+            live_deadline_min = lecture_row.live_deadline_minutes
+        else:
+            live_deadline_min = settings.DEFAULT_LIVE_DEADLINE_MINUTES
+
     result = await db.execute(
         select(LearningSession)
         .where(LearningSession.lecture_id == lecture_id)
