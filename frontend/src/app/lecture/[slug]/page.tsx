@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
+import { tokens } from "@/lib/tokens";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/components/ui/Toast";
 import { useI18n } from "@/contexts/I18nContext";
@@ -80,9 +81,12 @@ export default function LectureViewerPage() {
 
     const pauseSession = () => {
       // completed 상태는 서버가 전이 거부하므로 안전하게 호출 가능
-      fetch(`/api/v1/sessions/${sessionId}?status=paused`, {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+      const accessToken = tokens.getAccess();
+      fetch(`${backendUrl}/api/v1/sessions/${sessionId}?status=paused`, {
         method: "PATCH",
         keepalive: true,
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       }).catch(() => {/* 언로드 중 에러는 무시 */});
     };
 

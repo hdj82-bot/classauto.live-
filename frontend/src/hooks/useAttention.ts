@@ -78,7 +78,7 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
       const elapsed = Date.now() - lastResponseRef.current;
       if (elapsed > configRef.current.no_response_timeout_ms) {
         try {
-          const { data } = await api.post("/api/v1/attention/no-response", { session_id: sessionId });
+          const { data } = await api.post(`/api/v1/attention/no-response?session_id=${sessionId}`);
           setWarningLevel(data.warning_level);
           setMessage(data.message);
           if (data.should_pause) setIsPaused(true);
@@ -92,7 +92,7 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
 
   const resume = useCallback(async () => {
     try {
-      const { data } = await api.post("/api/v1/attention/resume", { session_id: sessionId });
+      const { data } = await api.post(`/api/v1/attention/resume?session_id=${sessionId}`);
       setWarningLevel(data.warning_level);
       setIsPaused(false);
       setMessage(null);
