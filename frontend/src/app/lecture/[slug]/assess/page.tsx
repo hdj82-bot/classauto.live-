@@ -13,12 +13,25 @@ interface Question {
   id: string;
   content: string;
   options: string[] | null;
+  timestamp_seconds?: number | null;
+}
+
+interface SubmittedResult {
+  question_id: string;
+  is_correct: boolean | null;
+}
+
+interface ScoreResult {
+  total: number;
+  correct: number;
+  pending: number;
 }
 
 export default function AssessmentPage() {
   const { slug } = useParams<{ slug: string }>();
   const searchParams = useSearchParams();
-  const sessionId = searchParams.get("session_id") ?? "";
+  // URL의 session_id = 학습 세션 ID (complete 호출용)
+  const learningSessionId = searchParams.get("session_id") ?? "";
   const router = useRouter();
   const { t } = useI18n();
   const { toast } = useToast();
@@ -29,22 +42,27 @@ export default function AssessmentPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [scoreResult, setScoreResult] = useState<ScoreResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 문제 API 응답의 session_id = 평가 세션 ID (응답 제출용)
+  const [assessmentSessionId, setAssessmentSessionId] = useState<string>("");
 
   useEffect(() => {
     (async () => {
       try {
         const { data: lecture } = await api.get(`/api/lectures/${slug}/public`);
-        const { data } = await api.get("/api/v1/questions", {
-          params: { lecture_id: lecture.id, session_id: sessionId },
+        // 백엔드 실제 경로: GET /api/questions/{lecture_id}?assessment_type=formative
+        const { data } = await api.get(`/api/questions/${lecture.id}`, {
+          params: { assessment_type: "formative" },
         });
-        setQuestions(data.questions ?? data ?? []);
+        setQuestions(data.questions ?? []);
+        setAssessmentSessionId(data.session_id ?? "");
       } catch {
         setError(t("assess.loadError"));
       }
       setLoading(false);
     })();
-  }, [slug, sessionId]);
+  }, [slug]);
 
   const currentQuestion = questions[currentIndex];
   const isFirst = currentIndex === 0;
@@ -53,7 +71,31 @@ export default function AssessmentPage() {
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      await api.post(`/api/v1/sessions/${sessionId}/complete`);
+      // 1. 답안 제출: POST /api/responses
+      const responses = Object.entries(answers).map(([question_id, user_answer]) => ({
+        question_id,
+        user_answer,
+        // 평가 페이지에는 영상 플레이어가 없으므로 0으로 전송
+        video_timestamp_seconds: 0,
+      }));
+
+      if (responses.length > 0 && assessmentSessionId) {
+        const { data: submitted } = await api.post("/api/responses", {
+          session_id: assessmentSessionId,
+          responses,
+        });
+        const results = submitted as SubmittedResult[];
+        const total = results.length;
+        const correct = results.filter((r) => r.is_correct === true).length;
+        const pending = results.filter((r) => r.is_correct === null).length;
+        setScoreResult({ total, correct, pending });
+      }
+
+      // 2. 학습 세션 완료 처리
+      if (learningSessionId) {
+        await api.post(`/api/v1/sessions/${learningSessionId}/complete`);
+      }
+
       setCompleted(true);
     } catch {
       toast(t("assess.submitError"), "error");
@@ -115,6 +157,13 @@ export default function AssessmentPage() {
               <h2 className="text-2xl font-bold text-indigo-700 mb-2">
                 {t("assess.complete")}
               </h2>
+              {scoreResult && scoreResult.total > 0 && (
+                <p className="text-indigo-600 font-semibold text-lg mb-1">
+                  {t("assess.accuracy", {
+                    pct: String(Math.round((scoreResult.correct / scoreResult.total) * 100)),
+                  })}
+                </p>
+              )}
               <p className="text-indigo-600 text-sm">{t("assess.completeDesc")}</p>
               <button
                 onClick={() => router.back()}
@@ -182,7 +231,6 @@ export default function AssessmentPage() {
                   {currentQuestion.content}
                 </p>
 
-                {/* Multiple choice */}
                 {currentQuestion.options && currentQuestion.options.length > 0 ? (
                   <div
                     className="space-y-3"
@@ -250,18 +298,8 @@ export default function AssessmentPage() {
                   disabled={isFirst}
                   className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition"
                 >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 19l-7-7 7-7"
-                    />
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                   </svg>
                   {t("common.previous")}
                 </button>
@@ -280,18 +318,8 @@ export default function AssessmentPage() {
                     className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition"
                   >
                     {t("common.next")}
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M9 5l7 7-7 7"
-                      />
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                     </svg>
                   </button>
                 )}
