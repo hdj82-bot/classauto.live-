@@ -22,6 +22,7 @@ class Lecture(Base):
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     live_deadline_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    pipeline_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

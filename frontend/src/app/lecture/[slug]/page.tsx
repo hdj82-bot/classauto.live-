@@ -121,7 +121,7 @@ export default function LectureViewerPage() {
 
     try {
       const { data } = await api.post(`/api/v1/qa`, {
-        session_id: sessionId, task_id: lecture?.id, question,
+        session_id: sessionId, lecture_id: lecture?.id, question,
       });
       setQaMessages((prev) => [...prev, { role: "assistant", text: data.answer }]);
     } catch {

@@ -26,7 +26,13 @@ class PipelineTask(celery.Task):
 
 
 @celery.task(base=PipelineTask, bind=True, max_retries=2, default_retry_delay=30)
-def step1_parse(self, task_id: str, s3_key: str) -> dict:
+def step1_parse(
+    self,
+    task_id: str,
+    s3_key: str,
+    instructor_id: str | None = None,
+    lecture_id: str | None = None,
+) -> dict:
     """Step 1: S3에서 PPT 다운로드 → PPTX 파싱 — 슬라이드 텍스트, 이미지, 노트 추출."""
     from app.services.pipeline.parser import parse_pptx
     from app.services.pipeline import s3 as s3_svc
@@ -65,7 +71,13 @@ def step1_parse(self, task_id: str, s3_key: str) -> dict:
     ]
 
     logger.info("Step1 완료: task_id=%s, %d 슬라이드 (S3: %s)", task_id, len(slides), s3_key)
-    return {"task_id": task_id, "slides": slides_data, "s3_key": s3_key}
+    return {
+        "task_id": task_id,
+        "slides": slides_data,
+        "s3_key": s3_key,
+        "instructor_id": instructor_id,
+        "lecture_id": lecture_id,
+    }
 
 
 @celery.task(base=PipelineTask, bind=True, max_retries=2, default_retry_delay=30)
@@ -148,7 +160,7 @@ def step5_notify(self, prev_result: dict) -> dict:
 def start_pipeline(task_id: str, s3_key: str, instructor_id: str | None = None, lecture_id: str | None = None):
     """5단계 Celery 체인 파이프라인을 시작. s3_key: S3에 업로드된 PPT 파일 키."""
     pipeline = chain(
-        step1_parse.s(task_id, s3_key),
+        step1_parse.s(task_id, s3_key, instructor_id, lecture_id),
         step2_embed.s(),
         step3_generate_scripts.s(),
         step4_mark_pending_review.s(),
