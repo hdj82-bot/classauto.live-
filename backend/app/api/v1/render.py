@@ -100,7 +100,7 @@ async def upload_ppt(
     from app.services.pipeline import s3 as s3_svc
     from app.tasks.pipeline import start_pipeline
 
-    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    lecture = await assert_professor_owns_lecture(db, lecture_id, user.id)
 
     if not file.filename or not file.filename.lower().endswith(".pptx"):
         raise HTTPException(status_code=400, detail=".pptx 파일만 업로드 가능합니다.")
@@ -127,6 +127,10 @@ async def upload_ppt(
         s3_url, s3_key = s3_svc.upload_ppt(content, str(lecture_id), file.filename)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # pipeline_task_id를 강의에 저장 — Q&A RAG 검색 키로 사용
+    lecture.pipeline_task_id = task_id
+    await db.commit()
 
     result = start_pipeline(task_id, s3_key, str(user.id), str(lecture_id))
 
