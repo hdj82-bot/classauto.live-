@@ -20,13 +20,13 @@ def render_slide(self, render_id: str, script_text: str) -> dict:
     from app.services.pipeline.heygen import create_video
 
     db = SyncSessionLocal()
+    loop = asyncio.new_event_loop()
     try:
         render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
         render.status = RenderStatus.tts_processing
         db.commit()
 
         # TTS 합성
-        loop = asyncio.new_event_loop()
         tts_result = loop.run_until_complete(synthesize(script_text))
 
         cost_log.record(
@@ -47,7 +47,6 @@ def render_slide(self, render_id: str, script_text: str) -> dict:
         heygen_job_id = loop.run_until_complete(
             create_video(audio_url=audio_url, avatar_id=render.avatar_id, callback_id=str(render.id))
         )
-        loop.close()
         render.heygen_job_id = heygen_job_id
         db.commit()
 
@@ -56,11 +55,20 @@ def render_slide(self, render_id: str, script_text: str) -> dict:
 
     except Exception as exc:
         db.rollback()
-        render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
-        render.status = RenderStatus.failed
-        render.error_message = str(exc)
-        db.commit()
-        logger.error("렌더 실패: render_id=%s, error=%s", render_id, exc)
+        is_final_failure = self.request.retries >= self.max_retries
+        if is_final_failure:
+            try:
+                render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
+                render.status = RenderStatus.failed
+                render.error_message = str(exc)
+                db.commit()
+            except Exception:
+                db.rollback()
+        logger.error(
+            "렌더 실패: render_id=%s, retries=%d/%d, error=%s",
+            render_id, self.request.retries, self.max_retries, exc,
+        )
         raise self.retry(exc=exc)
     finally:
+        loop.close()
         db.close()

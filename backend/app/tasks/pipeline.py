@@ -21,7 +21,21 @@ class PipelineTask(celery.Task):
     abstract = True
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
-        logger.error("파이프라인 태스크 실패: task_id=%s, error=%s", task_id, exc)
+        # args[0]이 dict이면 steps 2-5 (prev_result 전달), str이면 step1 (pipeline_task_id)
+        pipeline_task_id = None
+        lecture_id = None
+        if args:
+            first = args[0]
+            if isinstance(first, dict):
+                pipeline_task_id = first.get("task_id")
+                lecture_id = first.get("lecture_id")
+            elif isinstance(first, str):
+                pipeline_task_id = first
+                lecture_id = kwargs.get("lecture_id")
+        logger.error(
+            "파이프라인 태스크 실패: celery_task_id=%s, pipeline_task_id=%s, lecture_id=%s, error=%s",
+            task_id, pipeline_task_id, lecture_id, exc,
+        )
 
 
 @celery.task(base=PipelineTask, bind=True, max_retries=2, default_retry_delay=30)
