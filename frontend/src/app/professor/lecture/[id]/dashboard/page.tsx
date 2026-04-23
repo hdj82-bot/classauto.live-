@@ -136,7 +136,7 @@ function AttendanceView({ data }: { data: Record<string, unknown> }) {
           {students.map((s, i) => (
             <tr key={i} className="border-b border-gray-100">
               <td className="py-2 text-gray-900">{s.name as string}</td>
-              <td className="text-gray-500">{(s.studentNumber as string) || "-"}</td>
+              <td className="text-gray-500">{(s.student_number as string) || "-"}</td>
               <td>
                 <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${s.type === "live" ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${s.type === "live" ? "bg-green-500" : "bg-blue-500"}`} aria-hidden="true" />
