@@ -14,7 +14,8 @@ export default function AttentionPauseOverlay({ warningLevel, onResume }: Props)
 
   const bgs = ["", "from-amber-500/90 to-amber-600/90", "from-orange-500/90 to-orange-600/90", "from-red-500/90 to-red-600/90"];
   const bg = bgs[level] || bgs[3];
-  const message = t(`attention.level${level}` as "attention.level1");
+  const paused = t("attention.paused");
+  const message = t(`attention.warning${level}` as "attention.warning1");
   const description = t(`attention.level${level}Desc` as "attention.level1Desc");
 
   const handleKeyDown = useCallback(
@@ -49,6 +50,7 @@ export default function AttentionPauseOverlay({ warningLevel, onResume }: Props)
             <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
           )}
         </div>
+        <p className="text-white/70 text-xs font-medium uppercase tracking-widest">{paused}</p>
         <h2 className="text-2xl font-bold">{message}</h2>
         <p className="text-white/80 text-sm">{description}</p>
 
