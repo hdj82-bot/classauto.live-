@@ -62,13 +62,15 @@ async def heygen_webhook(
         )
         render = result.scalar_one_or_none()
         if not render:
-            logger.warning("알 수 없는 video_id 웹훅 수신: video_id=%s, event_type=%s", video_id, event_type)
+            logger.warning("HeyGen 웹훅: 매칭되는 render 없음 job_id=%s, event_type=%s", video_id, event_type)
             return {"status": "ignored", "reason": "unknown video_id"}
 
         # 멱등성: 이미 처리 완료된 렌더는 무시
         if render.status in (RenderStatus.ready, RenderStatus.failed):
             logger.info("이미 처리된 렌더: render_id=%s, status=%s", render.id, render.status)
             return {"status": "already_processed", "render_id": str(render.id)}
+
+        logger.info("HeyGen 웹훅 수신: job_id=%s, render_id=%s, event_type=%s", video_id, render.id, event_type)
 
         if event_type == "avatar_video.success":
             heygen_url = event_data.get("url", "")
