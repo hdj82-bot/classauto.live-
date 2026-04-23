@@ -187,3 +187,16 @@ async def test_webhook_invalid_signature(client):
             headers={"stripe-signature": "invalid"},
         )
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_stripe_webhook_missing_secret(client):
+    """STRIPE_WEBHOOK_SECRET 미설정(빈 문자열) 시 서명 검증 실패로 오류 반환."""
+    with patch("app.api.v1.payment.settings") as mock_settings:
+        mock_settings.STRIPE_WEBHOOK_SECRET = ""
+        resp = await client.post(
+            "/api/v1/payment/webhook",
+            content=b'{"type": "test"}',
+            headers={"stripe-signature": "t=1,v1=abc"},
+        )
+    assert resp.status_code in (400, 403, 500)
