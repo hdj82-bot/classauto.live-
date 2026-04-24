@@ -15,6 +15,7 @@ from sqlalchemy import JSON, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.security import create_access_token
 from app.db.base import Base
@@ -291,8 +292,15 @@ TEST_PG_URL = os.environ.get(
 
 @pytest_asyncio.fixture(scope="session")
 async def pg_engine():
-    """PostgreSQL + pgvector 엔진 (docker-compose.test.yml 필요)."""
-    _engine = create_async_engine(TEST_PG_URL, echo=False)
+    """PostgreSQL + pgvector 엔진 (docker-compose.test.yml 필요).
+
+    pytest-asyncio의 test_loop_scope=function 설정과 session-scope 픽스처가
+    만나면, 세션 loop에서 만들어진 asyncpg 커넥션을 function loop에서 꺼내
+    쓸 때 "cannot perform operation: another operation is in progress"가
+    발생한다. NullPool을 강제해 매 connect()마다 현재 event loop에 바인딩된
+    새 커넥션을 만들어 이 cross-loop 충돌을 피한다.
+    """
+    _engine = create_async_engine(TEST_PG_URL, echo=False, poolclass=NullPool)
     async with _engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.drop_all)
