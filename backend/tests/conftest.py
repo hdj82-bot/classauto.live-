@@ -290,53 +290,38 @@ TEST_PG_URL = os.environ.get(
 )
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def pg_engine():
     """PostgreSQL + pgvector 엔진 (docker-compose.test.yml 필요).
 
-    pytest-asyncio의 test_loop_scope=function 설정과 session-scope 픽스처가
-    만나면, 세션 loop에서 만들어진 asyncpg 커넥션을 function loop에서 꺼내
-    쓸 때 "cannot perform operation: another operation is in progress"가
-    발생한다. NullPool을 강제해 매 connect()마다 현재 event loop에 바인딩된
-    새 커넥션을 만들어 이 cross-loop 충돌을 피한다.
+    function-scope 로 운영해 각 테스트마다 현재 event loop 에 바인딩된
+    엔진·커넥션을 쓴다. pytest-asyncio 1.3 기본값은 test_loop_scope=function
+    이므로 session-scope 엔진을 쓰면 cross-loop 상태 충돌로 asyncpg 가
+    "cannot perform operation: another operation is in progress" 를 던진다.
+    NullPool 까지 병행해 풀링으로 인한 커넥션 재사용도 차단한다.
     """
     _engine = create_async_engine(TEST_PG_URL, echo=False, poolclass=NullPool)
     async with _engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    yield _engine
-    async with _engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await _engine.dispose()
+    try:
+        yield _engine
+    finally:
+        await _engine.dispose()
 
 
 @pytest_asyncio.fixture
 async def pg_db(pg_engine) -> AsyncGenerator[AsyncSession, None]:
-    """PostgreSQL 세션 (SAVEPOINT 기반 격리).
+    """PostgreSQL 세션.
 
-    asyncpg는 커넥션당 동시 작업을 허용하지 않으므로, SQLAlchemy 공식
-    async 패턴을 사용해 AsyncConnection의 sync 브리지를 통해 SAVEPOINT를
-    재시작한다. `session.sync_session.begin_nested()`를 직접 호출하면
-    이전 async 작업이 정리되기 전에 새 SAVEPOINT를 발행해
-    "another operation is in progress" 에러가 발생할 수 있다.
+    pg_engine 자체가 function-scope 이라 테스트마다 스키마가 새로 만들어
+    지므로 SAVEPOINT/rollback 기반 복잡한 격리 패턴이 불필요하다. 단일
+    AsyncSession 만 열어 yield 하고, 테스트 종료 시 세션을 닫는다.
+    커밋된 데이터의 청소는 pg_engine 의 drop_all+create_all 이 담당한다.
     """
-    async with pg_engine.connect() as conn:
-        await conn.begin()
-        await conn.begin_nested()
-        session = AsyncSession(bind=conn, expire_on_commit=False)
-
-        @event.listens_for(session.sync_session, "after_transaction_end")
-        def end_savepoint(session_sync, transaction):
-            if conn.closed:
-                return
-            if not conn.in_nested_transaction():
-                conn.sync_connection.begin_nested()
-
+    async with AsyncSession(pg_engine, expire_on_commit=False) as session:
         yield session
-
-        await session.close()
-        await conn.rollback()
 
 
 # ── 외부 API 테스트 자동 skip ────────────────────────────────────────────────────
