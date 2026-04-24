@@ -4,8 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
-  useState,
+  useSyncExternalStore,
 } from "react";
 import { authApi } from "@/lib/api";
 import { tokens } from "@/lib/tokens";
@@ -34,37 +33,66 @@ function parseJwt(token: string): Record<string, unknown> | null {
   }
 }
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+const tokenListeners = new Set<() => void>();
+function subscribeTokens(callback: () => void) {
+  tokenListeners.add(callback);
+  return () => {
+    tokenListeners.delete(callback);
+  };
+}
+function notifyTokens() {
+  tokenListeners.forEach((cb) => cb());
+}
 
-  useEffect(() => {
-    const access = tokens.getAccess();
-    if (access) {
-      const payload = parseJwt(access);
-      if (payload) {
-        setUser({
-          id: payload.sub as string,
-          email: "",
-          name: "",
-          role: payload.role as "professor" | "student" | "admin",
-        });
-      }
-    }
-    setIsLoading(false);
-  }, []);
+let cachedAccess: string | null | undefined = undefined;
+let cachedUser: AuthUser | null = null;
+
+function getUserSnapshot(): AuthUser | null {
+  const access = tokens.getAccess();
+  if (access === cachedAccess) return cachedUser;
+  cachedAccess = access;
+  if (!access) {
+    cachedUser = null;
+    return null;
+  }
+  const payload = parseJwt(access);
+  if (!payload) {
+    cachedUser = null;
+    return null;
+  }
+  cachedUser = {
+    id: payload.sub as string,
+    email: "",
+    name: "",
+    role: payload.role as "professor" | "student" | "admin",
+  };
+  return cachedUser;
+}
+
+function getServerUserSnapshot(): AuthUser | null {
+  return null;
+}
+
+const noopSubscribe = () => () => {};
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const user = useSyncExternalStore(
+    subscribeTokens,
+    getUserSnapshot,
+    getServerUserSnapshot,
+  );
+  // false during SSR and the first hydration render so consumers can show a
+  // loading state and skip auth-required redirects until the client snapshot
+  // settles.
+  const isHydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
 
   const login = useCallback((access: string, refresh: string) => {
     tokens.set(access, refresh);
-    const payload = parseJwt(access);
-    if (payload) {
-      setUser({
-        id: payload.sub as string,
-        email: "",
-        name: "",
-        role: payload.role as "professor" | "student" | "admin",
-      });
-    }
+    notifyTokens();
   }, []);
 
   const logout = useCallback(async () => {
@@ -73,12 +101,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await authApi.logout(refresh).catch(() => null);
     }
     tokens.clear();
-    setUser(null);
+    notifyTokens();
     window.location.href = "/auth/login";
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider
+      value={{ user, isLoading: !isHydrated, login, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );

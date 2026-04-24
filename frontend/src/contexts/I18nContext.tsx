@@ -1,12 +1,21 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import ko from "../../messages/ko.json";
 import en from "../../messages/en.json";
 
 export type Locale = "ko" | "en";
 
 const messages: Record<Locale, typeof ko> = { ko, en };
+
+const LOCALE_STORAGE_KEY = "ifl-locale";
 
 interface I18nContextType {
   locale: Locale;
@@ -24,21 +33,43 @@ export function useI18n() {
   return useContext(I18nContext);
 }
 
+const localeListeners = new Set<() => void>();
+function subscribeLocale(callback: () => void) {
+  localeListeners.add(callback);
+  return () => {
+    localeListeners.delete(callback);
+  };
+}
+
+function getLocaleSnapshot(): Locale {
+  if (typeof window === "undefined") return "ko";
+  const saved = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+  if (saved === "ko" || saved === "en") return saved;
+  return "ko";
+}
+
+function getServerLocaleSnapshot(): Locale {
+  return "ko";
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("ko");
+  const locale = useSyncExternalStore(
+    subscribeLocale,
+    getLocaleSnapshot,
+    getServerLocaleSnapshot,
+  );
 
   useEffect(() => {
-    const saved = localStorage.getItem("ifl-locale") as Locale | null;
-    if (saved && (saved === "ko" || saved === "en")) {
-      setLocaleState(saved);
-      document.documentElement.lang = saved;
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = locale;
     }
-  }, []);
+  }, [locale]);
 
   const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
-    localStorage.setItem("ifl-locale", l);
-    document.documentElement.lang = l;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LOCALE_STORAGE_KEY, l);
+    }
+    localeListeners.forEach((cb) => cb());
   }, []);
 
   const t = useCallback(
@@ -54,7 +85,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       }
       if (typeof value !== "string") return key;
       if (!params) return value;
-      return value.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? `{${k}}`));
+      return value.replace(/\{(\w+)\}/g, (_, k) =>
+        String(params[k] ?? `{${k}}`),
+      );
     },
     [locale],
   );
