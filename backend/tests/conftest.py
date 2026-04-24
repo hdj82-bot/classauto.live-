@@ -60,26 +60,20 @@ async def engine():
 async def db(engine) -> AsyncGenerator[AsyncSession, None]:
     """각 테스트마다 독립적인 SAVEPOINT 기반 롤백 격리.
 
-    외부 트랜잭션을 유지한 상태에서 AsyncSession이 commit()을 호출할 때마다
-    새 SAVEPOINT를 생성·해제하도록 join_transaction_mode="create_savepoint"를
-    사용한다. 동일 세션에서 여러 번의 commit()이 일어나도 외부 트랜잭션은
-    열린 채 유지되므로, 이전 SAVEPOINT에서 flush/commit된 데이터가 후속
-    쿼리에서도 계속 보인다. 테스트 종료 시 외부 트랜잭션을 롤백해 전체 격리.
-
-    (이전 구현은 conn.begin_nested() + after_transaction_end 이벤트로
-    SAVEPOINT를 재개하는 방식이었으나, AsyncSession의 conditional_savepoint
-    기본 모드와 conn 레벨 SAVEPOINT가 상호작용하는 과정에서 request 간
-    SessionTransaction 계층이 꼬여 이후 select 쿼리가 데이터를 보지 못하는
-    문제가 있었다.)
+    외부 트랜잭션을 시작하고, 세션의 commit()이 호출되면
+    SAVEPOINT로 대체하여 테스트 종료 후 전체 롤백합니다.
     """
     async with engine.connect() as conn:
         trans = await conn.begin()
-        session = AsyncSession(
-            bind=conn,
-            join_transaction_mode="create_savepoint",
-            expire_on_commit=False,
-        )
+        session = AsyncSession(bind=conn, expire_on_commit=False)
 
+        # session.commit() 호출 시 SAVEPOINT로 대체
+        @event.listens_for(session.sync_session, "after_transaction_end")
+        def restart_savepoint(session_sync, transaction):
+            if transaction.nested and not transaction._parent.nested:
+                session_sync.begin_nested()
+
+        await conn.begin_nested()
         yield session
 
         await session.close()
