@@ -178,8 +178,8 @@ async def test_portal_endpoint(client, professor):
 
 @pytest.mark.asyncio
 async def test_webhook_invalid_signature(client):
-    with patch("app.services.payment.settings") as mock_settings:
-        mock_settings.STRIPE_WEBHOOK_SECRET = "whsec_test"
+    from app.core.config import settings
+    with patch.object(settings, "STRIPE_WEBHOOK_SECRET", "whsec_test"):
         resp = await client.post(
             "/api/v1/payment/webhook",
             content=b'{"type": "test"}',

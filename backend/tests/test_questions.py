@@ -113,6 +113,7 @@ async def test_submit_responses_correct(client, student, lecture, db, _formative
     for q in _formative_questions:
         db.add(q)
     await db.flush()
+    await db.commit()  # GET 핸들러의 db.commit()이 SAVEPOINT를 release해도 outer trans에 남도록 영구 기록
 
     # 세션 생성
     r = await client.get(
@@ -151,6 +152,7 @@ async def test_submit_responses_wrong_answer(client, student, lecture, db, _form
     for q in _formative_questions:
         db.add(q)
     await db.flush()
+    await db.commit()
 
     r = await client.get(
         f"/api/questions/{lecture.id}",
@@ -186,6 +188,7 @@ async def test_submit_responses_timestamp_violation(
     for q in _formative_questions:
         db.add(q)
     await db.flush()
+    await db.commit()
 
     r = await client.get(
         f"/api/questions/{lecture.id}",

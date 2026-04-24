@@ -1,5 +1,5 @@
 """Stripe 결제 API."""
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import stripe
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/v1/payment", tags=["payment"])
 
 @router.post("/checkout", summary="Stripe Checkout 세션 생성")
 async def checkout(
-    plan: str,
+    plan: str = Query(..., description="구독 플랜 (BASIC 또는 PRO)"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
