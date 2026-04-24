@@ -278,9 +278,14 @@ async def video_pending(db: AsyncSession, lecture: Lecture, professor: User) -> 
 
 # ── PostgreSQL (pgvector) 통합 테스트 픽스처 ────────────────────────────────────
 
+# CI 환경은 DATABASE_URL로 Postgres 접속 정보를 주입한다 (포트 5432).
+# 로컬 docker-compose.test.yml은 포트 5433을 사용하므로 TEST_DATABASE_URL로 명시 override 가능.
 TEST_PG_URL = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://test_user:test_pass@localhost:5433/ifl_test",
+    os.environ.get(
+        "DATABASE_URL",
+        "postgresql+asyncpg://test:test@localhost:5432/ifl_test",
+    ),
 )
 
 
