@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-from app.models.subscription import PlanType, Subscription
+from app.models.subscription import PlanType
 from app.services.payment import (
     PaymentError,
     create_checkout_session,
