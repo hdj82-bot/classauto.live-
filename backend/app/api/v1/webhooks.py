@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.db.session import SyncSessionLocal
 from app.models.lecture import Lecture
-from app.models.video_render import VideoRender
+from app.models.video_render import VideoRender, RenderStatus
 from app.services.pipeline import cost_log, notification, s3 as s3_svc
 from app.services.pipeline.thumbnail import generate_thumbnail_from_video_url
 
@@ -39,6 +39,8 @@ async def heygen_webhook(
         ).hexdigest()
         if not hmac.compare_digest(expected, x_heygen_signature):
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    else:
+        logger.warning("HEYGEN_WEBHOOK_SECRET 미설정: 서명 검증 생략 (개발환경)")
 
     payload = await request.json()
     event_type = payload.get("event_type", "")
@@ -59,12 +61,15 @@ async def heygen_webhook(
         )
         render = result.scalar_one_or_none()
         if not render:
+            logger.warning("HeyGen 웹훅: 매칭되는 render 없음 job_id=%s, event_type=%s", video_id, event_type)
             return {"status": "ignored", "reason": "unknown video_id"}
 
         # 멱등성: 이미 처리 완료된 렌더는 무시
-        if render.status in ("READY", "FAILED"):
+        if render.status in (RenderStatus.ready, RenderStatus.failed):
             logger.info("이미 처리된 렌더: render_id=%s, status=%s", render.id, render.status)
             return {"status": "already_processed", "render_id": str(render.id)}
+
+        logger.info("HeyGen 웹훅 수신: job_id=%s, render_id=%s, event_type=%s", video_id, render.id, event_type)
 
         if event_type == "avatar_video.success":
             heygen_url = event_data.get("url", "")
@@ -77,12 +82,12 @@ async def heygen_webhook(
                     render.heygen_video_url = heygen_url
                 except Exception as exc:
                     logger.error("S3 업로드 실패: render_id=%s, error=%s", render.id, exc)
-                    render.status = "FAILED"
+                    render.status = RenderStatus.failed
                     render.error_message = f"S3 업로드 실패: {exc}"
                     db.commit()
                     return {"status": "error", "reason": "s3_upload_failed"}
 
-            render.status = "READY"
+            render.status = RenderStatus.ready
             render.completed_at = datetime.now(timezone.utc)
 
             cost_log.record(db, render.id, "heygen", "video_render", cost_usd=0.0,
@@ -112,7 +117,7 @@ async def heygen_webhook(
                 logger.warning("알림 전송 실패 (무시): render_id=%s, error=%s", render.id, exc)
 
         elif event_type == "avatar_video.fail":
-            render.status = "FAILED"
+            render.status = RenderStatus.failed
             render.error_message = event_data.get("error", "HeyGen rendering failed")
             db.commit()
 

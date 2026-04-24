@@ -1,5 +1,7 @@
 """Stripe 결제 API."""
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import stripe
@@ -20,13 +22,10 @@ router = APIRouter(prefix="/api/v1/payment", tags=["payment"])
 
 @router.post("/checkout", summary="Stripe Checkout 세션 생성")
 async def checkout(
-    plan: str = Query(..., description="구독 플랜 (BASIC 또는 PRO)"),
+    plan: Literal["BASIC", "PRO"],
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    if plan not in ("BASIC", "PRO"):
-        raise HTTPException(status_code=400, detail="BASIC 또는 PRO 플랜만 선택 가능합니다.")
-
     try:
         url = await create_checkout_session(db, user.id, user.email, plan)
         await db.commit()
@@ -51,6 +50,9 @@ async def portal(
 async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     body = await request.body()
     sig = request.headers.get("stripe-signature", "")
+
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=500, detail="Webhook not configured")
 
     try:
         event = stripe.Webhook.construct_event(body, sig, settings.STRIPE_WEBHOOK_SECRET)

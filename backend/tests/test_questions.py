@@ -1,10 +1,11 @@
 """평가 시스템 API 통합 테스트."""
 import uuid
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.models.question import AssessmentType, Difficulty, Question, QuestionType
+from app.models.session import LearningSession, SessionStatus
 from tests.conftest import make_auth_header
 
 
@@ -113,7 +114,7 @@ async def test_submit_responses_correct(client, student, lecture, db, _formative
     for q in _formative_questions:
         db.add(q)
     await db.flush()
-    await db.commit()  # GET 핸들러의 db.commit()이 SAVEPOINT를 release해도 outer trans에 남도록 영구 기록
+    await db.commit()  # GET 핸들러 db.commit() 이후에도 Question 이 보이도록 outer trans에 영구 기록
 
     # 세션 생성
     r = await client.get(
@@ -283,6 +284,12 @@ async def test_get_session_results(client, student, lecture, db, _formative_ques
     assert data["score"]["total"] == 1
     assert data["score"]["correct"] == 1
     assert len(data["responses"]) == 1
+    # selectinload(Response.question) 동작 검증: question 필드가 eager load돼야 함
+    response_item = data["responses"][0]
+    assert "question" in response_item
+    q = response_item["question"]
+    for field in ("id", "content", "question_type", "assessment_type", "correct_answer"):
+        assert field in q, f"question 필드 누락: {field}"
 
 
 @pytest.mark.asyncio
