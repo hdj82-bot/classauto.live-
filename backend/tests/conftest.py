@@ -138,6 +138,8 @@ async def client(db: AsyncSession, fake_redis: FakeRedis) -> AsyncGenerator:
     auth_svc.get_redis = override_get_redis  # auth service 내부 참조도 패치
     import app.api.deps as deps_module
     deps_module.get_redis = override_get_redis  # blacklist 검사용
+    import app.api.v1.auth as auth_api_module
+    auth_api_module.get_redis = override_get_redis  # /logout 블랙리스트 기록용
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
