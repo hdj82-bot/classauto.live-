@@ -13,7 +13,6 @@ from app.models.cost_log import CostLog
 from app.models.lecture import Lecture
 from app.models.qa_log import QALog
 from app.models.session import LearningSession
-from app.models.user import User
 
 
 async def get_attendance(

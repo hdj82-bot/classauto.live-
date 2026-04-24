@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch: {}
 
 env:
   PYTHON_VERSION: "3.12"
@@ -69,7 +70,7 @@ jobs:
           cd backend
           pip install -r requirements.txt
           pip install pytest pytest-asyncio pytest-cov aiosqlite httpx python-pptx
-      - run: cd backend && pytest --cov=app --cov-report=xml --cov-fail-under=60 -q
+      - run: cd backend && pytest -m "not integration" --cov=app --cov-report=xml --cov-fail-under=60 -q
       - uses: actions/upload-artifact@v4
         if: always()
         with:

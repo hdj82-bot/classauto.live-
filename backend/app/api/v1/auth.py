@@ -17,7 +17,6 @@ from app.models.user import UserRole
 from app.schemas.auth import (
     CompleteProfileRequest,
     LogoutRequest,
-    NeedsProfileResponse,
     RefreshRequest,
     TokenResponse,
 )

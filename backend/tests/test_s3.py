@@ -98,10 +98,13 @@ def test_file_exists_false():
 
 # ── upload_ppt ───────────────────────────────────────────────────────────────
 
+# 최소 PPTX(=ZIP) 바이트: PK\x03\x04 매직바이트로 시작하는 바디면 validate_pptx_content 통과.
+_MIN_PPTX_BYTES = b"PK\x03\x04" + b"\x00" * 28
+
 def test_upload_ppt():
     mock_client = MagicMock()
     with patch.object(s3_svc, "get_s3_client", return_value=mock_client):
-        s3_url, s3_key = s3_svc.upload_ppt(b"pptx-bytes", "lecture-123", "my slide.pptx")
+        s3_url, s3_key = s3_svc.upload_ppt(_MIN_PPTX_BYTES, "lecture-123", "my slide.pptx")
 
     assert "lecture-123" in s3_key
     assert "my_slide.pptx" in s3_key  # 공백 → 언더스코어
@@ -125,7 +128,6 @@ def test_upload_audio_bytes():
 
 @pytest.mark.asyncio
 async def test_upload_from_url():
-    import httpx
 
     mock_client = MagicMock()
     mock_response = MagicMock()

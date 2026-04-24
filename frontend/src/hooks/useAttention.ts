@@ -21,7 +21,7 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
   const [isPaused, setIsPaused] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const progressRef = useRef(0);
-  const lastResponseRef = useRef(Date.now());
+  const lastResponseRef = useRef(0);
   const heartbeatTimer = useRef<ReturnType<typeof setInterval>>(undefined);
   const noResponseTimer = useRef<ReturnType<typeof setInterval>>(undefined);
   const configRef = useRef<AttentionConfig>({
@@ -31,8 +31,9 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
   const configLoaded = useRef(false);
   const consecutiveFailuresRef = useRef(0);
 
-  // 서버에서 설정 로드 (한 번만)
+  // 마운트 시점 타임스탬프 초기화 + 서버 설정 로드 (한 번만)
   useEffect(() => {
+    lastResponseRef.current = Date.now();
     if (configLoaded.current) return;
     configLoaded.current = true;
 

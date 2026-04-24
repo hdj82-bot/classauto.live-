@@ -9,12 +9,12 @@
 """
 import io
 import uuid
-from unittest.mock import patch, AsyncMock, MagicMock, ANY
+from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
 from pptx import Presentation
 
-from app.services.pipeline.schemas import SlideContent, SlideScript
+from app.services.pipeline.schemas import SlideScript
 from tests.conftest import make_auth_header
 
 
@@ -209,7 +209,7 @@ def test_e2e_render_slide_pipeline():
          patch("app.services.pipeline.tts.synthesize", new_callable=AsyncMock, return_value=mock_tts_result) as mock_tts, \
          patch("app.services.pipeline.s3.upload_audio_bytes", return_value="https://s3/audio/test.mp3") as mock_s3_audio, \
          patch("app.services.pipeline.heygen.create_video", new_callable=AsyncMock, return_value="heygen-vid-001") as mock_heygen, \
-         patch("app.services.pipeline.cost_log.record") as mock_cost:
+         patch("app.services.pipeline.cost_log.record"):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.one.return_value = mock_render
         mock_session_cls.return_value = mock_db

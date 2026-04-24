@@ -15,7 +15,7 @@ export default function AttentionPauseOverlay({ warningLevel, onResume }: Props)
   const bgs = ["", "from-amber-500/90 to-amber-600/90", "from-orange-500/90 to-orange-600/90", "from-red-500/90 to-red-600/90"];
   const bg = bgs[level] || bgs[3];
   const paused = t("attention.paused");
-  const message = t(`attention.warning${level}` as "attention.warning1");
+  const message = t(`attention.level${level}` as "attention.level1");
   const description = t(`attention.level${level}Desc` as "attention.level1Desc");
 
   const handleKeyDown = useCallback(

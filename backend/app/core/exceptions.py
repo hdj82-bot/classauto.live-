@@ -2,7 +2,7 @@
 import logging
 import traceback
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -56,7 +56,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         """Pydantic 유효성 검증 실패 — 필드별 에러 목록 반환."""
         field_errors = []
         for err in exc.errors():
-            loc = " → ".join(str(l) for l in err.get("loc", []))
+            loc = " → ".join(str(part) for part in err.get("loc", []))
             field_errors.append({
                 "field": loc,
                 "message": err.get("msg", ""),

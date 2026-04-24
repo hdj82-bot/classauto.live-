@@ -1,12 +1,11 @@
 """subscription 서비스 단위 테스트."""
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import pytest_asyncio
 
-from app.models.subscription import PLAN_LIMITS, PlanType, Subscription
+from app.models.subscription import PlanType, Subscription
 from app.services.pipeline.subscription import (
     PlanLimitExceeded,
     check_limit,

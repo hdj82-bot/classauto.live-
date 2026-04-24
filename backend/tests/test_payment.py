@@ -1,10 +1,9 @@
 """Stripe 결제 서비스 및 API 테스트."""
-import uuid
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
-from app.models.subscription import PlanType, Subscription
+from app.models.subscription import PlanType
 from app.services.payment import (
     PaymentError,
     create_checkout_session,
@@ -148,12 +147,13 @@ async def test_checkout_endpoint(client, professor):
 
 @pytest.mark.asyncio
 async def test_checkout_invalid_plan(client, professor):
+    """plan은 Literal["BASIC", "PRO"] 이므로 그 외 값은 Pydantic 검증 실패(422)."""
     resp = await client.post(
         "/api/v1/payment/checkout",
         params={"plan": "INVALID"},
         headers=make_auth_header(professor),
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -179,8 +179,9 @@ async def test_portal_endpoint(client, professor):
 
 @pytest.mark.asyncio
 async def test_webhook_invalid_signature(client):
-    with patch("app.services.payment.settings") as mock_settings:
-        mock_settings.STRIPE_WEBHOOK_SECRET = "whsec_test"
+    """secret 설정된 상태 + 잘못된 서명 -> 400."""
+    from app.core.config import settings
+    with patch.object(settings, "STRIPE_WEBHOOK_SECRET", "whsec_test"):
         resp = await client.post(
             "/api/v1/payment/webhook",
             content=b'{"type": "test"}',
@@ -191,9 +192,9 @@ async def test_webhook_invalid_signature(client):
 
 @pytest.mark.asyncio
 async def test_stripe_webhook_missing_secret(client):
-    """STRIPE_WEBHOOK_SECRET 미설정(빈 문자열) 시 서명 검증 실패로 오류 반환."""
-    with patch("app.api.v1.payment.settings") as mock_settings:
-        mock_settings.STRIPE_WEBHOOK_SECRET = ""
+    """STRIPE_WEBHOOK_SECRET 미설정(빈 문자열) 시 500 `Webhook not configured` 반환."""
+    from app.core.config import settings
+    with patch.object(settings, "STRIPE_WEBHOOK_SECRET", ""):
         resp = await client.post(
             "/api/v1/payment/webhook",
             content=b'{"type": "test"}',

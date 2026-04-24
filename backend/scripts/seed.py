@@ -304,9 +304,9 @@ def main():
         _create_questions(db, lecture_ids)
         _create_sessions_and_responses(db, lecture_ids)
 
-        print(f"\n=== 완료 ===")
-        print(f"교수자 로그인: demo-professor@ifl.dev / demo1234!")
-        print(f"학생 로그인:   demo-student-1@ifl.dev / demo1234!")
+        print("\n=== 완료 ===")
+        print("교수자 로그인: demo-professor@ifl.dev / demo1234!")
+        print("학생 로그인:   demo-student-1@ifl.dev / demo1234!")
     except Exception as e:
         db.rollback()
         print(f"\n[ERROR] 시드 데이터 생성 실패: {e}", file=sys.stderr)

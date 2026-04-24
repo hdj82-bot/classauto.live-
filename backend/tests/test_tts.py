@@ -1,5 +1,5 @@
 """TTS 서비스 단위 테스트."""
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
+from unittest.mock import patch, AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -177,7 +177,7 @@ async def test_synthesize_writes_output_file(tmp_path):
     output = tmp_path / "output.mp3"
 
     with patch("app.services.pipeline.tts._elevenlabs_synthesize", new_callable=AsyncMock, return_value=mock_result):
-        result = await synthesize("파일 테스트", output_path=output)
+        await synthesize("파일 테스트", output_path=output)
 
     assert output.exists()
     assert output.read_bytes() == b"file-audio"

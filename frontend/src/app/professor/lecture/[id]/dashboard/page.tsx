@@ -14,25 +14,7 @@ export default function LectureDashboardPage() {
   const { toast } = useToast();
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("attendance");
-  const [data, setData] = useState<Record<string, unknown> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(false);
-    (async () => {
-      try {
-        const { data: result } = await api.get(`/api/v1/dashboard/${id}/${tab}`);
-        setData(result);
-      } catch {
-        setData(null);
-        setError(true);
-        toast(t("analytics.loadError"), "error");
-      }
-      setLoading(false);
-    })();
-  }, [id, tab]);
+  const [exporting, setExporting] = useState(false);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "attendance", label: t("analytics.tabAttendance") },
@@ -40,8 +22,6 @@ export default function LectureDashboardPage() {
     { key: "engagement", label: t("analytics.tabEngagement") },
     { key: "cost", label: t("analytics.tabCost") },
   ];
-
-  const [exporting, setExporting] = useState(false);
 
   const handleExportCSV = async () => {
     setExporting(true);
@@ -93,22 +73,69 @@ export default function LectureDashboardPage() {
         ))}
       </div>
 
-      {loading ? <LoadingSpinner label={t("analytics.loadingData")} /> : error ? (
-        <div className="text-center py-10" role="alert">
-          <p className="text-gray-500 mb-3">{t("analytics.loadFailed")}</p>
-          <button onClick={() => { setLoading(true); setError(false); api.get(`/api/v1/dashboard/${id}/${tab}`).then(({ data: result }) => setData(result)).catch(() => setError(true)).finally(() => setLoading(false)); }}
-            className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 py-2 transition">{t("common.retry")}</button>
-        </div>
-      ) : !data ? (
-        <p className="text-gray-400 text-center py-10">{t("analytics.noData")}</p>
-      ) : (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6" role="tabpanel">
-          {tab === "attendance" && <AttendanceView data={data} />}
-          {tab === "scores" && <ScoresView data={data} />}
-          {tab === "engagement" && <EngagementView data={data} />}
-          {tab === "cost" && <CostView data={data} />}
-        </div>
-      )}
+      {/* Remount per (id, tab) so each fetch starts with a fresh loading state
+          via lazy useState init — avoids a sync setState reset inside useEffect. */}
+      <DashboardPanel key={`${id}:${tab}`} id={id} tab={tab} />
+    </div>
+  );
+}
+
+function DashboardPanel({ id, tab }: { id: string; tab: Tab }) {
+  const { toast } = useToast();
+  const { t } = useI18n();
+  const [data, setData] = useState<Record<string, unknown> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: result } = await api.get(`/api/v1/dashboard/${id}/${tab}`);
+        if (cancelled) return;
+        setData(result);
+        setError(false);
+      } catch {
+        if (cancelled) return;
+        setData(null);
+        setError(true);
+        toast(t("analytics.loadError"), "error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, tab, retryNonce, toast, t]);
+
+  if (loading) return <LoadingSpinner label={t("analytics.loadingData")} />;
+  if (error) {
+    return (
+      <div className="text-center py-10" role="alert">
+        <p className="text-gray-500 mb-3">{t("analytics.loadFailed")}</p>
+        <button
+          onClick={() => {
+            setLoading(true);
+            setError(false);
+            setRetryNonce((n) => n + 1);
+          }}
+          className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-4 py-2 transition"
+        >
+          {t("common.retry")}
+        </button>
+      </div>
+    );
+  }
+  if (!data) return <p className="text-gray-400 text-center py-10">{t("analytics.noData")}</p>;
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl p-6" role="tabpanel">
+      {tab === "attendance" && <AttendanceView data={data} />}
+      {tab === "scores" && <ScoresView data={data} />}
+      {tab === "engagement" && <EngagementView data={data} />}
+      {tab === "cost" && <CostView data={data} />}
     </div>
   );
 }

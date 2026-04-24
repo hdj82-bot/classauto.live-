@@ -7,7 +7,6 @@ Redis: 인메모리 dict mock
 import os
 import uuid
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
@@ -16,7 +15,7 @@ from sqlalchemy import JSON, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 
 from app.core.security import create_access_token
 from app.db.base import Base
@@ -139,6 +138,8 @@ async def client(db: AsyncSession, fake_redis: FakeRedis) -> AsyncGenerator:
     auth_svc.get_redis = override_get_redis  # auth service 내부 참조도 패치
     import app.api.deps as deps_module
     deps_module.get_redis = override_get_redis  # blacklist 검사용
+    import app.api.v1.auth as auth_api_module
+    auth_api_module.get_redis = override_get_redis  # /logout 블랙리스트 기록용
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -280,43 +281,49 @@ async def video_pending(db: AsyncSession, lecture: Lecture, professor: User) -> 
 
 # ── PostgreSQL (pgvector) 통합 테스트 픽스처 ────────────────────────────────────
 
+# CI 환경은 DATABASE_URL로 Postgres 접속 정보를 주입한다 (포트 5432).
+# 로컬 docker-compose.test.yml은 포트 5433을 사용하므로 TEST_DATABASE_URL로 명시 override 가능.
 TEST_PG_URL = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+asyncpg://test_user:test_pass@localhost:5433/ifl_test",
+    os.environ.get(
+        "DATABASE_URL",
+        "postgresql+asyncpg://test:test@localhost:5432/ifl_test",
+    ),
 )
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture
 async def pg_engine():
-    """PostgreSQL + pgvector 엔진 (docker-compose.test.yml 필요)."""
-    _engine = create_async_engine(TEST_PG_URL, echo=False)
+    """PostgreSQL + pgvector 엔진 (docker-compose.test.yml 필요).
+
+    function-scope 로 운영해 각 테스트마다 현재 event loop 에 바인딩된
+    엔진·커넥션을 쓴다. pytest-asyncio 1.3 기본값은 test_loop_scope=function
+    이므로 session-scope 엔진을 쓰면 cross-loop 상태 충돌로 asyncpg 가
+    "cannot perform operation: another operation is in progress" 를 던진다.
+    NullPool 까지 병행해 풀링으로 인한 커넥션 재사용도 차단한다.
+    """
+    _engine = create_async_engine(TEST_PG_URL, echo=False, poolclass=NullPool)
     async with _engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
-    yield _engine
-    async with _engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await _engine.dispose()
+    try:
+        yield _engine
+    finally:
+        await _engine.dispose()
 
 
 @pytest_asyncio.fixture
 async def pg_db(pg_engine) -> AsyncGenerator[AsyncSession, None]:
-    """PostgreSQL 세션 (SAVEPOINT 기반 격리)."""
-    async with pg_engine.connect() as conn:
-        trans = await conn.begin()
-        session = AsyncSession(bind=conn, expire_on_commit=False)
+    """PostgreSQL 세션.
 
-        @event.listens_for(session.sync_session, "after_transaction_end")
-        def restart_savepoint(session_sync, transaction):
-            if transaction.nested and not transaction._parent.nested:
-                session_sync.begin_nested()
-
-        await conn.begin_nested()
+    pg_engine 자체가 function-scope 이라 테스트마다 스키마가 새로 만들어
+    지므로 SAVEPOINT/rollback 기반 복잡한 격리 패턴이 불필요하다. 단일
+    AsyncSession 만 열어 yield 하고, 테스트 종료 시 세션을 닫는다.
+    커밋된 데이터의 청소는 pg_engine 의 drop_all+create_all 이 담당한다.
+    """
+    async with AsyncSession(pg_engine, expire_on_commit=False) as session:
         yield session
-
-        await session.close()
-        await trans.rollback()
 
 
 # ── 외부 API 테스트 자동 skip ────────────────────────────────────────────────────

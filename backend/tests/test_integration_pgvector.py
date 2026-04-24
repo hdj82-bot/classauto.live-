@@ -7,7 +7,6 @@ docker-compose.test.yml 실행 필요:
 import uuid
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,10 +74,10 @@ async def test_cosine_similarity_search(pg_db: AsyncSession):
     result = await pg_db.execute(
         text("""
             SELECT slide_number, text_content,
-                   1 - (embedding <=> :qvec::vector) AS similarity
+                   1 - (embedding <=> CAST(:qvec AS vector)) AS similarity
             FROM slide_embeddings
             WHERE task_id = :tid
-            ORDER BY embedding <=> :qvec::vector
+            ORDER BY embedding <=> CAST(:qvec AS vector)
             LIMIT 1
         """),
         {"qvec": vec_str, "tid": task_id},
@@ -111,10 +110,10 @@ async def test_similarity_ordering(pg_db: AsyncSession):
     result = await pg_db.execute(
         text("""
             SELECT slide_number,
-                   1 - (embedding <=> :qvec::vector) AS similarity
+                   1 - (embedding <=> CAST(:qvec AS vector)) AS similarity
             FROM slide_embeddings
             WHERE task_id = :tid
-            ORDER BY embedding <=> :qvec::vector
+            ORDER BY embedding <=> CAST(:qvec AS vector)
             LIMIT 3
         """),
         {"qvec": vec_str, "tid": task_id},
@@ -161,10 +160,10 @@ async def test_hnsw_index_creation_and_query(pg_db: AsyncSession):
     result = await pg_db.execute(
         text("""
             SELECT slide_number,
-                   1 - (embedding <=> :qvec::vector) AS similarity
+                   1 - (embedding <=> CAST(:qvec AS vector)) AS similarity
             FROM slide_embeddings
             WHERE task_id = :tid
-            ORDER BY embedding <=> :qvec::vector
+            ORDER BY embedding <=> CAST(:qvec AS vector)
             LIMIT 3
         """),
         {"qvec": vec_str, "tid": task_id},
@@ -228,7 +227,7 @@ async def test_task_id_isolation(pg_db: AsyncSession):
         text("""
             SELECT text_content FROM slide_embeddings
             WHERE task_id = :tid
-            ORDER BY embedding <=> :qvec::vector
+            ORDER BY embedding <=> CAST(:qvec AS vector)
         """),
         {"qvec": vec_str, "tid": task_a},
     )

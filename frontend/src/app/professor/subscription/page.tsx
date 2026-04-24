@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/ui/Modal";
@@ -23,7 +23,7 @@ export default function SubscriptionPage() {
   const [changing, setChanging] = useState(false);
   const [confirmPlan, setConfirmPlan] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [{ data: s }, { data: u }] = await Promise.all([
         api.get("/api/v1/subscription"),
@@ -31,13 +31,34 @@ export default function SubscriptionPage() {
       ]);
       setSub(s);
       setUsage(u);
+      return true;
     } catch {
       toast("구독 정보를 불러오지 못했습니다.", "error");
+      return false;
     }
-    setLoading(false);
-  };
+  }, [toast]);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ data: s }, { data: u }] = await Promise.all([
+          api.get("/api/v1/subscription"),
+          api.get("/api/v1/subscription/usage"),
+        ]);
+        if (cancelled) return;
+        setSub(s);
+        setUsage(u);
+      } catch {
+        if (!cancelled) toast("구독 정보를 불러오지 못했습니다.", "error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [toast]);
 
   const handleChangePlan = async () => {
     if (!confirmPlan) return;

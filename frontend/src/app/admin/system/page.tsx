@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
@@ -15,23 +15,34 @@ export default function AdminSystemPage() {
   const [data, setData] = useState<SystemData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const cancelledRef = useRef(false);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const { data: res } = await api.get("/api/v1/admin/system");
+      const { data: res } = await api.get<SystemData>("/api/v1/admin/system");
+      if (cancelledRef.current) return;
       setData(res);
       setError(null);
     } catch {
+      if (cancelledRef.current) return;
       setError("시스템 상태를 불러올 수 없습니다.");
+    } finally {
+      if (!cancelledRef.current) setLoading(false);
     }
-    setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
+    cancelledRef.current = false;
+    // 초기 로드를 마이크로태스크로 지연시켜 이펙트 본문에서의 동기적 setState를 피함.
+    void Promise.resolve().then(() => {
+      if (!cancelledRef.current) void fetchData();
+    });
     const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      cancelledRef.current = true;
+      clearInterval(interval);
+    };
+  }, [fetchData]);
 
   if (loading) return <LoadingSpinner fullScreen label="시스템 상태 로딩 중..." />;
   if (error) return <div className="text-red-600 text-center py-20">{error}</div>;

@@ -25,23 +25,26 @@ export default function AdminUsersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchUsers = async (p: number, role: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params: Record<string, string | number> = { page: p, limit: 20 };
-      if (role) params.role = role;
-      const { data } = await api.get("/api/v1/admin/users", { params });
-      setUsers(data.users);
-      setTotal(data.total);
-    } catch {
-      setError("사용자 목록을 불러올 수 없습니다.");
-    }
-    setLoading(false);
-  };
-
   useEffect(() => {
-    fetchUsers(page, roleFilter);
+    let cancelled = false;
+    (async () => {
+      try {
+        const params: Record<string, string | number> = { page, limit: 20 };
+        if (roleFilter) params.role = roleFilter;
+        const { data } = await api.get("/api/v1/admin/users", { params });
+        if (cancelled) return;
+        setUsers(data.users);
+        setTotal(data.total);
+        setError(null);
+      } catch {
+        if (!cancelled) setError("사용자 목록을 불러올 수 없습니다.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [page, roleFilter]);
 
   const handleRoleChange = async (userId: string, newRole: string) => {

@@ -116,7 +116,7 @@ async def test_patch_script_invalid_tone(client, professor, video_pending):
 @pytest.mark.asyncio
 async def test_patch_script_rendering_locked(client, professor, db, lecture, course):
     """rendering 상태에서는 수정 불가 → 409."""
-    from app.models.video import Video, VideoScript, VideoStatus
+    from app.models.video import Video, VideoScript
 
     v = Video(
         id=uuid.uuid4(),
@@ -198,7 +198,7 @@ async def test_approve_video(client, professor, video_pending):
 @pytest.mark.asyncio
 async def test_approve_video_wrong_status(client, professor, db, lecture):
     """이미 rendering 상태에서 재승인 → 409."""
-    from app.models.video import Video, VideoScript, VideoStatus
+    from app.models.video import Video, VideoScript
 
     v = Video(
         id=uuid.uuid4(),
@@ -226,7 +226,7 @@ async def test_approve_video_wrong_status(client, professor, db, lecture):
 @pytest.mark.asyncio
 async def test_approve_empty_script_fails(client, professor, db, lecture):
     """세그먼트 없는 스크립트 승인 → 400."""
-    from app.models.video import Video, VideoScript, VideoStatus
+    from app.models.video import Video, VideoScript
 
     v = Video(
         id=uuid.uuid4(),
@@ -261,7 +261,7 @@ async def test_archive_video(client, professor, video_pending):
 @pytest.mark.asyncio
 async def test_archive_already_archived(client, professor, db, lecture):
     """이미 archived → 409."""
-    from app.models.video import Video, VideoStatus
+    from app.models.video import Video
 
     v = Video(
         id=uuid.uuid4(),

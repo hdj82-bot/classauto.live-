@@ -11,7 +11,6 @@ import math
 import uuid
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -94,10 +93,10 @@ async def test_full_pipeline_flow(pg_db: AsyncSession):
     result = await pg_db.execute(
         text("""
             SELECT slide_number, text_content,
-                   1 - (embedding <=> :qvec::vector) AS similarity
+                   1 - (embedding <=> CAST(:qvec AS vector)) AS similarity
             FROM slide_embeddings
             WHERE task_id = :tid
-            ORDER BY embedding <=> :qvec::vector
+            ORDER BY embedding <=> CAST(:qvec AS vector)
             LIMIT 3
         """),
         {"qvec": vec_str, "tid": task_id},
@@ -141,7 +140,7 @@ async def test_multiple_lectures_embedding_isolation(pg_db: AsyncSession):
         text("""
             SELECT text_content FROM slide_embeddings
             WHERE task_id = :tid
-            ORDER BY embedding <=> :qvec::vector
+            ORDER BY embedding <=> CAST(:qvec AS vector)
         """),
         {"qvec": vec_str, "tid": task_a},
     )
@@ -179,7 +178,7 @@ async def test_concurrent_writes_and_reads(pg_db: AsyncSession):
         text("""
             SELECT slide_number FROM slide_embeddings
             WHERE task_id = :tid
-            ORDER BY embedding <=> :qvec::vector
+            ORDER BY embedding <=> CAST(:qvec AS vector)
             LIMIT 5
         """),
         {"qvec": vec_str, "tid": task_id},
@@ -199,7 +198,7 @@ async def test_empty_result_when_no_embeddings(pg_db: AsyncSession):
         text("""
             SELECT slide_number FROM slide_embeddings
             WHERE task_id = :tid
-            ORDER BY embedding <=> :qvec::vector
+            ORDER BY embedding <=> CAST(:qvec AS vector)
             LIMIT 3
         """),
         {"qvec": vec_str, "tid": nonexistent},

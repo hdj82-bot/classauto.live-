@@ -72,8 +72,6 @@ async def _elevenlabs_synthesize(text: str) -> TTSResult:
 
             if resp.status_code == 200:
                 elapsed = time.monotonic() - start
-                # Content-Duration 헤더에서 오디오 길이 추출 (있는 경우)
-                audio_duration = _parse_audio_duration(resp.headers)
                 return TTSResult(
                     audio_bytes=resp.content,
                     provider="elevenlabs",

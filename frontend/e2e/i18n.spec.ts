@@ -11,7 +11,6 @@ test.describe("i18n - Language Switching", () => {
   });
 
   test("language selector is visible", async ({ page }) => {
-    const langSelect = page.locator("#lang-select");
     // 랜딩 페이지에는 자체 헤더가 있으므로 로그인 페이지에서 확인
     await page.goto("/auth/login");
     // 로그인 페이지에도 lang-select가 없을 수 있음 (Header는 인증 후만)
