@@ -1,8 +1,11 @@
-# ── Stage 1: Install dependencies ────────────────────────────────────────
+# ── Stage 1: Install ALL dependencies (incl. dev, needed for Next build) ─
+# @tailwindcss/postcss, @sentry/nextjs 등 빌드 타임에 필요한 패키지는
+# devDependencies 에 있으므로 --omit=dev 를 쓰면 안 된다. 최종 runtime
+# 이미지는 standalone build 결과물만 복사하므로 node_modules 크기는 영향 없음.
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+RUN npm ci
 
 # ── Stage 2: Build ───────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
