@@ -305,21 +305,30 @@ async def pg_engine():
 
 @pytest_asyncio.fixture
 async def pg_db(pg_engine) -> AsyncGenerator[AsyncSession, None]:
-    """PostgreSQL 세션 (SAVEPOINT 기반 격리)."""
+    """PostgreSQL 세션 (SAVEPOINT 기반 격리).
+
+    asyncpg는 커넥션당 동시 작업을 허용하지 않으므로, SQLAlchemy 공식
+    async 패턴을 사용해 AsyncConnection의 sync 브리지를 통해 SAVEPOINT를
+    재시작한다. `session.sync_session.begin_nested()`를 직접 호출하면
+    이전 async 작업이 정리되기 전에 새 SAVEPOINT를 발행해
+    "another operation is in progress" 에러가 발생할 수 있다.
+    """
     async with pg_engine.connect() as conn:
-        trans = await conn.begin()
+        await conn.begin()
+        await conn.begin_nested()
         session = AsyncSession(bind=conn, expire_on_commit=False)
 
         @event.listens_for(session.sync_session, "after_transaction_end")
-        def restart_savepoint(session_sync, transaction):
-            if transaction.nested and not transaction._parent.nested:
-                session_sync.begin_nested()
+        def end_savepoint(session_sync, transaction):
+            if conn.closed:
+                return
+            if not conn.in_nested_transaction():
+                conn.sync_connection.begin_nested()
 
-        await conn.begin_nested()
         yield session
 
         await session.close()
-        await trans.rollback()
+        await conn.rollback()
 
 
 # ── 외부 API 테스트 자동 skip ────────────────────────────────────────────────────
