@@ -112,10 +112,22 @@ DOMAIN=your-domain.com EMAIL=admin@example.com ./scripts/deploy.sh init
 
 ### DB 백업/복원
 
+운영 환경에서는 Celery beat 가 매일 UTC 03:00 (KST 12:00) 에
+`app.tasks.backup.daily_db_backup` 태스크를 실행해 컨테이너 내부에서
+`pg_dump -Fc` 결과를 gzip 압축한 뒤 `s3://${S3_BUCKET}/${BACKUP_S3_PREFIX}`
+경로(기본 `backups/`)로 업로드한다. 호스트 장애와 무관하게 오프사이트에
+백업이 보존되며, 30일 이상 된 객체는 S3 lifecycle rule 로 자동 만료시킨다
+(콘솔에서 prefix `backups/` 에 expiration 30 days 규칙 등록 필요).
+
+`scripts/backup.sh` 는 호스트 측 수동/복구 시나리오용으로 유지된다.
+호스트에 S3 자격증명이 없거나 워커가 다운된 환경에서는 OS cron 으로
+다음 줄을 직접 걸 수 있다:
+`0 3 * * * cd /opt/ifl-platform && ./scripts/backup.sh backup`.
+
 ```bash
-./scripts/backup.sh backup              # 백업 생성
-./scripts/backup.sh list                # 백업 목록
-./scripts/backup.sh restore backup.sql  # 복원
+./scripts/backup.sh backup              # 호스트 로컬 수동 백업
+./scripts/backup.sh list                # 호스트 로컬 백업 목록
+./scripts/backup.sh restore backup.sql  # 복원 (.sql 또는 .sql.gz)
 ```
 
 ## 테스트
