@@ -28,7 +28,7 @@ def _parse_sync_dsn(dsn: str) -> dict[str, str]:
     """postgresql://user:pass@host:port/db → 컴포넌트 dict."""
     parsed = urlparse(dsn)
     if not parsed.hostname or not parsed.username or not parsed.path:
-        raise ValueError(f"DATABASE_URL_SYNC parse 실패: host/user/db 누락")
+        raise ValueError("DATABASE_URL_SYNC parse 실패: host/user/db 누락")
     return {
         "host": parsed.hostname,
         "port": str(parsed.port or 5432),
