@@ -64,6 +64,12 @@ RATE_LIMITS: dict[str, tuple[int, int]] = {
 # 전체 API 기본 제한
 DEFAULT_RATE_LIMIT = (120, 60)  # 분당 120회
 
+# Rate limiting 제외 경로 — 외부 서비스 재시도(Stripe 3일)로 이벤트 유실 방지
+RATE_LIMIT_EXEMPT_PREFIXES: tuple[str, ...] = (
+    "/api/v1/webhooks",          # HeyGen 렌더 웹훅
+    "/api/v1/payment/webhook",   # Stripe 결제 웹훅
+)
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Redis 기반 슬라이딩 윈도우 Rate Limiter."""
@@ -71,7 +77,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # 정적 파일, 헬스체크, 웹훅은 제외
         path = request.url.path
-        if path in ("/health", "/docs", "/openapi.json") or path.startswith("/api/v1/webhooks"):
+        if path in ("/health", "/docs", "/openapi.json") or path.startswith(RATE_LIMIT_EXEMPT_PREFIXES):
             return await call_next(request)
 
         try:
