@@ -37,8 +37,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "8000:8000"
+    # 호스트 포트 미노출 — nginx 가 Docker 내부 네트워크(backend:8000)로 접근.
+    # Docker 는 UFW 규칙을 우회하므로 ports 매핑 시 공용 인터넷에 노출되어
+    # nginx/SSL/rate-limit/CSP 가 전부 우회됨.
     depends_on:
       db:
         condition: service_healthy
