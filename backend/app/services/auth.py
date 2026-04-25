@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import timedelta
 
@@ -20,6 +21,10 @@ from app.schemas.auth import TokenResponse
 
 _RT_PREFIX = "rt:"
 _STATE_PREFIX = "oauth_state:"
+_AUTHCODE_PREFIX = "authcode:"
+_TEMPCODE_PREFIX = "tempcode:"
+_AUTHCODE_TTL = 60
+_TEMPCODE_TTL = 60
 
 
 # ── Redis: Refresh Token ──────────────────────────────────────────────────────
@@ -48,6 +53,55 @@ async def pop_oauth_state(state: str) -> str | None:
     """state를 읽고 즉시 삭제 (재사용 방지)."""
     r = get_redis()
     return await r.getdel(f"{_STATE_PREFIX}{state}")
+
+
+# ── Redis: OAuth Auth Code (1회용) ────────────────────────────────────────────
+
+async def save_auth_code(code: str, user_id: str, role: str) -> None:
+    """기존 유저용 1회성 교환 코드. value=`{user_id}:{role}`, TTL 60초."""
+    r = get_redis()
+    await r.setex(f"{_AUTHCODE_PREFIX}{code}", _AUTHCODE_TTL, f"{user_id}:{role}")
+
+
+async def consume_auth_code(code: str) -> tuple[str, str] | None:
+    """code를 getdel로 1회 소비. 미존재/소비완료 시 None."""
+    r = get_redis()
+    raw = await r.getdel(f"{_AUTHCODE_PREFIX}{code}")
+    if not raw:
+        return None
+    user_id, _, role = raw.partition(":")
+    if not user_id or not role:
+        return None
+    return user_id, role
+
+
+# ── Redis: Temp Code (신규 유저 추가 정보 입력용) ──────────────────────────────
+
+async def save_temp_code(
+    temp_code: str,
+    temp_token: str,
+    email: str,
+    name: str,
+    role: str,
+) -> None:
+    """신규 유저용 1회성 교환 코드. temp_token과 표시용 메타데이터를 묶어 저장. TTL 60초."""
+    r = get_redis()
+    payload = json.dumps(
+        {"temp_token": temp_token, "email": email, "name": name, "role": role}
+    )
+    await r.setex(f"{_TEMPCODE_PREFIX}{temp_code}", _TEMPCODE_TTL, payload)
+
+
+async def consume_temp_code(temp_code: str) -> dict | None:
+    """temp_code를 getdel로 1회 소비. 미존재/소비완료/포맷오류 시 None."""
+    r = get_redis()
+    raw = await r.getdel(f"{_TEMPCODE_PREFIX}{temp_code}")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────
