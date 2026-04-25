@@ -3,9 +3,12 @@
 실제 Google OAuth 호출 없이 토큰 발급·갱신·로그아웃만 검증한다.
 """
 
+import json
+import uuid
+
 import pytest
 
-from app.core.security import create_refresh_token
+from app.core.security import create_refresh_token, create_temp_token
 
 
 # ── GET /api/auth/google ───────────────────────────────────────────────────────
@@ -149,6 +152,143 @@ async def test_logout_blacklists_access_token(client, fake_redis, professor):
     )
     assert resp.status_code == 204
     assert await fake_redis.exists(f"bl:{at_jti}") == 1
+
+
+# ── POST /api/auth/exchange (1회용 OAuth code → 토큰) ───────────────────────
+
+@pytest.mark.asyncio
+async def test_exchange_success(client, fake_redis, professor):
+    """유효한 code로 access/refresh 토큰을 발급받는다."""
+    code = str(uuid.uuid4())
+    await fake_redis.setex(
+        f"authcode:{code}", 60, f"{professor.id}:{professor.role.value}"
+    )
+    resp = await client.post("/api/auth/exchange", json={"code": code})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    # 1회용: Redis에서 즉시 소비되었는지 확인
+    assert await fake_redis.get(f"authcode:{code}") is None
+
+
+@pytest.mark.asyncio
+async def test_exchange_reuse_returns_401(client, fake_redis, professor):
+    """동일 code 재사용 시 즉시 401."""
+    code = str(uuid.uuid4())
+    await fake_redis.setex(
+        f"authcode:{code}", 60, f"{professor.id}:{professor.role.value}"
+    )
+    first = await client.post("/api/auth/exchange", json={"code": code})
+    assert first.status_code == 200
+
+    second = await client.post("/api/auth/exchange", json={"code": code})
+    assert second.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_exchange_unknown_code_returns_401(client):
+    """존재하지 않는 code → 401."""
+    resp = await client.post(
+        "/api/auth/exchange", json={"code": "does-not-exist"}
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_exchange_expired_code_returns_401(client, fake_redis, professor):
+    """TTL 경과(=Redis에 더이상 존재하지 않음) → 401."""
+    code = str(uuid.uuid4())
+    await fake_redis.setex(
+        f"authcode:{code}", 60, f"{professor.id}:{professor.role.value}"
+    )
+    # TTL 만료 시뮬레이션: 키를 직접 삭제
+    await fake_redis.delete(f"authcode:{code}")
+
+    resp = await client.post("/api/auth/exchange", json={"code": code})
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_exchange_inactive_user_returns_401(client, fake_redis, db, professor):
+    """비활성화된 유저의 code → 401."""
+    professor.is_active = False
+    await db.flush()
+
+    code = str(uuid.uuid4())
+    await fake_redis.setex(
+        f"authcode:{code}", 60, f"{professor.id}:{professor.role.value}"
+    )
+    resp = await client.post("/api/auth/exchange", json={"code": code})
+    assert resp.status_code == 401
+
+
+# ── POST /api/auth/temp-exchange (1회용 temp_code → temp_token) ──────────────
+
+@pytest.mark.asyncio
+async def test_temp_exchange_success(client, fake_redis):
+    """유효한 temp_code로 temp_token + 표시 메타를 받는다."""
+    temp_code = str(uuid.uuid4())
+    temp_token = create_temp_token(
+        google_sub="google-new-001",
+        email="new@test.ac.kr",
+        name="신규 유저",
+        role="student",
+    )
+    payload = json.dumps(
+        {
+            "temp_token": temp_token,
+            "email": "new@test.ac.kr",
+            "name": "신규 유저",
+            "role": "student",
+        }
+    )
+    await fake_redis.setex(f"tempcode:{temp_code}", 60, payload)
+
+    resp = await client.post(
+        "/api/auth/temp-exchange", json={"temp_code": temp_code}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["temp_token"] == temp_token
+    assert data["email"] == "new@test.ac.kr"
+    assert data["role"] == "student"
+    # 1회용 소비 확인
+    assert await fake_redis.get(f"tempcode:{temp_code}") is None
+
+
+@pytest.mark.asyncio
+async def test_temp_exchange_reuse_returns_401(client, fake_redis):
+    """temp_code 재사용 시 401."""
+    temp_code = str(uuid.uuid4())
+    payload = json.dumps(
+        {
+            "temp_token": "any.temp.token",
+            "email": "x@y.com",
+            "name": "X",
+            "role": "professor",
+        }
+    )
+    await fake_redis.setex(f"tempcode:{temp_code}", 60, payload)
+
+    first = await client.post(
+        "/api/auth/temp-exchange", json={"temp_code": temp_code}
+    )
+    assert first.status_code == 200
+
+    second = await client.post(
+        "/api/auth/temp-exchange", json={"temp_code": temp_code}
+    )
+    assert second.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_temp_exchange_unknown_code_returns_401(client):
+    """존재하지 않는 temp_code → 401."""
+    resp = await client.post(
+        "/api/auth/temp-exchange", json={"temp_code": "missing"}
+    )
+    assert resp.status_code == 401
 
 
 @pytest.mark.asyncio
