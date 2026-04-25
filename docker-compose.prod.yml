@@ -31,7 +31,8 @@ services:
 
   backend:
     image: ghcr.io/hdj82-bot/ifl-backend:${IFL_IMAGE_TAG:-latest}
-    container_name: ifl_backend
+    # container_name 제거: deploy.sh 가 rolling restart 시
+    # `--scale backend=2` 로 새 컨테이너를 띄우려면 고정 이름이 없어야 한다.
     restart: unless-stopped
     env_file:
       - .env
@@ -48,12 +49,15 @@ services:
       - ./scripts/docker-entrypoint.sh:/opt/docker-entrypoint.sh:ro
     entrypoint: ["/bin/sh", "/opt/docker-entrypoint.sh"]
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+    # Rolling restart: 진행 중 요청을 끝낼 시간 확보 (uvicorn graceful shutdown).
+    stop_grace_period: 30s
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      # 새 컨테이너가 import + DB 커넥션 풀 초기화까지 시간이 들 수 있으므로 상향.
+      start_period: 30s
     logging:
       driver: json-file
       options:
@@ -74,12 +78,15 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # Celery 가 SIGTERM 받고 진행 중 태스크를 ack 할 때까지 충분한 여유를 둠.
+    # acks_late=True 와 결합해 죽임 당해도 메시지 유실 없이 다른 worker 가 재처리.
+    stop_grace_period: 60s
     healthcheck:
       test: ["CMD-SHELL", "celery -A app.celery_app:celery inspect ping --timeout 10 || exit 1"]
       interval: 30s
       timeout: 15s
       retries: 3
-      start_period: 30s
+      start_period: 45s
     logging:
       driver: json-file
       options:
@@ -103,12 +110,22 @@ services:
 
   frontend:
     image: ghcr.io/hdj82-bot/ifl-frontend:${IFL_IMAGE_TAG:-latest}
-    container_name: ifl_frontend
+    # container_name 제거: backend 와 동일하게 rolling restart 를 위해 scale-friendly.
     restart: unless-stopped
     env_file:
       - .env
     depends_on:
       - backend
+    # Next.js standalone 서버가 진행 중 요청을 마치도록 SIGTERM 후 여유.
+    stop_grace_period: 30s
+    # Dockerfile 에 HEALTHCHECK 가 정의되어 있으나, 새 컨테이너 부팅 시간을 고려해
+    # compose 레벨에서 start_period 를 명시한다 (rolling 대기 신호로 사용).
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   nginx:
     image: nginx:alpine
