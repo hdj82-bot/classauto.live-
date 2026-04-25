@@ -330,10 +330,11 @@ async def test_exchange_sets_refresh_cookie_and_omits_body(client, fake_redis, p
     assert "refresh_token" not in data  # body 에서 제거됨
 
     set_cookie = resp.headers.get("set-cookie", "")
+    set_cookie_lower = set_cookie.lower()
     assert "ifl_refresh=" in set_cookie
-    assert "HttpOnly" in set_cookie
-    assert "Path=/api/auth" in set_cookie
-    assert "SameSite=lax" in set_cookie.lower() or "SameSite=Lax" in set_cookie
+    assert "httponly" in set_cookie_lower
+    assert "path=/api/auth" in set_cookie_lower
+    assert "samesite=lax" in set_cookie_lower
 
 
 @pytest.mark.asyncio
@@ -354,7 +355,7 @@ async def test_refresh_uses_cookie_when_present(client, fake_redis, professor):
     # rotation: 새 refresh 쿠키가 내려와야 함
     set_cookie = resp.headers.get("set-cookie", "")
     assert "ifl_refresh=" in set_cookie
-    assert "HttpOnly" in set_cookie
+    assert "httponly" in set_cookie.lower()
 
 
 @pytest.mark.asyncio
@@ -409,9 +410,10 @@ async def test_logout_clears_refresh_cookie(client, fake_redis, professor):
     assert resp.status_code == 204
 
     set_cookie = resp.headers.get("set-cookie", "")
+    set_cookie_lower = set_cookie.lower()
     assert "ifl_refresh=" in set_cookie
     # 만료 헤더: Max-Age=0 또는 Expires=Thu, 01 Jan 1970
-    assert "Max-Age=0" in set_cookie or "expires=Thu, 01 Jan 1970" in set_cookie.lower() or "1970" in set_cookie
+    assert "max-age=0" in set_cookie_lower or "expires=thu, 01 jan 1970" in set_cookie_lower or "1970" in set_cookie
 
     # Redis 에서도 삭제됐는지
     assert await fake_redis.get(f"rt:{jti}") is None
