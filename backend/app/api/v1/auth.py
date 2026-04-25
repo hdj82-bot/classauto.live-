@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Cookie, Depends, HTTPException, Query, Response, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
@@ -16,6 +16,7 @@ from app.core.security import GOOGLE_AUTH_URL, create_temp_token, decode_token
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.auth import (
+    AccessTokenOnlyResponse,
     CompleteProfileRequest,
     ExchangeRequest,
     LogoutRequest,
@@ -45,6 +46,44 @@ _GOOGLE_SCOPES = "openid email profile"
 _BL_PREFIX = "bl:"
 
 _optional_bearer = HTTPBearer(auto_error=False)
+
+
+# ── Refresh Token Cookie ──────────────────────────────────────────────────────
+# httpOnly + Secure(prod) + SameSite=Lax 쿠키로 refresh_token 을 내려보낸다.
+# Path=/api/auth 로 한정하여 다른 API 경로 요청에 동봉되지 않게 한다.
+# example.com / api.example.com 구조에서 Lax 는 same-site 로 인식되어
+# axios 의 same-site XHR 에 자동 첨부된다.
+
+REFRESH_COOKIE_NAME = "ifl_refresh"
+REFRESH_COOKIE_PATH = "/api/auth"
+
+
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        path=REFRESH_COOKIE_PATH,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+    )
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=REFRESH_COOKIE_NAME,
+        path=REFRESH_COOKIE_PATH,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+    )
+
+
+def _to_access_only(tokens: TokenResponse, response: Response) -> AccessTokenOnlyResponse:
+    """TokenResponse → 쿠키 set 후 access 만 body 로 반환."""
+    _set_refresh_cookie(response, tokens.refresh_token)
+    return AccessTokenOnlyResponse(access_token=tokens.access_token)
 
 
 # ── 1. Google OAuth 시작 ──────────────────────────────────────────────────────
@@ -122,16 +161,19 @@ async def google_callback(
 
 @router.post(
     "/exchange",
-    response_model=TokenResponse,
-    summary="OAuth 1회용 code → access/refresh 토큰 교환",
+    response_model=AccessTokenOnlyResponse,
+    summary="OAuth 1회용 code → access 토큰 교환 (refresh 는 httpOnly 쿠키로 전달)",
 )
 async def exchange_oauth_code(
     body: ExchangeRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """
     `/google/callback`이 발급한 1회용 code를 access/refresh 토큰 쌍으로 교환합니다.
     code는 Redis getdel로 즉시 소비되며, 재사용·미존재·TTL 경과 시 401을 반환합니다.
+
+    refresh_token 은 httpOnly 쿠키 `ifl_refresh` 로 내려가고 응답 body 에는 포함되지 않습니다.
     """
     consumed = await consume_auth_code(body.code)
     if not consumed:
@@ -157,7 +199,8 @@ async def exchange_oauth_code(
             detail="존재하지 않거나 비활성화된 유저입니다.",
         )
 
-    return await issue_tokens(user)
+    tokens = await issue_tokens(user)
+    return _to_access_only(tokens, response)
 
 
 # ── 2-2. Temp Code 교환 (신규 유저 → temp_token + 표시 메타) ───────────────────
@@ -186,12 +229,13 @@ async def exchange_temp_code(body: TempExchangeRequest):
 
 @router.post(
     "/complete-profile",
-    response_model=TokenResponse,
+    response_model=AccessTokenOnlyResponse,
     status_code=status.HTTP_201_CREATED,
     summary="신규 유저 추가 정보 입력 후 가입 완료",
 )
 async def complete_profile(
     body: CompleteProfileRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -239,34 +283,55 @@ async def complete_profile(
         department=body.department,
         student_number=body.student_number,
     )
-    return await issue_tokens(user)
+    tokens = await issue_tokens(user)
+    return _to_access_only(tokens, response)
 
 
 # ── 4. Access Token 갱신 ──────────────────────────────────────────────────────
 
-@router.post("/refresh", response_model=TokenResponse, summary="Access Token 갱신")
-async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+@router.post(
+    "/refresh",
+    response_model=AccessTokenOnlyResponse,
+    summary="Access Token 갱신 (refresh 는 ifl_refresh 쿠키)",
+)
+async def refresh(
+    response: Response,
+    body: RefreshRequest | None = Body(default=None),
+    ifl_refresh: str | None = Cookie(default=None),
+    db: AsyncSession = Depends(get_db),
+):
     """
-    유효한 Refresh Token으로 새로운 Access/Refresh Token 쌍을 발급합니다.
-    기존 Refresh Token은 즉시 무효화됩니다 (Token Rotation).
+    `ifl_refresh` 쿠키의 refresh_token 으로 새 access/refresh 쌍을 발급합니다.
+    Token Rotation: 기존 refresh 는 즉시 무효화되고 새 refresh 가 같은 쿠키로 다시 내려갑니다.
+
+    하위 호환을 위해 body 의 `refresh_token` 도 허용합니다 (쿠키 우선).
     """
+    refresh_token = ifl_refresh or (body.refresh_token if body else None)
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="refresh_token 이 없습니다.",
+        )
     try:
-        return await refresh_access_token(db, body.refresh_token)
+        tokens = await refresh_access_token(db, refresh_token)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    return _to_access_only(tokens, response)
 
 
 # ── 5. 로그아웃 ───────────────────────────────────────────────────────────────
 
 @router.delete("/logout", status_code=status.HTTP_204_NO_CONTENT, summary="로그아웃")
 async def logout(
-    body: LogoutRequest,
+    response: Response,
+    body: LogoutRequest | None = Body(default=None),
+    ifl_refresh: str | None = Cookie(default=None),
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
 ):
     """
-    Refresh Token을 Redis에서 즉시 삭제하고,
-    Authorization 헤더의 Access Token을 Redis 블랙리스트에 등록합니다.
-    Access Token TTL은 토큰 만료까지의 남은 시간으로 설정됩니다.
+    Refresh Token을 Redis에서 즉시 삭제하고 ifl_refresh 쿠키를 만료 처리합니다.
+    Authorization 헤더의 Access Token은 Redis 블랙리스트에 등록됩니다.
+    refresh_token 은 쿠키 우선, 없으면 body 에서 읽습니다.
     """
     # Access Token 블랙리스트 등록
     if credentials:
@@ -282,9 +347,15 @@ async def logout(
         except JWTError:
             pass  # 만료된 access token이어도 로그아웃 진행
 
-    # Refresh Token 무효화
+    # 쿠키는 항상 만료 처리
+    _clear_refresh_cookie(response)
+
+    refresh_token = ifl_refresh or (body.refresh_token if body else None)
+    if not refresh_token:
+        return
+
     try:
-        payload = decode_token(body.refresh_token)
+        payload = decode_token(refresh_token)
     except JWTError:
         return
 

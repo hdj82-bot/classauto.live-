@@ -19,7 +19,7 @@ interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
-  login: (access: string, refresh: string) => void;
+  login: (access: string) => void;
   logout: () => Promise<void>;
 }
 
@@ -90,16 +90,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => false,
   );
 
-  const login = useCallback((access: string, refresh: string) => {
-    tokens.set(access, refresh);
+  const login = useCallback((access: string) => {
+    tokens.set(access);
     notifyTokens();
   }, []);
 
   const logout = useCallback(async () => {
-    const refresh = tokens.getRefresh();
-    if (refresh) {
-      await authApi.logout(refresh).catch(() => null);
-    }
+    // refresh 쿠키는 서버가 만료 처리 (withCredentials 로 쿠키 전달됨)
+    await authApi.logout().catch(() => null);
     tokens.clear();
     notifyTokens();
     window.location.href = "/auth/login";

@@ -40,7 +40,7 @@ async def test_google_login_invalid_role(client):
 
 @pytest.mark.asyncio
 async def test_refresh_token_success(client, fake_redis, professor):
-    """유효한 Refresh Token으로 Access Token 재발급."""
+    """유효한 Refresh Token으로 Access Token 재발급 (레거시 body 호환)."""
     refresh_token, jti = create_refresh_token(str(professor.id), professor.role.value)
     # Redis에 jti 저장 (정상 발급 상태 시뮬레이션)
     await fake_redis.set(f"rt:{jti}", str(professor.id))
@@ -52,8 +52,9 @@ async def test_refresh_token_success(client, fake_redis, professor):
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
-    assert "refresh_token" in data
     assert data["token_type"] == "bearer"
+    # refresh_token 은 body 에서 제거되고 쿠키로 내려간다
+    assert "refresh_token" not in data
 
 
 @pytest.mark.asyncio
@@ -158,7 +159,7 @@ async def test_logout_blacklists_access_token(client, fake_redis, professor):
 
 @pytest.mark.asyncio
 async def test_exchange_success(client, fake_redis, professor):
-    """유효한 code로 access/refresh 토큰을 발급받는다."""
+    """유효한 code로 access 토큰 발급 + refresh 쿠키 내려옴."""
     code = str(uuid.uuid4())
     await fake_redis.setex(
         f"authcode:{code}", 60, f"{professor.id}:{professor.role.value}"
@@ -167,7 +168,8 @@ async def test_exchange_success(client, fake_redis, professor):
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
-    assert "refresh_token" in data
+    # refresh_token 은 쿠키로 내려가고 body 에는 없다
+    assert "refresh_token" not in data
     # 1회용: Redis에서 즉시 소비되었는지 확인
     assert await fake_redis.get(f"authcode:{code}") is None
 
@@ -308,3 +310,119 @@ async def test_blacklisted_access_token_rejected(client, fake_redis, professor):
         headers={"Authorization": f"Bearer {access_token}"},
     )
     assert resp.status_code == 401
+
+
+# ── httpOnly 쿠키 기반 refresh_token 플로우 ───────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_exchange_sets_refresh_cookie_and_omits_body(client, fake_redis, professor):
+    """exchange 응답은 ifl_refresh 쿠키를 내려보내고 body 에서 refresh_token 을 제외한다."""
+    code = str(uuid.uuid4())
+    await fake_redis.setex(
+        f"authcode:{code}", 60, f"{professor.id}:{professor.role.value}"
+    )
+    resp = await client.post("/api/auth/exchange", json={"code": code})
+    assert resp.status_code == 200
+
+    data = resp.json()
+    assert "access_token" in data
+    assert "refresh_token" not in data  # body 에서 제거됨
+
+    set_cookie = resp.headers.get("set-cookie", "")
+    set_cookie_lower = set_cookie.lower()
+    assert "ifl_refresh=" in set_cookie
+    assert "httponly" in set_cookie_lower
+    assert "path=/api/auth" in set_cookie_lower
+    assert "samesite=lax" in set_cookie_lower
+
+
+@pytest.mark.asyncio
+async def test_refresh_uses_cookie_when_present(client, fake_redis, professor):
+    """body 없이 ifl_refresh 쿠키만으로 refresh 가 작동한다."""
+    refresh_token, jti = create_refresh_token(str(professor.id), professor.role.value)
+    await fake_redis.set(f"rt:{jti}", str(professor.id))
+
+    resp = await client.post(
+        "/api/auth/refresh",
+        cookies={"ifl_refresh": refresh_token},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    assert "refresh_token" not in data
+
+    # rotation: 새 refresh 쿠키가 내려와야 함
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "ifl_refresh=" in set_cookie
+    assert "httponly" in set_cookie.lower()
+
+
+@pytest.mark.asyncio
+async def test_refresh_with_missing_cookie_returns_401(client):
+    """쿠키도 body 도 없으면 401."""
+    resp = await client.post("/api/auth/refresh")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_with_expired_cookie_returns_401(client, professor):
+    """Redis 에 없는 (= 소비된/만료된) refresh 쿠키는 401."""
+    refresh_token, _ = create_refresh_token(str(professor.id), professor.role.value)
+    resp = await client.post(
+        "/api/auth/refresh",
+        cookies={"ifl_refresh": refresh_token},
+    )
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_cookie_takes_precedence_over_body(client, fake_redis, professor):
+    """쿠키와 body 가 둘 다 있으면 쿠키가 우선된다."""
+    cookie_refresh, cookie_jti = create_refresh_token(str(professor.id), professor.role.value)
+    body_refresh, body_jti = create_refresh_token(str(professor.id), professor.role.value)
+    await fake_redis.set(f"rt:{cookie_jti}", str(professor.id))
+    await fake_redis.set(f"rt:{body_jti}", str(professor.id))
+
+    resp = await client.post(
+        "/api/auth/refresh",
+        cookies={"ifl_refresh": cookie_refresh},
+        json={"refresh_token": body_refresh},
+    )
+    assert resp.status_code == 200
+
+    # 쿠키 jti 는 소비되고 body jti 는 남아있다
+    assert await fake_redis.get(f"rt:{cookie_jti}") is None
+    assert await fake_redis.get(f"rt:{body_jti}") is not None
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_refresh_cookie(client, fake_redis, professor):
+    """logout 응답은 ifl_refresh 쿠키를 만료 헤더로 내려보낸다."""
+    refresh_token, jti = create_refresh_token(str(professor.id), professor.role.value)
+    await fake_redis.set(f"rt:{jti}", str(professor.id))
+
+    resp = await client.request(
+        "DELETE",
+        "/api/auth/logout",
+        cookies={"ifl_refresh": refresh_token},
+    )
+    assert resp.status_code == 204
+
+    set_cookie = resp.headers.get("set-cookie", "")
+    set_cookie_lower = set_cookie.lower()
+    assert "ifl_refresh=" in set_cookie
+    # 만료 헤더: Max-Age=0 또는 Expires=Thu, 01 Jan 1970
+    assert "max-age=0" in set_cookie_lower or "expires=thu, 01 jan 1970" in set_cookie_lower or "1970" in set_cookie
+
+    # Redis 에서도 삭제됐는지
+    assert await fake_redis.get(f"rt:{jti}") is None
+
+
+@pytest.mark.asyncio
+async def test_logout_without_cookie_still_clears_cookie_header(client):
+    """쿠키/토큰 없이 호출해도 쿠키 삭제 헤더는 응답에 포함된다."""
+    resp = await client.request("DELETE", "/api/auth/logout")
+    assert resp.status_code == 204
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "ifl_refresh=" in set_cookie

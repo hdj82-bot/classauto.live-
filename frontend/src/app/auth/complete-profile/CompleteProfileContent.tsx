@@ -80,7 +80,7 @@ export default function CompleteProfileContent() {
           ? { school, department }
           : { student_number: studentNumber }),
       });
-      login(data.access_token, data.refresh_token);
+      login(data.access_token);
       router.replace("/dashboard");
     } catch {
       setError(t("auth.registerError"));

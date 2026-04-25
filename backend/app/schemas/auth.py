@@ -8,6 +8,12 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class AccessTokenOnlyResponse(BaseModel):
+    """Refresh token 은 httpOnly 쿠키로 내려가고 응답 body 에서 제외."""
+    access_token: str
+    token_type: str = "bearer"
+
+
 class NeedsProfileResponse(BaseModel):
     needs_profile: bool = True
     temp_token: str
@@ -35,11 +41,12 @@ class CompleteProfileRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    """레거시 body refresh — 쿠키 미설정 클라이언트(예: 모바일) 호환용."""
+    refresh_token: str | None = None
 
 
 class LogoutRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class ExchangeRequest(BaseModel):
