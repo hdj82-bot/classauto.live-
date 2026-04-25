@@ -61,6 +61,20 @@ api.interceptors.response.use(
 );
 
 export const authApi = {
+  exchange: (code: string) =>
+    api.post<{ access_token: string; refresh_token: string }>(
+      "/api/auth/exchange",
+      { code },
+    ),
+
+  tempExchange: (temp_code: string) =>
+    api.post<{
+      temp_token: string;
+      email: string;
+      name: string;
+      role: "professor" | "student";
+    }>("/api/auth/temp-exchange", { temp_code }),
+
   completeProfile: (body: {
     temp_token: string;
     school?: string;
