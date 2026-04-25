@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     S3_PREFIX: str = "heygen/"
     S3_PPT_PREFIX: str = "ppt/"
     S3_PRESIGNED_EXPIRATION: int = 3600  # presigned URL 만료 시간 (초)
+    BACKUP_S3_PREFIX: str = "backups/"  # 일일 DB 백업 저장 prefix
 
     # ── Celery / Redis ──────────────────────────────────────────
     CELERY_BROKER_URL: str = "redis://redis:6379/0"

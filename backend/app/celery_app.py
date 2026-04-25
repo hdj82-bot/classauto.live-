@@ -1,5 +1,6 @@
 """Celery 인스턴스 설정."""
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -27,6 +28,10 @@ celery.conf.beat_schedule = {
     "cleanup-stale-sessions": {
         "task": "app.tasks.cleanup.cleanup_stale_sessions",
         "schedule": 3600,  # 1시간 간격
+    },
+    "daily-db-backup": {
+        "task": "app.tasks.backup.daily_db_backup",
+        "schedule": crontab(hour=3, minute=0),  # UTC 03:00 = KST 12:00
     },
 }
 

@@ -1,9 +1,13 @@
 #!/bin/bash
 # ══════════════════════════════════════════════════════════════════════════════
-# IFL Platform — DB 백업/복원 스크립트
+# IFL Platform — DB 백업/복원 스크립트 (수동/복구 시나리오용)
+#
+# ※ 정기 백업은 Celery beat 의 app.tasks.backup.daily_db_backup 가
+#   매일 UTC 03:00 에 S3({BACKUP_S3_PREFIX}) 로 자동 수행한다.
+#   본 스크립트는 호스트 측 수동 백업·복원·즉시 점검용이다.
 #
 # 사용법:
-#   ./scripts/backup.sh backup              # DB 백업 생성
+#   ./scripts/backup.sh backup              # DB 백업 생성 (호스트 로컬)
 #   ./scripts/backup.sh restore backup.sql   # DB 복원
 #   ./scripts/backup.sh list                 # 백업 목록
 # ══════════════════════════════════════════════════════════════════════════════
