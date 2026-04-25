@@ -3,9 +3,12 @@ import { tokens } from "./tokens";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+// withCredentials: true — 백엔드가 내려보낸 ifl_refresh (httpOnly, Path=/api/auth)
+// 쿠키를 /api/auth/* 요청에 자동 첨부시킨다.
 export const api = axios.create({
   baseURL: BACKEND_URL,
   headers: { "Content-Type": "application/json" },
+  withCredentials: true,
 });
 
 // 요청 인터셉터: Authorization 헤더 자동 첨부
@@ -15,24 +18,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// 응답 인터셉터: 401 시 Refresh Token으로 재발급
+// 응답 인터셉터: 401 시 refresh 쿠키로 재발급 시도
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
-      const refresh = tokens.getRefresh();
-      if (!refresh) {
-        tokens.clear();
-        window.location.href = "/auth/login";
-        return Promise.reject(error);
-      }
       try {
-        const { data } = await axios.post(`${BACKEND_URL}/api/auth/refresh`, {
-          refresh_token: refresh,
-        });
-        tokens.set(data.access_token, data.refresh_token);
+        // body 없이 호출 — refresh_token 은 withCredentials 로 쿠키에서 첨부됨
+        const { data } = await axios.post<{ access_token: string }>(
+          `${BACKEND_URL}/api/auth/refresh`,
+          null,
+          { withCredentials: true },
+        );
+        tokens.set(data.access_token);
         original.headers.Authorization = `Bearer ${data.access_token}`;
         return api(original);
       } catch {
@@ -62,10 +62,7 @@ api.interceptors.response.use(
 
 export const authApi = {
   exchange: (code: string) =>
-    api.post<{ access_token: string; refresh_token: string }>(
-      "/api/auth/exchange",
-      { code },
-    ),
+    api.post<{ access_token: string }>("/api/auth/exchange", { code }),
 
   tempExchange: (temp_code: string) =>
     api.post<{
@@ -80,8 +77,8 @@ export const authApi = {
     school?: string;
     department?: string;
     student_number?: string;
-  }) => api.post<{ access_token: string; refresh_token: string }>("/api/auth/complete-profile", body),
+  }) => api.post<{ access_token: string }>("/api/auth/complete-profile", body),
 
-  logout: (refresh_token: string) =>
-    api.delete("/api/auth/logout", { data: { refresh_token } }),
+  // refresh_token 쿠키는 서버가 만료 처리하므로 body 불필요
+  logout: () => api.delete("/api/auth/logout"),
 };

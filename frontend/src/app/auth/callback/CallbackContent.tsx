@@ -43,7 +43,7 @@ export default function CallbackContent() {
     (async () => {
       try {
         const { data } = await authApi.exchange(code);
-        login(data.access_token, data.refresh_token);
+        login(data.access_token);
         const payload = parseJwtPayload(data.access_token);
         redirectByRole(payload?.role as string | undefined, router);
       } catch {
