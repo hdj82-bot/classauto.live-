@@ -117,26 +117,77 @@ jobs:
       - run: cd frontend && npm ci
       - run: cd frontend && npm run build
 
-  # ── Docker Build Test ────────────────────────────────────────────────
-  docker-build:
-    name: Docker Build
+  # ── Docker Build & Push to GHCR ───────────────────────────────────────
+  # main 또는 임의 브랜치에 push 되면 backend / frontend 이미지를 빌드해
+  # ghcr.io/hdj82-bot/ifl-{backend,frontend} 로 push.
+  # main:    :latest, :sha-<short>
+  # 그 외:   :branch-<name>, :sha-<short>
+  # PR(fork 포함)에서는 GHCR 권한 문제로 push 하지 않음.
+  docker-build-push:
+    name: Docker Build & Push (${{ matrix.name }})
     runs-on: ubuntu-latest
     needs: [backend-test, frontend-test, frontend-build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            dockerfile: backend/Dockerfile.prod
+            image: ghcr.io/hdj82-bot/ifl-backend
+          - name: frontend
+            context: ./frontend
+            dockerfile: frontend/Dockerfile.prod
+            image: ghcr.io/hdj82-bot/ifl-frontend
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f backend/Dockerfile.prod -t ifl-backend ./backend
-      - run: docker build -f frontend/Dockerfile.prod -t ifl-frontend ./frontend
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch,prefix=branch-,enable=${{ github.ref_name != 'main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   # ── Deploy to Production ─────────────────────────────────────────────
   # 배포 서버가 준비되면 Repository → Settings → Secrets and variables →
   # Actions → Variables 탭에서 DEPLOY_ENABLED 라는 variable 을 "true" 로
   # 만들고 secrets(DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY) 를 추가하면
   # 이 job 이 활성화된다. 그 전까진 자동으로 skip.
+  #
+  # 서버에서 GHCR 이미지를 pull 하려면 최초 1회 docker login ghcr.io 가
+  # 필요하다 (private 패키지일 경우). README 의 "프로덕션 배포" 항목 참고.
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [docker-build]
+    needs: [docker-build-push]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     environment: production
     steps:
@@ -148,5 +199,4 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             cd /opt/ifl-platform
-            git pull origin main
             ./scripts/deploy.sh update
