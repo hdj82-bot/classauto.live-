@@ -1,10 +1,17 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authApi } from "@/lib/api";
 import { useI18n } from "@/contexts/I18nContext";
+
+type ExchangedProfile = {
+  tempToken: string;
+  email: string;
+  name: string;
+  role: "professor" | "student";
+};
 
 export default function CompleteProfileContent() {
   const searchParams = useSearchParams();
@@ -12,21 +19,47 @@ export default function CompleteProfileContent() {
   const { login } = useAuth();
   const { t } = useI18n();
 
-  const tempToken = searchParams.get("temp_token") ?? "";
-  const email = searchParams.get("email") ?? "";
-  const name = searchParams.get("name") ?? "";
-  const role = (searchParams.get("role") ?? "student") as "professor" | "student";
-
+  const [profile, setProfile] = useState<ExchangedProfile | null>(null);
   const [school, setSchool] = useState("");
   const [department, setDepartment] = useState("");
   const [studentNumber, setStudentNumber] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // temp_code는 1회용. StrictMode 이중 실행으로 두 번째가 401 나는 것을 막는다.
+  const exchangedRef = useRef(false);
 
-  if (!tempToken) {
-    router.replace("/auth/login");
-    return null;
+  useEffect(() => {
+    if (exchangedRef.current) return;
+    const tempCode = searchParams.get("temp_code");
+    if (!tempCode) {
+      router.replace("/auth/login?error=invalid_state");
+      return;
+    }
+    exchangedRef.current = true;
+    (async () => {
+      try {
+        const { data } = await authApi.tempExchange(tempCode);
+        setProfile({
+          tempToken: data.temp_token,
+          email: data.email,
+          name: data.name,
+          role: data.role,
+        });
+      } catch {
+        router.replace("/auth/login?error=exchange_failed");
+      }
+    })();
+  }, [searchParams, router]);
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-sm text-gray-500">{t("auth.completeProfile")}...</p>
+      </div>
+    );
   }
+
+  const { tempToken, email, name, role } = profile;
 
   const isValid =
     role === "professor"

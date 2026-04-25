@@ -1,8 +1,9 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { authApi } from "@/lib/api";
 
 function parseJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -26,22 +27,29 @@ export default function CallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { login } = useAuth();
+  // code는 1회용이므로 StrictMode 이중 실행으로 두 번 교환되어 두 번째가 401나는 것을 막는다.
+  const exchangedRef = useRef(false);
 
   useEffect(() => {
-    const access = searchParams.get("access_token");
-    const refresh = searchParams.get("refresh_token");
+    if (exchangedRef.current) return;
+    const code = searchParams.get("code");
 
-    if (!access || !refresh) {
+    if (!code) {
       router.replace("/auth/login?error=invalid_state");
       return;
     }
 
-    login(access, refresh);
-    // URL에서 토큰 제거 (보안)
-    window.history.replaceState(null, "", "/auth/callback");
-
-    const payload = parseJwtPayload(access);
-    redirectByRole(payload?.role as string | undefined, router);
+    exchangedRef.current = true;
+    (async () => {
+      try {
+        const { data } = await authApi.exchange(code);
+        login(data.access_token, data.refresh_token);
+        const payload = parseJwtPayload(data.access_token);
+        redirectByRole(payload?.role as string | undefined, router);
+      } catch {
+        router.replace("/auth/login?error=exchange_failed");
+      }
+    })();
   }, [searchParams, login, router]);
 
   return (
