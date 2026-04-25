@@ -7,27 +7,35 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.redis import get_redis
 from app.core.security import GOOGLE_AUTH_URL, create_temp_token, decode_token
 from app.db.session import get_db
-from app.models.user import UserRole
+from app.models.user import User, UserRole
 from app.schemas.auth import (
     CompleteProfileRequest,
+    ExchangeRequest,
     LogoutRequest,
     RefreshRequest,
+    TempExchangeRequest,
+    TempExchangeResponse,
     TokenResponse,
 )
 from app.services.auth import (
+    consume_auth_code,
+    consume_temp_code,
     create_user_from_google,
     exchange_google_code,
     get_user_by_google_sub,
     issue_tokens,
     pop_oauth_state,
     refresh_access_token,
+    save_auth_code,
     save_oauth_state,
+    save_temp_code,
     validate_and_delete_refresh_token,
 )
 
@@ -75,8 +83,12 @@ async def google_callback(
     """
     Google에서 Authorization Code와 state를 받아 처리합니다.
 
-    - **기존 유저**: 프론트엔드 `/auth/callback?access_token=...&refresh_token=...` 로 리다이렉트
-    - **신규 유저**: 프론트엔드 `/auth/complete-profile?temp_token=...&email=...&name=...&role=...` 로 리다이렉트
+    토큰을 URL로 노출하지 않기 위해 1회용 교환 코드만 프론트로 전달합니다
+    (nginx access_log·브라우저 히스토리·Referer 유출 방지). 프론트는 별도
+    POST 엔드포인트로 코드를 토큰과 교환합니다.
+
+    - **기존 유저**: 프론트엔드 `/auth/callback?code=...` 로 리다이렉트
+    - **신규 유저**: 프론트엔드 `/auth/complete-profile?temp_code=...` 로 리다이렉트
     """
     frontend = settings.FRONTEND_URL
 
@@ -95,22 +107,79 @@ async def google_callback(
 
     existing_user = await get_user_by_google_sub(db, google_sub)
     if existing_user:
-        tokens = await issue_tokens(existing_user)
-        params = urlencode({
-            "access_token": tokens.access_token,
-            "refresh_token": tokens.refresh_token,
-        })
-        return RedirectResponse(f"{frontend}/auth/callback?{params}")
+        auth_code = str(uuid.uuid4())
+        await save_auth_code(auth_code, str(existing_user.id), existing_user.role.value)
+        return RedirectResponse(f"{frontend}/auth/callback?code={auth_code}")
 
     # 신규 유저: 추가 정보 입력 필요
     temp_token = create_temp_token(google_sub, email, name, role_str)
-    params = urlencode({
-        "temp_token": temp_token,
-        "email": email,
-        "name": name,
-        "role": role_str,
-    })
-    return RedirectResponse(f"{frontend}/auth/complete-profile?{params}")
+    temp_code = str(uuid.uuid4())
+    await save_temp_code(temp_code, temp_token, email, name, role_str)
+    return RedirectResponse(f"{frontend}/auth/complete-profile?temp_code={temp_code}")
+
+
+# ── 2-1. OAuth Code 교환 (기존 유저 → access/refresh) ────────────────────────
+
+@router.post(
+    "/exchange",
+    response_model=TokenResponse,
+    summary="OAuth 1회용 code → access/refresh 토큰 교환",
+)
+async def exchange_oauth_code(
+    body: ExchangeRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    `/google/callback`이 발급한 1회용 code를 access/refresh 토큰 쌍으로 교환합니다.
+    code는 Redis getdel로 즉시 소비되며, 재사용·미존재·TTL 경과 시 401을 반환합니다.
+    """
+    consumed = await consume_auth_code(body.code)
+    if not consumed:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않거나 만료된 code입니다.",
+        )
+    user_id, _role = consumed
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않은 code입니다.",
+        )
+
+    result = await db.execute(select(User).where(User.id == user_uuid))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="존재하지 않거나 비활성화된 유저입니다.",
+        )
+
+    return await issue_tokens(user)
+
+
+# ── 2-2. Temp Code 교환 (신규 유저 → temp_token + 표시 메타) ───────────────────
+
+@router.post(
+    "/temp-exchange",
+    response_model=TempExchangeResponse,
+    summary="OAuth 1회용 temp_code → temp_token 교환",
+)
+async def exchange_temp_code(body: TempExchangeRequest):
+    """
+    `/google/callback`이 신규 유저에 대해 발급한 1회용 temp_code를
+    temp_token 및 폼 표시용 메타데이터(email/name/role)로 교환합니다.
+    재사용·미존재·TTL 경과 시 401.
+    """
+    payload = await consume_temp_code(body.temp_code)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="유효하지 않거나 만료된 temp_code입니다.",
+        )
+    return TempExchangeResponse(**payload)
 
 
 # ── 3. 프로필 완성 (신규 유저 전용) ──────────────────────────────────────────

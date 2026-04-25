@@ -40,3 +40,18 @@ class RefreshRequest(BaseModel):
 
 class LogoutRequest(BaseModel):
     refresh_token: str
+
+
+class ExchangeRequest(BaseModel):
+    code: str
+
+
+class TempExchangeRequest(BaseModel):
+    temp_code: str
+
+
+class TempExchangeResponse(BaseModel):
+    temp_token: str
+    email: str
+    name: str
+    role: Literal["professor", "student"]
