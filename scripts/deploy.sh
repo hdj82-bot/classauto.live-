@@ -164,13 +164,13 @@ cmd_update() {
     local current_backend=$(docker inspect --format='{{.Image}}' ifl_backend 2>/dev/null || echo "none")
     echo "$current_backend" > /tmp/ifl_rollback_image
 
-    # 1. 최신 코드 pull
+    # 1. 최신 코드 pull (compose 파일/스크립트 갱신 반영)
     log "최신 코드 Pull..."
     git pull origin main
 
-    # 2. 이미지 다시 빌드
-    log "Docker 이미지 빌드 중..."
-    docker compose -f "$COMPOSE_FILE" build
+    # 2. CI 가 GHCR 로 push 한 이미지 pull (서버 빌드 제거)
+    log "GHCR 에서 최신 이미지 Pull..."
+    docker compose -f "$COMPOSE_FILE" pull backend worker beat frontend
 
     # 3. 마이그레이션 직전 DB 백업 (실패 시 업데이트 중단)
     log "마이그레이션 전 DB 백업 생성 중..."

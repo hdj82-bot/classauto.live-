@@ -87,35 +87,77 @@ docker compose exec backend python -m scripts.seed
 
 ## 프로덕션 배포
 
+### CI/CD 흐름
+
+```
+main 머지 → GitHub Actions
+            ├─ backend / frontend 테스트
+            └─ docker-build-push (matrix)
+                ├─ ghcr.io/hdj82-bot/ifl-backend:{latest, sha-<short>}
+                └─ ghcr.io/hdj82-bot/ifl-frontend:{latest, sha-<short>}
+                       │
+                       ▼
+            deploy (SSH) → ./scripts/deploy.sh update
+                            ├─ git pull origin main   (compose/scripts 갱신)
+                            ├─ docker compose pull    (CI 가 push 한 이미지)
+                            ├─ DB 백업 + alembic upgrade
+                            └─ 서비스 순차 재시작
+```
+
+CI 에서 검증한 정확히 그 이미지가 서버에 배포된다 (서버에서 재빌드 안 함).
+특정 SHA 로 핀하거나 롤백하려면 `.env` 의 `IFL_IMAGE_TAG=sha-abc1234` 로 변경
+후 `./scripts/deploy.sh update`.
+
+### 신규 서버 셋업
+
 ```bash
 # 1. 서버 초기 설정 (Ubuntu)
 sudo ./scripts/setup-server.sh
 
-# 2. 환경변수 설정
-vi /opt/ifl-platform/.env
+# 2. GHCR 로그인 (private 패키지일 경우 1회)
+#    Personal Access Token (read:packages 권한) 또는 GITHUB_TOKEN 사용
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-username> --password-stdin
 
-# 3. 환경변수 검증
+# 3. 환경변수 설정
+vi /opt/ifl-platform/.env   # IFL_IMAGE_TAG=latest 확인
+
+# 4. 환경변수 검증
 ./scripts/validate-env.sh
 
-# 4. 배포
+# 5. 최초 배포
 DOMAIN=your-domain.com EMAIL=admin@example.com ./scripts/deploy.sh init
 ```
+
+> GHCR 패키지 visibility 는 GitHub Repo → Settings → Packages 에서 확인.
+> private 으로 두면 위 `docker login` 이 필수, public 으로 풀면 익명 pull 가능.
 
 ### 배포 명령어
 
 ```bash
 ./scripts/deploy.sh init       # 최초 배포 (SSL 포함)
-./scripts/deploy.sh update     # 업데이트 배포
+./scripts/deploy.sh update     # GHCR 이미지 pull → 재시작
 ./scripts/deploy.sh rollback   # 직전 버전 롤백
 ./scripts/deploy.sh status     # 서비스 상태 확인
 ```
 
 ### DB 백업/복원
 
+운영 환경에서는 Celery beat 가 매일 UTC 03:00 (KST 12:00) 에
+`app.tasks.backup.daily_db_backup` 태스크를 실행해 컨테이너 내부에서
+`pg_dump -Fc` 결과를 gzip 압축한 뒤 `s3://${S3_BUCKET}/${BACKUP_S3_PREFIX}`
+경로(기본 `backups/`)로 업로드한다. 호스트 장애와 무관하게 오프사이트에
+백업이 보존되며, 30일 이상 된 객체는 S3 lifecycle rule 로 자동 만료시킨다
+(콘솔에서 prefix `backups/` 에 expiration 30 days 규칙 등록 필요).
+
+`scripts/backup.sh` 는 호스트 측 수동/복구 시나리오용으로 유지된다.
+호스트에 S3 자격증명이 없거나 워커가 다운된 환경에서는 OS cron 으로
+다음 줄을 직접 걸 수 있다:
+`0 3 * * * cd /opt/ifl-platform && ./scripts/backup.sh backup`.
+
 ```bash
-./scripts/backup.sh backup              # 백업 생성
-./scripts/backup.sh list                # 백업 목록
-./scripts/backup.sh restore backup.sql  # 복원
+./scripts/backup.sh backup              # 호스트 로컬 수동 백업
+./scripts/backup.sh list                # 호스트 로컬 백업 목록
+./scripts/backup.sh restore backup.sql  # 복원 (.sql 또는 .sql.gz)
 ```
 
 ## 테스트

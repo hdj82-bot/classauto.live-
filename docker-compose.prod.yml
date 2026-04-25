@@ -30,9 +30,7 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/hdj82-bot/ifl-backend:${IFL_IMAGE_TAG:-latest}
     container_name: ifl_backend
     restart: unless-stopped
     env_file:
@@ -63,9 +61,7 @@ services:
         max-file: "5"
 
   worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/hdj82-bot/ifl-backend:${IFL_IMAGE_TAG:-latest}
     container_name: ifl_worker
     restart: unless-stopped
     command: celery -A app.celery_app:celery worker --loglevel=info --concurrency=4
@@ -91,9 +87,7 @@ services:
         max-file: "5"
 
   beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/hdj82-bot/ifl-backend:${IFL_IMAGE_TAG:-latest}
     container_name: ifl_beat
     restart: unless-stopped
     command: celery -A app.celery_app:celery beat --loglevel=info
@@ -108,9 +102,7 @@ services:
         max-file: "3"
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
+    image: ghcr.io/hdj82-bot/ifl-frontend:${IFL_IMAGE_TAG:-latest}
     container_name: ifl_frontend
     restart: unless-stopped
     env_file:
