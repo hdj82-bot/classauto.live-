@@ -183,6 +183,25 @@ cd frontend && npm run test:e2e
 cd loadtest && ./run.sh --headless -u 100 -r 10 -t 5m
 ```
 
+### 배포 직후 스모크 테스트
+
+실제 배포된 스택이 외부에서 동작하는지를 curl/jq/openssl 로 자동 검증한다.
+`deploy.sh` 또는 GitHub Actions 배포 workflow 의 마지막 단계에서 호출하는 것을
+권장한다. 종료 코드는 실패한 체크 개수(0 이면 전체 통과).
+
+```bash
+./scripts/smoke-test.sh ifl-platform.com
+```
+
+검증 항목: `/health` JSON(db/redis/s3 전부 ok) · 보안 헤더(HSTS ≥ 1년, CSP 에
+`'unsafe-eval'` 없음, X-Frame-Options, X-Content-Type-Options) · TLS 1.3 +
+인증서 잔여 ≥ 30일 · `/metrics` / `/docs` / `/openapi.json` 외부 차단 ·
+`/api/auth/google` 302 → accounts.google.com · `/api/auth/exchange` 미인증
+POST 거부 · `/api/v1/qa` 130회 호출 시 rate-limit 트리거 · Stripe 웹훅
+`/api/v1/payment/webhook` 은 100회 POST 해도 429 없음 (rate-limit 제외 확인).
+
+의존성: `curl`, `jq`, `openssl`. 없으면 스크립트가 시작 시 종료 코드 2 로 중단.
+
 ## 프로젝트 구조
 
 ```
