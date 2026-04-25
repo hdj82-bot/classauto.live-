@@ -172,22 +172,30 @@ cmd_update() {
     log "Docker 이미지 빌드 중..."
     docker compose -f "$COMPOSE_FILE" build
 
-    # 3. DB 마이그레이션
+    # 3. 마이그레이션 직전 DB 백업 (실패 시 업데이트 중단)
+    log "마이그레이션 전 DB 백업 생성 중..."
+    if ! "$SCRIPT_DIR/backup.sh" backup; then
+        error "DB 백업 실패 — 마이그레이션을 중단합니다."
+        error "backup.sh 를 수동 점검한 뒤 다시 시도하세요."
+        exit 1
+    fi
+
+    # 4. DB 마이그레이션
     log "DB 마이그레이션 확인 중..."
     docker compose -f "$COMPOSE_FILE" run --rm backend alembic upgrade head
 
-    # 4. 서비스 순차 재시작 (무중단에 가깝게)
+    # 5. 서비스 순차 재시작 (무중단에 가깝게)
     log "백엔드 서비스 재시작..."
     docker compose -f "$COMPOSE_FILE" up -d --no-deps backend worker beat
 
-    # 5. 프론트엔드 재시작
+    # 6. 프론트엔드 재시작
     log "프론트엔드 재시작..."
     docker compose -f "$COMPOSE_FILE" up -d --no-deps frontend
 
-    # 6. nginx 리로드
+    # 7. nginx 리로드
     docker compose -f "$COMPOSE_FILE" exec nginx nginx -s reload 2>/dev/null || true
 
-    # 7. 헬스체크
+    # 8. 헬스체크
     sleep 10
     cmd_status
 
@@ -209,7 +217,22 @@ cmd_rollback() {
     cmd_status
 
     log "=== 롤백 완료 ==="
-    warn "문제가 해결되면 git checkout main으로 복귀하세요."
+    warn ""
+    warn "┌─────────────────────────────────────────────────────────────┐"
+    warn "│  주의: DB 스키마는 자동으로 되돌려지지 않습니다.            │"
+    warn "│                                                             │"
+    warn "│  직전 배포에서 파괴적 마이그레이션이 실행되었다면 코드와    │"
+    warn "│  스키마가 어긋날 수 있습니다. 최신 백업에서 복원하려면:     │"
+    warn "│                                                             │"
+    warn "│    ./scripts/backup.sh list                                 │"
+    warn "│    ./scripts/backup.sh restore <파일>                       │"
+    warn "│                                                             │"
+    warn "│  또는 alembic downgrade 로 한 단계 되돌리세요:              │"
+    warn "│    docker compose -f $COMPOSE_FILE run --rm \\              │"
+    warn "│      backend alembic downgrade -1                           │"
+    warn "└─────────────────────────────────────────────────────────────┘"
+    warn ""
+    warn "문제가 해결되면 git checkout main 으로 복귀하세요."
 }
 
 # ── 상태 확인 ─────────────────────────────────────────────────────────────
