@@ -142,25 +142,133 @@ while true; do curl -o /dev/null -s -w "%{http_code}\n" \
 
 이 상태에서 `./scripts/deploy.sh update` 를 돌려 5xx 가 0~1회 이하면 정상.
 
-### 신규 서버 셋업
+### 신규 서버 셋업 — 1회 체크리스트
+
+깨끗한 Ubuntu 22.04/24.04 서버에서 처음 운영을 띄울 때 한 번만 실행하는 절차.
+순서 그대로 따라가면 된다 (각 단계는 다음 단계의 전제조건).
+
+#### 0. 사전 준비 (서버 외부)
+
+- [ ] **도메인 보유 + DNS A 레코드** 등록
+  ```
+  classauto.live      A   <서버 공인 IP>
+  api.classauto.live  A   <서버 공인 IP>
+  ```
+  `dig +short classauto.live` 로 IP 가 올라왔는지 확인. TTL 은 처음 발급 시 짧게(300s) 두면 편하다.
+
+- [ ] **SSH 접속 가능** — 비밀번호 로그인은 끄고 키 기반만 허용 권장
+  ```bash
+  ssh-copy-id ubuntu@<서버IP>
+  ssh ubuntu@<서버IP>   # 비밀번호 안 묻히면 OK
+  ```
+
+- [ ] **GHCR Personal Access Token 발급** (private 패키지인 경우만)
+  - GitHub → Settings → Developer settings → Personal access tokens (classic)
+  - 권한: `read:packages` 만 체크 (write 권한은 CI 만 가지면 됨)
+  - public 패키지면 이 단계 스킵
+
+#### 1. 서버 초기화 (`scripts/setup-server.sh`)
 
 ```bash
-# 1. 서버 초기 설정 (Ubuntu)
+ssh ubuntu@<서버IP>
+sudo apt-get update && sudo apt-get install -y git
+sudo git clone https://github.com/hdj82-bot/classauto.live-.git /opt/ifl-platform
+cd /opt/ifl-platform
 sudo ./scripts/setup-server.sh
-
-# 2. GHCR 로그인 (private 패키지일 경우 1회)
-#    Personal Access Token (read:packages 권한) 또는 GITHUB_TOKEN 사용
-echo "$GHCR_TOKEN" | docker login ghcr.io -u <github-username> --password-stdin
-
-# 3. 환경변수 설정
-vi /opt/ifl-platform/.env   # IFL_IMAGE_TAG=latest 확인
-
-# 4. 환경변수 검증
-./scripts/validate-env.sh
-
-# 5. 최초 배포
-DOMAIN=your-domain.com EMAIL=admin@example.com ./scripts/deploy.sh init
 ```
+
+스크립트가 자동으로 처리:
+- 시스템 패키지 업데이트, chrony 시간 동기화
+- 2GB swap 파일 + `vm.overcommit_memory=1` (Redis 안전)
+- Docker + Docker Compose v2 설치, `$SUDO_USER` 를 docker 그룹 추가
+- UFW (SSH/80/443 만 허용), fail2ban (sshd jail), unattended-upgrades
+
+옵션 환경변수로 동작 변경 가능:
+```bash
+sudo SWAP_SIZE_GB=4 TIMEZONE=Asia/Seoul ./scripts/setup-server.sh
+```
+
+#### 2. GHCR 로그인 (private 패키지인 경우만)
+
+```bash
+echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u <github-username> --password-stdin
+```
+
+`setup-server.sh` 에 `GHCR_USER`/`GHCR_TOKEN` 을 환경변수로 넘기면 1단계에서 자동 처리된다.
+
+#### 3. `.env` 작성
+
+```bash
+sudo cp /opt/ifl-platform/.env.production /opt/ifl-platform/.env
+sudo vi /opt/ifl-platform/.env
+```
+
+`CHANGE_ME` 가 들어간 항목을 모두 실제 값으로 교체. 최소한 다음은 반드시:
+
+| 카테고리 | 변수 |
+|---|---|
+| DB / 인프라 | `POSTGRES_PASSWORD` (≥16자), `JWT_SECRET_KEY` (≥32자, `openssl rand -hex 32`) |
+| 도메인 / SSL | `DOMAIN`, `SSL_EMAIL`, `FRONTEND_URL`, `NEXT_PUBLIC_API_URL`, `GOOGLE_OAUTH_REDIRECT_URI`, `HEYGEN_CALLBACK_URL` |
+| AI | `ANTHROPIC_API_KEY` (`sk-ant-...`), `OPENAI_API_KEY` (`sk-...`) |
+| 영상 / 음성 | `HEYGEN_API_KEY`, `HEYGEN_AVATAR_ID`, `HEYGEN_WEBHOOK_SECRET`, `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID` |
+| OAuth | `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` |
+| 결제 | `STRIPE_SECRET_KEY` (`sk_live_...`), `STRIPE_WEBHOOK_SECRET` (`whsec_...`), `STRIPE_PRICE_BASIC`, `STRIPE_PRICE_PRO` |
+| 스토리지 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET` |
+| 번역 | `DEEPL_API_KEY` |
+| 모니터링 | `SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN` |
+
+> `JWT_SECRET_KEY` 와 `POSTGRES_PASSWORD` 는 절대 커밋하지 말 것 (서버 `.env` 에만 존재).
+
+#### 4. 환경변수 검증 — `validate-env.sh --strict`
+
+```bash
+cd /opt/ifl-platform
+./scripts/validate-env.sh --strict
+```
+
+`--strict` 모드는 production 전제로 추가 검증:
+- 모든 `[REQUIRED]` 변수 채워졌는지 + `CHANGE_ME` 잔존 여부
+- 형식: `JWT_SECRET_KEY` ≥32자, `STRIPE_SECRET_KEY` 가 `sk_test_`/`sk_live_`,
+  `STRIPE_WEBHOOK_SECRET` 이 `whsec_`, `ANTHROPIC_API_KEY` 가 `sk-ant-`,
+  Sentry DSN URL 형태, AWS Access Key 가 `AKIA...` 20자, S3 버킷명 규칙 등
+- `--strict` 추가 검증: `DOMAIN` ≠ localhost, `SSL_EMAIL` 이메일 형식,
+  모든 외부 URL 이 `https://` 로 시작, `STRIPE_SECRET_KEY` 가 `sk_test_` 면 경고
+
+종료 코드 0 이 나올 때까지 반복. 0 이 아니면 다음 단계로 가지 말 것.
+
+#### 5. 최초 배포 — `deploy.sh init`
+
+```bash
+DOMAIN=classauto.live EMAIL=admin@classauto.live ./scripts/deploy.sh init
+```
+
+`init` 가 하는 일 (자동):
+1. `validate-env` 1차 검증
+2. DB/Redis 컨테이너 기동 → Alembic 마이그레이션
+3. Let's Encrypt 인증서 발급 (`scripts/init-ssl.sh`)
+4. 전체 스택 기동 → `cmd_status` 헬스체크
+
+#### 6. 배포 직후 검증 — `smoke-test.sh`
+
+```bash
+./scripts/smoke-test.sh classauto.live
+```
+
+`/health` JSON, 보안 헤더(HSTS/CSP/X-Frame-Options), TLS 1.3, 인증서 잔여일,
+`/metrics` 외부 차단, OAuth 리다이렉트, rate-limit 동작, Stripe 웹훅 예외 등을
+자동 점검. 종료 코드가 실패한 체크 개수.
+
+#### 7. (선택) GitHub Actions CD 활성화
+
+```
+GitHub Repo → Settings → Secrets and variables → Actions
+  DEPLOY_HOST  = <서버 IP>
+  DEPLOY_USER  = ubuntu
+  DEPLOY_SSH_KEY = <서버 ~/.ssh/authorized_keys 와 짝인 개인키>
+```
+
+이후 `main` 머지 시 `.github/workflows/ci.yml` 이
+`./scripts/deploy.sh update` 를 SSH 로 호출 (rolling restart, 무중단).
 
 > GHCR 패키지 visibility 는 GitHub Repo → Settings → Packages 에서 확인.
 > private 으로 두면 위 `docker login` 이 필수, public 으로 풀면 익명 pull 가능.
