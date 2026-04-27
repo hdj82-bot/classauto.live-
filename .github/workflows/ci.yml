@@ -3,9 +3,15 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    tags: ['v*']
   pull_request:
     branches: [main, develop]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: '프로덕션 배포까지 진행 (체크하지 않으면 빌드/테스트만 실행)'
+        type: boolean
+        default: false
 
 env:
   PYTHON_VERSION: "3.12"
@@ -177,18 +183,31 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
 
   # ── Deploy to Production ─────────────────────────────────────────────
-  # 배포 서버가 준비되면 Repository → Settings → Secrets and variables →
-  # Actions → Variables 탭에서 DEPLOY_ENABLED 라는 variable 을 "true" 로
-  # 만들고 secrets(DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY) 를 추가하면
-  # 이 job 이 활성화된다. 그 전까진 자동으로 skip.
-  #
-  # 서버에서 GHCR 이미지를 pull 하려면 최초 1회 docker login ghcr.io 가
-  # 필요하다 (private 패키지일 경우). README 의 "프로덕션 배포" 항목 참고.
+  # 1) 활성화 절차: Repository → Settings → Secrets and variables → Actions
+  #    → Variables 탭에서 DEPLOY_ENABLED = "true" 추가 + secrets 3종
+  #    (DEPLOY_HOST / DEPLOY_USER / DEPLOY_SSH_KEY) 등록.
+  # 2) 활성화된 후에도 main 푸시만으로는 배포되지 않는다. 다음 두 경로 중
+  #    하나여야 deploy job 이 실행된다 (사고 방지):
+  #      a. refs/tags/v* 형태의 릴리스 태그 푸시 (예: git tag v1.2.3 && git push --tags)
+  #      b. Actions → Run workflow 에서 'deploy' 입력을 체크한 수동 트리거 (main 한정)
+  # 3) 추가 안전장치로 production environment 에 Required reviewers 를
+  #    구성할 것을 권장 (Settings → Environments → production → Deployment
+  #    protection rules → Required reviewers). 자세한 내용은 README 의
+  #    "프로덕션 배포 게이트 활성화" 절 참고.
+  # 4) 서버에서 GHCR 이미지를 pull 하려면 최초 1회 docker login ghcr.io 가
+  #    필요하다 (private 패키지일 경우).
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [docker-build-push]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    if: |
+      always()
+      && (needs.docker-build-push.result == 'success' || needs.docker-build-push.result == 'skipped')
+      && vars.DEPLOY_ENABLED == 'true'
+      && (
+        startsWith(github.ref, 'refs/tags/v')
+        || (github.event_name == 'workflow_dispatch' && inputs.deploy == true && github.ref == 'refs/heads/main')
+      )
     environment: production
     steps:
       - name: SSH Deploy

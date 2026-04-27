@@ -89,20 +89,37 @@ docker-compose exec backend alembic upgrade head
 
 ## 프로덕션 배포
 
-### 신규 서버 설정 (Ubuntu)
+### 신규 서버 1회 셋업 (Ubuntu 22.04/24.04)
+
+상세 체크리스트는 [README.md — "신규 서버 셋업 — 1회 체크리스트"](README.md#신규-서버-셋업--1회-체크리스트) 참조.
+요약하면 다음 순서:
+
 ```bash
-# 1. 서버 초기 설정 (Docker, 방화벽, 프로젝트 클론)
-sudo ./scripts/setup-server.sh
+# 0. 사전: 도메인 DNS A 레코드 → 서버 IP, SSH 키 등록, GHCR PAT 발급(private 패키지 시)
 
-# 2. 환경변수 설정
-vi /opt/ifl-platform/.env   # CHANGE_ME 값 모두 수정
-
-# 3. DNS 설정: A 레코드로 도메인 → 서버 IP
-
-# 4. 배포
+# 1. 서버 초기화 — Docker/UFW/fail2ban/swap/chrony/unattended-upgrades 자동 설치
+sudo apt-get install -y git
+sudo git clone https://github.com/hdj82-bot/classauto.live-.git /opt/ifl-platform
 cd /opt/ifl-platform
+sudo ./scripts/setup-server.sh              # 옵션: SWAP_SIZE_GB / TIMEZONE / GHCR_USER / GHCR_TOKEN
+
+# 2. (private 패키지 시) GHCR 로그인
+echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u <user> --password-stdin
+
+# 3. .env 작성 (CHANGE_ME 모두 교체)
+sudo cp .env.production .env && sudo vi .env
+
+# 4. 환경변수 검증 — 형식/길이/프리픽스 + production 전제 강화
+./scripts/validate-env.sh --strict
+
+# 5. 최초 배포 (DB 마이그레이션 + Let's Encrypt + 전체 스택 기동)
 DOMAIN=your-domain.com EMAIL=admin@your-domain.com ./scripts/deploy.sh init
+
+# 6. 스모크 테스트
+./scripts/smoke-test.sh your-domain.com
 ```
+
+`validate-env.sh --strict` 가 0 으로 빠질 때까지 5단계로 진행하지 말 것.
 
 ### 배포 명령어
 ```bash
