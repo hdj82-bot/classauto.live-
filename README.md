@@ -142,6 +142,34 @@ while true; do curl -o /dev/null -s -w "%{http_code}\n" \
 
 이 상태에서 `./scripts/deploy.sh update` 를 돌려 5xx 가 0~1회 이하면 정상.
 
+### 무중단 롤백
+
+`./scripts/deploy.sh rollback` 도 update 와 동일한 rolling 패턴으로 동작한다 — 502 없이
+직전 버전으로 복귀.
+
+흐름:
+
+1. `update` 시작 직전 자동으로 저장된 스냅샷(`$STATE_DIR/rollback.env`) 에서
+   직전 git SHA + GHCR 이미지 태그(`sha-<short>`) 를 읽는다.
+2. `git checkout <prev-sha>` (detached HEAD) — compose/script 가 그 시점 상태와
+   일치해야 entrypoint 와 healthcheck 가 깨지지 않는다.
+3. `IFL_IMAGE_TAG=sha-<prev>` 로 `docker compose pull` → backend / frontend 를
+   `rolling_restart_scaled` 로 무중단 교체.
+4. worker `stop -t 60` → 새(=이전) 이미지로 기동, beat 는 `--force-recreate`.
+
+GHCR 에서 해당 태그가 사라진 경우 로컬 캐시된 이미지 SHA 로 폴백한다.
+스냅샷이 없으면(스크립트가 처음 실행되거나 파일이 삭제됨) 안전하게 중단하고
+수동 절차를 안내한다.
+
+> **롤백은 1단계 뒤로만 지원한다.** 스냅샷은 매 update 시 덮어써지므로,
+> 두 번 연속 rollback 을 호출해도 같은 SHA 로 돌아갈 뿐이다. 더 깊은 롤백은
+> `IFL_IMAGE_TAG=sha-<원하는-sha>` 와 `git checkout` 으로 수동 처리.
+
+> **DB 스키마는 자동 복귀하지 않는다.** 직전 update 가 파괴적 마이그레이션을
+> 포함했다면 `./scripts/backup.sh restore <파일>` 또는
+> `alembic downgrade -1` 을 별도로 수행해야 한다. update 가 마이그레이션 직전
+> 자동 백업을 만들어두므로 `./scripts/backup.sh list` 로 가장 최근 백업을 확인할 것.
+
 ### 신규 서버 셋업
 
 ```bash

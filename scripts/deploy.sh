@@ -22,6 +22,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
+# 롤백 스냅샷 보존 위치. 재부팅에도 살아남도록 /var/lib/ifl 우선.
+# 권한 없으면 ~/.ifl-deploy 로 폴백.
+if [ -w /var/lib 2>/dev/null ] || [ -d /var/lib/ifl ]; then
+    STATE_DIR="${IFL_STATE_DIR:-/var/lib/ifl}"
+else
+    STATE_DIR="${IFL_STATE_DIR:-$HOME/.ifl-deploy}"
+fi
+ROLLBACK_SNAPSHOT="$STATE_DIR/rollback.env"
+
 # 색상
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -217,6 +226,44 @@ rolling_restart_scaled() {
     log "${service}: rolling 완료 — 신규 ${new_id:0:12} 단독 운영."
 }
 
+# ── 롤백 스냅샷 ───────────────────────────────────────────────────────────
+# update 시작 직전 호출. 현재 git HEAD 와 실행 중 backend 이미지 ID 를 기록.
+# git SHA 는 GHCR 이미지 태그(sha-<short>) 와 동일 형식이라 그대로 롤백 태그로 사용.
+save_rollback_snapshot() {
+    mkdir -p "$STATE_DIR"
+
+    local prev_git_sha prev_git_full backend_image frontend_image
+    prev_git_sha=$(git rev-parse --short HEAD 2>/dev/null || echo "")
+    prev_git_full=$(git rev-parse HEAD 2>/dev/null || echo "")
+
+    # GHCR 에서 태그가 사라졌을 때 fallback 으로 쓸 실제 로컬 이미지 sha256.
+    backend_image=$(_running_image_id backend)
+    frontend_image=$(_running_image_id frontend)
+
+    # 원자적 쓰기 (rename) — 부분 기록으로 인한 손상 방지.
+    {
+        echo "# IFL rollback snapshot — written by deploy.sh update"
+        echo "IFL_PREVIOUS_GIT_SHA=${prev_git_sha}"
+        echo "IFL_PREVIOUS_GIT_FULL=${prev_git_full}"
+        echo "IFL_PREVIOUS_TAG=sha-${prev_git_sha}"
+        echo "IFL_PREVIOUS_BACKEND_IMAGE=${backend_image}"
+        echo "IFL_PREVIOUS_FRONTEND_IMAGE=${frontend_image}"
+        echo "IFL_SNAPSHOT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } > "${ROLLBACK_SNAPSHOT}.tmp"
+    mv -f "${ROLLBACK_SNAPSHOT}.tmp" "$ROLLBACK_SNAPSHOT"
+
+    log "롤백 스냅샷 저장: git=${prev_git_sha} → ${ROLLBACK_SNAPSHOT}"
+}
+
+# 현재 실행 중인 서비스의 이미지 sha256 반환 (없으면 빈 문자열).
+_running_image_id() {
+    local service="$1"
+    local cid
+    cid=$(docker compose -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null | head -n 1 || true)
+    [ -z "$cid" ] && { echo ""; return; }
+    docker inspect --format='{{.Image}}' "$cid" 2>/dev/null || echo ""
+}
+
 # ── 업데이트 배포 (무중단 rolling) ─────────────────────────────────────────
 cmd_update() {
     log "=== IFL Platform 무중단 업데이트 배포 ==="
@@ -224,12 +271,8 @@ cmd_update() {
     validate_env
     check_ssl_expiry
 
-    # 롤백용으로 현재 backend 이미지 SHA 저장
-    local old_backend_id
-    old_backend_id=$(docker compose -f "$COMPOSE_FILE" ps -q backend | head -n 1)
-    if [ -n "$old_backend_id" ]; then
-        docker inspect --format='{{.Image}}' "$old_backend_id" > /tmp/ifl_rollback_image 2>/dev/null || true
-    fi
+    # 0. 롤백 스냅샷 (git pull 이전의 SHA / 이미지 기록)
+    save_rollback_snapshot
 
     # 1. 최신 코드 pull (compose 파일 / 스크립트 자체 갱신 반영)
     log "최신 코드 Pull..."
@@ -285,21 +328,97 @@ cmd_update() {
     log "=== 업데이트 완료 ==="
 }
 
-# ── 롤백 ──────────────────────────────────────────────────────────────────
+# ── 롤백 (무중단 rolling) ─────────────────────────────────────────────────
+# 직전 update 가 저장한 스냅샷의 git SHA / GHCR 이미지 태그로 무중단 복귀.
+# update 와 동일한 패턴(rolling backend → rolling frontend → graceful worker → beat)
+# 을 재사용하므로 502 발생 없이 이전 버전으로 돌아간다.
 cmd_rollback() {
-    log "=== 롤백 실행 ==="
-    warn "직전 커밋으로 롤백합니다."
+    log "=== IFL Platform 무중단 롤백 ==="
 
-    git checkout HEAD~1
+    if [ ! -f "$ROLLBACK_SNAPSHOT" ]; then
+        error "롤백 스냅샷이 없습니다: $ROLLBACK_SNAPSHOT"
+        error "이 서버에서 'deploy.sh update' 가 한 번도 성공한 적이 없거나"
+        error "스냅샷 파일이 삭제되었습니다."
+        error ""
+        error "수동 롤백 절차:"
+        error "  1) 알려진 직전 git SHA 를 확인 (git log)"
+        error "  2) git checkout <prev-sha>"
+        error "  3) IFL_IMAGE_TAG=sha-<short> docker compose -f $COMPOSE_FILE pull"
+        error "  4) IFL_IMAGE_TAG=sha-<short> $0 update  # 또는 수동 rolling"
+        exit 1
+    fi
 
-    docker compose -f "$COMPOSE_FILE" build
-    docker compose -f "$COMPOSE_FILE" up -d --no-deps backend worker beat frontend
+    # shellcheck disable=SC1090
+    source "$ROLLBACK_SNAPSHOT"
+
+    if [ -z "${IFL_PREVIOUS_GIT_SHA:-}" ] || [ -z "${IFL_PREVIOUS_TAG:-}" ]; then
+        error "스냅샷이 손상됨: IFL_PREVIOUS_GIT_SHA 또는 IFL_PREVIOUS_TAG 가 비어있음."
+        error "내용: $(cat "$ROLLBACK_SNAPSHOT")"
+        exit 1
+    fi
+
+    warn "롤백 대상: git=${IFL_PREVIOUS_GIT_SHA}  image_tag=${IFL_PREVIOUS_TAG}"
+    warn "스냅샷 시각: ${IFL_SNAPSHOT_AT:-unknown}"
+
+    # 1. 작업 트리를 직전 커밋으로 — compose/script 가 그 시점과 일치해야
+    #    rolling 동작과 entrypoint 가 깨지지 않는다.
+    log "git 작업트리를 ${IFL_PREVIOUS_GIT_SHA} 로 되돌립니다 (detached HEAD)..."
+    git fetch --quiet origin || true
+    git checkout --quiet "${IFL_PREVIOUS_GIT_FULL:-$IFL_PREVIOUS_GIT_SHA}"
+
+    # 2. 롤백 대상 이미지 pull (이미 로컬에 있으면 즉시 끝)
+    log "GHCR 에서 롤백 이미지(${IFL_PREVIOUS_TAG}) pull..."
+    if ! IFL_IMAGE_TAG="${IFL_PREVIOUS_TAG}" \
+            docker compose -f "$COMPOSE_FILE" pull backend worker beat frontend; then
+        # GHCR 에서 사라진 태그면 로컬 캐시된 이미지 sha256 로 폴백 시도.
+        warn "GHCR pull 실패 — 로컬 캐시 이미지로 폴백 시도..."
+        if [ -z "${IFL_PREVIOUS_BACKEND_IMAGE:-}" ] || [ -z "${IFL_PREVIOUS_FRONTEND_IMAGE:-}" ]; then
+            error "폴백할 로컬 이미지가 부족합니다."
+            error "  backend  : ${IFL_PREVIOUS_BACKEND_IMAGE:-(none)}"
+            error "  frontend : ${IFL_PREVIOUS_FRONTEND_IMAGE:-(none)}"
+            error "롤백 불가."
+            exit 1
+        fi
+        # sha256:... 는 compose 의 image: 필드가 직접 못 쓰므로 임시 태그로 묶는다.
+        local fallback_tag="rollback-fallback"
+        docker tag "${IFL_PREVIOUS_BACKEND_IMAGE}"  "ghcr.io/hdj82-bot/ifl-backend:${fallback_tag}"  || {
+            error "backend 로컬 이미지 태깅 실패."; exit 1; }
+        docker tag "${IFL_PREVIOUS_FRONTEND_IMAGE}" "ghcr.io/hdj82-bot/ifl-frontend:${fallback_tag}" || {
+            error "frontend 로컬 이미지 태깅 실패."; exit 1; }
+        export IFL_IMAGE_TAG="${fallback_tag}"
+        warn "폴백 모드: IFL_IMAGE_TAG=${fallback_tag} (로컬 캐시 전용)"
+    else
+        export IFL_IMAGE_TAG="${IFL_PREVIOUS_TAG}"
+    fi
+
+    # 3. backend rolling (새 = 이전 버전, 기존 = 현재 버전 → 교체)
+    if ! rolling_restart_scaled backend; then
+        error "backend 롤백 rolling 실패 — 클러스터 상태 점검 필요."
+        exit 1
+    fi
+
+    # 4. frontend rolling
+    if ! rolling_restart_scaled frontend; then
+        error "frontend 롤백 rolling 실패 — 클러스터 상태 점검 필요."
+        exit 1
+    fi
+
+    # 5. worker graceful (acks_late 로 미완 태스크는 broker 재큐잉)
+    log "worker graceful 재시작 (이전 이미지로)..."
+    docker compose -f "$COMPOSE_FILE" stop -t 60 worker
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps worker
+
+    # 6. beat 단일 인스턴스 즉시 교체
+    log "beat 재시작 (이전 이미지로)..."
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps --force-recreate beat
+
+    # 7. nginx reload (upstream 컨테이너 IP 갱신)
     docker compose -f "$COMPOSE_FILE" exec nginx nginx -s reload 2>/dev/null || true
 
-    sleep 10
+    sleep 5
     cmd_status
 
-    log "=== 롤백 완료 ==="
+    log "=== 무중단 롤백 완료 — git=${IFL_PREVIOUS_GIT_SHA} ==="
     warn ""
     warn "┌─────────────────────────────────────────────────────────────┐"
     warn "│  주의: DB 스키마는 자동으로 되돌려지지 않습니다.            │"
@@ -315,7 +434,8 @@ cmd_rollback() {
     warn "│      backend alembic downgrade -1                           │"
     warn "└─────────────────────────────────────────────────────────────┘"
     warn ""
-    warn "문제가 해결되면 git checkout main 으로 복귀하세요."
+    warn "현재 detached HEAD 상태입니다. 문제 해결 후 'git checkout main' 으로 복귀하세요."
+    warn "롤백은 1단계 뒤로만 지원합니다(스냅샷이 직전 update 때만 갱신됨)."
 }
 
 # ── 상태 확인 ─────────────────────────────────────────────────────────────

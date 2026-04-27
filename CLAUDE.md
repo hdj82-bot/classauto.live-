@@ -131,6 +131,18 @@ while true; do curl -o /dev/null -s -w "%{http_code}\n" \
   https://api.$DOMAIN/health; sleep 0.2; done
 ```
 
+### 무중단 롤백
+`update` 는 시작 직전 `$STATE_DIR/rollback.env` (기본 `/var/lib/ifl/rollback.env`,
+권한 없을 시 `~/.ifl-deploy/rollback.env`) 에 직전 git SHA 와 GHCR 이미지 태그
+(`sha-<short>`) 를 기록한다. `rollback` 은 그 스냅샷을 읽어 `IFL_IMAGE_TAG=sha-<prev>`
+로 GHCR 에서 이전 이미지를 pull → 위와 동일한 rolling 패턴으로 backend/frontend
+교체 → worker graceful → beat force-recreate. GHCR 에서 태그가 삭제된 경우
+로컬 캐시된 이미지 SHA 로 폴백.
+
+제약: 1단계 뒤로만(직전 update 직전 상태) 자동 롤백 가능. DB 스키마는 자동 복귀
+대상이 아니며, 파괴적 마이그레이션이 있었다면 `./scripts/backup.sh restore <파일>`
+또는 `alembic downgrade` 로 별도 처리.
+
 ### DB 백업/복원
 ```bash
 ./scripts/backup.sh backup              # 백업 생성
