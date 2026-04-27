@@ -107,10 +107,28 @@ DOMAIN=your-domain.com EMAIL=admin@your-domain.com ./scripts/deploy.sh init
 ### 배포 명령어
 ```bash
 ./scripts/deploy.sh init       # 최초 배포 (SSL 포함)
-./scripts/deploy.sh update     # 업데이트 배포
+./scripts/deploy.sh update     # 무중단 rolling 업데이트 (아래 참조)
 ./scripts/deploy.sh rollback   # 직전 버전 롤백
 ./scripts/deploy.sh status     # 서비스 상태 확인
 ./scripts/deploy.sh logs backend  # 로그 조회
+```
+
+### 무중단 (Rolling) 업데이트
+`update` 는 backend / frontend 를 다음 패턴으로 교체한다:
+1. 새 컨테이너 1개 추가 (`compose up -d --no-recreate --scale=2`)
+2. 새 컨테이너 healthcheck 가 `healthy` 가 될 때까지 대기 (최대 120s)
+3. 기존 컨테이너 graceful stop (SIGTERM, `stop_grace_period` 동안 in-flight 요청 처리)
+4. 기존 컨테이너 제거 → 새 인스턴스 단독 운영
+
+worker 는 `docker compose stop -t 60` 으로 SIGTERM + 60초 대기 후 새 이미지로 재기동
+(Celery `acks_late=True` 가정 — 시간 내 ack 못 한 태스크는 broker 에 남아 재큐잉).
+beat 는 단일 인스턴스(동시 실행 금지)라 `--force-recreate` 로 즉시 교체.
+
+nginx `upstream` 은 `max_fails=2 fail_timeout=10s` 로 unhealthy 컨테이너 자동 제외.
+배포 중 5xx 가 발생하지 않는지 검증하려면:
+```bash
+while true; do curl -o /dev/null -s -w "%{http_code}\n" \
+  https://api.$DOMAIN/health; sleep 0.2; done
 ```
 
 ### DB 백업/복원

@@ -101,12 +101,46 @@ main 머지 → GitHub Actions
                             ├─ git pull origin main   (compose/scripts 갱신)
                             ├─ docker compose pull    (CI 가 push 한 이미지)
                             ├─ DB 백업 + alembic upgrade
-                            └─ 서비스 순차 재시작
+                            └─ rolling restart        (무중단 — 아래 참조)
 ```
 
 CI 에서 검증한 정확히 그 이미지가 서버에 배포된다 (서버에서 재빌드 안 함).
 특정 SHA 로 핀하거나 롤백하려면 `.env` 의 `IFL_IMAGE_TAG=sha-abc1234` 로 변경
 후 `./scripts/deploy.sh update`.
+
+### 무중단 (Rolling) 재시작
+
+`./scripts/deploy.sh update` 는 backend / frontend 를 다음 패턴으로 교체한다:
+
+```
+backend (or frontend):
+  1) compose up -d --no-recreate --scale=2  → 새 컨테이너 1개 추가 (기존 보존)
+  2) docker inspect Health.Status == healthy 가 될 때까지 polling (최대 120s)
+  3) 기존 컨테이너 docker stop -t 35  (compose 의 stop_grace_period=30s 동안 SIGTERM)
+  4) docker rm 으로 제거 — 신규 단독 운영
+
+worker:
+  - docker compose stop -t 60 worker  → SIGTERM 후 60초 동안 진행 태스크 ack
+  - docker compose up -d worker       → 새 이미지로 기동
+  - Celery acks_late=True 가정. 시간 내 ack 못 한 태스크는 broker 에 남아 재큐잉.
+
+beat:
+  - 단일 인스턴스 (동시 실행 금지) → docker compose up -d --force-recreate beat
+```
+
+nginx 의 `upstream backend` 블록에 `max_fails=2 fail_timeout=10s` 가 걸려 있어
+교체 직후의 IP 변경이 즉시 반영되지 않더라도 unhealthy 컨테이너는 자동 제외된다.
+
+### 검증 방법
+
+배포 전 별도 터미널에서 health 엔드포인트를 0.2초 간격으로 두드린다:
+
+```bash
+while true; do curl -o /dev/null -s -w "%{http_code}\n" \
+  https://api.$DOMAIN/health; sleep 0.2; done
+```
+
+이 상태에서 `./scripts/deploy.sh update` 를 돌려 5xx 가 0~1회 이하면 정상.
 
 ### 신규 서버 셋업
 
