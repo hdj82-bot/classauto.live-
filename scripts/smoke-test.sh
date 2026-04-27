@@ -129,13 +129,21 @@ else
     fail "SSL 인증서 enddate 추출 실패"
 fi
 
-# ── 4. /metrics 외부 노출 차단 ──────────────────────────────────────────────
+# ── 4. /metrics 외부 노출 차단 (인증 필요 또는 내부망 한정) ─────────────────
+# 허용 응답: 401/403 (인증/인가 거부) 또는 404 (nginx 가 외부에서 라우팅 차단).
+# 200 이면 인증 없이 메트릭이 그대로 노출된 상태 — Prometheus 토큰 부재로 추정.
 code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$API/metrics")
-if [ "$code" = "404" ]; then
-    pass "/metrics 외부 접근 404 (nginx 차단)"
-else
-    fail "/metrics 외부 접근 응답 $code — 404 가 아님 (노출 가능성)"
-fi
+case "$code" in
+    401|403)
+        pass "/metrics 외부 접근 $code (인증 필요)"
+        ;;
+    404)
+        pass "/metrics 외부 접근 404 (nginx 차단 — 내부망 한정)"
+        ;;
+    *)
+        fail "/metrics 외부 접근 응답 $code — 401/403/404 여야 함 (인증 없이 노출됨)"
+        ;;
+esac
 
 # ── 5. /docs, /openapi.json 프로덕션 비노출 ──────────────────────────────────
 for path in /docs /openapi.json; do

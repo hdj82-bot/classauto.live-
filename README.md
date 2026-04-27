@@ -90,14 +90,14 @@ docker compose exec backend python -m scripts.seed
 ### CI/CD 흐름
 
 ```
-main 머지 → GitHub Actions
+main 머지 또는 v* 태그 푸시 → GitHub Actions
             ├─ backend / frontend 테스트
             └─ docker-build-push (matrix)
                 ├─ ghcr.io/hdj82-bot/ifl-backend:{latest, sha-<short>}
                 └─ ghcr.io/hdj82-bot/ifl-frontend:{latest, sha-<short>}
                        │
                        ▼
-            deploy (SSH) → ./scripts/deploy.sh update
+            deploy (SSH, 게이트 통과 시에만 실행) → ./scripts/deploy.sh update
                             ├─ git pull origin main   (compose/scripts 갱신)
                             ├─ docker compose pull    (CI 가 push 한 이미지)
                             ├─ DB 백업 + alembic upgrade
@@ -107,6 +107,50 @@ main 머지 → GitHub Actions
 CI 에서 검증한 정확히 그 이미지가 서버에 배포된다 (서버에서 재빌드 안 함).
 특정 SHA 로 핀하거나 롤백하려면 `.env` 의 `IFL_IMAGE_TAG=sha-abc1234` 로 변경
 후 `./scripts/deploy.sh update`.
+
+### 프로덕션 배포 게이트 활성화
+
+기본값은 **비활성** 이다. 배포 서버가 준비되기 전엔 deploy job 이 자동으로
+skip 되어 CI 전체가 green 으로 유지된다 (PR #34).
+
+**1단계 — DEPLOY_ENABLED 변수와 SSH secrets 등록**
+
+Repository → Settings → Secrets and variables → Actions
+
+| 탭 | 이름 | 값 |
+|----|------|-----|
+| Variables | `DEPLOY_ENABLED` | `true` |
+| Secrets | `DEPLOY_HOST` | 배포 서버 IP/도메인 |
+| Secrets | `DEPLOY_USER` | SSH 사용자 |
+| Secrets | `DEPLOY_SSH_KEY` | SSH 개인키 (전체 PEM 본문) |
+
+`DEPLOY_ENABLED` 가 `"true"` 가 아니면 deploy job 의 `if` 조건에서 걸러져
+실행 자체가 일어나지 않는다 ([ci.yml](.github/workflows/ci.yml)).
+
+**2단계 — production environment 에 Required reviewers 구성 (강력 권장)**
+
+Repository → Settings → Environments → `production` → Deployment protection rules
+→ **Required reviewers** 체크 후 승인자 1명 이상 등록.
+
+deploy job 에 `environment: production` 이 설정되어 있어, GitHub 이 잡 진입
+시점에 reviewer 의 명시적 승인을 강제한다. 사고 방지의 마지막 안전장치.
+
+**3단계 — 배포 트리거 (main 푸시만으로는 배포되지 않는다)**
+
+`DEPLOY_ENABLED=true` 가 켜진 뒤에도 deploy job 은 다음 두 경로 중 하나에서만
+실행된다. 단순 main 푸시는 이미지 빌드/푸시까지만 진행되고 deploy 는 skip.
+
+- **(a) 릴리스 태그 푸시** — 권장
+  ```bash
+  git tag -a v1.2.3 -m "release v1.2.3"
+  git push origin v1.2.3
+  ```
+- **(b) 수동 트리거** — Actions 탭 → CI workflow → "Run workflow" → branch=main
+  선택 후 `deploy` 체크박스를 켜고 실행. 체크하지 않으면 빌드/테스트만 돌고
+  deploy job 은 skip.
+
+> 게이트 동작을 끄고 싶으면 `DEPLOY_ENABLED` variable 을 삭제하거나 값을
+> `false` 로 바꾸면 즉시 비활성화된다 (코드 변경 불필요).
 
 ### 무중단 (Rolling) 재시작
 
@@ -229,10 +273,11 @@ cd loadtest && ./run.sh --headless -u 100 -r 10 -t 5m
 
 검증 항목: `/health` JSON(db/redis/s3 전부 ok) · 보안 헤더(HSTS ≥ 1년, CSP 에
 `'unsafe-eval'` 없음, X-Frame-Options, X-Content-Type-Options) · TLS 1.3 +
-인증서 잔여 ≥ 30일 · `/metrics` / `/docs` / `/openapi.json` 외부 차단 ·
-`/api/auth/google` 302 → accounts.google.com · `/api/auth/exchange` 미인증
-POST 거부 · `/api/v1/qa` 130회 호출 시 rate-limit 트리거 · Stripe 웹훅
-`/api/v1/payment/webhook` 은 100회 POST 해도 429 없음 (rate-limit 제외 확인).
+인증서 잔여 ≥ 30일 · `/metrics` 인증 필요(401/403) 또는 외부 차단(404) ·
+`/docs` / `/openapi.json` 외부 차단 · `/api/auth/google` 302 → accounts.google.com ·
+`/api/auth/exchange` 미인증 POST 거부 · `/api/v1/qa` 130회 호출 시 rate-limit
+트리거 · Stripe 웹훅 `/api/v1/payment/webhook` 은 100회 POST 해도 429 없음
+(rate-limit 제외 확인).
 
 의존성: `curl`, `jq`, `openssl`. 없으면 스크립트가 시작 시 종료 코드 2 로 중단.
 
