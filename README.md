@@ -87,6 +87,10 @@ docker compose exec backend python -m scripts.seed
 
 ## 프로덕션 배포
 
+> **새 운영자 / 새 PC / 처음 배포 시작 시**: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+> 를 따라가면 끝까지 (서버 임대 → DNS → init → CD → 운영 점검) 한 번에 진행할
+> 수 있다. 아래 섹션은 요약/레퍼런스용.
+
 ### CI/CD 흐름
 
 ```
