@@ -2,6 +2,7 @@
 
 > **통합 백엔드** — FastAPI + Celery + PostgreSQL(pgvector) + Redis
 > 프론트엔드: Next.js (frontend/)
+> **프로덕션 호스팅**: Vercel(프론트) + Railway(백엔드/Celery/Redis) + Supabase(DB/pgvector)
 
 ---
 
@@ -87,91 +88,112 @@ docker-compose exec backend alembic upgrade head
 
 ---
 
-## 프로덕션 배포
+## 프로덕션 배포 — Vercel + Railway + Supabase (2026-04 결정)
+
+> **선정 사유**: 1인 사용자 단계에서 Lightsail/EC2 같은 고정비 VPS 대신 종량제 무료 티어로 시작.
+> 기존 `docker-compose.prod.yml` + nginx 구성은 자체 호스팅 옵션으로 보존.
+> **단계별 체크리스트**: [DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) — Phase 0~7
+
+### 구성 매핑
+
+| 컴포넌트 | 프로덕션 호스팅 | 비고 |
+|---------|----------------|------|
+| Next.js 프론트엔드 | **Vercel** | `frontend/` 루트, GitHub 연결 시 자동 배포 |
+| FastAPI 백엔드 | **Railway** | `backend/Dockerfile.prod` 재사용 |
+| Celery Worker | **Railway** (별도 서비스) | 동일 이미지, 명령만 변경 |
+| Celery Beat | **Railway** (별도 서비스) | 동일 이미지, 명령만 변경 |
+| Redis | **Railway** 플러그인 | `REDIS_URL` 자동 주입 |
+| PostgreSQL + pgvector | **Supabase** | `create extension vector;` 후 `DATABASE_URL` 사용 (Pooler 모드) |
+| Auth (Google OAuth) | Supabase Auth 또는 기존 자체 JWT | 단계적 마이그레이션 가능 |
+| Storage (PPT/오디오) | Supabase Storage 또는 기존 S3 | 환경변수 분기 |
+| nginx / Let's Encrypt | **사용 안 함** | TLS는 Vercel/Railway가 자동 처리 |
+
+### 배포 절차 (요약)
+
+1. **Supabase**: 프로젝트 생성 (Tokyo) → `create extension if not exists vector;` → `DATABASE_URL`(Pooler) 발급 → 로컬에서 `alembic upgrade head`
+2. **Railway**: GitHub 레포 연결 → 서비스 3개 (backend / celery-worker / celery-beat) — 모두 `backend/Dockerfile.prod` 사용, 시작 명령만 차별화. Redis 플러그인 추가
+3. **Vercel**: GitHub 레포 연결 → Root Directory `frontend` → `NEXT_PUBLIC_API_URL` 등록
+4. **CI/CD**: Vercel/Railway가 GitHub push 자동 감지 — 별도 GitHub Actions 불필요
+
+### 비용 단계
+
+| 단계 | MAU | 월 비용 |
+|------|-----|---------|
+| 1 (현재) | ~10 | $0~5 (모두 Free) |
+| 2 | 100~1,000 | $25~50 |
+| 3 | 1,000~10,000 | $100~300 (Pro) |
+| 4 | 10,000+ | AWS ECS/EKS 검토 |
+
+### DB 백업/복원
+
+- Supabase는 자동 일일 백업 (Pro 7일 보관). Free 티어는 PITR 미지원
+- 수동: `pg_dump $DATABASE_URL > backup.sql` / `psql $DATABASE_URL < backup.sql`
+
+---
+
+## (참고) 자체 호스팅 — Docker Compose VPS
+
+기존 단일 서버(VPS) 배포 방식 — 트래픽이 충분히 누적된 후 비용 효율을 위해 사용 가능.
+**전체 운영 플레이북은 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** 참조.
 
 ### 신규 서버 1회 셋업 (Ubuntu 22.04/24.04)
 
-상세 체크리스트는 [README.md — "신규 서버 셋업 — 1회 체크리스트"](README.md#신규-서버-셋업--1회-체크리스트) 참조.
-요약하면 다음 순서:
-
 ```bash
-# 0. 사전: 도메인 DNS A 레코드 → 서버 IP, SSH 키 등록, GHCR PAT 발급(private 패키지 시)
+# 0. 사전: 도메인 DNS A 레코드 → 서버 IP, SSH 키 등록, GHCR PAT(private 패키지 시)
 
 # 1. 서버 초기화 — Docker/UFW/fail2ban/swap/chrony/unattended-upgrades 자동 설치
 sudo apt-get install -y git
-sudo git clone https://github.com/hdj82-bot/classauto.live-.git /opt/ifl-platform
+sudo git clone https://github.com/hdj82-bot/Interactive-flipped-learning.git /opt/ifl-platform
 cd /opt/ifl-platform
 sudo ./scripts/setup-server.sh              # 옵션: SWAP_SIZE_GB / TIMEZONE / GHCR_USER / GHCR_TOKEN
 
 # 2. (private 패키지 시) GHCR 로그인
 echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u <user> --password-stdin
 
-# 3. .env 작성 (CHANGE_ME 모두 교체)
+# 3. .env 작성
 sudo cp .env.production .env && sudo vi .env
 
-# 4. 환경변수 검증 — 형식/길이/프리픽스 + production 전제 강화
+# 4. 환경변수 검증
 ./scripts/validate-env.sh --strict
 
-# 5. 최초 배포 (DB 마이그레이션 + Let's Encrypt + 전체 스택 기동)
+# 5. 최초 배포
 DOMAIN=your-domain.com EMAIL=admin@your-domain.com ./scripts/deploy.sh init
 
 # 6. 스모크 테스트
 ./scripts/smoke-test.sh your-domain.com
 ```
 
-`validate-env.sh --strict` 가 0 으로 빠질 때까지 5단계로 진행하지 말 것.
-
 ### 배포 명령어
+
 ```bash
 ./scripts/deploy.sh init       # 최초 배포 (SSL 포함)
-./scripts/deploy.sh update     # 무중단 rolling 업데이트 (아래 참조)
+./scripts/deploy.sh update     # 무중단 rolling 업데이트
 ./scripts/deploy.sh rollback   # 직전 버전 롤백
 ./scripts/deploy.sh status     # 서비스 상태 확인
 ./scripts/deploy.sh logs backend  # 로그 조회
+./scripts/backup.sh backup | list | restore <file>
 ```
 
-### 무중단 (Rolling) 업데이트
-`update` 는 backend / frontend 를 다음 패턴으로 교체한다:
+### 무중단 (Rolling) 업데이트 / 롤백
+
+`update`는 backend / frontend를 다음 패턴으로 교체:
 1. 새 컨테이너 1개 추가 (`compose up -d --no-recreate --scale=2`)
-2. 새 컨테이너 healthcheck 가 `healthy` 가 될 때까지 대기 (최대 120s)
-3. 기존 컨테이너 graceful stop (SIGTERM, `stop_grace_period` 동안 in-flight 요청 처리)
+2. healthcheck `healthy` 대기 (최대 120s)
+3. 기존 컨테이너 graceful stop (SIGTERM, `stop_grace_period`)
 4. 기존 컨테이너 제거 → 새 인스턴스 단독 운영
 
-worker 는 `docker compose stop -t 60` 으로 SIGTERM + 60초 대기 후 새 이미지로 재기동
-(Celery `acks_late=True` 가정 — 시간 내 ack 못 한 태스크는 broker 에 남아 재큐잉).
-beat 는 단일 인스턴스(동시 실행 금지)라 `--force-recreate` 로 즉시 교체.
+worker는 `docker compose stop -t 60`으로 SIGTERM + 60초 대기 후 재기동 (Celery `acks_late=True` 가정).
+beat는 단일 인스턴스라 `--force-recreate`로 즉시 교체.
 
-nginx `upstream` 은 `max_fails=2 fail_timeout=10s` 로 unhealthy 컨테이너 자동 제외.
-배포 중 5xx 가 발생하지 않는지 검증하려면:
-```bash
-while true; do curl -o /dev/null -s -w "%{http_code}\n" \
-  https://api.$DOMAIN/health; sleep 0.2; done
-```
-
-### 무중단 롤백
-`update` 는 시작 직전 `$STATE_DIR/rollback.env` (기본 `/var/lib/ifl/rollback.env`,
-권한 없을 시 `~/.ifl-deploy/rollback.env`) 에 직전 git SHA 와 GHCR 이미지 태그
-(`sha-<short>`) 를 기록한다. `rollback` 은 그 스냅샷을 읽어 `IFL_IMAGE_TAG=sha-<prev>`
-로 GHCR 에서 이전 이미지를 pull → 위와 동일한 rolling 패턴으로 backend/frontend
-교체 → worker graceful → beat force-recreate. GHCR 에서 태그가 삭제된 경우
-로컬 캐시된 이미지 SHA 로 폴백.
-
-제약: 1단계 뒤로만(직전 update 직전 상태) 자동 롤백 가능. DB 스키마는 자동 복귀
-대상이 아니며, 파괴적 마이그레이션이 있었다면 `./scripts/backup.sh restore <파일>`
-또는 `alembic downgrade` 로 별도 처리.
-
-### DB 백업/복원
-```bash
-./scripts/backup.sh backup              # 백업 생성
-./scripts/backup.sh list                # 백업 목록
-./scripts/backup.sh restore backup.sql  # 복원
-```
+`rollback`은 직전 update 시 저장한 `$STATE_DIR/rollback.env` 스냅샷을 사용해 GHCR에서 이전 이미지 pull → 동일 rolling 패턴.
+1단계 뒤로만 자동 롤백 가능. DB 스키마는 자동 복귀 대상 아님 — `./scripts/backup.sh restore` 또는 `alembic downgrade` 별도 처리.
 
 ### GitHub Actions CD
-main 브랜치 push 시 자동 배포. GitHub Secrets에 설정 필요:
-- `DEPLOY_HOST`: 서버 IP
-- `DEPLOY_USER`: SSH 사용자
-- `DEPLOY_SSH_KEY`: SSH 개인키
+
+자체 호스팅 시에만 활성화. 필요 Variables/Secrets:
+- Variables: `DEPLOY_ENABLED=true`
+- Secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
+- `production` environment에 Required reviewers 권장
 
 ---
 
@@ -205,15 +227,28 @@ draft → pending_review → rendering → done
                archived  (모든 상태에서 가능)
 ```
 
-## 아키텍처
+## 아키텍처 (프로덕션)
 
 ```
-          ┌──────────┐
- ┌───────▶│  Nginx   │◀── HTTPS (443)
- │        │  (SSL)   │
- │        └──┬────┬──┘
- │           │    │
-┌▼───────┐ ┌▼────▼──┐
+                  ┌─────────────┐
+   사용자 ─HTTPS─▶│   Vercel    │  ← Next.js 프론트엔드 (CDN/Edge)
+                  └──────┬──────┘
+                         │ NEXT_PUBLIC_API_URL
+                         ▼
+                  ┌─────────────┐
+                  │   Railway   │  ← FastAPI / Celery Worker / Celery Beat / Redis
+                  └──────┬──────┘
+                         │ DATABASE_URL
+                         ▼
+                  ┌─────────────┐
+                  │  Supabase   │  ← Postgres + pgvector + Auth + Storage
+                  └─────────────┘
+```
+
+## 아키텍처 (로컬 개발)
+
+```
+┌────────┐ ┌─────────┐
 │Frontend│ │Backend  │
 │Next.js │ │FastAPI  │
 │ :3000  │ │ :8000   │

@@ -1,6 +1,13 @@
 # 환경변수 (절대 커밋 금지)
 .env
 *.env.local
+.env.*.local
+.env.production.local
+.env.staging.local
+# 실시크릿이 들어간 로컬 사본 — 템플릿(.env.production / .env.staging)은 git에 보존
+secrets/
+*.pem
+*.key
 
 # Python
 __pycache__/
