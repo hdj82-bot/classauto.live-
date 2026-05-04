@@ -1,15 +1,31 @@
 import logging
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+# 화이트리스트 — 오타("prodution")로 인해 prod 보호 분기를 우회당하는 사고 방지.
+_ALLOWED_ENVIRONMENTS: frozenset[str] = frozenset(
+    {"development", "staging", "production", "test"}
+)
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # ── Environment ────────────────────────────────────────────
-    ENVIRONMENT: str = "development"  # development | staging | production
+    ENVIRONMENT: str = "development"  # development | staging | production | test
+
+    @field_validator("ENVIRONMENT")
+    @classmethod
+    def _validate_environment(cls, v: str) -> str:
+        v_norm = (v or "").strip().lower()
+        if v_norm not in _ALLOWED_ENVIRONMENTS:
+            raise ValueError(
+                f"ENVIRONMENT must be one of {sorted(_ALLOWED_ENVIRONMENTS)} (got {v!r})"
+            )
+        return v_norm
 
     # ── DB / Redis ──────────────────────────────────────────────
     DATABASE_URL: str = "postgresql+asyncpg://user:pass@db:5432/ifl"
