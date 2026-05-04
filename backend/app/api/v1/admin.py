@@ -1,6 +1,8 @@
 """관리자 전용 API."""
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,13 +10,20 @@ from sqlalchemy import extract, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
+from app.core.redis import get_redis
 from app.db.session import get_db
 from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.user import User, UserRole
 from app.models.video_render import RenderCostLog, VideoRender
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+# I: 관리자 통계 Redis 캐시
+_STATS_CACHE_KEY = "admin:stats"
+_STATS_CACHE_TTL_SECONDS = 300  # 5분
 
 
 # ── GET /api/v1/admin/stats ──────────────────────────────────────────────────
@@ -25,8 +34,26 @@ async def get_stats(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """전체 통계: 총 사용자, 강좌, 강의, 세션, 렌더링 수."""
+    """전체 통계: 총 사용자, 강좌, 강의, 세션, 렌더링 수.
+
+    I: COUNT(*) 5개를 매 요청마다 풀 스캔 — Redis 5분 TTL 캐시. 캐시 미스/장애 시 fresh.
+    """
     from app.models.session import LearningSession
+
+    # ── I: 캐시 조회 ──
+    redis_client = None
+    try:
+        redis_client = get_redis()
+        cached = await redis_client.get(_STATS_CACHE_KEY)
+        if cached:
+            try:
+                payload = json.loads(cached)
+                payload["_cached"] = True
+                return payload
+            except (TypeError, ValueError):
+                logger.warning("admin:stats 캐시 파싱 실패 — fresh 조회로 폴백")
+    except Exception as exc:
+        logger.warning("admin:stats 캐시 조회 실패: %s — fresh 조회로 폴백", exc)
 
     users_count = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
     courses_count = (await db.execute(select(func.count()).select_from(Course))).scalar() or 0
@@ -34,13 +61,26 @@ async def get_stats(
     sessions_count = (await db.execute(select(func.count()).select_from(LearningSession))).scalar() or 0
     renders_count = (await db.execute(select(func.count()).select_from(VideoRender))).scalar() or 0
 
-    return {
+    payload = {
         "total_users": users_count,
         "total_courses": courses_count,
         "total_lectures": lectures_count,
         "total_sessions": sessions_count,
         "total_renders": renders_count,
     }
+
+    # ── I: 캐시 갱신 (실패는 무시) ──
+    if redis_client is not None:
+        try:
+            await redis_client.set(
+                _STATS_CACHE_KEY,
+                json.dumps(payload),
+                ex=_STATS_CACHE_TTL_SECONDS,
+            )
+        except Exception as exc:
+            logger.warning("admin:stats 캐시 저장 실패: %s", exc)
+
+    return payload
 
 
 # ── GET /api/v1/admin/users ──────────────────────────────────────────────────
@@ -168,7 +208,12 @@ async def get_costs(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """전체 API 비용 집계 (서비스별, 월별)."""
+    """전체 API 비용 집계 (서비스별, 최근 12개월).
+
+    I: 월별 집계는 ``created_at`` 인덱스(창 2 의 alembic 0013 에서 추가)에 의존.
+    인덱스 부재 시 풀 스캔 — 행이 많아지면 비용 폭증. limit=12 로 결과 행을 제한했지만
+    GROUP BY 자체는 전체 스캔이 필요하므로 인덱스가 필수.
+    """
     # 서비스별 합계
     by_service_stmt = (
         select(RenderCostLog.service, func.sum(RenderCostLog.cost_usd))
@@ -177,7 +222,7 @@ async def get_costs(
     )
     by_service_rows = (await db.execute(by_service_stmt)).all()
 
-    # 월별 합계
+    # 월별 합계 — 최근 12개월 (인덱스: render_cost_logs(created_at) — 0013)
     by_month_stmt = (
         select(
             extract("year", RenderCostLog.created_at).label("year"),
