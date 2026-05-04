@@ -62,7 +62,12 @@ async def test_e2e_ppt_upload_triggers_pipeline(client, professor, lecture):
     mock_s3.assert_called_once()
     call_args = mock_s3.call_args
     assert call_args[0][1] == str(lecture.id)  # lecture_id
-    assert call_args[0][2] == "강의.pptx"  # filename
+    # Critical 6: 사용자 제공 파일명("강의.pptx") 은 UUID.hex+.pptx 로 강제 치환됨
+    safe_filename = call_args[0][2]
+    assert safe_filename != "강의.pptx"
+    assert safe_filename.endswith(".pptx")
+    assert "/" not in safe_filename and ".." not in safe_filename
+    assert len(safe_filename) == 32 + len(".pptx")  # uuid4().hex + ".pptx"
 
     # 파이프라인에 s3_key가 전달되는지 검증
     mock_pipeline.assert_called_once()
@@ -195,26 +200,37 @@ def test_e2e_step5_notify():
 def test_e2e_render_slide_pipeline():
     """render_slide 태스크가 TTS → S3 업로드 → HeyGen 요청 전체 플로우를 실행하는지 검증."""
     from app.tasks.render import render_slide
+    from app.models.video_render import RenderStatus
     from app.services.pipeline.tts import TTSResult
 
     render_id = uuid.uuid4()
+    instructor_id = uuid.uuid4()
     mock_render = MagicMock()
     mock_render.id = render_id
+    mock_render.instructor_id = instructor_id
     mock_render.avatar_id = "avatar-test"
-    mock_render.status = "PENDING"
+    mock_render.status = RenderStatus.pending
+    # Critical 8: idempotent skip 분기 비활성화 — 신규 렌더 상태로 진입
+    mock_render.audio_url = None
+    mock_render.heygen_job_id = None
 
     mock_tts_result = TTSResult(audio_bytes=b"tts-audio", provider="elevenlabs", duration_seconds=1.2)
 
     with patch("app.tasks.render.SyncSessionLocal") as mock_session_cls, \
          patch("app.services.pipeline.tts.synthesize", new_callable=AsyncMock, return_value=mock_tts_result) as mock_tts, \
          patch("app.services.pipeline.s3.upload_audio_bytes", return_value="https://s3/audio/test.mp3") as mock_s3_audio, \
+         patch("app.services.pipeline.s3.file_exists", return_value=False), \
          patch("app.services.pipeline.heygen.create_video", new_callable=AsyncMock, return_value="heygen-vid-001") as mock_heygen, \
+         patch("app.services.pipeline.cost_log.record_once"), \
          patch("app.services.pipeline.cost_log.record"):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.one.return_value = mock_render
         mock_session_cls.return_value = mock_db
 
-        result = render_slide.run(str(render_id), "안녕하세요, 테스트 스크립트입니다.")
+        # Critical 7: caller_user_id 일치 시 통과 — instructor_id 그대로 전달
+        result = render_slide.apply(
+            args=[str(render_id), "안녕하세요, 테스트 스크립트입니다.", str(instructor_id)],
+        ).get(propagate=True)
 
     # TTS 호출 검증
     mock_tts.assert_called_once_with("안녕하세요, 테스트 스크립트입니다.")

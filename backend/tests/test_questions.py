@@ -363,3 +363,164 @@ async def test_generate_questions_student_forbidden(client, student, lecture):
         },
     )
     assert resp.status_code == 403
+
+
+# ── Critical 9: 입력 한도 + rate limit ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_generate_questions_oversize_ppt_content_rejected(
+    client, professor, lecture,
+):
+    """ppt_content > 50KB → 413, Claude API 호출 전에 차단."""
+    from app.api.v1 import questions as qapi
+
+    huge_text = "가" * (qapi.MAX_PPT_CONTENT_BYTES // 3 + 100)  # UTF-8 한글 3바이트
+    assert len(huge_text.encode("utf-8")) > qapi.MAX_PPT_CONTENT_BYTES
+
+    with patch("app.services.question.anthropic.Anthropic") as mock_anthropic:
+        resp = await client.post(
+            f"/api/lectures/{lecture.id}/questions/generate",
+            headers=make_auth_header(professor),
+            json={
+                "ppt_content": huge_text,
+                "formative_count": 1,
+                "summative_count": 1,
+                "video_duration_seconds": 300,
+            },
+        )
+
+    assert resp.status_code == 413
+    mock_anthropic.assert_not_called()  # ← 핵심: Claude API 호출 차단
+
+
+class _ZSetFakeRedis:
+    """ZSET 메서드를 지원하는 in-memory Redis 더블 — rate limit 테스트 전용."""
+
+    def __init__(self):
+        self._zsets: dict[str, dict[str, float]] = {}
+        # FakeRedis 호환 메서드 (conftest.FakeRedis)
+        self._store: dict[str, str] = {}
+
+    async def zremrangebyscore(self, key, mn, mx):
+        z = self._zsets.get(key, {})
+        removed = [m for m, s in z.items() if mn <= s <= mx]
+        for m in removed:
+            del z[m]
+        self._zsets[key] = z
+        return len(removed)
+
+    async def zcard(self, key):
+        return len(self._zsets.get(key, {}))
+
+    async def zadd(self, key, mapping):
+        z = self._zsets.setdefault(key, {})
+        z.update(mapping)
+        return len(mapping)
+
+    async def expire(self, key, seconds):
+        return 1
+
+    # conftest.FakeRedis 호환 (auth blacklist 등)
+    async def set(self, key, value, ex=None):
+        self._store[key] = value
+
+    async def setex(self, key, ttl, value):
+        self._store[key] = value
+
+    async def get(self, key):
+        return self._store.get(key)
+
+    async def getdel(self, key):
+        return self._store.pop(key, None)
+
+    async def delete(self, key):
+        return 1 if self._store.pop(key, None) is not None else 0
+
+    async def exists(self, key):
+        return 1 if key in self._store else 0
+
+
+@pytest.mark.asyncio
+async def test_generate_questions_rate_limited_per_lecture_user(
+    client, professor, lecture,
+):
+    """같은 (lecture, user) 5분 내 두 번째 호출 → 429."""
+    from app.api.v1 import questions as qapi
+
+    fake = _ZSetFakeRedis()
+
+    fake_response = MagicMock()
+    fake_response.content = [
+        MagicMock(
+            type="text",
+            text='{"formative":[],"summative":[{"question_type":"short_answer","difficulty":"easy","content":"문제","options":null,"correct_answer":"답","explanation":"해설","timestamp_seconds":null}]}',
+        )
+    ]
+
+    with patch.object(qapi, "get_redis", return_value=fake), \
+         patch("app.services.question.anthropic.Anthropic") as mock_anthropic:
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = fake_response
+        mock_anthropic.return_value = mock_client
+
+        body = {
+            "ppt_content": "슬라이드 1: 파이썬 소개",
+            "formative_count": 1,
+            "summative_count": 1,
+            "video_duration_seconds": 300,
+        }
+
+        first = await client.post(
+            f"/api/lectures/{lecture.id}/questions/generate",
+            headers=make_auth_header(professor),
+            json=body,
+        )
+        assert first.status_code in (201, 502)  # 첫 호출은 통과 (혹은 LLM stub 이슈로 502)
+
+        second = await client.post(
+            f"/api/lectures/{lecture.id}/questions/generate",
+            headers=make_auth_header(professor),
+            json=body,
+        )
+        assert second.status_code == 429
+        assert "5분" in second.json()["detail"] or "TOO_MANY" in second.json()["detail"].upper() or "잠시" in second.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_generate_questions_rate_limit_failopen_when_redis_broken(
+    client, professor, lecture,
+):
+    """Redis 가 실패해도 라우터는 fail-open — 429 가 아니라 정상/LLM 경로로 통과."""
+    from app.api.v1 import questions as qapi
+
+    class _BrokenRedis:
+        async def zremrangebyscore(self, *a, **kw):
+            raise RuntimeError("redis down")
+
+    fake_response = MagicMock()
+    fake_response.content = [
+        MagicMock(
+            type="text",
+            text='{"formative":[],"summative":[{"question_type":"short_answer","difficulty":"easy","content":"문제","options":null,"correct_answer":"답","explanation":"해설","timestamp_seconds":null}]}',
+        )
+    ]
+
+    with patch.object(qapi, "get_redis", return_value=_BrokenRedis()), \
+         patch("app.services.question.anthropic.Anthropic") as mock_anthropic:
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = fake_response
+        mock_anthropic.return_value = mock_client
+
+        resp = await client.post(
+            f"/api/lectures/{lecture.id}/questions/generate",
+            headers=make_auth_header(professor),
+            json={
+                "ppt_content": "슬라이드 1: 파이썬",
+                "formative_count": 1,
+                "summative_count": 1,
+                "video_duration_seconds": 300,
+            },
+        )
+
+    assert resp.status_code != 429  # rate limit 으로는 차단되지 않음
