@@ -6,6 +6,24 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+# J: Sentry 로 보내기 전 마스킹할 키 (소문자 비교).
+# request body / response body / breadcrumbs / extras 어디든 등장 가능.
+_SENSITIVE_KEYS = frozenset({
+    "email",
+    "password",
+    "token",
+    "secret",
+    "authorization",
+    "api_key",
+    "apikey",
+    "refresh_token",
+    "access_token",
+})
+
+_FILTERED = "[Filtered]"
+_MAX_DEPTH = 10
+
+
 def init_sentry() -> None:
     """SENTRY_DSN이 설정된 경우에만 Sentry를 초기화."""
     if not settings.SENTRY_DSN:
@@ -37,15 +55,67 @@ def init_sentry() -> None:
     logger.info("Sentry 초기화 완료 (env=%s)", settings.ENVIRONMENT)
 
 
-def _before_send(event, hint):
-    """Sentry로 전송 전 민감 정보 필터링."""
-    # 헬스체크 에러는 무시
-    if event.get("request", {}).get("url", "").endswith("/health"):
-        return None
+def _scrub(value, depth: int = 0):
+    """dict/list 를 재귀적으로 walk 하면서 sensitive key 의 값을 [Filtered] 로 치환.
 
-    # Authorization 헤더에서 실제 토큰 마스킹
-    headers = event.get("request", {}).get("headers", {})
-    if "authorization" in headers:
-        headers["authorization"] = "Bearer [FILTERED]"
+    J: depth 한도 ``_MAX_DEPTH`` 로 self-referential / 순환 구조에서도 무한루프를 방지.
+    원본을 in-place 수정 — 호출자는 반환값을 사용해도, 무시해도 무관 (sentry event 본인).
+    """
+    if depth > _MAX_DEPTH:
+        return value
+
+    if isinstance(value, dict):
+        for k in list(value.keys()):
+            try:
+                k_lower = k.lower() if isinstance(k, str) else ""
+            except Exception:
+                k_lower = ""
+            if k_lower in _SENSITIVE_KEYS:
+                value[k] = _FILTERED
+            else:
+                value[k] = _scrub(value[k], depth + 1)
+        return value
+
+    if isinstance(value, list):
+        for i, item in enumerate(value):
+            value[i] = _scrub(item, depth + 1)
+        return value
+
+    if isinstance(value, tuple):
+        # tuple 은 immutable — list 로 변환해 scrub 후 다시 tuple 로 (드물게 발생)
+        return tuple(_scrub(item, depth + 1) for item in value)
+
+    return value
+
+
+def _before_send(event, hint):
+    """Sentry로 전송 전 민감 정보 필터링.
+
+    J: 이벤트 dict 전체를 재귀적으로 walk — request.data, request.cookies, breadcrumbs,
+    extras, contexts 어느 곳에 들어 있든 ``_SENSITIVE_KEYS`` 매칭 시 [Filtered].
+    """
+    # 헬스체크 에러는 무시
+    try:
+        if event.get("request", {}).get("url", "").endswith("/health"):
+            return None
+    except AttributeError:
+        pass
+
+    # Authorization 헤더는 항상 통째로 마스킹 (key=lower 매칭 외에도 추가 안전망)
+    try:
+        headers = event.get("request", {}).get("headers", {})
+        if isinstance(headers, dict):
+            for h in list(headers.keys()):
+                if isinstance(h, str) and h.lower() == "authorization":
+                    headers[h] = "Bearer [FILTERED]"
+    except Exception:
+        pass
+
+    # 전체 event dict 재귀 마스킹 — sensitive key 의 값을 [Filtered] 로 치환.
+    try:
+        _scrub(event, depth=0)
+    except Exception as exc:
+        # before_send 가 절대 sentry 송신을 막아선 안 됨 — 로깅만 하고 통과
+        logger.warning("Sentry before_send scrub 실패: %s", exc)
 
     return event
