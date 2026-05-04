@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 import stripe
 from fastapi import HTTPException, status
@@ -39,6 +40,16 @@ class PaymentError(Exception):
     """결제 관련 에러."""
 
 
+def _build_client_reference_id(user_id: uuid.UUID, plan: str) -> str:
+    """`{user_id}:{plan}:{YYYYMMDD}` 형식의 idempotency 키.
+
+    동일 user/plan/날짜 조합은 Stripe 측에서 동일 client_reference_id로 인식되어
+    같은 사용자가 같은 날 같은 플랜으로 여러 번 결제 시도해도 중복 활성화를 줄인다.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return f"{user_id}:{plan}:{today}"
+
+
 async def create_checkout_session(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -62,17 +73,23 @@ async def create_checkout_session(
     else:
         customer = stripe.Customer.retrieve(sub.stripe_customer_id)
 
+    client_reference_id = _build_client_reference_id(user_id, plan)
     session = stripe.checkout.Session.create(
         customer=sub.stripe_customer_id,
         mode="subscription",
         line_items=[{"price": _PLAN_TO_PRICE[plan], "quantity": 1}],
         success_url=f"{settings.FRONTEND_URL}/subscription?status=success",
         cancel_url=f"{settings.FRONTEND_URL}/subscription?status=cancel",
+        client_reference_id=client_reference_id,
         # metadata.plan은 더 이상 신뢰하지 않는다(웹훅에서 price_id로 결정).
-        metadata={"user_id": str(user_id), "plan": plan},
+        # user_id만 client_reference_id 보조용으로 남긴다.
+        metadata={"user_id": str(user_id)},
     )
 
-    logger.info("Stripe Checkout 세션 생성: user_id=%s, plan=%s", user_id, plan)
+    logger.info(
+        "Stripe Checkout 세션 생성: user_id=%s, plan=%s, ref=%s",
+        user_id, plan, client_reference_id,
+    )
     return session.url
 
 

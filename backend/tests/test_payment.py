@@ -1,4 +1,5 @@
 """Stripe 결제 서비스 및 API 테스트."""
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
@@ -7,6 +8,7 @@ from fastapi import HTTPException
 from app.models.subscription import PlanType
 from app.services.payment import (
     PaymentError,
+    _build_client_reference_id,
     create_checkout_session,
     create_portal_session,
     handle_webhook_event,
@@ -39,7 +41,7 @@ async def test_create_checkout_session_new_customer(db, professor):
 
     with patch("app.services.payment.settings") as mock_settings, \
          patch("app.services.payment.stripe.Customer.create", return_value=mock_customer), \
-         patch("app.services.payment.stripe.checkout.Session.create", return_value=mock_session):
+         patch("app.services.payment.stripe.checkout.Session.create", return_value=mock_session) as mock_create:
         mock_settings.STRIPE_PRICE_BASIC = "price_basic_test"
         mock_settings.STRIPE_PRICE_PRO = "price_pro_test"
         mock_settings.FRONTEND_URL = "http://localhost:3000"
@@ -48,6 +50,26 @@ async def test_create_checkout_session_new_customer(db, professor):
             url = await create_checkout_session(db, professor.id, professor.email, "BASIC")
 
     assert url == "https://checkout.stripe.com/session_123"
+
+    # idempotency 보강: client_reference_id="{user_id}:{plan}:{YYYYMMDD}" 형식 확인
+    kwargs = mock_create.call_args.kwargs
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    assert kwargs["client_reference_id"] == f"{professor.id}:BASIC:{today}"
+    # metadata.plan 은 더 이상 보내지 않음(웹훅에서 신뢰하지 않음)
+    assert "plan" not in kwargs["metadata"]
+    assert kwargs["metadata"]["user_id"] == str(professor.id)
+
+
+def test_build_client_reference_id_format(professor=None):
+    """`{user_id}:{plan}:{YYYYMMDD}` 포맷이 유지되는지 회귀 테스트."""
+    import uuid as _uuid
+    uid = _uuid.uuid4()
+    ref = _build_client_reference_id(uid, "BASIC")
+    parts = ref.split(":")
+    assert len(parts) == 3
+    assert parts[0] == str(uid)
+    assert parts[1] == "BASIC"
+    assert len(parts[2]) == 8 and parts[2].isdigit()
 
 
 @pytest.mark.asyncio
