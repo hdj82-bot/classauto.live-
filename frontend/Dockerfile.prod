@@ -2,13 +2,13 @@
 # @tailwindcss/postcss, @sentry/nextjs 등 빌드 타임에 필요한 패키지는
 # devDependencies 에 있으므로 --omit=dev 를 쓰면 안 된다. 최종 runtime
 # 이미지는 standalone build 결과물만 복사하므로 node_modules 크기는 영향 없음.
-FROM node:20-alpine AS deps
+FROM node:20.18.1-alpine3.20 AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
 # ── Stage 2: Build ───────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:20.18.1-alpine3.20 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -17,7 +17,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # ── Stage 3: Runtime ─────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:20.18.1-alpine3.20 AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production

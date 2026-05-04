@@ -1,0 +1,55 @@
+# VCS
+.git
+.gitignore
+.github
+
+# Env files (must never bake secrets into image)
+.env
+.env.*
+!.env.example
+
+# Python build artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+*.egg
+.eggs
+
+# Virtualenvs
+.venv
+venv
+env
+
+# Test/coverage
+.pytest_cache
+.coverage
+.coverage.*
+coverage.xml
+htmlcov
+.tox
+.mypy_cache
+.ruff_cache
+
+# Tests not needed in runtime image
+tests
+
+# Docs / editor / OS
+docs
+*.md
+!README.md
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Local data / uploads
+uploads
+*.log
+
+# Docker
+Dockerfile
+Dockerfile.*
+.dockerignore
