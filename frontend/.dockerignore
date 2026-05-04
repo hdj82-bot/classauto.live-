@@ -1,0 +1,43 @@
+# VCS
+.git
+.gitignore
+.github
+
+# Env files (NEXT_PUBLIC_* are baked at build, but never include real secrets)
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Next.js build output
+.next
+out
+
+# Tests not needed in runtime image
+__tests__
+e2e
+coverage
+playwright-report
+test-results
+*.spec.ts
+*.spec.tsx
+
+# Docs / editor / OS
+docs
+*.md
+!README.md
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+Dockerfile.*
+.dockerignore

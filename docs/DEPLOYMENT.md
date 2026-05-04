@@ -409,6 +409,30 @@ Repository → **Settings → Secrets and variables → Actions**
 | `DEPLOY_HOST` | `<서버 공인 IP>` |
 | `DEPLOY_USER` | `ubuntu` |
 | `DEPLOY_SSH_KEY` | `.pem` 파일 본문 전체 (`-----BEGIN ... PRIVATE KEY-----` 부터 `-----END ...-----` 까지) |
+| `DEPLOY_HOST_KEY` | 아래 7-1-a 절 참고 — `ssh-keyscan` 결과 |
+| `DEPLOY_HOST_FINGERPRINT` | (선택) `ssh-keygen -lf` 로 추출한 SHA256 지문 |
+
+#### 7-1-a. SSH host key 등록 (MITM 방지, **필수**)
+
+`appleboy/ssh-action` 은 기본적으로 처음 보는 호스트도 그대로 신뢰하기 때문에,
+DNS hijack / IP 탈취 시 공격자 서버로 그대로 SSH 키와 명령이 전달될 수 있다.
+배포 호스트의 공개키를 미리 secret 으로 등록해 일치할 때만 접속하도록 강제한다.
+
+본인 노트북에서 (서버에 한 번이라도 정상적으로 SSH 가 붙은 상태에서):
+
+```bash
+# 1) 서버 호스트키 수집 — IP 또는 도메인 사용
+ssh-keyscan -t rsa,ed25519 <서버 IP> > deploy_host_key.txt
+
+# 2) 내용 확인 (서버 측에서 미리 알고 있는 fingerprint 와 한 번 대조)
+ssh-keygen -lf deploy_host_key.txt
+
+# 3) 결과 파일 전체를 GitHub Secrets 의 DEPLOY_HOST_KEY 에 붙여넣기
+cat deploy_host_key.txt
+```
+
+> 서버를 재구축하거나 호스트키가 회전되면 SSH 접속이 실패한다.
+> 그때만 위 절차를 다시 수행해 secret 을 갱신한다 — 절대 자동으로 trust 시키지 말 것.
 
 ### 7-2. Required Reviewer (강력 권장 — 사고 방지 마지막 안전장치)
 

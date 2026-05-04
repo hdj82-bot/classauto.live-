@@ -171,7 +171,32 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch,prefix=branch-,enable=${{ github.ref_name != 'main' }}
 
-      - name: Build and push
+      - name: Build (load locally for scan)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: ${{ matrix.image }}:scan-${{ github.sha }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      # CRITICAL/HIGH 취약점이 있으면 push 전에 차단. unfixed 는 무시 (베이스 이미지
+      # 패치가 아직 안 나온 항목까지 막으면 빌드가 막힘).
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ matrix.image }}:scan-${{ github.sha }}
+          format: table
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          timeout: 10m
+
+      - name: Push image
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -216,6 +241,11 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # MITM 방지 — 빈 값이면 처음 보는 호스트로도 자동 접속하므로
+          # `ssh-keyscan -t rsa,ed25519 <서버 IP>` 결과를 통째로 secret 으로 등록.
+          # 등록 방법은 docs/DEPLOYMENT.md "SSH host key 등록" 절 참고.
+          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
+          known_hosts: ${{ secrets.DEPLOY_HOST_KEY }}
           script: |
             cd /opt/ifl-platform
             ./scripts/deploy.sh update
