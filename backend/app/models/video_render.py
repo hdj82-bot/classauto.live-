@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -83,3 +83,27 @@ class RenderCostLog(Base):
     )
 
     video_render: Mapped[VideoRender] = relationship(back_populates="cost_logs")
+
+
+class WebhookEventLog(Base):
+    """외부 웹훅 이벤트 수신 로그 (멱등성 보장용).
+
+    `(provider, external_id, event_type)`에 UNIQUE 제약을 걸어
+    동일 이벤트의 중복 처리를 차단한다. HeyGen은 `external_id=video_id`,
+    `event_type=avatar_video.success|avatar_video.fail`을 사용한다.
+    """
+    __tablename__ = "webhook_event_logs"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "external_id", "event_type",
+            name="uq_webhook_event_logs_provider_external_event",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
