@@ -1,7 +1,8 @@
 """렌더링 파이프라인 API (app/api/routes.py 흡수)."""
+import tempfile
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +13,12 @@ from app.models.video_render import VideoRender
 from app.services.lecture import assert_professor_owns_lecture
 
 router = APIRouter(prefix="/api/v1/render", tags=["render"])
+
+
+# 업로드 한도 (Critical 5: 메모리 폭발 방지)
+MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100MB
+UPLOAD_CHUNK_SIZE = 1024 * 1024       # 1MB
+PPTX_MAGIC = b"PK\x03\x04"
 
 
 @router.post("", summary="렌더링 요청 (슬라이드별)")
@@ -50,7 +57,8 @@ async def create_render_request(
     await db.commit()
 
     for rid, s in zip(render_ids, scripts):
-        render_slide.delay(rid, s.get("script", ""))
+        # caller_user_id 전달 — 태스크에서 instructor_id 일치 검증 (Critical 7)
+        render_slide.delay(rid, s.get("script", ""), str(user.id))
 
     return {"render_ids": render_ids, "message": "렌더링 파이프라인이 시작되었습니다."}
 
@@ -90,8 +98,39 @@ async def get_lecture_render_status(
     }
 
 
+async def _stream_upload_to_buffer(file: UploadFile) -> bytes:
+    """UploadFile을 청크 단위로 읽어 임시 버퍼에 저장. 한도 초과 시 즉시 중단.
+
+    Critical 5: file.read()는 전체를 메모리에 적재 — 100MB×N 동시 업로드 시 OOM.
+    SpooledTemporaryFile은 일정 임계 이하에서는 메모리, 초과 시 디스크로 자동 전환.
+    """
+    buffer = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024)
+    total = 0
+    try:
+        while True:
+            chunk = await file.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_UPLOAD_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"파일 크기가 {MAX_UPLOAD_SIZE // (1024 * 1024)}MB를 초과합니다.",
+                )
+            buffer.write(chunk)
+
+        if total == 0:
+            raise HTTPException(status_code=400, detail="빈 파일은 업로드할 수 없습니다.")
+
+        buffer.seek(0)
+        return buffer.read()
+    finally:
+        buffer.close()
+
+
 @router.post("/upload", summary="PPT 업로드 → S3 저장 → 5단계 파이프라인 시작")
 async def upload_ppt(
+    request: Request,
     lecture_id: uuid.UUID,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -102,29 +141,44 @@ async def upload_ppt(
 
     lecture = await assert_professor_owns_lecture(db, lecture_id, user.id)
 
-    if not file.filename or not file.filename.lower().endswith(".pptx"):
+    # ── Critical 6: 확장자 검증 (path traversal 방지를 위해 사용자 파일명은 신뢰하지 않음) ──
+    original_name = file.filename or ""
+    if not original_name.lower().endswith(".pptx"):
         raise HTTPException(status_code=400, detail=".pptx 파일만 업로드 가능합니다.")
 
-    # Content-Type 검증
+    # Content-Type 화이트리스트
     allowed_types = {
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "application/octet-stream",  # 일부 브라우저에서 전송
+        "application/octet-stream",
     }
     if file.content_type and file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"허용되지 않는 Content-Type: {file.content_type}")
 
-    # 파일 크기 제한 (100MB)
-    MAX_FILE_SIZE = 100 * 1024 * 1024
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="파일 크기가 100MB를 초과합니다.")
-    if len(content) == 0:
-        raise HTTPException(status_code=400, detail="빈 파일은 업로드할 수 없습니다.")
+    # ── Critical 5: Content-Length 선검사로 명백한 오버사이즈 즉시 거부 ──
+    declared_length = request.headers.get("content-length")
+    if declared_length:
+        try:
+            if int(declared_length) > MAX_UPLOAD_SIZE + 4096:  # 4KB multipart overhead 여유
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Content-Length가 {MAX_UPLOAD_SIZE // (1024 * 1024)}MB를 초과합니다.",
+                )
+        except ValueError:
+            raise HTTPException(status_code=400, detail="잘못된 Content-Length 헤더")
+
+    # ── Critical 5: 청크 단위 스트리밍 — 한도 초과 시 즉시 중단 ──
+    content = await _stream_upload_to_buffer(file)
+
+    # ── Critical 6: 매직바이트(PK\x03\x04) 검증 — 확장자만 위장한 파일 차단 ──
+    if len(content) < 4 or content[:4] != PPTX_MAGIC:
+        raise HTTPException(status_code=400, detail="유효한 PPTX 파일이 아닙니다 (ZIP 시그니처 불일치).")
+
+    # ── Critical 6: 파일명을 uuid4().hex + .pptx 로 강제 — 사용자 입력 절대 신뢰 X ──
+    safe_filename = f"{uuid.uuid4().hex}.pptx"
     task_id = str(uuid.uuid4())
 
-    # S3에 PPT 업로드 (매직바이트 검증 포함)
     try:
-        s3_url, s3_key = s3_svc.upload_ppt(content, str(lecture_id), file.filename)
+        s3_url, s3_key = s3_svc.upload_ppt(content, str(lecture_id), safe_filename)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

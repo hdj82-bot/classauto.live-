@@ -40,9 +40,24 @@ def _archive_videos_for_lecture(lecture_id: uuid.UUID) -> None:
         db.close()
 
 
+def _audio_s3_key(render_id: str, ext: str = "mp3") -> str:
+    """upload_audio_bytes 가 사용하는 S3 키와 동일한 규칙."""
+    from app.core.config import settings
+    return f"{settings.S3_PREFIX}audio/{render_id}.{ext}"
+
+
 @celery.task(bind=True, max_retries=2, default_retry_delay=30)
-def render_slide(self, render_id: str, script_text: str) -> dict:
-    """TTS 합성 → S3 업로드 → HeyGen 비디오 생성 요청."""
+def render_slide(
+    self,
+    render_id: str,
+    script_text: str,
+    caller_user_id: str | None = None,
+) -> dict:
+    """TTS 합성 → S3 업로드 → HeyGen 비디오 생성 요청.
+
+    Critical 7: 호출자(caller_user_id) 가 VideoRender.instructor_id 와 다르면 즉시 종료.
+    Critical 8: 각 단계는 산출물 존재 여부로 idempotent — 재시도/중복 enqueue 시 skip.
+    """
     import asyncio
     from app.services.pipeline.tts import synthesize
     from app.services.pipeline.heygen import create_video
@@ -51,31 +66,79 @@ def render_slide(self, render_id: str, script_text: str) -> dict:
     loop = asyncio.new_event_loop()
     try:
         render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
-        render.status = RenderStatus.tts_processing
-        db.commit()
 
-        # TTS 합성
-        tts_result = loop.run_until_complete(synthesize(script_text))
+        # ── Critical 7: 호출자 소유권 검증 ──
+        if caller_user_id is not None:
+            if str(render.instructor_id) != str(caller_user_id):
+                logger.warning(
+                    "[security] render_slide 소유권 불일치 — 태스크 즉시 종료: "
+                    "render_id=%s, render.instructor_id=%s, caller=%s, celery_task_id=%s",
+                    render_id, render.instructor_id, caller_user_id, self.request.id,
+                )
+                # retry 하지 않고 종료 — Celery 가 결과를 성공으로 기록(반복 enqueue 방지)
+                return {"render_id": render_id, "status": "REJECTED_OWNERSHIP_MISMATCH"}
 
-        cost_log.record(
-            db, render.id, service=tts_result.provider, operation="tts_synthesize",
-            cost_usd=0.0, duration_seconds=tts_result.duration_seconds,
-        )
+        # ── Critical 8: 이미 HeyGen 까지 완료된 경우 전체 skip ──
+        if render.heygen_job_id:
+            logger.info(
+                "render_slide idempotent skip — 이미 HeyGen 제출됨: "
+                "render_id=%s, heygen_job_id=%s",
+                render_id, render.heygen_job_id,
+            )
+            return {"render_id": render_id, "heygen_job_id": render.heygen_job_id, "skipped": True}
 
-        # S3 오디오 업로드
-        audio_url = s3_svc.upload_audio_bytes(tts_result.audio_bytes, str(render.id))
-        render.audio_url = audio_url
-        render.tts_provider = tts_result.provider
-        db.commit()
+        # 단계 진입 시점에만 상태 갱신 — 이미 진행 단계 이후면 덮어쓰지 않음
+        if render.status in (RenderStatus.pending,):
+            render.status = RenderStatus.tts_processing
+            db.commit()
 
-        # HeyGen 비디오 생성
-        render.status = RenderStatus.rendering
-        db.commit()
+        # ── Critical 8: TTS 단계 idempotency ──
+        # 이미 audio_url 이 있고 S3 객체도 존재하면 TTS 호출 skip
+        audio_url = render.audio_url
+        s3_audio_key = _audio_s3_key(render_id)
+        tts_already_done = bool(audio_url) and s3_svc.file_exists(s3_audio_key)
+
+        if not tts_already_done:
+            tts_result = loop.run_until_complete(synthesize(script_text))
+
+            cost_log.record_once(
+                db, render.id, service=tts_result.provider, operation="tts_synthesize",
+                cost_usd=0.0, duration_seconds=tts_result.duration_seconds,
+            )
+            db.flush()
+
+            audio_url = s3_svc.upload_audio_bytes(tts_result.audio_bytes, str(render.id))
+            render.audio_url = audio_url
+            render.tts_provider = tts_result.provider
+            db.commit()
+        else:
+            logger.info(
+                "TTS idempotent skip — audio_url 및 S3 객체 존재: render_id=%s, key=%s",
+                render_id, s3_audio_key,
+            )
+
+        # ── Critical 8: HeyGen 단계 idempotency ──
+        if render.heygen_job_id:
+            logger.info(
+                "HeyGen idempotent skip — heygen_job_id 이미 존재: render_id=%s",
+                render_id,
+            )
+            return {"render_id": render_id, "heygen_job_id": render.heygen_job_id, "skipped": True}
+
+        if render.status != RenderStatus.rendering:
+            render.status = RenderStatus.rendering
+            db.commit()
 
         heygen_job_id = loop.run_until_complete(
             create_video(audio_url=audio_url, avatar_id=render.avatar_id, callback_id=str(render.id))
         )
         render.heygen_job_id = heygen_job_id
+        db.commit()
+
+        cost_log.record_once(
+            db, render.id, service="heygen", operation="heygen_submit",
+            cost_usd=0.0,
+        )
         db.commit()
 
         logger.info("렌더 파이프라인 시작 완료: render_id=%s, heygen_job_id=%s", render_id, heygen_job_id)
