@@ -128,6 +128,19 @@ async def health_check():
             checks["s3"] = "not_configured"
     except Exception:
         checks["s3"] = "error"
+    # ── G: Celery worker 큐 도달성 검증 ──
+    # broker 가 살아있어도 worker 프로세스가 0 이면 큐가 영구 적체. ping 으로 응답하는
+    # worker 가 1개 이상인지 확인.
+    try:
+        from app.celery_app import celery as celery_app
+        inspect = celery_app.control.inspect(timeout=2.0)
+        ping = inspect.ping()
+        if not ping:
+            checks["celery"] = "no_workers"
+        else:
+            checks["celery"] = "ok"
+    except Exception:
+        checks["celery"] = "error"
 
     status = "ok" if all(v in ("ok", "not_configured") for v in checks.values()) else "degraded"
     return {"status": status, "checks": checks, "env": settings.ENVIRONMENT}
