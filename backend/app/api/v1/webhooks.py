@@ -8,11 +8,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Header, Request
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.db.session import SyncSessionLocal
 from app.models.lecture import Lecture
-from app.models.video_render import VideoRender, RenderStatus
+from app.models.video_render import RenderStatus, VideoRender, WebhookEventLog
 from app.services.pipeline import cost_log, notification, s3 as s3_svc
 from app.services.pipeline.thumbnail import generate_thumbnail_from_video_url
 
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
 
 VALID_EVENT_TYPES = {"avatar_video.success", "avatar_video.fail"}
+_HEYGEN_PROVIDER = "heygen"
 
 
 @router.post("/heygen", summary="HeyGen 렌더링 웹훅")
@@ -56,17 +58,40 @@ async def heygen_webhook(
 
     db = SyncSessionLocal()
     try:
+        # 멱등성 1단계: WebhookEventLog UNIQUE(provider, external_id, event_type)로
+        # 동일 이벤트의 중복 처리를 차단. INSERT가 실패하면 이미 수신/처리된 이벤트.
+        log = WebhookEventLog(
+            provider=_HEYGEN_PROVIDER,
+            external_id=video_id,
+            event_type=event_type,
+        )
+        db.add(log)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            logger.info(
+                "중복 HeyGen 웹훅 무시: job_id=%s, event_type=%s", video_id, event_type
+            )
+            return {"status": "duplicate", "video_id": video_id, "event_type": event_type}
+
         result = db.execute(
             select(VideoRender).where(VideoRender.heygen_job_id == video_id)
         )
         render = result.scalar_one_or_none()
         if not render:
             logger.warning("HeyGen 웹훅: 매칭되는 render 없음 job_id=%s, event_type=%s", video_id, event_type)
+            db.commit()
             return {"status": "ignored", "reason": "unknown video_id"}
 
-        # 멱등성: 이미 처리 완료된 렌더는 무시
+        # 멱등성 2단계: 이미 done/failed 상태인데 success가 다시 와도 200 + 무시.
+        # (이벤트 로그는 위에서 이미 첫 수신을 막지만, 재발급 시 안전망으로 유지)
         if render.status in (RenderStatus.ready, RenderStatus.failed):
-            logger.info("이미 처리된 렌더: render_id=%s, status=%s", render.id, render.status)
+            logger.info(
+                "이미 처리된 렌더에 대한 %s 이벤트 무시: render_id=%s, status=%s",
+                event_type, render.id, render.status,
+            )
+            db.commit()
             return {"status": "already_processed", "render_id": str(render.id)}
 
         logger.info("HeyGen 웹훅 수신: job_id=%s, render_id=%s, event_type=%s", video_id, render.id, event_type)

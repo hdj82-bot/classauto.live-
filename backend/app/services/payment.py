@@ -3,14 +3,21 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 import stripe
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.subscription import PlanType, Subscription
 from app.services.pipeline.subscription import get_or_create_subscription
+
+try:
+    import sentry_sdk
+except ImportError:  # pragma: no cover - sentry는 옵션 의존성
+    sentry_sdk = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +38,16 @@ _PLAN_TO_PRICE: dict[str, str] = {
 
 class PaymentError(Exception):
     """결제 관련 에러."""
+
+
+def _build_client_reference_id(user_id: uuid.UUID, plan: str) -> str:
+    """`{user_id}:{plan}:{YYYYMMDD}` 형식의 idempotency 키.
+
+    동일 user/plan/날짜 조합은 Stripe 측에서 동일 client_reference_id로 인식되어
+    같은 사용자가 같은 날 같은 플랜으로 여러 번 결제 시도해도 중복 활성화를 줄인다.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    return f"{user_id}:{plan}:{today}"
 
 
 async def create_checkout_session(
@@ -56,16 +73,23 @@ async def create_checkout_session(
     else:
         customer = stripe.Customer.retrieve(sub.stripe_customer_id)
 
+    client_reference_id = _build_client_reference_id(user_id, plan)
     session = stripe.checkout.Session.create(
         customer=sub.stripe_customer_id,
         mode="subscription",
         line_items=[{"price": _PLAN_TO_PRICE[plan], "quantity": 1}],
         success_url=f"{settings.FRONTEND_URL}/subscription?status=success",
         cancel_url=f"{settings.FRONTEND_URL}/subscription?status=cancel",
-        metadata={"user_id": str(user_id), "plan": plan},
+        client_reference_id=client_reference_id,
+        # metadata.plan은 더 이상 신뢰하지 않는다(웹훅에서 price_id로 결정).
+        # user_id만 client_reference_id 보조용으로 남긴다.
+        metadata={"user_id": str(user_id)},
     )
 
-    logger.info("Stripe Checkout 세션 생성: user_id=%s, plan=%s", user_id, plan)
+    logger.info(
+        "Stripe Checkout 세션 생성: user_id=%s, plan=%s, ref=%s",
+        user_id, plan, client_reference_id,
+    )
     return session.url
 
 
@@ -101,12 +125,50 @@ async def handle_webhook_event(db: AsyncSession, event: stripe.Event) -> str:
         return "ignored"
 
 
+def _reject_unknown_price(price_id: str | None, *, customer_id: str, context: str) -> None:
+    """알 수 없는 price_id를 받은 경우 4xx + Sentry 경고."""
+    logger.error(
+        "알 수 없는 Stripe price_id: context=%s, customer=%s, price_id=%s",
+        context, customer_id, price_id,
+    )
+    if sentry_sdk is not None:
+        sentry_sdk.capture_message(
+            f"Unknown Stripe price_id in {context}: {price_id} (customer={customer_id})",
+            level="warning",
+        )
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Unknown Stripe price_id: {price_id}",
+    )
+
+
+def _extract_price_id(stripe_subscription) -> str | None:
+    """Stripe Subscription 오브젝트에서 첫 line item의 price.id 추출."""
+    items = getattr(stripe_subscription, "items", None)
+    data = getattr(items, "data", None) if items is not None else None
+    if not data:
+        return None
+    first = data[0]
+    price = getattr(first, "price", None)
+    return getattr(price, "id", None) if price is not None else None
+
+
 async def _handle_checkout_completed(db: AsyncSession, session) -> str:
-    """Checkout 완료 → 구독 활성화."""
+    """Checkout 완료 → 구독 활성화.
+
+    metadata.plan은 신뢰하지 않는다. 실제 플랜은 Stripe Subscription의
+    items.data[0].price.id 를 _PRICE_TO_PLAN 으로 매핑해 결정한다.
+    """
     customer_id = session.customer
     subscription_id = session.subscription
     metadata = session.metadata or {}
-    plan = metadata.get("plan", "BASIC")
+
+    # 실제 가입 라인 아이템에서 price_id를 가져와 PlanType을 결정.
+    stripe_sub = stripe.Subscription.retrieve(subscription_id)
+    price_id = _extract_price_id(stripe_sub)
+    new_plan = _PRICE_TO_PLAN.get(price_id) if price_id else None
+    if not new_plan:
+        _reject_unknown_price(price_id, customer_id=customer_id, context="checkout.completed")
 
     sub = await _get_sub_by_customer(db, customer_id)
     if not sub:
@@ -117,9 +179,12 @@ async def _handle_checkout_completed(db: AsyncSession, session) -> str:
 
     if sub:
         sub.stripe_subscription_id = subscription_id
-        sub.plan = PlanType(plan)
+        sub.plan = new_plan
         await db.flush()
-        logger.info("구독 활성화: customer=%s, plan=%s", customer_id, plan)
+        logger.info(
+            "구독 활성화: customer=%s, plan=%s, price_id=%s",
+            customer_id, new_plan.value, price_id,
+        )
         return "activated"
 
     logger.warning("Checkout 완료했으나 사용자를 찾을 수 없음: customer=%s", customer_id)
@@ -129,21 +194,24 @@ async def _handle_checkout_completed(db: AsyncSession, session) -> str:
 async def _handle_subscription_updated(db: AsyncSession, subscription) -> str:
     """구독 변경 (업/다운그레이드)."""
     customer_id = subscription.customer
-    price_id = subscription.items.data[0].price.id if subscription.items.data else None
+    price_id = _extract_price_id(subscription)
 
     sub = await _get_sub_by_customer(db, customer_id)
     if not sub:
         return "user_not_found"
 
-    new_plan = _PRICE_TO_PLAN.get(price_id)
-    if new_plan:
-        sub.plan = new_plan
-        sub.stripe_subscription_id = subscription.id
-        await db.flush()
-        logger.info("구독 변경: customer=%s, plan=%s", customer_id, new_plan.value)
-        return "updated"
+    new_plan = _PRICE_TO_PLAN.get(price_id) if price_id else None
+    if not new_plan:
+        _reject_unknown_price(price_id, customer_id=customer_id, context="subscription.updated")
 
-    return "unknown_price"
+    sub.plan = new_plan
+    sub.stripe_subscription_id = subscription.id
+    await db.flush()
+    logger.info(
+        "구독 변경: customer=%s, plan=%s, price_id=%s",
+        customer_id, new_plan.value, price_id,
+    )
+    return "updated"
 
 
 async def _handle_subscription_deleted(db: AsyncSession, subscription) -> str:

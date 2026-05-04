@@ -11,6 +11,7 @@ import uuid
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.models.video_render import VideoRender, RenderStatus
@@ -158,6 +159,87 @@ async def test_heygen_webhook_no_video_id(client):
         )
     assert resp.status_code == 200
     assert resp.json()["reason"] == "no video_id"
+
+
+# ── 멱등성: 중복 웹훅 (동일 video_id+event_type 재수신) ─────────────────────
+
+@pytest.mark.asyncio
+async def test_heygen_webhook_duplicate_event_blocked(client):
+    """동일 (video_id, event_type) 이벤트가 두 번째로 도착하면 200 + duplicate 반환.
+
+    WebhookEventLog UNIQUE(provider, external_id, event_type) 제약이 두 번째
+    flush 에서 IntegrityError 를 던지면 중복으로 처리된다.
+    """
+    mock_db = MagicMock()
+    # WebhookEventLog flush 시 IntegrityError 발생 — 이미 동일 이벤트가 처리됨
+    mock_db.flush.side_effect = IntegrityError("duplicate", {}, Exception("unique"))
+    mock_db.__enter__ = MagicMock(return_value=mock_db)
+    mock_db.__exit__ = MagicMock(return_value=False)
+
+    payload = {
+        "event_type": "avatar_video.success",
+        "event_data": {"video_id": "heygen-dup-1", "url": "https://x"},
+    }
+    body = json.dumps(payload).encode()
+
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""), \
+         patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db):
+        resp = await client.post(
+            "/api/v1/webhooks/heygen",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "duplicate"
+    # render 조회까지 가지 않고 일찍 반환됐는지 — execute(select VideoRender) 호출 없음
+    assert mock_db.execute.call_count == 0
+    mock_db.rollback.assert_called_once()
+
+
+# ── 멱등성: 이미 done 상태인 render에 success 재수신 ────────────────────────
+
+@pytest.mark.asyncio
+async def test_heygen_webhook_already_processed_render_ignored(client, professor, lecture):
+    """이미 ready 상태인 render에 success 이벤트가 와도 200 + already_processed."""
+    render = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        heygen_job_id="heygen-already-done",
+        avatar_id="test-avatar",
+        tts_provider="elevenlabs",
+        slide_number=1,
+        status=RenderStatus.ready,  # 이미 처리 완료
+    )
+
+    mock_db = MagicMock()
+    mock_db.flush.return_value = None  # 첫 수신이라 로그 INSERT 성공
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = render
+    mock_db.execute.return_value = mock_result
+    mock_db.__enter__ = MagicMock(return_value=mock_db)
+    mock_db.__exit__ = MagicMock(return_value=False)
+
+    payload = {
+        "event_type": "avatar_video.success",
+        "event_data": {"video_id": "heygen-already-done", "url": "https://x"},
+    }
+    body = json.dumps(payload).encode()
+
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""), \
+         patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db):
+        resp = await client.post(
+            "/api/v1/webhooks/heygen",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "already_processed"
+    assert data["render_id"] == str(render.id)
+    # 상태는 그대로
+    assert render.status == RenderStatus.ready
 
 
 # ── 잘못된 HMAC 서명 ────────────────────────────────────────────────────────

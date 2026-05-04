@@ -1,16 +1,29 @@
 """Stripe 결제 서비스 및 API 테스트."""
+from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
+from fastapi import HTTPException
 
 from app.models.subscription import PlanType
 from app.services.payment import (
     PaymentError,
+    _build_client_reference_id,
     create_checkout_session,
     create_portal_session,
     handle_webhook_event,
 )
 from tests.conftest import make_auth_header
+
+
+def _stripe_subscription(price_id: str, sub_id: str = "sub_test_456"):
+    """Stripe Subscription 응답을 모방하는 MagicMock 헬퍼."""
+    item = MagicMock()
+    item.price.id = price_id
+    sub = MagicMock()
+    sub.id = sub_id
+    sub.items.data = [item]
+    return sub
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -28,7 +41,7 @@ async def test_create_checkout_session_new_customer(db, professor):
 
     with patch("app.services.payment.settings") as mock_settings, \
          patch("app.services.payment.stripe.Customer.create", return_value=mock_customer), \
-         patch("app.services.payment.stripe.checkout.Session.create", return_value=mock_session):
+         patch("app.services.payment.stripe.checkout.Session.create", return_value=mock_session) as mock_create:
         mock_settings.STRIPE_PRICE_BASIC = "price_basic_test"
         mock_settings.STRIPE_PRICE_PRO = "price_pro_test"
         mock_settings.FRONTEND_URL = "http://localhost:3000"
@@ -37,6 +50,26 @@ async def test_create_checkout_session_new_customer(db, professor):
             url = await create_checkout_session(db, professor.id, professor.email, "BASIC")
 
     assert url == "https://checkout.stripe.com/session_123"
+
+    # idempotency 보강: client_reference_id="{user_id}:{plan}:{YYYYMMDD}" 형식 확인
+    kwargs = mock_create.call_args.kwargs
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    assert kwargs["client_reference_id"] == f"{professor.id}:BASIC:{today}"
+    # metadata.plan 은 더 이상 보내지 않음(웹훅에서 신뢰하지 않음)
+    assert "plan" not in kwargs["metadata"]
+    assert kwargs["metadata"]["user_id"] == str(professor.id)
+
+
+def test_build_client_reference_id_format(professor=None):
+    """`{user_id}:{plan}:{YYYYMMDD}` 포맷이 유지되는지 회귀 테스트."""
+    import uuid as _uuid
+    uid = _uuid.uuid4()
+    ref = _build_client_reference_id(uid, "BASIC")
+    parts = ref.split(":")
+    assert len(parts) == 3
+    assert parts[0] == str(uid)
+    assert parts[1] == "BASIC"
+    assert len(parts[2]) == 8 and parts[2].isdigit()
 
 
 @pytest.mark.asyncio
@@ -81,12 +114,114 @@ async def test_webhook_checkout_completed(db, professor):
     mock_event.type = "checkout.session.completed"
     mock_event.data.object.customer = "cus_webhook_test"
     mock_event.data.object.subscription = "sub_test_456"
-    mock_event.data.object.metadata = {"plan": "PRO", "user_id": str(professor.id)}
+    # metadata.plan 은 신뢰하지 않음 — price_id 기반 매핑이 권위.
+    mock_event.data.object.metadata = {"user_id": str(professor.id)}
 
-    result = await handle_webhook_event(db, mock_event)
+    fake_sub = _stripe_subscription(price_id="price_pro_test")
+    with patch.dict(
+        "app.services.payment._PRICE_TO_PLAN",
+        {"price_pro_test": PlanType.pro},
+        clear=True,
+    ), patch(
+        "app.services.payment.stripe.Subscription.retrieve",
+        return_value=fake_sub,
+    ):
+        result = await handle_webhook_event(db, mock_event)
+
     assert result == "activated"
     assert sub.plan == PlanType.pro
     assert sub.stripe_subscription_id == "sub_test_456"
+
+
+@pytest.mark.asyncio
+async def test_webhook_checkout_ignores_metadata_plan(db, professor):
+    """공격자가 metadata.plan='PRO'로 변조해도 price_id가 BASIC이면 BASIC으로 활성화."""
+    from app.services.pipeline.subscription import get_or_create_subscription
+    sub = await get_or_create_subscription(db, professor.id)
+    sub.stripe_customer_id = "cus_tamper_test"
+    await db.flush()
+
+    mock_event = MagicMock()
+    mock_event.type = "checkout.session.completed"
+    mock_event.data.object.customer = "cus_tamper_test"
+    mock_event.data.object.subscription = "sub_test_basic"
+    # 공격자가 임의로 PRO로 변조한 metadata
+    mock_event.data.object.metadata = {"plan": "PRO", "user_id": str(professor.id)}
+
+    fake_sub = _stripe_subscription(price_id="price_basic_test")
+    with patch.dict(
+        "app.services.payment._PRICE_TO_PLAN",
+        {"price_basic_test": PlanType.basic, "price_pro_test": PlanType.pro},
+        clear=True,
+    ), patch(
+        "app.services.payment.stripe.Subscription.retrieve",
+        return_value=fake_sub,
+    ):
+        result = await handle_webhook_event(db, mock_event)
+
+    assert result == "activated"
+    # metadata.plan='PRO' 였지만 실제 price_id가 BASIC이므로 BASIC으로 결정.
+    assert sub.plan == PlanType.basic
+
+
+@pytest.mark.asyncio
+async def test_webhook_checkout_unknown_price_rejected(db, professor):
+    """알 수 없는 price_id면 4xx (HTTPException) 발생."""
+    from app.services.pipeline.subscription import get_or_create_subscription
+    sub = await get_or_create_subscription(db, professor.id)
+    sub.stripe_customer_id = "cus_unknown_price"
+    await db.flush()
+
+    mock_event = MagicMock()
+    mock_event.type = "checkout.session.completed"
+    mock_event.data.object.customer = "cus_unknown_price"
+    mock_event.data.object.subscription = "sub_test_unk"
+    mock_event.data.object.metadata = {"user_id": str(professor.id)}
+
+    fake_sub = _stripe_subscription(price_id="price_does_not_exist")
+    with patch.dict(
+        "app.services.payment._PRICE_TO_PLAN",
+        {"price_basic_test": PlanType.basic},
+        clear=True,
+    ), patch(
+        "app.services.payment.stripe.Subscription.retrieve",
+        return_value=fake_sub,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await handle_webhook_event(db, mock_event)
+
+    assert exc.value.status_code == 400
+    assert "Unknown Stripe price_id" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_webhook_subscription_updated_unknown_price_rejected(db, professor):
+    """customer.subscription.updated 에서도 알 수 없는 price_id는 4xx."""
+    from app.services.pipeline.subscription import get_or_create_subscription
+    sub = await get_or_create_subscription(db, professor.id)
+    sub.stripe_customer_id = "cus_upd_unknown"
+    sub.plan = PlanType.basic
+    await db.flush()
+
+    item = MagicMock()
+    item.price.id = "price_phantom"
+    mock_event = MagicMock()
+    mock_event.type = "customer.subscription.updated"
+    mock_event.data.object.customer = "cus_upd_unknown"
+    mock_event.data.object.id = "sub_phantom"
+    mock_event.data.object.items.data = [item]
+
+    with patch.dict(
+        "app.services.payment._PRICE_TO_PLAN",
+        {"price_basic_test": PlanType.basic, "price_pro_test": PlanType.pro},
+        clear=True,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await handle_webhook_event(db, mock_event)
+
+    assert exc.value.status_code == 400
+    # 거부됐으므로 plan 그대로.
+    assert sub.plan == PlanType.basic
 
 
 @pytest.mark.asyncio
