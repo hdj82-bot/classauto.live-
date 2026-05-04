@@ -101,11 +101,17 @@ def render_slide(
         if not tts_already_done:
             tts_result = loop.run_until_complete(synthesize(script_text))
 
-            cost_log.record_once(
-                db, render.id, service=tts_result.provider, operation="tts_synthesize",
-                cost_usd=0.0, duration_seconds=tts_result.duration_seconds,
+            # H: TTS API 성공 직후 별도 트랜잭션으로 비용을 즉시 commit.
+            # 이후 S3 업로드(또는 HeyGen 단계)가 실패해 메인 트랜잭션이 rollback 돼도
+            # 이미 발생한 provider 비용은 회계에 반드시 남아야 한다.
+            cost_log.record_once_committed(
+                SyncSessionLocal,
+                render.id,
+                service=tts_result.provider,
+                operation="tts_synthesize",
+                cost_usd=0.0,
+                duration_seconds=tts_result.duration_seconds,
             )
-            db.flush()
 
             audio_url = s3_svc.upload_audio_bytes(tts_result.audio_bytes, str(render.id))
             render.audio_url = audio_url
@@ -132,13 +138,18 @@ def render_slide(
         heygen_job_id = loop.run_until_complete(
             create_video(audio_url=audio_url, avatar_id=render.avatar_id, callback_id=str(render.id))
         )
-        render.heygen_job_id = heygen_job_id
-        db.commit()
 
-        cost_log.record_once(
-            db, render.id, service="heygen", operation="heygen_submit",
+        # H: HeyGen 제출 성공 직후 비용을 별도 트랜잭션으로 즉시 commit —
+        # heygen_job_id 를 메인 세션에 쓰는 것이 후속 예외로 rollback 되어도 비용은 남는다.
+        cost_log.record_once_committed(
+            SyncSessionLocal,
+            render.id,
+            service="heygen",
+            operation="heygen_submit",
             cost_usd=0.0,
         )
+
+        render.heygen_job_id = heygen_job_id
         db.commit()
 
         logger.info("렌더 파이프라인 시작 완료: render_id=%s, heygen_job_id=%s", render_id, heygen_job_id)
