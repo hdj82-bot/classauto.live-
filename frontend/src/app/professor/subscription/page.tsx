@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, isStripeCheckoutUrl } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -73,6 +73,14 @@ export default function SubscriptionPage() {
       } else {
         // BASIC/PRO 업그레이드: Stripe Checkout으로 이동
         const { data } = await api.post(`/api/v1/payment/checkout?plan=${confirmPlan}`);
+        // Open-redirect 방어: 백엔드가 변조되거나 응답 검증이 약할 가능성에
+        // 대비해 Stripe 공식 호스트만 허용. 다른 호스트로의 redirect 차단.
+        if (!isStripeCheckoutUrl(data?.checkout_url)) {
+          toast("결제 페이지 주소가 올바르지 않습니다.", "error");
+          setChanging(false);
+          setConfirmPlan(null);
+          return;
+        }
         window.location.href = data.checkout_url;
         // 리다이렉트 후에는 아래 코드가 실행되지 않음
       }
