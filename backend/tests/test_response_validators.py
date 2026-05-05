@@ -75,3 +75,56 @@ def test_unrealistic_huge_timestamp_rejected():
     """실제 사고 케이스 — 클라이언트가 999999 초를 보내 채점 우회 시도."""
     with pytest.raises(ValidationError):
         SingleResponse(**_payload(video_timestamp_seconds=999_999))
+
+
+# ── T5: Response (session_id, question_id) UNIQUE 제약 ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_response_session_question_unique_constraint(db, professor, lecture):
+    """동일 (session_id, question_id) 행 두 개 시 IntegrityError."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models.question import (
+        AssessmentType, Difficulty, Question, QuestionType,
+    )
+    from app.models.response import Response
+    from app.models.session import LearningSession
+
+    session = LearningSession(
+        id=uuid.uuid4(),
+        user_id=professor.id,
+        lecture_id=lecture.id,
+    )
+    question = Question(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        assessment_type=AssessmentType.formative,
+        question_type=QuestionType.multiple_choice,
+        difficulty=Difficulty.medium,
+        content="문제",
+        options=["A", "B", "C", "D"],
+        correct_answer="0",
+        is_active=True,
+    )
+    db.add_all([session, question])
+    await db.flush()
+
+    db.add(Response(
+        id=uuid.uuid4(),
+        session_id=session.id,
+        question_id=question.id,
+        user_answer="0",
+        video_timestamp_seconds=5,
+    ))
+    await db.flush()
+
+    db.add(Response(
+        id=uuid.uuid4(),
+        session_id=session.id,
+        question_id=question.id,
+        user_answer="1",
+        video_timestamp_seconds=10,
+    ))
+    with pytest.raises(IntegrityError):
+        await db.flush()

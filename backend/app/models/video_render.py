@@ -62,6 +62,8 @@ class VideoRender(Base):
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # 관계
+    # T7: Lecture.video_renders 와 양방향 — back_populates 로 명시.
+    lecture = relationship("Lecture", back_populates="video_renders")
     cost_logs: Mapped[list["RenderCostLog"]] = relationship(
         back_populates="video_render", cascade="all, delete-orphan"
     )
@@ -80,8 +82,9 @@ class RenderCostLog(Base):
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     metadata_json: Mapped[str | None] = mapped_column(Text)
+    # T5: admin.get_costs 가 월별 GROUP BY 에 created_at 을 사용 — 색인 필수.
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True,
     )
 
     video_render: Mapped[VideoRender] = relationship(back_populates="cost_logs")

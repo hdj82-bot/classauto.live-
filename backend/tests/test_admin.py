@@ -378,6 +378,58 @@ async def test_get_costs_unauthorized(client):
     assert resp.status_code in (401, 403)
 
 
+@pytest.mark.asyncio
+async def test_get_costs_only_returns_last_12_months(
+    client, admin, db, professor, lecture,
+):
+    """T6: 13개월 전 비용은 by_service/by_month 합계에서 제외되어야 한다."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.video_render import RenderCostLog, RenderStatus, VideoRender
+
+    render = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        avatar_id="av",
+        status=RenderStatus.ready,
+    )
+    db.add(render)
+    await db.flush()
+
+    now = datetime.now(timezone.utc)
+    # 13개월 전 (윈도우 밖) — 1.0 USD
+    old = RenderCostLog(
+        id=uuid.uuid4(),
+        video_render_id=render.id,
+        service="heygen",
+        operation="video_render",
+        cost_usd=1.0,
+        created_at=now - timedelta(days=400),
+    )
+    # 1개월 전 (윈도우 안) — 2.5 USD
+    recent = RenderCostLog(
+        id=uuid.uuid4(),
+        video_render_id=render.id,
+        service="heygen",
+        operation="video_render",
+        cost_usd=2.5,
+        created_at=now - timedelta(days=30),
+    )
+    db.add_all([old, recent])
+    await db.flush()
+
+    resp = await client.get("/api/v1/admin/costs", headers=make_auth_header(admin))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["window_days"] == 365
+    # 13개월 전 비용 1.0 은 제외되어야 함 — 합계는 2.5 만 잡혀야
+    assert data["total_cost_usd"] == 2.5
+    # by_service 도 동일 윈도우 적용 — heygen 한 항목만, 2.5
+    services = {row["service"]: row["cost_usd"] for row in data["by_service"]}
+    assert services == {"heygen": 2.5}
+
+
 # ── GET /api/v1/admin/system ─────────────────────────────────────────────────
 
 
