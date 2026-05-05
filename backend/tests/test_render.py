@@ -1,8 +1,11 @@
 """렌더링 파이프라인 API 통합 테스트."""
+import io
+import os
 import uuid
 from unittest.mock import patch, AsyncMock, MagicMock
 
 import pytest
+from pptx import Presentation
 
 from app.models.video_render import VideoRender, RenderStatus
 from tests.conftest import make_auth_header
@@ -258,11 +261,6 @@ async def test_upload_ppt_content_length_pre_check_rejects(
 
 
 # ── High F: 파이프라인 tmp_dir cleanup ─────────────────────────────────────
-
-import io
-import os
-
-from pptx import Presentation
 
 
 def _make_pptx_bytes(slide_titles: list[str]) -> bytes:

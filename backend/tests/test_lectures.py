@@ -1,6 +1,5 @@
 """강의(Lecture) API 통합 테스트."""
 import uuid
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
