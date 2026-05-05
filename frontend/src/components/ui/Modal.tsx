@@ -64,13 +64,13 @@ export default function Modal({ open, onClose, closable = true, children, title 
       <div
         ref={panelRef}
         tabIndex={-1}
-        className="relative bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto outline-none animate-scale-in"
+        className="relative bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded-2xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto outline-none animate-scale-in"
       >
         {(title || closable) && (
           <div className="flex items-center justify-between px-6 pt-5 pb-2">
-            {title && <h3 id="modal-title" className="text-lg font-semibold text-gray-900">{title}</h3>}
+            {title && <h3 id="modal-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>}
             {closable && onClose && (
-              <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition text-xl leading-none" aria-label={t("common.close")}>&times;</button>
+              <button type="button" onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition text-xl leading-none" aria-label={t("common.close")}>&times;</button>
             )}
           </div>
         )}

@@ -29,11 +29,11 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-200">
+    <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur border-b border-gray-200 dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
         <Link href={homeHref} className="flex items-center gap-2" aria-label="IFL Platform Home">
           <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold" aria-hidden="true">IFL</span>
-          <span className="text-sm font-semibold text-gray-900 hidden sm:inline">Interactive Flipped Learning</span>
+          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 hidden sm:inline">Interactive Flipped Learning</span>
         </Link>
 
         <div className="flex items-center gap-2">
@@ -43,7 +43,7 @@ export default function Header() {
             id="lang-select"
             value={locale}
             onChange={handleLocaleChange}
-            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none focus:border-indigo-500"
+            className="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2 py-1 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 outline-none focus:border-indigo-500"
           >
             <option value="ko">{t("language.ko")}</option>
             <option value="en">{t("language.en")}</option>
@@ -60,16 +60,16 @@ export default function Header() {
                     aria-current={isActive(link.href) ? "page" : undefined}
                     className={`text-sm px-3 py-1.5 rounded-lg transition ${
                       isActive(link.href)
-                        ? "text-indigo-700 bg-indigo-50 font-medium"
-                        : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                        ? "text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 font-medium"
+                        : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
                     }`}
                   >
                     {link.label}
                   </Link>
                 ))}
-                <div className="flex items-center gap-2 ml-3 pl-3 border-l border-gray-200">
-                  <span className="text-xs text-gray-400">{user.role === "professor" ? t("common.professor") : t("common.student")}</span>
-                  <button onClick={logout} className="text-xs text-gray-500 hover:text-red-600 border border-gray-200 rounded-lg px-2.5 py-1 transition">
+                <div className="flex items-center gap-2 ml-3 pl-3 border-l border-gray-200 dark:border-gray-700">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">{user.role === "professor" ? t("common.professor") : t("common.student")}</span>
+                  <button type="button" onClick={logout} className="text-xs text-gray-500 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1 transition">
                     {t("common.logout")}
                   </button>
                 </div>
@@ -77,8 +77,9 @@ export default function Header() {
 
               {/* Mobile hamburger */}
               <button
+                type="button"
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="md:hidden p-2 text-gray-600"
+                className="md:hidden p-2 text-gray-600 dark:text-gray-300"
                 aria-label={t("common.menu")}
                 aria-expanded={menuOpen}
               >
@@ -98,8 +99,8 @@ export default function Header() {
       {/* Mobile dropdown menu */}
       {user && menuOpen && (
         <>
-          <div className="md:hidden fixed inset-0 top-14 bg-black/20 z-30" onClick={() => setMenuOpen(false)} aria-hidden="true" />
-          <nav className="md:hidden relative z-40 border-t border-gray-200 bg-white px-4 py-3 space-y-1 animate-scale-in" aria-label={t("nav.lectureManage")}>
+          <div className="md:hidden fixed inset-0 top-14 bg-black/20 dark:bg-black/50 z-30" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+          <nav className="md:hidden relative z-40 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3 space-y-1 animate-scale-in" aria-label={t("nav.lectureManage")}>
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -108,16 +109,16 @@ export default function Header() {
                 aria-current={isActive(link.href) ? "page" : undefined}
                 className={`block text-sm rounded-lg px-3 py-2 transition ${
                   isActive(link.href)
-                    ? "text-indigo-700 bg-indigo-50 font-medium"
-                    : "text-gray-700 hover:bg-gray-50"
+                    ? "text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 font-medium"
+                    : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                 }`}
               >
                 {link.label}
               </Link>
             ))}
-            <div className="pt-2 mt-1 border-t border-gray-100 flex items-center justify-between px-3">
-              <span className="text-xs text-gray-400">{user.role === "professor" ? t("common.professor") : t("common.student")}</span>
-              <button onClick={logout} className="text-xs text-red-500 hover:text-red-700 transition">{t("common.logout")}</button>
+            <div className="pt-2 mt-1 border-t border-gray-100 dark:border-gray-800 flex items-center justify-between px-3">
+              <span className="text-xs text-gray-400 dark:text-gray-500">{user.role === "professor" ? t("common.professor") : t("common.student")}</span>
+              <button type="button" onClick={logout} className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition">{t("common.logout")}</button>
             </div>
           </nav>
         </>
