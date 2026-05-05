@@ -10,7 +10,7 @@ import httpx
 from google.cloud import texttospeech
 
 from app.core.config import settings
-from app.core.retry import retry_external
+from app.core.retry import RetryableHTTPError, retry_external
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,22 @@ async def synthesize(text: str, output_path: Path | None = None) -> TTSResult:
     return result
 
 
-@retry_external(label="elevenlabs.synthesize")
 async def _elevenlabs_synthesize(text: str) -> TTSResult:
+    """ElevenLabs 호출 wrapper — 재시도 후 도메인 예외(TTSError) 로 변환.
+
+    `_elevenlabs_call_with_retry` 가 통일 재시도 정책(3회·exp backoff)으로
+    호출하고, 5xx/429/timeout 이 max 시도 후에도 실패하면 헬퍼가 raise 한
+    `RetryableHTTPError` / `httpx.HTTPStatusError` / `httpx.TimeoutException`
+    을 모두 `TTSError("최대 재시도 초과")` 로 래핑해 호출부 호환성 유지.
+    """
+    try:
+        return await _elevenlabs_call_with_retry(text)
+    except (RetryableHTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
+        raise TTSError(f"ElevenLabs 최대 재시도 초과: {exc}") from exc
+
+
+@retry_external(label="elevenlabs.synthesize")
+async def _elevenlabs_call_with_retry(text: str) -> TTSResult:
     """ElevenLabs TTS API 호출.
 
     `retry_external` 데코레이터가 통일 재시도 정책(3회·exp backoff)을 적용한다.

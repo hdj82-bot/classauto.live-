@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
-from app.core.retry import request_with_retry
+from app.core.retry import RetryableHTTPError, request_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,10 @@ async def _request_with_retry(
         # 4xx(영구 오류)는 retry 대상이 아니므로 응답 그대로 반환해
         # 기존 호출부의 status_code 분기 코드와 호환을 유지한다.
         return exc.response
+    except (RetryableHTTPError, httpx.TimeoutException) as exc:
+        # 5xx/429/timeout 은 헬퍼가 max 3회 후 마지막 예외를 그대로 raise.
+        # 도메인 예외(HeyGenError) 로 래핑해 호출부 호환성을 유지한다.
+        raise HeyGenError(f"HeyGen API 최대 재시도 초과: {exc}") from exc
 
 
 # ── 비디오 생성 ──────────────────────────────────────────────────────────────
