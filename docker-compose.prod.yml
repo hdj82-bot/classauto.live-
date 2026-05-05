@@ -1,5 +1,11 @@
 version: "3.9"
 
+# 모든 서비스에 deploy.resources.limits 적용. 단일 VM (8GB RAM) 가정에서
+# 한 컨테이너가 메모리 누수로 다른 서비스를 OOM kill 시키는 사고 방지.
+# (compose v3 의 deploy 키는 swarm 외 모드에서는 mem_limit 등으로만 강제되지만
+# Docker 25+ / docker compose v2.20+ 에서는 standalone compose 도 일부 키를
+# resources/limits 로 인식한다. mem_limit/cpus 도 함께 명시해 호환성 확보.)
+
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -16,6 +22,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 1g
+    cpus: 1.5
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.5"
 
   redis:
     image: redis:7-alpine
@@ -28,6 +41,13 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 512m
+    cpus: 1.0
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
 
   backend:
     image: ghcr.io/hdj82-bot/ifl-backend:${IFL_IMAGE_TAG:-latest}
@@ -63,6 +83,13 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+    mem_limit: 1g
+    cpus: 1.0
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
 
   worker:
     image: ghcr.io/hdj82-bot/ifl-backend:${IFL_IMAGE_TAG:-latest}
@@ -92,6 +119,14 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+    mem_limit: 1536m
+    cpus: 1.5
+    deploy:
+      resources:
+        limits:
+          # PPT 파싱 / Pillow 이미지 처리에 메모리를 많이 쓰므로 상한을 약간 높임.
+          memory: 1.5G
+          cpus: "1.5"
 
   beat:
     image: ghcr.io/hdj82-bot/ifl-backend:${IFL_IMAGE_TAG:-latest}
@@ -101,12 +136,20 @@ services:
     env_file:
       - .env
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+    mem_limit: 256m
+    cpus: 0.5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
 
   frontend:
     image: ghcr.io/hdj82-bot/ifl-frontend:${IFL_IMAGE_TAG:-latest}
@@ -114,8 +157,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    # backend 가 healthy 가 된 뒤에만 frontend 컨테이너 시작 — Next.js 가
+    # 초기화 단계에서 백엔드 기동 전에 호출하다가 5xx 를 캐싱하는 사고 방지.
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     # Next.js standalone 서버가 진행 중 요청을 마치도록 SIGTERM 후 여유.
     stop_grace_period: 30s
     # Dockerfile 에 HEALTHCHECK 가 정의되어 있으나, 새 컨테이너 부팅 시간을 고려해
@@ -126,6 +172,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    mem_limit: 768m
+    cpus: 1.0
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+          cpus: "1.0"
 
   nginx:
     image: nginx:alpine
@@ -143,6 +196,13 @@ services:
     depends_on:
       - backend
       - frontend
+    mem_limit: 256m
+    cpus: 0.5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
 
   certbot:
     image: certbot/certbot
@@ -154,6 +214,13 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet --deploy-hook \"echo Certificate renewed at $(date)\" 2>&1 | tee -a /etc/letsencrypt/renewal.log; sleep 12h & wait $${!}; done;'"
     depends_on:
       - nginx
+    mem_limit: 128m
+    cpus: 0.25
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
 
 volumes:
   postgres_data:

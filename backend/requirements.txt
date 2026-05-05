@@ -24,6 +24,8 @@ google-auth-oauthlib>=1.2.0
 
 # HTTP
 httpx>=0.27.0
+# Retry/backoff (HeyGen / 외부 API 호출에 사용 — 창1·3 요청)
+tenacity>=8.5.0
 
 # AI / ML
 anthropic>=0.30.0
