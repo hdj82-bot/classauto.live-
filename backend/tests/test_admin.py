@@ -8,6 +8,7 @@
   GET  /api/v1/admin/system
 """
 import uuid
+from unittest.mock import patch
 
 import pytest
 
@@ -48,6 +49,62 @@ async def test_get_stats_student_forbidden(client, student):
 async def test_get_stats_unauthorized(client):
     resp = await client.get("/api/v1/admin/stats")
     assert resp.status_code in (401, 403)
+
+
+# ── I: admin /stats Redis 캐시 ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_admin_stats_serves_from_cache_on_second_call(client, admin):
+    """첫 호출은 fresh, 두 번째 호출은 캐시 히트(_cached=True) — DB 풀스캔 회피."""
+    from app.api.v1 import admin as admin_api
+
+    cache: dict[str, str] = {}
+
+    class _CachingFakeRedis:
+        async def get(self, key):
+            return cache.get(key)
+
+        async def set(self, key, value, ex=None):
+            cache[key] = value
+
+    with patch.object(admin_api, "get_redis", return_value=_CachingFakeRedis()):
+        first = await client.get("/api/v1/admin/stats", headers=make_auth_header(admin))
+        assert first.status_code == 200
+        assert first.json().get("_cached") is not True
+        assert admin_api._STATS_CACHE_KEY in cache  # 첫 호출이 캐시 채움
+
+        second = await client.get("/api/v1/admin/stats", headers=make_auth_header(admin))
+        assert second.status_code == 200
+        assert second.json().get("_cached") is True
+
+        # 두 호출의 본 데이터는 같아야 한다
+        f = first.json()
+        s = second.json()
+        for k in ("total_users", "total_courses", "total_lectures",
+                  "total_sessions", "total_renders"):
+            assert f[k] == s[k]
+
+
+@pytest.mark.asyncio
+async def test_admin_stats_falls_through_when_redis_broken(client, admin):
+    """Redis get() 실패 시 fresh 조회로 폴백 — 엔드포인트가 죽으면 안 됨."""
+    from app.api.v1 import admin as admin_api
+
+    class _BrokenRedis:
+        async def get(self, key):
+            raise RuntimeError("redis down")
+
+        async def set(self, key, value, ex=None):
+            raise RuntimeError("redis down")
+
+    with patch.object(admin_api, "get_redis", return_value=_BrokenRedis()):
+        resp = await client.get("/api/v1/admin/stats", headers=make_auth_header(admin))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("_cached") is not True
+    assert "total_users" in data
 
 
 # ── GET /api/v1/admin/users ──────────────────────────────────────────────────
