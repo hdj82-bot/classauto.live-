@@ -100,7 +100,7 @@ async def test_elevenlabs_retries_on_429():
     mock_resp_200.headers = httpx.Headers({})
 
     with patch("app.services.pipeline.tts.httpx.AsyncClient") as mock_cls, \
-         patch("app.services.pipeline.tts.asyncio.sleep", new_callable=AsyncMock):
+         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
         mock_client = AsyncMock()
         mock_client.post.side_effect = [mock_resp_429, mock_resp_200]
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -120,7 +120,7 @@ async def test_elevenlabs_max_retries_exceeded():
     mock_resp.headers = httpx.Headers({})
 
     with patch("app.services.pipeline.tts.httpx.AsyncClient") as mock_cls, \
-         patch("app.services.pipeline.tts.asyncio.sleep", new_callable=AsyncMock):
+         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
         mock_client = AsyncMock()
         mock_client.post.return_value = mock_resp
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -135,7 +135,7 @@ async def test_elevenlabs_max_retries_exceeded():
 @pytest.mark.asyncio
 async def test_elevenlabs_timeout_retries():
     with patch("app.services.pipeline.tts.httpx.AsyncClient") as mock_cls, \
-         patch("app.services.pipeline.tts.asyncio.sleep", new_callable=AsyncMock):
+         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
         mock_client = AsyncMock()
         mock_client.post.side_effect = httpx.TimeoutException("timeout")
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)

@@ -11,10 +11,30 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.retry import retry_external
 from app.models.question import AssessmentType, Question
 from app.models.session import LearningSession, SessionStatus
 
 logger = logging.getLogger(__name__)
+
+# Claude SDK 의 일시적 오류만 재시도. 4xx(BadRequestError 등)는 즉시 raise.
+_CLAUDE_RETRY_ON = (
+    anthropic.APIConnectionError,
+    anthropic.APITimeoutError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+)
+
+
+@retry_external(label="claude.questions.generate", extra_retry_on=_CLAUDE_RETRY_ON)
+def _claude_generate_questions(client: anthropic.Anthropic, user_prompt: str):
+    return client.messages.create(
+        model="claude-opus-4-6",
+        max_tokens=8192,
+        thinking={"type": "adaptive"},
+        system=_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
 
 
 # ── Claude API 프롬프트 ────────────────────────────────────────────────────────
@@ -100,22 +120,14 @@ async def generate_questions(
         s_count = sum(1 for q in all_existing if q.assessment_type == AssessmentType.summative)
         return f_count, s_count
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
 
     try:
-        response = client.messages.create(
-            model="claude-opus-4-6",
-            max_tokens=8192,
-            thinking={"type": "adaptive"},
-            system=_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": _build_user_prompt(
-                        ppt_content, formative_count, summative_count, video_duration_seconds
-                    ),
-                }
-            ],
+        response = _claude_generate_questions(
+            client,
+            _build_user_prompt(
+                ppt_content, formative_count, summative_count, video_duration_seconds,
+            ),
         )
     except anthropic.APIError as exc:
         logger.error("Claude API 호출 실패: %s", exc)

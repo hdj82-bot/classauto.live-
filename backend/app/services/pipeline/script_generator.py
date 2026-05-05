@@ -8,10 +8,22 @@ from pathlib import Path
 import anthropic
 
 from app.core.config import settings
+from app.core.retry import retry_external
 from app.services.pipeline.parser import encode_image_base64
 from app.services.pipeline.schemas import SlideContent, SlideScript
 
 logger = logging.getLogger(__name__)
+
+# Claude SDK 자체 retry 와는 별개로, 우리 정책(3회·exp backoff·timeout 30s)을
+# 강제하기 위해 anthropic.APIStatusError(5xx/429) 와 anthropic.APIConnectionError
+# 를 명시적 재시도 대상으로 추가한다. 4xx 영구 오류는 BadRequestError 등으로
+# 별도 분기되어 재시도하지 않는다.
+_RETRY_ON = (
+    anthropic.APIConnectionError,
+    anthropic.APITimeoutError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+)
 
 SYSTEM_PROMPT = """\
 당신은 전문 프레젠테이션 발표 코치입니다.
@@ -28,7 +40,10 @@ SYSTEM_PROMPT = """\
 
 def generate_scripts(slides: list[SlideContent]) -> list[SlideScript]:
     """모든 슬라이드에 대해 발화 스크립트를 생성."""
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    # 명시적 timeout 30s — anthropic SDK 의 with_options 로 호출별 한도 부과.
+    client = anthropic.Anthropic(
+        api_key=settings.ANTHROPIC_API_KEY, timeout=30.0,
+    )
     scripts: list[SlideScript] = []
 
     for slide in slides:
@@ -39,6 +54,7 @@ def generate_scripts(slides: list[SlideContent]) -> list[SlideScript]:
     return scripts
 
 
+@retry_external(label="claude.messages.create", extra_retry_on=_RETRY_ON)
 def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) -> str:
     content_blocks: list[dict] = []
 

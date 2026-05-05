@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Enum as SAEnum, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.db.base import Base
 
@@ -86,3 +86,37 @@ class LearningSession(Base):
 
     user = relationship("User", backref="sessions")
     lecture = relationship("Lecture", back_populates="sessions")
+
+    # ── 상태 전이 강제 (모델 레벨) ────────────────────────────────────────────
+    # 서비스 레이어(session_svc.update_session_status) 외 경로(직접 ORM 할당,
+    # bulk_update_mappings, raw SQL 외 경로 등)에서도 잘못된 전이가 시도되면
+    # SQLAlchemy 의 @validates 훅이 이를 ValueError 로 차단한다.
+
+    @validates("status")
+    def _validate_status_transition(self, _key, new_value):
+        # 인스턴스 새로 만들 때(loader 가 status 설정) 기존 값이 None
+        # → 자유롭게 허용. 정상 전이 검사는 변경(update) 케이스에만 수행.
+        if new_value is None:
+            return new_value
+
+        # str/enum 모두 허용 — 들어온 값을 enum 으로 정규화.
+        try:
+            new_status = (
+                new_value
+                if isinstance(new_value, SessionStatus)
+                else SessionStatus(new_value)
+            )
+        except ValueError as exc:
+            raise ValueError(f"Unknown SessionStatus: {new_value!r}") from exc
+
+        current = self.status
+        if current is None or current == new_status:
+            return new_status
+
+        if not can_transition(current, new_status):
+            allowed = [s.value for s in get_allowed_transitions(current)]
+            raise ValueError(
+                f"세션 상태 전이 불가: {current.value} → {new_status.value}. "
+                f"허용: [{', '.join(allowed) or '없음(terminal)'}]"
+            )
+        return new_status

@@ -1,7 +1,6 @@
 """TTS 서비스 (ElevenLabs primary + Google Cloud TTS fallback)."""
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
@@ -11,12 +10,9 @@ import httpx
 from google.cloud import texttospeech
 
 from app.core.config import settings
+from app.core.retry import RetryableHTTPError, retry_external
 
 logger = logging.getLogger(__name__)
-
-_MAX_RETRIES = 3
-_BASE_DELAY = 2.0
-_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
 class TTSError(Exception):
@@ -48,7 +44,27 @@ async def synthesize(text: str, output_path: Path | None = None) -> TTSResult:
 
 
 async def _elevenlabs_synthesize(text: str) -> TTSResult:
-    """ElevenLabs TTS API 호출 (exponential backoff 재시도 포함)."""
+    """ElevenLabs 호출 wrapper — 재시도 후 도메인 예외(TTSError) 로 변환.
+
+    `_elevenlabs_call_with_retry` 가 통일 재시도 정책(3회·exp backoff)으로
+    호출하고, 5xx/429/timeout 이 max 시도 후에도 실패하면 헬퍼가 raise 한
+    `RetryableHTTPError` / `httpx.HTTPStatusError` / `httpx.TimeoutException`
+    을 모두 `TTSError("최대 재시도 초과")` 로 래핑해 호출부 호환성 유지.
+    """
+    try:
+        return await _elevenlabs_call_with_retry(text)
+    except (RetryableHTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
+        raise TTSError(f"ElevenLabs 최대 재시도 초과: {exc}") from exc
+
+
+@retry_external(label="elevenlabs.synthesize")
+async def _elevenlabs_call_with_retry(text: str) -> TTSResult:
+    """ElevenLabs TTS API 호출.
+
+    `retry_external` 데코레이터가 통일 재시도 정책(3회·exp backoff)을 적용한다.
+    4xx(429 제외) 는 즉시 TTSError 로 raise (재시도 X). 5xx/429/Timeout 만 재시도.
+    timeout 은 ElevenLabs 합성 특성상 120s 유지(긴 문장 처리).
+    """
     logger.info("ElevenLabs TTS 요청: text_length=%d, voice_id=%s", len(text), settings.ELEVENLABS_VOICE_ID)
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{settings.ELEVENLABS_VOICE_ID}"
     headers = {
@@ -62,39 +78,28 @@ async def _elevenlabs_synthesize(text: str) -> TTSResult:
         "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": True},
     }
 
-    last_exc: Exception | None = None
+    start = time.monotonic()
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(url, headers=headers, json=payload)
 
-    for attempt in range(_MAX_RETRIES):
-        try:
-            start = time.monotonic()
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(url, headers=headers, json=payload)
+    if resp.status_code == 200:
+        elapsed = time.monotonic() - start
+        return TTSResult(
+            audio_bytes=resp.content,
+            provider="elevenlabs",
+            duration_seconds=elapsed,
+        )
 
-            if resp.status_code == 200:
-                elapsed = time.monotonic() - start
-                return TTSResult(
-                    audio_bytes=resp.content,
-                    provider="elevenlabs",
-                    duration_seconds=elapsed,
-                )
-
-            if resp.status_code not in _RETRYABLE_STATUS:
-                raise TTSError(f"ElevenLabs API 오류 [{resp.status_code}]: {resp.text}")
-
-            logger.warning(
-                "ElevenLabs API %d (시도 %d/%d)", resp.status_code, attempt + 1, _MAX_RETRIES,
-            )
-            last_exc = TTSError(f"HTTP {resp.status_code}: {resp.text}")
-
-        except httpx.TimeoutException as exc:
-            logger.warning("ElevenLabs 타임아웃 (시도 %d/%d): %s", attempt + 1, _MAX_RETRIES, exc)
-            last_exc = exc
-
-        if attempt < _MAX_RETRIES - 1:
-            delay = _BASE_DELAY * (2 ** attempt)
-            await asyncio.sleep(delay)
-
-    raise TTSError(f"ElevenLabs 최대 재시도 초과: {last_exc}")
+    # retry_external 의 정책과 합치하도록 4xx/5xx 분기:
+    # - 4xx(429 제외): 영구 오류 → TTSError 즉시 raise (데코레이터가 재시도 안 함)
+    # - 5xx/429: httpx.HTTPStatusError 로 띄우면 데코레이터가 재시도
+    if resp.status_code in (429, 500, 502, 503, 504):
+        raise httpx.HTTPStatusError(
+            f"ElevenLabs HTTP {resp.status_code}",
+            request=resp.request,
+            response=resp,
+        )
+    raise TTSError(f"ElevenLabs API 오류 [{resp.status_code}]: {resp.text[:300]}")
 
 
 def _google_tts_synthesize(text: str) -> TTSResult:
