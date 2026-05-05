@@ -130,3 +130,65 @@ def test_before_send_returns_event_even_when_scrub_fails(monkeypatch):
     event = {"request": {"url": "/foo"}, "extra": {"password": "p"}}
     result = sentry_mod._before_send(event, {})
     assert result is event
+
+
+# ── T9: 추가 sensitive 키 ────────────────────────────────────────────────
+
+
+def test_before_send_masks_t9_extra_sensitive_keys():
+    """stripe / heygen webhook signature, jwt, bearer 도 마스킹되어야 한다."""
+    event = {
+        "request": {
+            "url": "/api/v1/webhooks/heygen",
+            "headers": {
+                "stripe-signature": "t=123,v1=abc",
+                "x-heygen-signature": "sha256=abcdef",
+                "Authorization": "Bearer xyz",
+            },
+            "data": {
+                "jwt": "eyJhbGciOi...",
+                "bearer": "raw-token-value",
+                "stripe_signature": "duplicate-form-name",
+            },
+        },
+    }
+    result = sentry_mod._before_send(event, {})
+    h = result["request"]["headers"]
+    assert h["stripe-signature"] == "[Filtered]"
+    assert h["x-heygen-signature"] == "[Filtered]"
+    # Authorization 은 추가 안전망(Bearer [FILTERED]) 또는 deep-scrub [Filtered] 둘 중 하나
+    assert h["Authorization"] in ("[Filtered]", "Bearer [FILTERED]")
+    d = result["request"]["data"]
+    assert d["jwt"] == "[Filtered]"
+    assert d["bearer"] == "[Filtered]"
+    assert d["stripe_signature"] == "[Filtered]"
+
+
+# ── T9: depth limit 회귀 가드 (10 단계 이상 중첩에서도 안전) ──────────────
+
+
+def test_before_send_stops_at_max_depth_without_recursion_error():
+    """10 단계보다 깊은 dict 에서도 RecursionError 없이 반환된다.
+
+    depth 10 까지는 마스킹 적용, 그 이상은 원본 보존(하지만 재귀 종료) — 핵심은 안전성.
+    """
+    # 12 단계 깊이의 password 필드 — 재귀 한도(_MAX_DEPTH=10) 보다 깊다.
+    deep: dict = {"password": "leaf-secret"}
+    for _ in range(12):
+        deep = {"nested": deep}
+
+    event = {"request": {"url": "/x"}, "extra": deep}
+    # 안전하게 반환되어야 한다 (RecursionError 없이).
+    result = sentry_mod._before_send(event, {})
+    assert result is not None
+
+    # 얕은 단계(<= 10) 의 password 는 적어도 한 번 마스킹되어야 한다 — 0~7 단계에 password 를 두자.
+    shallow: dict = {"password": "shallow-secret", "label": "ok"}
+    event2 = {"request": {"url": "/x"}, "extra": {"a": {"b": shallow}}}
+    result2 = sentry_mod._before_send(event2, {})
+    assert result2["extra"]["a"]["b"]["password"] == "[Filtered]"
+
+
+def test_max_depth_constant_is_documented():
+    """T9: depth 한도가 10 으로 유지되는지 회귀 가드."""
+    assert sentry_mod._MAX_DEPTH == 10

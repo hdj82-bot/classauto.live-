@@ -6,8 +6,12 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-# J: Sentry 로 보내기 전 마스킹할 키 (소문자 비교).
+# J/T9: Sentry 로 보내기 전 마스킹할 키 (소문자 비교).
 # request body / response body / breadcrumbs / extras 어디든 등장 가능.
+# T9 추가:
+#   - stripe-signature / x-heygen-signature: 외부 webhook HMAC 헤더
+#   - jwt: JWT 페이로드 / 토큰 변형
+#   - bearer: "Bearer <token>" 식의 raw 토큰 필드
 _SENSITIVE_KEYS = frozenset({
     "email",
     "password",
@@ -18,9 +22,20 @@ _SENSITIVE_KEYS = frozenset({
     "apikey",
     "refresh_token",
     "access_token",
+    # T9 확장
+    "jwt",
+    "bearer",
+    "stripe_signature",
+    "stripe-signature",
+    "x-heygen-signature",
+    "x_heygen_signature",
+    "heygen_signature",
 })
 
 _FILTERED = "[Filtered]"
+# T9: 재귀 한도 — Sentry event 가 self-referential / 깊게 중첩된 경우에도 안전.
+# 10 이면 실제 Sentry event 모양(보통 depth ≤ 6)을 충분히 커버하면서, 악성/순환 구조에서
+# 무한 재귀를 막는다.
 _MAX_DEPTH = 10
 
 
