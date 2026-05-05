@@ -13,7 +13,7 @@ psycopg2-binary>=2.9.9
 pgvector>=0.3.6
 
 # Redis / Celery
-redis>=5.0.0
+redis>=7.4.0
 celery[redis]>=5.4.0
 
 # Auth
