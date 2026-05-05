@@ -45,8 +45,8 @@ export default function Header() {
             onChange={handleLocaleChange}
             className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-600 outline-none focus:border-indigo-500"
           >
-            <option value="ko">한국어</option>
-            <option value="en">English</option>
+            <option value="ko">{t("language.ko")}</option>
+            <option value="en">{t("language.en")}</option>
           </select>
 
           {user && (

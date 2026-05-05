@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { useToast } from "@/components/ui/Toast";
+import { useI18n } from "@/contexts/I18nContext";
 
 interface UserItem {
   id: string;
@@ -18,6 +20,8 @@ interface UserItem {
 const ROLES = ["professor", "student", "admin"];
 
 export default function AdminUsersPage() {
+  const { t } = useI18n();
+  const { toast } = useToast();
   const [users, setUsers] = useState<UserItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -37,7 +41,7 @@ export default function AdminUsersPage() {
         setTotal(data.total);
         setError(null);
       } catch {
-        if (!cancelled) setError("사용자 목록을 불러올 수 없습니다.");
+        if (!cancelled) setError(t("admin.userLoadError"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -45,7 +49,7 @@ export default function AdminUsersPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, roleFilter]);
+  }, [page, roleFilter, t]);
 
   const handleRoleChange = async (userId: string, newRole: string) => {
     try {
@@ -55,8 +59,9 @@ export default function AdminUsersPage() {
       setUsers((prev) =>
         prev.map((u) => (u.id === userId ? { ...u, role: newRole } : u))
       );
+      toast(t("admin.userRoleChanged"), "success");
     } catch {
-      alert("역할 변경에 실패했습니다.");
+      toast(t("admin.userRoleChangeError"), "error");
     }
   };
 
@@ -70,8 +75,9 @@ export default function AdminUsersPage() {
           u.id === userId ? { ...u, is_active: !currentActive } : u
         )
       );
+      toast(t("admin.userActiveChanged"), "success");
     } catch {
-      alert("상태 변��에 실패했습니다.");
+      toast(t("admin.userActiveChangeError"), "error");
     }
   };
 
@@ -79,25 +85,27 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">사용자 관리</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">{t("admin.users")}</h1>
 
       {/* 필터 */}
       <div className="mb-4 flex items-center gap-4">
+        <label htmlFor="role-filter" className="sr-only">{t("admin.userColRole")}</label>
         <select
+          id="role-filter"
           value={roleFilter}
           onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
           className="border rounded-lg px-3 py-2 text-sm"
         >
-          <option value="">전체 역할</option>
-          <option value="professor">교수자</option>
-          <option value="student">학습자</option>
-          <option value="admin">관리자</option>
+          <option value="">{t("admin.filterRoleAll")}</option>
+          <option value="professor">{t("admin.filterRoleProfessor")}</option>
+          <option value="student">{t("admin.filterRoleStudent")}</option>
+          <option value="admin">{t("admin.filterRoleAdmin")}</option>
         </select>
-        <span className="text-sm text-gray-500">총 {total}명</span>
+        <span className="text-sm text-gray-500">{t("admin.totalCount", { count: total })}</span>
       </div>
 
-      {loading && <LoadingSpinner fullScreen={false} label="로딩 중..." />}
-      {error && <p className="text-red-600">{error}</p>}
+      {loading && <LoadingSpinner fullScreen={false} label={t("admin.loadingLabel")} />}
+      {error && <p className="text-red-600" role="alert">{error}</p>}
 
       {!loading && !error && (
         <>
@@ -105,12 +113,12 @@ export default function AdminUsersPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-left">
                 <tr>
-                  <th className="px-4 py-3 font-medium text-gray-600">이름</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">이메일</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">역할</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">소속</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">상태</th>
-                  <th className="px-4 py-3 font-medium text-gray-600">작업</th>
+                  <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColName")}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColEmail")}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColRole")}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColAffiliation")}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColStatus")}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColAction")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -119,7 +127,9 @@ export default function AdminUsersPage() {
                     <td className="px-4 py-3 font-medium">{user.name}</td>
                     <td className="px-4 py-3 text-gray-600">{user.email}</td>
                     <td className="px-4 py-3">
+                      <label htmlFor={`role-${user.id}`} className="sr-only">{t("admin.userColRole")}</label>
                       <select
+                        id={`role-${user.id}`}
                         value={user.role}
                         onChange={(e) => handleRoleChange(user.id, e.target.value)}
                         className="border rounded px-2 py-1 text-xs"
@@ -136,7 +146,7 @@ export default function AdminUsersPage() {
                       <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
                         user.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
                       }`}>
-                        {user.is_active ? "활성" : "비활성"}
+                        {user.is_active ? t("admin.userActive") : t("admin.userInactive")}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -144,7 +154,7 @@ export default function AdminUsersPage() {
                         onClick={() => handleToggleActive(user.id, user.is_active)}
                         className="text-xs text-indigo-600 hover:underline"
                       >
-                        {user.is_active ? "비활성화" : "활성화"}
+                        {user.is_active ? t("admin.userDeactivate") : t("admin.userActivate")}
                       </button>
                     </td>
                   </tr>
@@ -161,7 +171,7 @@ export default function AdminUsersPage() {
                 disabled={page === 1}
                 className="px-3 py-1 border rounded text-sm disabled:opacity-50"
               >
-                이전
+                {t("common.previous")}
               </button>
               <span className="px-3 py-1 text-sm text-gray-600">
                 {page} / {totalPages}
@@ -171,7 +181,7 @@ export default function AdminUsersPage() {
                 disabled={page === totalPages}
                 className="px-3 py-1 border rounded text-sm disabled:opacity-50"
               >
-                다음
+                {t("common.next")}
               </button>
             </div>
           )}

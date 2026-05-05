@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { useI18n } from "@/contexts/I18nContext";
 
 interface SystemData {
   db_size_mb: number | null;
@@ -12,6 +13,7 @@ interface SystemData {
 }
 
 export default function AdminSystemPage() {
+  const { t } = useI18n();
   const [data, setData] = useState<SystemData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,15 +27,14 @@ export default function AdminSystemPage() {
       setError(null);
     } catch {
       if (cancelledRef.current) return;
-      setError("시스템 상태를 불러올 수 없습니다.");
+      setError(t("admin.systemLoadError"));
     } finally {
       if (!cancelledRef.current) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     cancelledRef.current = false;
-    // 초기 로드를 마이크로태스크로 지연시켜 이펙트 본문에서의 동기적 setState를 피함.
     void Promise.resolve().then(() => {
       if (!cancelledRef.current) void fetchData();
     });
@@ -44,30 +45,30 @@ export default function AdminSystemPage() {
     };
   }, [fetchData]);
 
-  if (loading) return <LoadingSpinner fullScreen label="시스템 상태 로딩 중..." />;
-  if (error) return <div className="text-red-600 text-center py-20">{error}</div>;
+  if (loading) return <LoadingSpinner fullScreen label={t("admin.systemLoadingLabel")} />;
+  if (error) return <div className="text-red-600 text-center py-20" role="alert">{error}</div>;
   if (!data) return null;
 
   const items = [
     {
-      title: "PostgreSQL",
+      title: t("admin.systemPostgres"),
       metrics: [
-        { label: "데이터베이스 크기", value: data.db_size_mb != null ? `${data.db_size_mb} MB` : "N/A" },
+        { label: t("admin.systemDbSize"), value: data.db_size_mb != null ? `${data.db_size_mb} MB` : "N/A" },
       ],
       status: data.db_size_mb != null ? "online" : "unknown",
     },
     {
-      title: "Redis",
+      title: t("admin.systemRedis"),
       metrics: [
-        { label: "사용 메모리", value: data.redis_used_memory_mb != null ? `${data.redis_used_memory_mb} MB` : "N/A" },
-        { label: "연결된 클라이언트", value: data.redis_connected_clients != null ? `${data.redis_connected_clients}` : "N/A" },
+        { label: t("admin.systemRedisMemory"), value: data.redis_used_memory_mb != null ? `${data.redis_used_memory_mb} MB` : "N/A" },
+        { label: t("admin.systemRedisClients"), value: data.redis_connected_clients != null ? `${data.redis_connected_clients}` : "N/A" },
       ],
       status: data.redis_used_memory_mb != null ? "online" : "unknown",
     },
     {
-      title: "Celery",
+      title: t("admin.systemCelery"),
       metrics: [
-        { label: "대기열 길이", value: data.celery_queue_length != null ? `${data.celery_queue_length}` : "N/A" },
+        { label: t("admin.systemQueueLen"), value: data.celery_queue_length != null ? `${data.celery_queue_length}` : "N/A" },
       ],
       status: data.celery_queue_length != null ? "online" : "unknown",
     },
@@ -76,12 +77,12 @@ export default function AdminSystemPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">시스템 ���니터링</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t("admin.systemTitle")}</h1>
         <button
           onClick={fetchData}
           className="text-sm text-indigo-600 hover:underline"
         >
-          새로고침
+          {t("admin.systemRefresh")}
         </button>
       </div>
 
@@ -108,7 +109,7 @@ export default function AdminSystemPage() {
         ))}
       </div>
 
-      <p className="text-xs text-gray-400 mt-6 text-center">30초마다 자동 갱신됩니다.</p>
+      <p className="text-xs text-gray-400 mt-6 text-center">{t("admin.systemAutoRefresh")}</p>
     </div>
   );
 }
