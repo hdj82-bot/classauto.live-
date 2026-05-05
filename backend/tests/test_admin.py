@@ -7,7 +7,6 @@
   GET  /api/v1/admin/costs
   GET  /api/v1/admin/system
 """
-import json
 import uuid
 from unittest.mock import patch
 
