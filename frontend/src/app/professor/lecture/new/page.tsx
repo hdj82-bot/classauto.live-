@@ -86,6 +86,9 @@ export default function NewLecturePage() {
 
         <div>
           <label htmlFor="ppt-upload" className="block text-sm font-medium text-gray-700 mb-1.5">{t("professor.pptFile")}</label>
+          {/* N4 (round 4): 드래그/드롭 영역은 div 가 필요하지만 Space 가 페이지 스크롤을
+              일으키지 않도록 preventDefault, focus-visible ring 추가. label htmlFor 가
+              내부 input 을 가리키고 있어 키보드 사용자는 label 클릭으로도 진입 가능. */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -93,10 +96,15 @@ export default function NewLecturePage() {
             onClick={() => fileInputRef.current?.click()}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
             aria-label={t("professor.pptDragDrop")}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition ${
-              dragOver ? "border-indigo-500 bg-indigo-50" : "border-gray-300 hover:border-gray-400"
+            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition ${
+              dragOver ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40" : "border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
             }`}
           >
             {file ? (

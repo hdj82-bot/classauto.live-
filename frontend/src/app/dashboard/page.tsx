@@ -89,36 +89,37 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-8">
             {courses.map((course) => (
-              <section key={course.id} className="bg-white rounded-2xl border border-gray-200 p-6" aria-labelledby={`course-${course.id}`}>
-                <h2 id={`course-${course.id}`} className="text-lg font-semibold text-gray-900 mb-1">{course.title}</h2>
-                {course.description && <p className="text-sm text-gray-500 mb-4">{course.description}</p>}
+              <section key={course.id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6" aria-labelledby={`course-${course.id}`}>
+                <h2 id={`course-${course.id}`} className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">{course.title}</h2>
+                {course.description && <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{course.description}</p>}
                 {(lectures[course.id] || []).length === 0 ? (
-                  <p className="text-sm text-gray-400 py-4">{t("dashboard.noLectures")}</p>
+                  <p className="text-sm text-gray-400 dark:text-gray-500 py-4">{t("dashboard.noLectures")}</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {(lectures[course.id] || []).map((lec) => (
-                      <article key={lec.id}
+                      // N4 (round 4): role="button" + onKeyDown 패턴 → 진짜 <button> 으로 교체.
+                      // 브라우저가 Enter/Space/Tab focus 를 모두 기본 처리하므로 수동 onKeyDown 불필요.
+                      <button
+                        key={lec.id}
+                        type="button"
                         onClick={() => user.role === "student" ? router.push(`/lecture/${lec.slug}`) : router.push(`/professor/lecture/${lec.id}`)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); user.role === "student" ? router.push(`/lecture/${lec.slug}`) : router.push(`/professor/lecture/${lec.id}`); } }}
                         aria-label={`${lec.title} - ${lec.is_published ? t("common.published") : t("common.unpublished")}`}
-                        className="border border-gray-200 rounded-xl p-4 hover:border-indigo-300 hover:shadow-sm transition cursor-pointer group">
-                        <div className="aspect-video bg-gray-100 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                        className="text-left w-full border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-white dark:bg-gray-900 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition group">
+                        <div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                           {lec.thumbnail_url ? (
                             <img src={lec.thumbnail_url} alt={`${lec.title} thumbnail`} className="w-full h-full object-cover rounded-lg" />
                           ) : (
-                            <svg className="w-10 h-10 text-gray-300 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <svg className="w-10 h-10 text-gray-300 dark:text-gray-600 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
                             </svg>
                           )}
                         </div>
-                        <h3 className="text-sm font-medium text-gray-900 truncate">{lec.title}</h3>
-                        <span className={`mt-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${lec.is_published ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                        <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{lec.title}</h3>
+                        <span className={`mt-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${lec.is_published ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"}`}>
                           <span className={`w-1.5 h-1.5 rounded-full ${lec.is_published ? "bg-green-500" : "bg-gray-400"}`} aria-hidden="true" />
                           {lec.is_published ? t("common.published") : t("common.unpublished")}
                         </span>
-                      </article>
+                      </button>
                     ))}
                   </div>
                 )}
