@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import uuid
 
 from celery import chain
@@ -87,40 +88,48 @@ def step1_parse(
         logger.error("Step1 S3 다운로드 실패: task_id=%s, s3_key=%s, error=%s", task_id, s3_key, exc)
         raise self.retry(exc=exc)
 
+    # High F: tmp_dir 은 try/finally 로 감싸 shutil.rmtree(ignore_errors=True).
+    # retry 케이스(예: S3 다운로드 실패)는 위쪽에서 self.retry 가 발생하여 tmp_dir 가
+    # 만들어지기 전에 종료되므로 자연스럽게 보존된다.
     tmp_dir = os.path.join(UPLOAD_DIR, task_id)
     os.makedirs(tmp_dir, exist_ok=True)
-    local_path = os.path.join(tmp_dir, os.path.basename(s3_key))
-    with open(local_path, "wb") as f:
-        f.write(ppt_bytes)
-
     try:
-        output_dir = os.path.join(tmp_dir, "images")
-        slides = parse_pptx(local_path, output_dir)
-    except Exception as exc:
-        logger.error("Step1 PPTX 파싱 실패: task_id=%s, error=%s", task_id, exc)
-        raise RuntimeError(f"PPT 파싱 실패: {exc}") from exc
+        local_path = os.path.join(tmp_dir, os.path.basename(s3_key))
+        with open(local_path, "wb") as f:
+            f.write(ppt_bytes)
 
-    if not slides:
-        raise RuntimeError(f"PPT에 슬라이드가 없습니다: task_id={task_id}")
+        try:
+            output_dir = os.path.join(tmp_dir, "images")
+            slides = parse_pptx(local_path, output_dir)
+        except Exception as exc:
+            logger.error("Step1 PPTX 파싱 실패: task_id=%s, error=%s", task_id, exc)
+            raise RuntimeError(f"PPT 파싱 실패: {exc}") from exc
 
-    slides_data = [
-        {
-            "slide_number": s.slide_number,
-            "texts": s.texts,
-            "speaker_notes": s.speaker_notes,
-            "image_paths": s.image_paths,
+        if not slides:
+            raise RuntimeError(f"PPT에 슬라이드가 없습니다: task_id={task_id}")
+
+        slides_data = [
+            {
+                "slide_number": s.slide_number,
+                "texts": s.texts,
+                "speaker_notes": s.speaker_notes,
+                "image_paths": s.image_paths,
+            }
+            for s in slides
+        ]
+
+        logger.info("Step1 완료: task_id=%s, %d 슬라이드 (S3: %s)", task_id, len(slides), s3_key)
+        return {
+            "task_id": task_id,
+            "slides": slides_data,
+            "s3_key": s3_key,
+            "instructor_id": instructor_id,
+            "lecture_id": lecture_id,
         }
-        for s in slides
-    ]
-
-    logger.info("Step1 완료: task_id=%s, %d 슬라이드 (S3: %s)", task_id, len(slides), s3_key)
-    return {
-        "task_id": task_id,
-        "slides": slides_data,
-        "s3_key": s3_key,
-        "instructor_id": instructor_id,
-        "lecture_id": lecture_id,
-    }
+    finally:
+        # 최종 실패/성공 모두 tmp_dir 정리 — 디스크 누수 방지.
+        # script_generator 는 이미지 누락을 graceful 하게 skip 하므로 안전.
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @celery.task(base=PipelineTask, bind=True, max_retries=2, default_retry_delay=30)

@@ -255,3 +255,70 @@ async def test_upload_ppt_content_length_pre_check_rejects(
     # httpx 가 Content-Length 를 자동 재계산할 수 있으므로 200 도 허용,
     # 단 명시적으로 큰 값을 받았다면 413 이어야 함.
     assert resp.status_code in (200, 413)
+
+
+# ── High F: 파이프라인 tmp_dir cleanup ─────────────────────────────────────
+
+import io
+import os
+
+from pptx import Presentation
+
+
+def _make_pptx_bytes(slide_titles: list[str]) -> bytes:
+    prs = Presentation()
+    for title in slide_titles:
+        slide_layout = prs.slide_layouts[1]
+        slide = prs.slides.add_slide(slide_layout)
+        slide.shapes.title.text = title
+    buf = io.BytesIO()
+    prs.save(buf)
+    return buf.getvalue()
+
+
+def test_step1_pipeline_cleans_up_tmp_dir_on_success(tmp_path):
+    """step1_parse 가 성공 후 tmp_dir 를 비움 (디스크 누수 방지)."""
+    from app.tasks.pipeline import step1_parse
+
+    pptx_bytes = _make_pptx_bytes(["슬라이드 X"])
+
+    with patch("app.services.pipeline.s3.download_file", return_value=pptx_bytes), \
+         patch("app.tasks.pipeline.UPLOAD_DIR", str(tmp_path)):
+        result = step1_parse.run("task-cleanup-ok", "ppt/lecture/x.pptx")
+
+    assert result["task_id"] == "task-cleanup-ok"
+    # finally 블록에서 tmp_dir 가 제거됐어야 함
+    assert not os.path.exists(os.path.join(str(tmp_path), "task-cleanup-ok"))
+
+
+def test_step1_pipeline_cleans_up_tmp_dir_on_parse_failure(tmp_path):
+    """parse_pptx 가 raise 해도 tmp_dir 는 정리된다 (최종 실패 시 디스크 누수 X)."""
+    from app.tasks.pipeline import step1_parse
+
+    with patch(
+        "app.services.pipeline.s3.download_file", return_value=b"not a real pptx"
+    ), patch("app.tasks.pipeline.UPLOAD_DIR", str(tmp_path)):
+        with pytest.raises(RuntimeError, match="PPT 파싱 실패"):
+            step1_parse.run("task-cleanup-fail", "ppt/lecture/bad.pptx")
+
+    # parse 실패해도 finally 가 tmp_dir 를 정리
+    assert not os.path.exists(os.path.join(str(tmp_path), "task-cleanup-fail"))
+
+
+def test_step1_pipeline_preserves_tmp_dir_on_s3_retry(tmp_path):
+    """S3 다운로드 실패 시 self.retry 가 호출되며, 그 시점에 tmp_dir 는 만들어지지 않아 보존된다.
+
+    eager 호출(.run) 에서 self.retry(exc=...) 는 원본 예외를 다시 던진다.
+    여기서 핵심은 'tmp_dir 가 만들어지기 전 단계에서 종료'되는지 확인.
+    """
+    from app.tasks.pipeline import step1_parse
+
+    with patch(
+        "app.services.pipeline.s3.download_file", side_effect=ConnectionError("s3 down")
+    ), patch("app.tasks.pipeline.UPLOAD_DIR", str(tmp_path)):
+        # Celery eager 모드: self.retry(exc=exc) 가 원본 예외를 raise
+        with pytest.raises((ConnectionError, Exception)):
+            step1_parse.run("task-cleanup-retry", "ppt/lecture/x.pptx")
+
+    # retry 분기는 tmp_dir 생성 이전에 도달 — 디렉토리가 아예 만들어지지 않음
+    assert not os.path.exists(os.path.join(str(tmp_path), "task-cleanup-retry"))
