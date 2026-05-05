@@ -32,4 +32,20 @@ class Lecture(Base):
     )
 
     course = relationship("Course", back_populates="lectures")
-    sessions = relationship("LearningSession", back_populates="lecture", cascade="all, delete-orphan")
+    # T7: ORM 레벨 cascade — DB FK 의 ondelete=CASCADE 와 함께, 세션이 child 를 로드한
+    # 상태에서 lecture 가 삭제될 때 child rows 도 일관되게 정리되도록 명시.
+    sessions = relationship(
+        "LearningSession", back_populates="lecture", cascade="all, delete-orphan"
+    )
+    questions = relationship(
+        "Question",
+        back_populates="lecture",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    video_renders = relationship(
+        "VideoRender",
+        back_populates="lecture",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
