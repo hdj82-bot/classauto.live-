@@ -78,16 +78,16 @@ async def test_create_checkout_session_passes_idempotency_keys(db, professor):
         captured["client_reference_id"] = kwargs["client_reference_id"]
         return _FakeSession()
 
+    # _PLAN_TO_PRICE 는 import 시점에 settings 를 한 번만 읽으므로
+    # 후행 settings patch 로는 못 바꾼다. 모듈 dict 자체를 교체해 우회.
+    fake_price_map = {"BASIC": "price_basic_test", "PRO": "price_pro_test"}
+
     with patch("app.services.payment.stripe.Customer.create", side_effect=fake_customer_create), \
          patch(
              "app.services.payment.stripe.checkout.Session.create",
              side_effect=fake_session_create,
          ), \
-         patch.object(
-             __import__("app.core.config", fromlist=["settings"]).settings,
-             "STRIPE_PRICE_BASIC",
-             "price_basic_test",
-         ):
+         patch("app.services.payment._PLAN_TO_PRICE", fake_price_map):
         url = await create_checkout_session(db, professor.id, professor.email, "BASIC")
 
     assert url == "https://checkout.stripe.com/pay/cs_test"
