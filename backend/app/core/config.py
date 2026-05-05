@@ -148,7 +148,12 @@ def _validate_settings() -> None:
         if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
             raise RuntimeError("프로덕션에서 Google OAuth 설정은 필수입니다.")
 
-        missing = [k for k in _REQUIRED_IN_PROD if not getattr(settings, k)]
+        # 빈 문자열·공백만 들어간 값도 누락으로 간주 — pydantic 의 default ""
+        # 가 환경변수로 무심코 덮어써졌을 때 production 에서 사일런트 통과 차단.
+        missing = [
+            k for k in _REQUIRED_IN_PROD
+            if not (getattr(settings, k) or "").strip()
+        ]
         if missing:
             raise RuntimeError(f"프로덕션 필수 환경변수 누락: {missing}")
 
