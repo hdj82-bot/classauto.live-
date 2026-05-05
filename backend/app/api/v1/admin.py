@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import extract, func, select, text
@@ -203,32 +204,42 @@ async def delete_user(
 # ── GET /api/v1/admin/costs ──────────────────────────────────────────────────
 
 
+# T6: 비용 집계는 최근 1년만 — 행이 누적될수록 GROUP BY 스캔이 무거워지므로
+# 시간 윈도우로 입력 행 수 자체를 제한한다. 0014 의 ix_render_cost_logs_created_at
+# 인덱스가 WHERE created_at >= start_date 의 인덱스 스캔을 백킹.
+COSTS_WINDOW_DAYS = 365
+
+
 @router.get("/costs")
 async def get_costs(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """전체 API 비용 집계 (서비스별, 최근 12개월).
+    """전체 API 비용 집계 (서비스별/월별, 최근 12개월).
 
-    I: 월별 집계는 ``created_at`` 인덱스(창 2 의 alembic 0013 에서 추가)에 의존.
-    인덱스 부재 시 풀 스캔 — 행이 많아지면 비용 폭증. limit=12 로 결과 행을 제한했지만
-    GROUP BY 자체는 전체 스캔이 필요하므로 인덱스가 필수.
+    T6: ``WHERE created_at >= today - 365d`` 로 입력 행 수를 제한.
+    월별/서비스별 집계 모두 동일 윈도우 적용 — by_service 가 by_month 합과 일치하도록.
+    인덱스 ``ix_render_cost_logs_created_at`` (0014) 가 시간 필터 핫 패스를 백킹.
     """
-    # 서비스별 합계
+    start_date = datetime.now(timezone.utc) - timedelta(days=COSTS_WINDOW_DAYS)
+
+    # 서비스별 합계 — 최근 12개월 윈도우
     by_service_stmt = (
         select(RenderCostLog.service, func.sum(RenderCostLog.cost_usd))
+        .where(RenderCostLog.created_at >= start_date)
         .group_by(RenderCostLog.service)
         .order_by(func.sum(RenderCostLog.cost_usd).desc())
     )
     by_service_rows = (await db.execute(by_service_stmt)).all()
 
-    # 월별 합계 — 최근 12개월 (인덱스: render_cost_logs(created_at) — 0013)
+    # 월별 합계 — 최근 12개월 (인덱스: render_cost_logs(created_at) — 0014)
     by_month_stmt = (
         select(
             extract("year", RenderCostLog.created_at).label("year"),
             extract("month", RenderCostLog.created_at).label("month"),
             func.sum(RenderCostLog.cost_usd).label("total"),
         )
+        .where(RenderCostLog.created_at >= start_date)
         .group_by("year", "month")
         .order_by(text("year DESC, month DESC"))
         .limit(12)
@@ -239,6 +250,7 @@ async def get_costs(
 
     return {
         "total_cost_usd": round(total_cost, 4),
+        "window_days": COSTS_WINDOW_DAYS,
         "by_service": [
             {"service": row[0], "cost_usd": round(row[1] or 0, 4)}
             for row in by_service_rows
