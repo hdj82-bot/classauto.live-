@@ -1,0 +1,105 @@
+# Dependabot 설정 — round 1 PR #47 본문에 명시한 권장 후속.
+# 베이스 이미지 / Python / npm / Actions 의 보안 패치를 매주 자동 PR.
+#
+# 모든 ecosystem 은 매주 월요일 09:00 KST(=00:00 UTC) 검사. 한 번에 PR 폭주를
+# 막기 위해 open-pull-requests-limit 은 작게(5) 둔다.
+version: 2
+
+updates:
+  # ── Python: backend/requirements.txt ─────────────────────────────────────
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "00:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - backend
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    groups:
+      # 마이너/패치 보안 업데이트는 한 PR 로 묶어서 노이즈 감소.
+      backend-minor-patch:
+        update-types:
+          - minor
+          - patch
+
+  # ── npm: frontend/ ───────────────────────────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "00:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    # Next.js / React 같은 메이저는 별도 검토. 마이너/패치만 그룹화.
+    groups:
+      frontend-minor-patch:
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Major 점프(Next/React/Vitest 등)는 수동 검토 — 호환성 깨짐 빈번.
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+
+  # ── GitHub Actions: .github/workflows/* ──────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "00:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: "chore(ci)"
+
+  # ── Docker base images ───────────────────────────────────────────────────
+  # round 1 에서 핀 한 python:3.12.7-slim-bookworm / node:20.18.1-alpine3.20
+  # 의 패치 업데이트가 나오면 자동 PR.
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "00:00"
+      timezone: UTC
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "00:00"
+      timezone: UTC
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - docker
+    commit-message:
+      prefix: "chore(docker)"

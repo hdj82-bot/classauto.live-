@@ -3,8 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+import { startGoogleLogin } from "@/lib/auth";
 
 export default function LoginContent() {
   const searchParams = useSearchParams();
@@ -21,7 +20,8 @@ export default function LoginContent() {
 
   const handleGoogleLogin = () => {
     setIsRedirecting(true);
-    window.location.href = `${BACKEND_URL}/api/auth/google?role=${role}`;
+    // helper 가 URL 빌더 + same-origin 검증 + OAuth state 발급 + redirect 까지 처리.
+    startGoogleLogin(role);
   };
 
   return (
