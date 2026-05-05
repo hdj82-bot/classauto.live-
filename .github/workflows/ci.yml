@@ -186,7 +186,7 @@ jobs:
       # CRITICAL/HIGH 취약점이 있으면 push 전에 차단. unfixed 는 무시 (베이스 이미지
       # 패치가 아직 안 나온 항목까지 막으면 빌드가 막힘).
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:scan-${{ github.sha }}
           format: table
