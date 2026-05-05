@@ -27,6 +27,12 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # redis-py v6/7 major 는 celery[redis] 5.x 가 redis<6.0 을 요구해
+      # ResolutionImpossible (round 3 dependabot PR #71 close 이력).
+      # celery 가 redis 7.x 호환 release 낼 때까지 보류.
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
 
   # ── npm: frontend/ ───────────────────────────────────────────────────────
   - package-ecosystem: npm
@@ -56,6 +62,13 @@ updates:
       - dependency-name: "react"
         update-types: ["version-update:semver-major"]
       - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      # eslint v10 은 contextOrFilename API 가 바뀌어 eslint-config-next 와
+      # 비호환 (round 3 dependabot PR #75 close 이력). 호환 release 까지 보류.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # typescript v6 은 ts-jest·type-defs 호환성 미검증 (PR #76 close 이력).
+      - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 
   # ── GitHub Actions: .github/workflows/* ──────────────────────────────────

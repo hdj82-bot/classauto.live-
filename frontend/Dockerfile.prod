@@ -23,7 +23,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
+# Alpine OS 패키지 패치 적용 — Trivy CRITICAL/HIGH CVE (openssl·busybox 등) 대응.
+# 최종 runtime 이미지에만 적용해도 스캔 대상은 final image 이므로 충분.
+RUN apk update && apk upgrade --no-cache \
+    && addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./

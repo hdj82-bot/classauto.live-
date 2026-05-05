@@ -3,8 +3,13 @@ FROM python:3.12.7-slim-bookworm AS builder
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev && rm -rf /var/lib/apt/lists/*
+# apt-get upgrade 로 base 이미지 빌드 시점 이후의 OS 패치(openssl/sqlite/gpgv 등)
+# 를 적용한다. 이게 없으면 Trivy CRITICAL/HIGH CVE 가 누적되어 CI 가 차단됨.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+       gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
@@ -14,8 +19,12 @@ FROM python:3.12.7-slim-bookworm
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 postgresql-client curl && rm -rf /var/lib/apt/lists/* \
+# runtime 단도 동일하게 OS 패치 적용 (Trivy 검사 대상은 최종 image 이므로 이쪽이 필수).
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+       libpq5 postgresql-client curl \
+    && rm -rf /var/lib/apt/lists/* \
     && adduser --system --no-create-home appuser
 
 COPY --from=builder /install /usr/local
