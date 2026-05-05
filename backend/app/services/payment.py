@@ -41,13 +41,27 @@ class PaymentError(Exception):
 
 
 def _build_client_reference_id(user_id: uuid.UUID, plan: str) -> str:
-    """`{user_id}:{plan}:{YYYYMMDD}` 형식의 idempotency 키.
+    """`{user_id}:{plan}:{YYYYMMDD}` 형식. 웹훅에서 사용자 식별 보조용.
 
-    동일 user/plan/날짜 조합은 Stripe 측에서 동일 client_reference_id로 인식되어
-    같은 사용자가 같은 날 같은 플랜으로 여러 번 결제 시도해도 중복 활성화를 줄인다.
+    Stripe 측에 metadata 처럼 따라다니지만 멱등을 보장하지는 않는다.
+    실제 API 멱등은 `_idempotency_key` 가 담당한다.
     """
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
     return f"{user_id}:{plan}:{today}"
+
+
+def _idempotency_key(prefix: str, user_id: uuid.UUID, *parts: str) -> str:
+    """Stripe `Idempotency-Key` 헤더 값 생성.
+
+    동일 키로 들어오는 두 번째 요청은 24시간 동안 첫 번째 응답을 그대로 반환하므로
+    네트워크 재시도·중복 클릭으로 인한 다중 customer/checkout 생성을 차단한다.
+    `prefix:{user_id}:{...parts}` 구조이며 날짜를 함께 묶어 일자별 분리.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    suffix = ":".join(parts) if parts else ""
+    if suffix:
+        return f"{prefix}:{user_id}:{suffix}:{today}"
+    return f"{prefix}:{user_id}:{today}"
 
 
 async def create_checkout_session(
@@ -62,11 +76,12 @@ async def create_checkout_session(
 
     sub = await get_or_create_subscription(db, user_id)
 
-    # Stripe Customer 생성 또는 재사용
+    # Stripe Customer 생성 또는 재사용 (Idempotency-Key 로 중복 생성 방지)
     if not sub.stripe_customer_id:
         customer = stripe.Customer.create(
             email=user_email,
             metadata={"user_id": str(user_id)},
+            idempotency_key=_idempotency_key("customer", user_id),
         )
         sub.stripe_customer_id = customer.id
         await db.flush()
@@ -74,6 +89,9 @@ async def create_checkout_session(
         customer = stripe.Customer.retrieve(sub.stripe_customer_id)
 
     client_reference_id = _build_client_reference_id(user_id, plan)
+    # 같은 user/plan/날짜 조합 재요청은 24h 동안 같은 Checkout 세션 재사용.
+    # 네트워크 재시도·중복 클릭이 다중 세션을 만들지 않도록 차단.
+    idem = _idempotency_key("checkout", user_id, plan)
     session = stripe.checkout.Session.create(
         customer=sub.stripe_customer_id,
         mode="subscription",
@@ -84,11 +102,12 @@ async def create_checkout_session(
         # metadata.plan은 더 이상 신뢰하지 않는다(웹훅에서 price_id로 결정).
         # user_id만 client_reference_id 보조용으로 남긴다.
         metadata={"user_id": str(user_id)},
+        idempotency_key=idem,
     )
 
     logger.info(
-        "Stripe Checkout 세션 생성: user_id=%s, plan=%s, ref=%s",
-        user_id, plan, client_reference_id,
+        "Stripe Checkout 세션 생성: user_id=%s, plan=%s, ref=%s, idem=%s",
+        user_id, plan, client_reference_id, idem,
     )
     return session.url
 
