@@ -18,7 +18,7 @@ import functools
 import logging
 import random
 import time
-from typing import Any, Awaitable, Callable, Iterable, TypeVar
+from typing import Any, Callable, Iterable, TypeVar
 
 import httpx
 

@@ -45,7 +45,7 @@ async def test_request_with_retry_retries_on_500():
     mock_resp_200.status_code = 200
 
     with patch("app.services.pipeline.heygen.httpx.AsyncClient") as mock_client_cls, \
-         patch("app.services.pipeline.heygen.asyncio.sleep", new_callable=AsyncMock):
+         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
         mock_client = AsyncMock()
         mock_client.request.side_effect = [mock_resp_500, mock_resp_200]
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -64,7 +64,7 @@ async def test_request_with_retry_max_retries_exceeded():
     mock_resp.text = "Service Unavailable"
 
     with patch("app.services.pipeline.heygen.httpx.AsyncClient") as mock_client_cls, \
-         patch("app.services.pipeline.heygen.asyncio.sleep", new_callable=AsyncMock):
+         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
         mock_client = AsyncMock()
         mock_client.request.return_value = mock_resp
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
@@ -77,7 +77,7 @@ async def test_request_with_retry_max_retries_exceeded():
 @pytest.mark.asyncio
 async def test_request_with_retry_timeout():
     with patch("app.services.pipeline.heygen.httpx.AsyncClient") as mock_client_cls, \
-         patch("app.services.pipeline.heygen.asyncio.sleep", new_callable=AsyncMock):
+         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
         mock_client = AsyncMock()
         mock_client.request.side_effect = httpx.TimeoutException("timeout")
         mock_client_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
