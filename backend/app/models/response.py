@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -10,6 +10,10 @@ from app.db.base import Base
 class Response(Base):
     """학습자의 문항 응답."""
     __tablename__ = "responses"
+    __table_args__ = (
+        # T5: 같은 세션에서 동일 문제 중복 제출 방지 + 조회 색인.
+        UniqueConstraint("session_id", "question_id", name="uq_responses_session_question"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(

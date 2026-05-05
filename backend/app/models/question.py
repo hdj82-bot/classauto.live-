@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Integer, Text, func
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, ForeignKey, Index, Integer, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,6 +27,10 @@ class Difficulty(str, enum.Enum):
 
 class Question(Base):
     __tablename__ = "questions"
+    __table_args__ = (
+        # T5: get_questions_for_session 의 (lecture_id, assessment_type) 핫 패스 색인.
+        Index("ix_questions_lecture_assessment", "lecture_id", "assessment_type"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     lecture_id: Mapped[uuid.UUID] = mapped_column(
@@ -54,5 +58,7 @@ class Question(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    lecture = relationship("Lecture", backref="questions")
+    # T7: Lecture.questions 가 cascade="all, delete-orphan" 으로 명시되므로
+    # backref 대신 back_populates 로 양쪽 명시 (이중 등록 방지).
+    lecture = relationship("Lecture", back_populates="questions")
     responses = relationship("Response", back_populates="question", cascade="all, delete-orphan")
