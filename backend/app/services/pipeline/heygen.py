@@ -2,18 +2,14 @@
 from __future__ import annotations
 
 import logging
-import asyncio
 from typing import Any
 
 import httpx
 
 from app.core.config import settings
+from app.core.retry import request_with_retry
 
 logger = logging.getLogger(__name__)
-
-_RETRYABLE_STATUS = {429, 500, 502, 503, 504}
-_MAX_RETRIES = 3
-_BASE_DELAY = 2.0  # 초
 
 
 class HeyGenError(Exception):
@@ -37,35 +33,28 @@ async def _request_with_retry(
     headers: dict | None = None,
     json: dict | None = None,
     params: dict | None = None,
-    timeout: float = 60.0,
+    timeout: float = 30.0,
 ) -> httpx.Response:
-    """Exponential backoff 재시도가 포함된 HTTP 요청."""
-    hdrs = headers or _headers()
-    last_exc: Exception | None = None
+    """app.core.retry 의 통일 정책(3회·exp backoff·4xx 즉시 raise) 위임.
 
-    for attempt in range(_MAX_RETRIES):
-        try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                resp = await client.request(method, url, headers=hdrs, json=json, params=params)
-
-            if resp.status_code not in _RETRYABLE_STATUS:
-                return resp
-
-            logger.warning(
-                "HeyGen API %s %s → %d (시도 %d/%d)",
-                method, url, resp.status_code, attempt + 1, _MAX_RETRIES,
-            )
-            last_exc = HeyGenError(f"HTTP {resp.status_code}: {resp.text}")
-
-        except httpx.TimeoutException as exc:
-            logger.warning("HeyGen API 타임아웃 (시도 %d/%d): %s", attempt + 1, _MAX_RETRIES, exc)
-            last_exc = exc
-
-        if attempt < _MAX_RETRIES - 1:
-            delay = _BASE_DELAY * (2 ** attempt)
-            await asyncio.sleep(delay)
-
-    raise HeyGenError(f"HeyGen API 최대 재시도 초과: {last_exc}")
+    이전 구현의 _MAX_RETRIES=3, exp backoff 정책을 그대로 유지하되,
+    4xx(429 제외) 는 retry 헬퍼가 즉시 HTTPStatusError 로 띄우므로
+    호출부에서 명시적으로 처리한다.
+    """
+    try:
+        return await request_with_retry(
+            method,
+            url,
+            headers=headers or _headers(),
+            json=json,
+            params=params,
+            timeout=timeout,
+            label=f"heygen.{method.lower()}",
+        )
+    except httpx.HTTPStatusError as exc:
+        # 4xx(영구 오류)는 retry 대상이 아니므로 응답 그대로 반환해
+        # 기존 호출부의 status_code 분기 코드와 호환을 유지한다.
+        return exc.response
 
 
 # ── 비디오 생성 ──────────────────────────────────────────────────────────────

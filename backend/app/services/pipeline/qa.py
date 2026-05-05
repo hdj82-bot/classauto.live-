@@ -8,9 +8,25 @@ import anthropic
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.retry import retry_external
 from app.services.pipeline.retriever import RetrievalResult, is_in_scope, search_similar_slides
 
 logger = logging.getLogger(__name__)
+
+_CLAUDE_RETRY_ON = (
+    anthropic.APIConnectionError,
+    anthropic.APITimeoutError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+)
+
+
+@retry_external(label="claude.qa.create", extra_retry_on=_CLAUDE_RETRY_ON)
+def _claude_qa_call(client, user_content: str):
+    return client.messages.create(
+        model=settings.QA_MODEL, max_tokens=1024, system=QA_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_content}],
+    )
 
 OUT_OF_SCOPE_MESSAGE = (
     "죄송합니다. 해당 질문은 현재 강의 자료의 범위를 벗어납니다. "
@@ -51,12 +67,12 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
         )
 
     context = _build_context(results)
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
 
     try:
-        response = client.messages.create(
-            model=settings.QA_MODEL, max_tokens=1024, system=QA_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": f"## 참고 슬라이드 내용\n{context}\n\n## 학습자 질문\n{question}"}],
+        response = _claude_qa_call(
+            client,
+            f"## 참고 슬라이드 내용\n{context}\n\n## 학습자 질문\n{question}",
         )
     except anthropic.APIError as exc:
         logger.error("Q&A Claude API 호출 실패: %s", exc)
