@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -11,7 +12,15 @@ from app.models.lecture import Lecture
 from app.models.user import User, UserRole
 from app.models.video import Video
 from app.schemas.lecture import LectureCreate, LecturePublicResponse, LectureUpdate
+from app.services.render import cancel_in_flight_renders_for_lecture
 from app.utils.slug import slugify
+
+logger = logging.getLogger(__name__)
+
+try:
+    import sentry_sdk
+except ImportError:  # pragma: no cover
+    sentry_sdk = None  # type: ignore[assignment]
 
 
 # ── 소유권 검증 헬퍼 ───────────────────────────────────────────────────────────
@@ -138,6 +147,43 @@ async def create_lecture(
     await db.commit()
     await db.refresh(lecture)
     return lecture
+
+
+async def delete_lecture(
+    db: AsyncSession, lecture_id: uuid.UUID, instructor: User
+) -> None:
+    """강의 삭제 — 진행 중인 HeyGen 렌더 잡을 취소한 뒤 DB row 제거.
+
+    pre-delete 훅:
+      1) 해당 lecture 의 VideoRender 중 in-flight 상태 select
+      2) heygen.cancel_video(job_id) wrapper 호출 (services/render.py)
+      3) DB 상태 → cancelled + cancelled_at 기록
+      4) 정상 삭제. 취소 호출이 실패해도 삭제는 진행 (Sentry warning).
+    """
+    lecture = await get_lecture_or_404(db, lecture_id)
+    course_result = await db.execute(
+        select(Course).where(Course.id == lecture.course_id)
+    )
+    course = course_result.scalar_one_or_none()
+    if not course or course.instructor_id != instructor.id:
+        raise PermissionError("이 강의를 삭제할 권한이 없습니다.")
+
+    # pre-delete: 진행 중 HeyGen 잡 취소. 실패해도 삭제는 계속.
+    try:
+        await cancel_in_flight_renders_for_lecture(db, lecture_id)
+    except Exception as exc:
+        logger.warning(
+            "lecture %s 삭제 전 render cancel 훅 실패 (삭제는 진행): %s",
+            lecture_id, exc,
+        )
+        if sentry_sdk is not None:
+            sentry_sdk.capture_message(
+                f"cancel_in_flight_renders raised in delete_lecture: lecture_id={lecture_id} ({exc})",
+                level="warning",
+            )
+
+    await db.delete(lecture)
+    await db.commit()
 
 
 async def update_lecture(

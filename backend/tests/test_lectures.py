@@ -1,6 +1,11 @@
 """강의(Lecture) API 통합 테스트."""
+import uuid
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
+from app.models.video_render import RenderStatus, VideoRender
 from tests.conftest import make_auth_header
 
 
@@ -124,4 +129,125 @@ async def test_public_lecture(client, lecture):
 @pytest.mark.asyncio
 async def test_public_lecture_not_found(client):
     resp = await client.get("/api/lectures/nonexistent-slug-9999/public")
+    assert resp.status_code == 404
+
+
+# ── DELETE /api/lectures/{id} — High E: HeyGen cancel pre-hook ──────────────
+
+@pytest.mark.asyncio
+async def test_delete_lecture_cancels_in_flight_renders(
+    client, professor, lecture, db,
+):
+    """삭제 시 pending/rendering 상태 render 가 cancel 호출되고 DB 가 cancelled 로 마킹.
+
+    - heygen.cancel_video 가 각 in-flight render 의 heygen_job_id 로 호출되는지 확인
+    - 호출 후 lecture row 가 사라지는지 확인
+    - cascade 로 video_renders 행도 함께 삭제되므로 cancel 마킹은 호출 시점 검증으로만.
+    """
+    pending_render = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        heygen_job_id="heygen-pending-1",
+        avatar_id="av",
+        status=RenderStatus.pending,
+    )
+    rendering_render = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        heygen_job_id="heygen-rendering-2",
+        avatar_id="av",
+        status=RenderStatus.rendering,
+    )
+    ready_render = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        heygen_job_id="heygen-done-3",
+        avatar_id="av",
+        status=RenderStatus.ready,
+    )
+    db.add_all([pending_render, rendering_render, ready_render])
+    await db.flush()
+
+    with patch(
+        "app.services.render.heygen_svc.cancel_video",
+        new_callable=AsyncMock,
+        return_value=True,
+    ) as mock_cancel:
+        resp = await client.delete(
+            f"/api/lectures/{lecture.id}",
+            headers=make_auth_header(professor),
+        )
+
+    assert resp.status_code == 204
+    # in-flight 상태(pending, rendering) render 만 cancel 호출
+    called_ids = {call.args[0] for call in mock_cancel.call_args_list}
+    assert called_ids == {"heygen-pending-1", "heygen-rendering-2"}
+    # ready 상태 render 는 cancel 호출 X
+    assert "heygen-done-3" not in called_ids
+
+
+@pytest.mark.asyncio
+async def test_delete_lecture_proceeds_when_cancel_fails(
+    client, professor, lecture, db,
+):
+    """heygen cancel 이 예외를 던져도 lecture 삭제는 정상 진행."""
+    render = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        heygen_job_id="heygen-flaky",
+        avatar_id="av",
+        status=RenderStatus.rendering,
+    )
+    db.add(render)
+    await db.flush()
+
+    with patch(
+        "app.services.render.heygen_svc.cancel_video",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("heygen down"),
+    ):
+        resp = await client.delete(
+            f"/api/lectures/{lecture.id}",
+            headers=make_auth_header(professor),
+        )
+
+    # 취소 실패해도 삭제는 204 로 성공
+    assert resp.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_lecture_other_professor_forbidden(
+    client, db, course, lecture,
+):
+    """소유자가 아닌 교수자의 삭제 시도 → 403."""
+    from app.models.user import User, UserRole
+
+    other = User(
+        id=uuid.uuid4(),
+        google_sub="google-other-xx",
+        email="other@test.ac.kr",
+        name="다른 교수",
+        role=UserRole.professor,
+        is_active=True,
+    )
+    db.add(other)
+    await db.flush()
+
+    resp = await client.delete(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(other),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_delete_lecture_not_found(client, professor):
+    resp = await client.delete(
+        f"/api/lectures/{uuid.uuid4()}",
+        headers=make_auth_header(professor),
+    )
     assert resp.status_code == 404

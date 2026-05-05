@@ -163,6 +163,28 @@ async def list_avatars() -> list[dict[str, Any]]:
 # ── 비디오 삭제 ──────────────────────────────────────────────────────────────
 
 
+async def cancel_video(video_id: str) -> bool:
+    """진행 중인 HeyGen 비디오 잡 취소 (best-effort).
+
+    Lecture 삭제 등으로 더 이상 결과가 필요 없는 잡을 정리한다. 실패해도
+    호출자(예: lecture DELETE)는 진행을 멈추지 않으므로 예외 대신 bool 반환.
+    HeyGen v1 API 의 video.delete 엔드포인트가 PROCESSING 상태 잡도 처리한다.
+    """
+    url = f"{settings.HEYGEN_BASE_URL}/v1/video.delete"
+    payload = {"video_ids": [video_id]}
+
+    try:
+        resp = await _request_with_retry("POST", url, json=payload, timeout=30.0)
+        if resp.status_code == 200:
+            logger.info("HeyGen 비디오 취소 완료: %s", video_id)
+            return True
+        logger.warning("HeyGen 비디오 취소 실패 [%d]: %s", resp.status_code, resp.text)
+        return False
+    except HeyGenError as exc:
+        logger.error("HeyGen 비디오 취소 오류: %s — %s", video_id, exc)
+        return False
+
+
 async def delete_video(video_id: str) -> bool:
     """HeyGen 비디오 삭제."""
     url = f"{settings.HEYGEN_BASE_URL}/v1/video.delete"

@@ -16,6 +16,7 @@ class RenderStatus(str, enum.Enum):
     uploading = "UPLOADING"
     ready = "READY"
     failed = "FAILED"
+    cancelled = "CANCELLED"
 
 
 class VideoRender(Base):
@@ -58,6 +59,7 @@ class VideoRender(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # 관계
     cost_logs: Mapped[list["RenderCostLog"]] = relationship(
