@@ -172,7 +172,7 @@ jobs:
             type=ref,event=branch,prefix=branch-,enable=${{ github.ref_name != 'main' }}
 
       - name: Build (load locally for scan)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -206,7 +206,7 @@ jobs:
           timeout: 10m
 
       - name: Push image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
