@@ -1,0 +1,12 @@
+# Trivy ignore — 임시 우회 항목.
+#
+# 각 entry 는 dependabot 의 자동 patch PR 이 도착하면 즉시 제거할 것.
+# 이 파일에 무기한 항목을 누적하지 말 것. 추가 시 sunset 일자 명시.
+
+# Next.js — Denial of Service with Server Components (HIGH)
+#   현재: 16.2.1 (frontend/package.json 의 ^16.2.1)
+#   fixed-in: 15.5.15 / 16.2.3
+#   처방: dependabot/npm 이 minor-patch 그룹으로 16.2.3 자동 PR 예정
+#   sunset: 다음 dependabot npm 주간 cycle 머지 후 즉시 제거
+#   참고: lock-file 직접 수정은 npm install 환경 필요해 임시 ignore 로 우회
+GHSA-q4gf-8mx6-v5v3

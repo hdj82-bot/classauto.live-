@@ -201,6 +201,8 @@ jobs:
           ignore-unfixed: true
           vuln-type: 'os,library'
           skip-dirs: 'usr/local/lib/node_modules/npm'
+          # 임시 ignore (dependabot patch PR 도착 시 .trivyignore 정리).
+          trivyignores: '.trivyignore'
           timeout: 10m
 
       - name: Push image
