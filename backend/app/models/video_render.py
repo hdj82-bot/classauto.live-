@@ -10,13 +10,19 @@ from app.db.base import Base
 
 
 class RenderStatus(str, enum.Enum):
-    pending = "PENDING"
-    tts_processing = "TTS_PROCESSING"
-    rendering = "RENDERING"
-    uploading = "UPLOADING"
-    ready = "READY"
-    failed = "FAILED"
-    cancelled = "CANCELLED"
+    """렌더 작업 상태.
+
+    멤버 이름과 value 모두 lowercase 로 통일 — SessionStatus·PlanType 패턴 일치.
+    historical UPPER value("PENDING" 등) 를 사용하던 데이터는 alembic 0015 가
+    PostgreSQL ENUM RENAME VALUE / SQLite UPDATE 로 lowercase 로 마이그레이션.
+    """
+    pending = "pending"
+    tts_processing = "tts_processing"
+    rendering = "rendering"
+    uploading = "uploading"
+    ready = "ready"
+    failed = "failed"
+    cancelled = "cancelled"
 
 
 class VideoRender(Base):

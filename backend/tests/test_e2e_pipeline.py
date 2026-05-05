@@ -329,6 +329,7 @@ def test_parser_real_pptx(tmp_path):
 
 def test_e2e_polling_completed_render():
     """poll_pending_renders가 완료된 렌더를 S3 업로드 + READY 처리하는지 검증."""
+    from app.models.video_render import RenderStatus
     from app.tasks.polling import poll_pending_renders
 
     render_id = uuid.uuid4()
@@ -341,7 +342,7 @@ def test_e2e_polling_completed_render():
     mock_render.lecture_id = lecture_id
     mock_render.instructor_id = instructor_id
     mock_render.slide_number = 1
-    mock_render.status = "RENDERING"
+    mock_render.status = RenderStatus.rendering
 
     mock_status = {
         "status": "completed",
@@ -363,5 +364,5 @@ def test_e2e_polling_completed_render():
     assert result["checked"] == 1
     assert result["completed"] == 1
     assert mock_render.s3_video_url == "https://s3/video.mp4"
-    assert mock_render.status == "READY"
+    assert mock_render.status == RenderStatus.ready
     mock_notify.assert_called_once()

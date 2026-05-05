@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_professor
 from app.db.session import get_db
 from app.models.user import User
-from app.models.video_render import VideoRender
+from app.models.video_render import RenderStatus, VideoRender
 from app.services.lecture import assert_professor_owns_lecture
 
 router = APIRouter(prefix="/api/v1/render", tags=["render"])
@@ -75,8 +75,8 @@ async def get_lecture_render_status(
         select(VideoRender).where(VideoRender.lecture_id == lecture_id).order_by(VideoRender.slide_number)
     )
     renders = list(result.scalars().all())
-    completed = sum(1 for r in renders if r.status.value == "READY")
-    failed = sum(1 for r in renders if r.status.value == "FAILED")
+    completed = sum(1 for r in renders if r.status == RenderStatus.ready)
+    failed = sum(1 for r in renders if r.status == RenderStatus.failed)
 
     return {
         "lecture_id": str(lecture_id),
