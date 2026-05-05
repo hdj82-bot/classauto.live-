@@ -11,8 +11,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 # backend/app 하위 .py 파일 — 테스트 디렉토리는 제외 (테스트는 mock 용 .dict 등을 쓸 수 있음)
 _APP_ROOT = Path(__file__).resolve().parent.parent / "app"
 
