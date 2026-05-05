@@ -200,22 +200,36 @@ export default function ScriptEditorPage() {
             </div>
             <div>
               <label htmlFor="start-sec" className="block text-sm font-medium text-gray-700 mb-1">{t("script.startSec")}</label>
-              <input id="start-sec" type="number" value={current.start_seconds}
-                onChange={(e) => handleSegmentChange(activeSlide, "start_seconds", parseInt(e.target.value) || 0)}
+              <input id="start-sec" type="number" value={current.start_seconds} min={0} step={1}
+                onChange={(e) => {
+                  const n = e.target.valueAsNumber;
+                  handleSegmentChange(activeSlide, "start_seconds", Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0);
+                }}
                 className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
             </div>
             <div>
               <label htmlFor="end-sec" className="block text-sm font-medium text-gray-700 mb-1">{t("script.endSec")}</label>
-              <input id="end-sec" type="number" value={current.end_seconds}
-                onChange={(e) => handleSegmentChange(activeSlide, "end_seconds", parseInt(e.target.value) || 0)}
+              <input id="end-sec" type="number" value={current.end_seconds} min={0} step={1}
+                onChange={(e) => {
+                  const n = e.target.valueAsNumber;
+                  handleSegmentChange(activeSlide, "end_seconds", Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0);
+                }}
                 className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
             </div>
           </div>
 
           <div>
             <label htmlFor="qa-pin" className="block text-sm font-medium text-gray-700 mb-1">{t("script.qaPinTiming")}</label>
-            <input id="qa-pin" type="number" value={current.question_pin_seconds ?? ""}
-              onChange={(e) => handleSegmentChange(activeSlide, "question_pin_seconds", e.target.value ? parseInt(e.target.value) : null)}
+            <input id="qa-pin" type="number" value={current.question_pin_seconds ?? ""} min={0} step={1}
+              onChange={(e) => {
+                const raw = e.target.value;
+                if (!raw) {
+                  handleSegmentChange(activeSlide, "question_pin_seconds", null);
+                  return;
+                }
+                const n = e.target.valueAsNumber;
+                handleSegmentChange(activeSlide, "question_pin_seconds", Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null);
+              }}
               className="w-40 border border-gray-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500"
               placeholder={t("script.qaPinPlaceholder")} />
           </div>

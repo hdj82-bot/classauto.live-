@@ -27,7 +27,11 @@ interface QAMessage {
 }
 
 export default function LectureViewerPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams<{ slug: string | string[] }>();
+  // 동적 세그먼트가 catch-all 로 바뀌거나 누락된 경우(예: 잘못된 URL)
+  // useParams 는 string[] 또는 undefined 를 반환할 수 있다.
+  // 항상 string 으로 좁혀 첫 번째 세그먼트만 사용.
+  const slug = Array.isArray(params?.slug) ? params.slug[0] : params?.slug;
   const { user } = useAuth();
   const router = useRouter();
   const { t } = useI18n();
@@ -49,6 +53,7 @@ export default function LectureViewerPage() {
   const [duration, setDuration] = useState(0);
 
   useEffect(() => {
+    if (!slug) { router.replace("/dashboard"); return; }
     (async () => {
       try {
         const { data } = await api.get(`/api/lectures/${slug}/public`);
