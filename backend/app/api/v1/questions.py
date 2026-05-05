@@ -2,6 +2,7 @@
 import logging
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,55 @@ router = APIRouter(prefix="/api", tags=["questions"])
 MAX_PPT_CONTENT_BYTES = 50 * 1024  # 50KB — Claude API 비용 방어
 QGEN_RATE_LIMIT_WINDOW_SECONDS = 300  # 5분
 QGEN_RATE_LIMIT_MAX = 1               # 윈도우 내 1회
+
+# High D: 동시 생성 가드 (Redis SETNX)
+QGEN_LOCK_TTL_SECONDS = 180           # 락 자동 만료 — 워커 다운 시 영구 잠김 방지
+
+
+@asynccontextmanager
+async def _qgen_lock(lecture_id: uuid.UUID):
+    """Redis SETNX 기반 강의별 문제 생성 락.
+
+    동일 lecture 에 대한 두 번째 동시 요청은 락 획득 실패 → 409 Conflict.
+    Redis 미설정/장애 시에는 fail-open (락 없이 통과). 작업 완료/실패 시 DEL.
+    """
+    redis_client = None
+    try:
+        redis_client = get_redis()
+    except Exception as exc:
+        logger.warning("qgen_lock: Redis 초기화 실패 — fail-open: %s", exc)
+        yield
+        return
+
+    if redis_client is None:
+        yield
+        return
+
+    key = f"qgen:lecture:{lecture_id}"
+    acquired = False
+    try:
+        acquired = bool(
+            await redis_client.set(key, "1", nx=True, ex=QGEN_LOCK_TTL_SECONDS)
+        )
+    except Exception as exc:
+        # Redis 오류는 fail-open — rate limit 가 1차 방어선이므로 가용성을 우선.
+        logger.warning("qgen_lock: SETNX 실패 — fail-open: %s", exc)
+        yield
+        return
+
+    if not acquired:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이미 해당 강의의 문제 생성이 진행 중입니다. 완료 후 다시 시도해주세요.",
+        )
+
+    try:
+        yield
+    finally:
+        try:
+            await redis_client.delete(key)
+        except Exception as exc:
+            logger.warning("qgen_lock: 락 해제 실패 (TTL 만료에 의존): %s", exc)
 
 
 async def _enforce_qgen_rate_limit(lecture_id: uuid.UUID, user_id: uuid.UUID) -> None:
@@ -104,22 +154,24 @@ async def generate_questions(
     # ── Critical 9: lecture+user 단위 rate limit (5분당 1회) ──
     await _enforce_qgen_rate_limit(lecture_id, current_user.id)
 
-    try:
-        formative_created, summative_created = await question_svc.generate_questions(
-            db=db,
-            lecture_id=lecture_id,
-            ppt_content=body.ppt_content,
-            formative_count=body.formative_count,
-            summative_count=body.summative_count,
-            video_duration_seconds=body.video_duration_seconds,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"문제 생성 중 오류가 발생했습니다: {exc}",
-        ) from exc
+    # ── High D: 동일 lecture 동시 생성 가드 (Redis SETNX, TTL 180s) ──
+    async with _qgen_lock(lecture_id):
+        try:
+            formative_created, summative_created = await question_svc.generate_questions(
+                db=db,
+                lecture_id=lecture_id,
+                ppt_content=body.ppt_content,
+                formative_count=body.formative_count,
+                summative_count=body.summative_count,
+                video_duration_seconds=body.video_duration_seconds,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"문제 생성 중 오류가 발생했습니다: {exc}",
+            ) from exc
 
     return GenerateResponse(
         lecture_id=lecture_id,
