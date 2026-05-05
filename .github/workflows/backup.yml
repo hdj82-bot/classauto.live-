@@ -1,0 +1,107 @@
+name: Daily DB Backup
+
+# 자체 호스팅(VPS + Docker Compose) 모드에서만 의미 있는 백업 워크플로.
+# Vercel/Railway/Supabase 모드에서는 Supabase 자동 백업 + Railway snapshot 으로
+# 대체되므로, vars.DEPLOY_ENABLED 가 "true" 일 때만 실행한다.
+#
+# 동작:
+#   1. Postgres URL(secrets.DATABASE_URL_BACKUP)로 pg_dump
+#   2. gzip 압축
+#   3. AWS S3 에 ifl-backup/<yyyy-mm-dd>/<hh-mm>.sql.gz 로 업로드
+#   4. 보관 정책(30일)은 S3 lifecycle 로 별도 설정 — workflow 는 업로드만
+#
+# 필요 secrets:
+#   DATABASE_URL_BACKUP        postgres://USER:PASS@HOST:5432/DB
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   AWS_REGION                 e.g. ap-northeast-2
+#   BACKUP_S3_BUCKET           e.g. ifl-platform-backups
+# 필요 vars:
+#   DEPLOY_ENABLED             "true" 일 때만 실행
+
+on:
+  schedule:
+    # 03:00 KST = 18:00 UTC (KST 는 UTC+9, DST 없음)
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "수동 백업 사유 (감사용)"
+        required: false
+        default: "manual run"
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: pg_dump → S3
+    runs-on: ubuntu-latest
+    if: vars.DEPLOY_ENABLED == 'true'
+    timeout-minutes: 30
+
+    steps:
+      - name: Install postgresql-client (matches backend image — pg16)
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL "https://www.postgresql.org/media/keys/ACCC4CF8.asc" \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          # shellcheck disable=SC1091
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Configure AWS CLI
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Dump → gzip → upload
+        env:
+          # connection string 자체가 secret. echo / 출력 금지.
+          DATABASE_URL_BACKUP: ${{ secrets.DATABASE_URL_BACKUP }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DATABASE_URL_BACKUP:-}" ]; then
+            echo "::error::DATABASE_URL_BACKUP secret is empty"
+            exit 1
+          fi
+          if [ -z "${BACKUP_S3_BUCKET:-}" ]; then
+            echo "::error::BACKUP_S3_BUCKET secret is empty"
+            exit 1
+          fi
+
+          DATE_DIR="$(date -u +'%Y-%m-%d')"
+          TIME_NAME="$(date -u +'%H-%M')"
+          OUT="/tmp/ifl-${TIME_NAME}.sql.gz"
+
+          # --no-owner / --no-privileges: 복원 시 다른 환경의 role/permission
+          # 차이로 실패하지 않도록 메타정보 제외.
+          # --format=plain | gzip: 단일 .sql.gz 로 표준 포맷 유지.
+          pg_dump --no-owner --no-privileges --format=plain "${DATABASE_URL_BACKUP}" \
+            | gzip -9 > "${OUT}"
+
+          SIZE=$(stat -c%s "${OUT}")
+          echo "backup size: ${SIZE} bytes"
+          if [ "${SIZE}" -lt 1024 ]; then
+            echo "::error::backup file is suspiciously small (<1KB)"
+            exit 1
+          fi
+
+          aws s3 cp "${OUT}" \
+            "s3://${BACKUP_S3_BUCKET}/ifl-backup/${DATE_DIR}/${TIME_NAME}.sql.gz" \
+            --only-show-errors --no-progress
+
+          rm -f "${OUT}"
+
+      - name: Summary
+        run: |
+          echo "Backup uploaded to s3://${BACKUP_S3_BUCKET:-?}/ifl-backup/$(date -u +%Y-%m-%d)/" >> "$GITHUB_STEP_SUMMARY"
+          echo "Retention(30d) is enforced via S3 bucket lifecycle policy." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
