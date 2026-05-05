@@ -13,17 +13,17 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.95.2",
-    "axios": "^1.13.6",
-    "next": "16.2.1",
+    "@tanstack/react-query": "^5.100.9",
+    "axios": "^1.16.0",
+    "next": "16.2.4",
     "next-auth": "^5.0.0-beta.30",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.11.2",
+    "@axe-core/playwright": "^4.11.3",
     "@playwright/test": "^1.59.1",
-    "@sentry/nextjs": "^10.49.0",
+    "@sentry/nextjs": "^10.51.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
@@ -32,11 +32,11 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.1",
-    "jsdom": "^29.0.1",
+    "eslint-config-next": "16.2.4",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.5"
   }
 }
