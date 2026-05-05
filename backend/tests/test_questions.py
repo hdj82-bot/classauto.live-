@@ -524,3 +524,152 @@ async def test_generate_questions_rate_limit_failopen_when_redis_broken(
         )
 
     assert resp.status_code != 429  # rate limit 으로는 차단되지 않음
+
+
+# ── High D: 동시 생성 가드 (Redis SETNX) ────────────────────────────────────
+
+
+class _LockFakeRedis:
+    """SET nx/ex/delete 를 지원하는 in-memory Redis 더블 — qgen lock 용."""
+
+    def __init__(self):
+        self._kv: dict[str, str] = {}
+        # rate limit 도 함께 통과시키기 위한 ZSET 더미
+        self._zsets: dict[str, dict[str, float]] = {}
+
+    async def set(self, key, value, nx=False, ex=None):
+        if nx and key in self._kv:
+            return None
+        self._kv[key] = value
+        return True
+
+    async def delete(self, key):
+        return 1 if self._kv.pop(key, None) is not None else 0
+
+    # rate limit 호환
+    async def zremrangebyscore(self, key, mn, mx):
+        z = self._zsets.get(key, {})
+        removed = [m for m, s in z.items() if mn <= s <= mx]
+        for m in removed:
+            del z[m]
+        self._zsets[key] = z
+        return len(removed)
+
+    async def zcard(self, key):
+        return len(self._zsets.get(key, {}))
+
+    async def zadd(self, key, mapping):
+        self._zsets.setdefault(key, {}).update(mapping)
+        return len(mapping)
+
+    async def expire(self, key, seconds):
+        return 1
+
+
+@pytest.mark.asyncio
+async def test_generate_questions_concurrent_request_rejected_with_409(
+    client, professor, lecture,
+):
+    """동일 lecture 에 대해 락이 이미 잡혀있으면 두 번째 요청 → 409 Conflict."""
+    from app.api.v1 import questions as qapi
+
+    fake = _LockFakeRedis()
+    # 첫 번째 요청을 시뮬레이션해서 미리 락 점유
+    await fake.set(f"qgen:lecture:{lecture.id}", "1", nx=True, ex=180)
+
+    with patch.object(qapi, "get_redis", return_value=fake), \
+         patch("app.services.question.anthropic.Anthropic") as mock_anthropic:
+        resp = await client.post(
+            f"/api/lectures/{lecture.id}/questions/generate",
+            headers=make_auth_header(professor),
+            json={
+                "ppt_content": "슬라이드 내용 충분히 길게 작성합니다.",
+                "formative_count": 1,
+                "summative_count": 1,
+                "video_duration_seconds": 300,
+            },
+        )
+
+    assert resp.status_code == 409
+    # 락 점유 상태에서는 Claude API 호출이 일어나지 않아야 함
+    mock_anthropic.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_generate_questions_lock_released_after_success(
+    client, professor, lecture,
+):
+    """작업 성공 후 락이 DEL 되어 다음 요청이 통과 가능."""
+    from app.api.v1 import questions as qapi
+
+    fake = _LockFakeRedis()
+
+    fake_response = MagicMock()
+    fake_response.content = [
+        MagicMock(
+            type="text",
+            text='{"formative":[],"summative":[{"question_type":"short_answer","difficulty":"easy","content":"문제","options":null,"correct_answer":"답","explanation":"해설","timestamp_seconds":null}]}',
+        )
+    ]
+
+    with patch.object(qapi, "get_redis", return_value=fake), \
+         patch("app.services.question.anthropic.Anthropic") as mock_anthropic:
+        mock_anthropic.return_value.messages.create.return_value = fake_response
+        resp = await client.post(
+            f"/api/lectures/{lecture.id}/questions/generate",
+            headers=make_auth_header(professor),
+            json={
+                "ppt_content": "슬라이드 내용 충분히 길게 작성합니다.",
+                "formative_count": 1,
+                "summative_count": 1,
+                "video_duration_seconds": 300,
+            },
+        )
+
+    # 첫 호출은 정상 통과 (LLM stub 형식이 다르면 502 가능)
+    assert resp.status_code in (201, 502)
+    # 작업 종료 후 락이 해제되어 키가 남아있지 않아야 함
+    assert f"qgen:lecture:{lecture.id}" not in fake._kv
+
+
+@pytest.mark.asyncio
+async def test_generate_questions_lock_failopen_when_redis_broken(
+    client, professor, lecture,
+):
+    """Redis 장애 시 락 가드는 fail-open — 409 가 아니라 LLM 경로로 진행."""
+    from app.api.v1 import questions as qapi
+
+    class _BrokenRedis:
+        async def set(self, *a, **kw):
+            raise RuntimeError("redis down")
+
+        async def delete(self, *a, **kw):
+            return 0
+
+        # rate limit 측에서도 fail-open 시키기 위한 dummy
+        async def zremrangebyscore(self, *a, **kw):
+            raise RuntimeError("redis down")
+
+    fake_response = MagicMock()
+    fake_response.content = [
+        MagicMock(
+            type="text",
+            text='{"formative":[],"summative":[{"question_type":"short_answer","difficulty":"easy","content":"문제","options":null,"correct_answer":"답","explanation":"해설","timestamp_seconds":null}]}',
+        )
+    ]
+
+    with patch.object(qapi, "get_redis", return_value=_BrokenRedis()), \
+         patch("app.services.question.anthropic.Anthropic") as mock_anthropic:
+        mock_anthropic.return_value.messages.create.return_value = fake_response
+        resp = await client.post(
+            f"/api/lectures/{lecture.id}/questions/generate",
+            headers=make_auth_header(professor),
+            json={
+                "ppt_content": "슬라이드 내용 충분히 길게 작성합니다.",
+                "formative_count": 1,
+                "summative_count": 1,
+                "video_duration_seconds": 300,
+            },
+        )
+
+    assert resp.status_code != 409

@@ -18,6 +18,7 @@ from app.schemas.video import VideoStatusResponse
 from app.services.lecture import (
     assert_professor_owns_lecture,
     create_lecture,
+    delete_lecture,
     get_public_lecture_by_slug,
     list_course_lectures,
     update_lecture,
@@ -95,6 +96,30 @@ async def patch_lecture(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+
+
+# ── 강의 삭제 ─────────────────────────────────────────────────────────────────
+
+@router.delete(
+    "/api/lectures/{lecture_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="강의 삭제 (소유 교수자 전용)",
+)
+async def delete_lecture_endpoint(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """강의 삭제. 진행 중인 HeyGen 렌더 잡은 best-effort 로 취소된 뒤 row 가 제거됩니다.
+    cascade 로 child (video_renders, sessions, questions ...) 도 함께 삭제됩니다.
+    """
+    try:
+        await delete_lecture(db, lecture_id, professor)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    return None
 
 
 # ── 강의의 영상 조회 (교수자 전용) ───────────────────────────────────────────
