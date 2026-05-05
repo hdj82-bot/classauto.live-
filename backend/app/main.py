@@ -69,7 +69,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     expose_headers=["X-Request-ID", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"],
-    max_age=600,
+    # preflight 응답 24h 캐시 — 브라우저가 OPTIONS 요청을 매번 보내지 않도록.
+    max_age=86400,
 )
 
 # 기존 라우터 등록
