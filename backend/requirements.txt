@@ -19,7 +19,7 @@ celery[redis]>=5.4.0,<6.0.0
 # Auth
 python-jose[cryptography]>=3.3.0,<4.0.0
 passlib[bcrypt]>=1.7.4,<2.0.0
-google-auth>=2.30.0,<3.0.0
+google-auth>=2.50.0,<3.0.0
 google-auth-oauthlib>=1.2.0,<2.0.0
 
 # HTTP
