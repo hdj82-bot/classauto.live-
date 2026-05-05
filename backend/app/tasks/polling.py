@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from app.celery_app import celery
 from app.db.session import SyncSessionLocal
 from app.models.lecture import Lecture
-from app.models.video_render import VideoRender
+from app.models.video_render import RenderStatus, VideoRender
 from app.services.pipeline import cost_log, notification, s3 as s3_svc
 from app.services.pipeline.heygen import get_video_status
 from app.services.pipeline.thumbnail import generate_thumbnail_from_video_url
@@ -25,7 +25,7 @@ def poll_pending_renders() -> dict:
     db = SyncSessionLocal()
     loop = asyncio.new_event_loop()
     try:
-        renders = db.query(VideoRender).filter(VideoRender.status == "RENDERING").all()
+        renders = db.query(VideoRender).filter(VideoRender.status == RenderStatus.rendering).all()
 
         if not renders:
             return {"checked": 0}
@@ -41,7 +41,7 @@ def poll_pending_renders() -> dict:
             # 타임아웃 검사: 너무 오래된 렌더링은 실패 처리
             created = getattr(render, "created_at", None)
             if isinstance(created, datetime) and created < timeout_cutoff:
-                render.status = "FAILED"
+                render.status = RenderStatus.failed
                 render.error_message = f"렌더링 타임아웃 ({RENDER_TIMEOUT_HOURS}시간 초과)"
                 failed += 1
                 logger.warning("렌더링 타임아웃: render_id=%s", render.id)
@@ -49,7 +49,7 @@ def poll_pending_renders() -> dict:
 
             # 이미 웹훅으로 처리 완료된 경우 건너뜀 (레이스 컨디션 방지)
             db.refresh(render)
-            if render.status in ("READY", "FAILED"):
+            if render.status in (RenderStatus.ready, RenderStatus.failed):
                 continue
 
             try:
@@ -61,7 +61,7 @@ def poll_pending_renders() -> dict:
                     )
                     render.s3_video_url = s3_url
                     render.heygen_video_url = status_data["video_url"]
-                    render.status = "READY"
+                    render.status = RenderStatus.ready
                     render.completed_at = datetime.now(timezone.utc)
 
                     cost_log.record(db, render.id, "s3", "upload_video", duration_seconds=elapsed)
@@ -91,7 +91,7 @@ def poll_pending_renders() -> dict:
                     completed += 1
 
                 elif status_data["status"] == "failed":
-                    render.status = "FAILED"
+                    render.status = RenderStatus.failed
                     render.error_message = status_data.get("error", "HeyGen rendering failed")
 
                     try:

@@ -9,7 +9,7 @@ from sqlalchemy import extract, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.subscription import PLAN_LIMITS, PlanType, Subscription
-from app.models.video_render import VideoRender
+from app.models.video_render import RenderStatus, VideoRender
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def get_monthly_usage(db: AsyncSession, user_id: uuid.UUID) -> int:
         select(func.count()).select_from(VideoRender)
         .where(
             VideoRender.instructor_id == user_id,
-            VideoRender.status != "FAILED",
+            VideoRender.status != RenderStatus.failed,
             extract("year", VideoRender.created_at) == now.year,
             extract("month", VideoRender.created_at) == now.month,
         )
