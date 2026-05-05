@@ -91,7 +91,7 @@ def test_render_slide_passes_when_caller_user_id_matches():
          patch("app.services.pipeline.heygen.create_video", new_callable=AsyncMock) as mock_heygen, \
          patch("app.services.pipeline.s3.upload_audio_bytes", return_value="https://s3/x.mp3"), \
          patch("app.services.pipeline.s3.file_exists", return_value=False), \
-         patch("app.services.pipeline.cost_log.record_once") as mock_cost:
+         patch("app.services.pipeline.cost_log.record_once_committed", return_value=True) as mock_cost:
         mock_tts.return_value = tts_result
         mock_heygen.return_value = "heygen-job-99"
 
@@ -101,7 +101,8 @@ def test_render_slide_passes_when_caller_user_id_matches():
     assert result.get("heygen_job_id") == "heygen-job-99"
     mock_tts.assert_called_once()
     mock_heygen.assert_called_once()
-    assert mock_cost.call_count >= 1
+    # H: 비용 기록은 record_once_committed (별도 트랜잭션) 로 이동 — TTS / HeyGen 각 1회.
+    assert mock_cost.call_count >= 2
 
 
 # ── Critical 8: idempotency ─────────────────────────────────────────────────
