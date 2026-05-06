@@ -1,133 +1,220 @@
-"""TTS 서비스 (ElevenLabs primary + Google Cloud TTS fallback)."""
+"""TTS 파이프라인 (ElevenLabs primary + Google Cloud TTS fallback).
+
+orchestrator. 실 HTTP 호출은 ``elevenlabs_client`` / ``google_tts_client`` 가
+담당하며, 이 모듈은 다음 책임만 갖는다.
+
+1. 1차: ElevenLabs (settings.ELEVENLABS_VOICE_ID 또는 호출자가 넘긴 cloned voice).
+2. 2차: ElevenLabs 가 ``ElevenLabsError`` 계열을 raise 하면 Google TTS 로 폴백.
+3. 두 provider 모두 실패하면 ``TTSError`` 로 통합 raise.
+4. 폴백 발생 시 별도 WARNING 로그 + (선택) cost_logs.metadata 에 reason 기록.
+5. (선택) S3 또는 로컬 파일로 audio bytes 저장.
+
+후방 호환:
+- ``TTSResult``, ``TTSError``, ``synthesize`` 의 시그니처는 기존 caller
+  (app/tasks/render.py, e2e/idempotency 테스트) 가 의존하므로 그대로 유지.
+"""
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
-from google.cloud import texttospeech
 
-from app.core.config import settings
-from app.core.retry import RetryableHTTPError, retry_external
+from app.services.pipeline import elevenlabs_client, google_tts_client
+
+if TYPE_CHECKING:
+    import uuid
 
 logger = logging.getLogger(__name__)
 
 
 class TTSError(Exception):
-    """TTS 합성 실패."""
+    """TTS 합성 실패 (ElevenLabs 와 Google 모두 실패)."""
 
 
 class TTSResult:
-    def __init__(self, audio_bytes: bytes, provider: str, duration_seconds: float):
+    """합성 결과.
+
+    audio_bytes: mp3 audio
+    provider: "elevenlabs" | "google_tts"
+    duration_seconds: 호출+합성에 걸린 wall-clock (오디오 길이 아님)
+    text_chars: 입력 텍스트 글자수 (단가 계산 / 회계용)
+    fallback_reason: ElevenLabs 실패로 Google 로 폴백한 경우 예외 클래스명+메시지
+    """
+
+    def __init__(
+        self,
+        audio_bytes: bytes,
+        provider: str,
+        duration_seconds: float,
+        text_chars: int = 0,
+        fallback_reason: str | None = None,
+    ):
         self.audio_bytes = audio_bytes
         self.provider = provider
         self.duration_seconds = duration_seconds
+        self.text_chars = text_chars
+        self.fallback_reason = fallback_reason
 
 
-async def synthesize(text: str, output_path: Path | None = None) -> TTSResult:
-    """ElevenLabs로 TTS 합성 시도, 실패 시 Google Cloud TTS 폴백."""
+# ── 메인 진입점 ──────────────────────────────────────────────────────────────
+
+
+async def synthesize(
+    text: str,
+    output_path: Path | None = None,
+    *,
+    voice_id: str | None = None,
+    sessionmaker=None,
+    video_render_id: uuid.UUID | None = None,
+    s3_render_id: str | None = None,
+) -> TTSResult:
+    """ElevenLabs 합성 시도, 실패 시 Google TTS 폴백.
+
+    voice_id: ElevenLabs voice ID. None 이면 settings.ELEVENLABS_VOICE_ID 사용.
+              Cloned voice (IVC 결과) 를 쓰려면 user 의 elevenlabs_voice_id 전달.
+    sessionmaker, video_render_id: 둘 다 주어지면 cost_logs 에 즉시 기록.
+                                   (별도 트랜잭션 — record_once_committed 위임)
+    s3_render_id: 주어지면 audio 를 S3 의 표준 경로에 업로드.
+    output_path: 주어지면 로컬 파일에도 동시 저장 (개발/디버깅용).
+    """
+    if not text or not text.strip():
+        raise TTSError("text 가 비어있어 합성 불가")
+
+    fallback_reason: str | None = None
+    start = time.monotonic()
     try:
-        result = await _elevenlabs_synthesize(text)
-        logger.info("ElevenLabs TTS 합성 성공 (%.1f초)", result.duration_seconds)
-    except Exception as exc:
-        logger.warning("ElevenLabs TTS 실패, Google Cloud TTS로 폴백: %s", exc)
-        result = _google_tts_synthesize(text)
-        logger.info("Google Cloud TTS 합성 성공 (%.1f초)", result.duration_seconds)
+        audio_bytes = await elevenlabs_client.synthesize(text, voice_id=voice_id)
+        provider = "elevenlabs"
+        logger.info(
+            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s",
+            len(text), voice_id or "<default>",
+        )
+    except elevenlabs_client.ElevenLabsError as exc:
+        fallback_reason = f"{type(exc).__name__}: {exc}"
+        logger.warning(
+            "ElevenLabs 합성 실패 → Google TTS 폴백 트리거: %s", fallback_reason,
+        )
+        try:
+            audio_bytes = await _run_google_tts(text)
+            provider = "google_tts"
+            logger.info(
+                "Google TTS 폴백 합성 성공: chars=%d, original_failure=%s",
+                len(text), fallback_reason,
+            )
+        except google_tts_client.GoogleTTSError as g_exc:
+            logger.error(
+                "TTS 양쪽 provider 모두 실패: elevenlabs=%s, google=%s",
+                fallback_reason, g_exc,
+            )
+            raise TTSError(
+                f"TTS 폴백도 실패: elevenlabs={fallback_reason}; google={g_exc}"
+            ) from g_exc
+    elapsed = time.monotonic() - start
+
+    result = TTSResult(
+        audio_bytes=audio_bytes,
+        provider=provider,
+        duration_seconds=elapsed,
+        text_chars=len(text),
+        fallback_reason=fallback_reason,
+    )
+
+    # ── 비용 기록 (선택) ─────────────────────────────────────────────────
+    if sessionmaker is not None and video_render_id is not None:
+        # 지연 임포트 — cost_tracker → cost_log 의존 사이클 회피, 테스트 모킹 단순화.
+        from app.services import cost_tracker  # noqa: PLC0415
+
+        cost_tracker.record_tts_cost(
+            sessionmaker=sessionmaker,
+            video_render_id=video_render_id,
+            provider=provider,
+            text_chars=len(text),
+            duration_seconds=elapsed,
+            fallback_reason=fallback_reason,
+        )
+
+    # ── 저장 (선택) ──────────────────────────────────────────────────────
+    if s3_render_id is not None:
+        # 지연 임포트 — boto3 미설정 환경(단위 테스트) 에서도 import 단계 통과.
+        from app.services.pipeline import s3 as s3_svc  # noqa: PLC0415
+
+        try:
+            s3_url = s3_svc.upload_audio_bytes(audio_bytes, s3_render_id)
+            logger.info("TTS audio S3 업로드: render_id=%s, url=%s", s3_render_id, s3_url)
+        except Exception as exc:
+            # S3 업로드 실패는 caller 가 결정 — 여기서는 로깅만 (메인 트랜잭션 보호)
+            logger.error("TTS audio S3 업로드 실패: render_id=%s, error=%s", s3_render_id, exc)
+            raise
 
     if output_path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_bytes(result.audio_bytes)
+        output_path.write_bytes(audio_bytes)
 
+    logger.info(
+        "TTS 합성 완료: provider=%s, chars=%d, %.2fs, fallback=%s",
+        provider, len(text), elapsed, bool(fallback_reason),
+    )
     return result
 
 
+async def _run_google_tts(text: str) -> bytes:
+    """Google TTS (gRPC sync) 를 비동기 컨텍스트에서 실행 — 스레드 오프로드."""
+    return await asyncio.to_thread(google_tts_client.synthesize, text)
+
+
+# ── 후방 호환 헬퍼 ───────────────────────────────────────────────────────────
+# 기존 caller 와 외부 단위 테스트가 이 이름들을 import 한다. 새 클라이언트 모듈을
+# 위임 호출하도록 구현해 시그니처와 도메인 예외 변환 동작만 보존한다.
+
+
 async def _elevenlabs_synthesize(text: str) -> TTSResult:
-    """ElevenLabs 호출 wrapper — 재시도 후 도메인 예외(TTSError) 로 변환.
-
-    `_elevenlabs_call_with_retry` 가 통일 재시도 정책(3회·exp backoff)으로
-    호출하고, 5xx/429/timeout 이 max 시도 후에도 실패하면 헬퍼가 raise 한
-    `RetryableHTTPError` / `httpx.HTTPStatusError` / `httpx.TimeoutException`
-    을 모두 `TTSError("최대 재시도 초과")` 로 래핑해 호출부 호환성 유지.
-    """
-    try:
-        return await _elevenlabs_call_with_retry(text)
-    except (RetryableHTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
-        raise TTSError(f"ElevenLabs 최대 재시도 초과: {exc}") from exc
-
-
-@retry_external(label="elevenlabs.synthesize")
-async def _elevenlabs_call_with_retry(text: str) -> TTSResult:
-    """ElevenLabs TTS API 호출.
-
-    `retry_external` 데코레이터가 통일 재시도 정책(3회·exp backoff)을 적용한다.
-    4xx(429 제외) 는 즉시 TTSError 로 raise (재시도 X). 5xx/429/Timeout 만 재시도.
-    timeout 은 ElevenLabs 합성 특성상 120s 유지(긴 문장 처리).
-    """
-    logger.info("ElevenLabs TTS 요청: text_length=%d, voice_id=%s", len(text), settings.ELEVENLABS_VOICE_ID)
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{settings.ELEVENLABS_VOICE_ID}"
-    headers = {
-        "xi-api-key": settings.ELEVENLABS_API_KEY,
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg",
-    }
-    payload = {
-        "text": text,
-        "model_id": settings.ELEVENLABS_MODEL_ID,
-        "voice_settings": {"stability": 0.5, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": True},
-    }
-
+    """``elevenlabs_client.synthesize`` 위임. ElevenLabsError → TTSError."""
     start = time.monotonic()
-    async with httpx.AsyncClient(timeout=120.0) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-
-    if resp.status_code == 200:
-        elapsed = time.monotonic() - start
-        return TTSResult(
-            audio_bytes=resp.content,
-            provider="elevenlabs",
-            duration_seconds=elapsed,
-        )
-
-    # retry_external 의 정책과 합치하도록 4xx/5xx 분기:
-    # - 4xx(429 제외): 영구 오류 → TTSError 즉시 raise (데코레이터가 재시도 안 함)
-    # - 5xx/429: httpx.HTTPStatusError 로 띄우면 데코레이터가 재시도
-    if resp.status_code in (429, 500, 502, 503, 504):
-        raise httpx.HTTPStatusError(
-            f"ElevenLabs HTTP {resp.status_code}",
-            request=resp.request,
-            response=resp,
-        )
-    raise TTSError(f"ElevenLabs API 오류 [{resp.status_code}]: {resp.text[:300]}")
+    try:
+        audio = await elevenlabs_client.synthesize(text)
+    except elevenlabs_client.ElevenLabsAuthError as exc:
+        raise TTSError(f"ElevenLabs 인증 실패 (401): {exc}") from exc
+    except elevenlabs_client.ElevenLabsQuotaError as exc:
+        raise TTSError(f"ElevenLabs 쿼터 초과 (429) — 최대 재시도 초과: {exc}") from exc
+    except elevenlabs_client.ElevenLabsServerError as exc:
+        raise TTSError(f"ElevenLabs 서버 오류 — 최대 재시도 초과: {exc}") from exc
+    except elevenlabs_client.ElevenLabsError as exc:
+        raise TTSError(f"ElevenLabs 호출 실패: {exc}") from exc
+    elapsed = time.monotonic() - start
+    return TTSResult(
+        audio_bytes=audio,
+        provider="elevenlabs",
+        duration_seconds=elapsed,
+        text_chars=len(text),
+    )
 
 
 def _google_tts_synthesize(text: str) -> TTSResult:
-    logger.info("Google Cloud TTS 요청: text_length=%d, voice=%s", len(text), settings.GOOGLE_TTS_VOICE_NAME)
-    if settings.GOOGLE_TTS_CREDENTIALS_JSON:
-        credentials_info = json.loads(settings.GOOGLE_TTS_CREDENTIALS_JSON)
-        client = texttospeech.TextToSpeechClient.from_service_account_info(credentials_info)
-    else:
-        client = texttospeech.TextToSpeechClient()
-
-    synthesis_input = texttospeech.SynthesisInput(text=text)
-    voice = texttospeech.VoiceSelectionParams(
-        language_code=settings.GOOGLE_TTS_LANGUAGE_CODE,
-        name=settings.GOOGLE_TTS_VOICE_NAME,
-    )
-    audio_config = texttospeech.AudioConfig(
-        audio_encoding=texttospeech.AudioEncoding.MP3, speaking_rate=1.0, pitch=0.0,
-    )
-
+    """``google_tts_client.synthesize`` 위임. GoogleTTSError → TTSError."""
     start = time.monotonic()
-    response = client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
+    try:
+        audio = google_tts_client.synthesize(text)
+    except google_tts_client.GoogleTTSError as exc:
+        raise TTSError(f"Google TTS 호출 실패: {exc}") from exc
     elapsed = time.monotonic() - start
-
-    return TTSResult(audio_bytes=response.audio_content, provider="google_tts", duration_seconds=elapsed)
+    return TTSResult(
+        audio_bytes=audio,
+        provider="google_tts",
+        duration_seconds=elapsed,
+        text_chars=len(text),
+    )
 
 
 def _parse_audio_duration(headers: httpx.Headers) -> float | None:
-    """응답 헤더에서 오디오 길이(초)를 추출. 없으면 None."""
+    """응답 헤더에서 오디오 길이(초)를 추출. 없으면 None.
+
+    ElevenLabs 가 ``content-duration`` / ``x-audio-duration`` 헤더를 일관되게
+    내려보내지는 않으므로, 추후 정확한 단가 계산이 필요할 때 보조 수단으로 사용.
+    """
     val = headers.get("content-duration") or headers.get("x-audio-duration")
     if val:
         try:

@@ -1,29 +1,64 @@
-"""TTS 서비스 단위 테스트."""
-from unittest.mock import patch, AsyncMock, MagicMock
+"""TTS orchestrator + 도메인 예외 변환 단위 테스트.
+
+새 구조:
+- tts.synthesize: ElevenLabs 시도 → 실패 시 Google TTS 폴백 → 둘 다 실패 시 TTSError
+- elevenlabs_client / google_tts_client 의 도메인 예외를 패치해 흐름만 검증
+- 실 HTTP 호출은 test_tts_clients.py (respx) 에서 검증
+
+DoD 매핑 (요건):
+1. ElevenLabs 성공                       → test_synthesize_elevenlabs_success
+2. ElevenLabs 5xx → 폴백                 → test_synthesize_falls_back_on_elevenlabs_server_error
+3. 폴백도 실패                           → test_synthesize_raises_when_both_providers_fail
+4. 쿼터 (429)                            → test_synthesize_falls_back_on_quota_error
+5. voice cloning 분기                     → test_synthesize_passes_custom_voice_id_through
+6. 비용 기록                              → test_synthesize_records_cost_when_sessionmaker_given
+"""
+from __future__ import annotations
+
+import uuid
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 
+from app.services.pipeline import elevenlabs_client, google_tts_client, tts
 from app.services.pipeline.tts import (
     TTSError,
     TTSResult,
-    synthesize,
     _elevenlabs_synthesize,
     _google_tts_synthesize,
     _parse_audio_duration,
+    synthesize,
 )
 
 
 # ── TTSResult ────────────────────────────────────────────────────────────────
 
-def test_tts_result():
+
+def test_tts_result_basic():
     r = TTSResult(audio_bytes=b"audio", provider="elevenlabs", duration_seconds=1.5)
     assert r.audio_bytes == b"audio"
     assert r.provider == "elevenlabs"
     assert r.duration_seconds == 1.5
+    assert r.text_chars == 0
+    assert r.fallback_reason is None
+
+
+def test_tts_result_with_extras():
+    r = TTSResult(
+        audio_bytes=b"a",
+        provider="google_tts",
+        duration_seconds=0.8,
+        text_chars=42,
+        fallback_reason="ElevenLabsServerError: oops",
+    )
+    assert r.text_chars == 42
+    assert r.fallback_reason and "ElevenLabsServerError" in r.fallback_reason
 
 
 # ── _parse_audio_duration ────────────────────────────────────────────────────
+
 
 def test_parse_audio_duration_content_duration():
     headers = httpx.Headers({"content-duration": "12.5"})
@@ -36,8 +71,7 @@ def test_parse_audio_duration_x_audio_duration():
 
 
 def test_parse_audio_duration_missing():
-    headers = httpx.Headers({})
-    assert _parse_audio_duration(headers) is None
+    assert _parse_audio_duration(httpx.Headers({})) is None
 
 
 def test_parse_audio_duration_invalid():
@@ -45,157 +79,245 @@ def test_parse_audio_duration_invalid():
     assert _parse_audio_duration(headers) is None
 
 
-# ── _elevenlabs_synthesize ───────────────────────────────────────────────────
+# ── synthesize: 1차 (ElevenLabs) 성공 경로 ─────────────────────────────────
 
-@pytest.mark.asyncio
-async def test_elevenlabs_success():
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.content = b"fake-audio-mp3"
-    mock_resp.headers = httpx.Headers({"content-type": "audio/mpeg"})
-
-    with patch("app.services.pipeline.tts.httpx.AsyncClient") as mock_cls:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_resp
-        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-
-        result = await _elevenlabs_synthesize("안녕하세요")
-
-    assert result.provider == "elevenlabs"
-    assert result.audio_bytes == b"fake-audio-mp3"
-    assert result.duration_seconds > 0
-
-
-@pytest.mark.asyncio
-async def test_elevenlabs_non_retryable_error():
-    mock_resp = MagicMock()
-    mock_resp.status_code = 401
-    mock_resp.text = "Unauthorized"
-    mock_resp.headers = httpx.Headers({})
-
-    with patch("app.services.pipeline.tts.httpx.AsyncClient") as mock_cls:
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_resp
-        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-
-        with pytest.raises(TTSError, match="401"):
-            await _elevenlabs_synthesize("테스트")
-
-    # 재시도 없이 즉시 실패해야 함
-    mock_client.post.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_elevenlabs_retries_on_429():
-    mock_resp_429 = MagicMock()
-    mock_resp_429.status_code = 429
-    mock_resp_429.text = "Rate limited"
-    mock_resp_429.headers = httpx.Headers({})
-
-    mock_resp_200 = MagicMock()
-    mock_resp_200.status_code = 200
-    mock_resp_200.content = b"audio-after-retry"
-    mock_resp_200.headers = httpx.Headers({})
-
-    with patch("app.services.pipeline.tts.httpx.AsyncClient") as mock_cls, \
-         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
-        mock_client = AsyncMock()
-        mock_client.post.side_effect = [mock_resp_429, mock_resp_200]
-        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-
-        result = await _elevenlabs_synthesize("재시도 테스트")
-
-    assert result.audio_bytes == b"audio-after-retry"
-    assert mock_client.post.call_count == 2
-
-
-@pytest.mark.asyncio
-async def test_elevenlabs_max_retries_exceeded():
-    mock_resp = MagicMock()
-    mock_resp.status_code = 500
-    mock_resp.text = "Server Error"
-    mock_resp.headers = httpx.Headers({})
-
-    with patch("app.services.pipeline.tts.httpx.AsyncClient") as mock_cls, \
-         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
-        mock_client = AsyncMock()
-        mock_client.post.return_value = mock_resp
-        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-
-        with pytest.raises(TTSError, match="최대 재시도 초과"):
-            await _elevenlabs_synthesize("실패 테스트")
-
-    assert mock_client.post.call_count == 3
-
-
-@pytest.mark.asyncio
-async def test_elevenlabs_timeout_retries():
-    with patch("app.services.pipeline.tts.httpx.AsyncClient") as mock_cls, \
-         patch("app.core.retry.asyncio.sleep", new_callable=AsyncMock):
-        mock_client = AsyncMock()
-        mock_client.post.side_effect = httpx.TimeoutException("timeout")
-        mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
-
-        with pytest.raises(TTSError, match="최대 재시도 초과"):
-            await _elevenlabs_synthesize("타임아웃 테스트")
-
-    assert mock_client.post.call_count == 3
-
-
-# ── synthesize (폴백) ────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
 async def test_synthesize_elevenlabs_success():
-    mock_result = TTSResult(b"audio", "elevenlabs", 0.5)
-
-    with patch("app.services.pipeline.tts._elevenlabs_synthesize", new_callable=AsyncMock, return_value=mock_result):
-        result = await synthesize("테스트")
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        return_value=b"el-audio",
+    ) as el_mock, patch.object(
+        google_tts_client, "synthesize", side_effect=AssertionError("Google 호출되면 안 됨"),
+    ):
+        result = await synthesize("안녕하세요")
 
     assert result.provider == "elevenlabs"
+    assert result.audio_bytes == b"el-audio"
+    assert result.text_chars == len("안녕하세요")
+    assert result.fallback_reason is None
+    el_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_synthesize_fallback_to_google():
-    mock_google_result = TTSResult(b"google-audio", "google_tts", 0.8)
+async def test_synthesize_passes_custom_voice_id_through():
+    """voice cloning 분기: caller 가 voice_id 를 전달하면 ElevenLabs client 까지 그대로 전달."""
+    cloned_voice = "cloned-user-12345"
 
-    with patch("app.services.pipeline.tts._elevenlabs_synthesize", new_callable=AsyncMock, side_effect=TTSError("fail")), \
-         patch("app.services.pipeline.tts._google_tts_synthesize", return_value=mock_google_result):
-        result = await synthesize("폴백 테스트")
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        return_value=b"cloned-audio",
+    ) as el_mock:
+        result = await synthesize("내 목소리로", voice_id=cloned_voice)
+
+    assert result.provider == "elevenlabs"
+    el_mock.assert_awaited_once()
+    _, kwargs = el_mock.call_args
+    assert kwargs.get("voice_id") == cloned_voice
+
+
+# ── synthesize: 2차 폴백 (Google TTS) 경로 ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_synthesize_falls_back_on_elevenlabs_server_error():
+    """ElevenLabs 5xx → ElevenLabsServerError → Google 호출."""
+    el_exc = elevenlabs_client.ElevenLabsServerError("HTTP 502 retries exhausted")
+
+    def google_sync(text):  # google_tts_client.synthesize 는 sync
+        return b"google-audio"
+
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=el_exc,
+    ), patch.object(google_tts_client, "synthesize", side_effect=google_sync) as g_mock:
+        result = await synthesize("폴백 발동")
 
     assert result.provider == "google_tts"
     assert result.audio_bytes == b"google-audio"
+    assert result.fallback_reason is not None
+    assert "ElevenLabsServerError" in result.fallback_reason
+    g_mock.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_synthesize_writes_output_file(tmp_path):
-    mock_result = TTSResult(b"file-audio", "elevenlabs", 0.3)
-    output = tmp_path / "output.mp3"
+async def test_synthesize_falls_back_on_quota_error():
+    """ElevenLabs 쿼터 초과 (429) → ElevenLabsQuotaError → Google 호출."""
+    el_exc = elevenlabs_client.ElevenLabsQuotaError("HTTP 429 quota")
 
-    with patch("app.services.pipeline.tts._elevenlabs_synthesize", new_callable=AsyncMock, return_value=mock_result):
-        await synthesize("파일 테스트", output_path=output)
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=el_exc,
+    ), patch.object(
+        google_tts_client, "synthesize", return_value=b"google-quota-fallback",
+    ):
+        result = await synthesize("쿼터 폴백")
+
+    assert result.provider == "google_tts"
+    assert result.audio_bytes == b"google-quota-fallback"
+    assert result.fallback_reason and "ElevenLabsQuotaError" in result.fallback_reason
+
+
+@pytest.mark.asyncio
+async def test_synthesize_falls_back_on_auth_error():
+    """ElevenLabs 401 (auth) 도 일관되게 폴백 — 운영 중 한 provider 가 죽어도 영상 생성 지속."""
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        side_effect=elevenlabs_client.ElevenLabsAuthError("ELEVENLABS_API_KEY invalid"),
+    ), patch.object(
+        google_tts_client, "synthesize", return_value=b"auth-fallback",
+    ):
+        result = await synthesize("auth 폴백")
+
+    assert result.provider == "google_tts"
+    assert result.fallback_reason and "ElevenLabsAuthError" in result.fallback_reason
+
+
+@pytest.mark.asyncio
+async def test_synthesize_raises_when_both_providers_fail():
+    """ElevenLabs 5xx → Google 도 5xx → TTSError 통합."""
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        side_effect=elevenlabs_client.ElevenLabsServerError("HTTP 503"),
+    ), patch.object(
+        google_tts_client, "synthesize",
+        side_effect=google_tts_client.GoogleTTSServerError("INTERNAL"),
+    ):
+        with pytest.raises(TTSError, match="폴백도 실패"):
+            await synthesize("실패 케이스")
+
+
+@pytest.mark.asyncio
+async def test_synthesize_rejects_empty_text():
+    with pytest.raises(TTSError, match="비어있어"):
+        await synthesize("")
+
+
+@pytest.mark.asyncio
+async def test_synthesize_writes_output_file(tmp_path: Path):
+    output = tmp_path / "out.mp3"
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        return_value=b"file-audio",
+    ):
+        await synthesize("파일 저장 테스트", output_path=output)
 
     assert output.exists()
     assert output.read_bytes() == b"file-audio"
 
 
-# ── _google_tts_synthesize ───────────────────────────────────────────────────
+# ── synthesize: 비용 기록 ────────────────────────────────────────────────────
 
-def test_google_tts_synthesize():
-    mock_response = MagicMock()
-    mock_response.audio_content = b"google-tts-audio"
 
-    with patch("app.services.pipeline.tts.texttospeech.TextToSpeechClient") as mock_cls:
-        mock_client = MagicMock()
-        mock_client.synthesize_speech.return_value = mock_response
-        mock_cls.return_value = mock_client
+@pytest.mark.asyncio
+async def test_synthesize_records_cost_when_sessionmaker_given():
+    """sessionmaker + video_render_id 가 모두 주어지면 cost_tracker.record_tts_cost 호출."""
+    fake_sessionmaker = MagicMock(name="SessionLocal")
+    render_id = uuid.uuid4()
 
-        result = _google_tts_synthesize("구글 TTS 테스트")
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        return_value=b"audio",
+    ), patch("app.services.cost_tracker.record_tts_cost", return_value=True) as cost_mock:
+        result = await synthesize(
+            "비용 테스트 텍스트",
+            sessionmaker=fake_sessionmaker,
+            video_render_id=render_id,
+        )
 
+    assert result.provider == "elevenlabs"
+    cost_mock.assert_called_once()
+    _, kwargs = cost_mock.call_args
+    assert kwargs["sessionmaker"] is fake_sessionmaker
+    assert kwargs["video_render_id"] == render_id
+    assert kwargs["provider"] == "elevenlabs"
+    assert kwargs["text_chars"] == len("비용 테스트 텍스트")
+    assert kwargs["fallback_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_synthesize_cost_records_fallback_reason():
+    """폴백 발동 시 cost_tracker.record_tts_cost 에 fallback_reason 전달."""
+    fake_sessionmaker = MagicMock(name="SessionLocal")
+    render_id = uuid.uuid4()
+
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        side_effect=elevenlabs_client.ElevenLabsQuotaError("HTTP 429"),
+    ), patch.object(
+        google_tts_client, "synthesize", return_value=b"g",
+    ), patch("app.services.cost_tracker.record_tts_cost", return_value=True) as cost_mock:
+        await synthesize(
+            "폴백 비용",
+            sessionmaker=fake_sessionmaker,
+            video_render_id=render_id,
+        )
+
+    cost_mock.assert_called_once()
+    _, kwargs = cost_mock.call_args
+    assert kwargs["provider"] == "google_tts"
+    assert kwargs["fallback_reason"] is not None
+    assert "ElevenLabsQuotaError" in kwargs["fallback_reason"]
+
+
+@pytest.mark.asyncio
+async def test_synthesize_skips_cost_when_not_provided():
+    """sessionmaker 가 None 이면 record_tts_cost 호출하지 않음."""
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, return_value=b"a",
+    ), patch("app.services.cost_tracker.record_tts_cost") as cost_mock:
+        await synthesize("스킵")
+
+    cost_mock.assert_not_called()
+
+
+# ── 후방 호환 헬퍼 (_elevenlabs_synthesize / _google_tts_synthesize) ────────
+
+
+@pytest.mark.asyncio
+async def test_elevenlabs_synthesize_helper_wraps_audio():
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, return_value=b"x",
+    ):
+        result = await _elevenlabs_synthesize("hi")
+    assert isinstance(result, TTSResult)
+    assert result.provider == "elevenlabs"
+    assert result.audio_bytes == b"x"
+    assert result.duration_seconds >= 0
+
+
+@pytest.mark.asyncio
+async def test_elevenlabs_synthesize_helper_translates_errors():
+    """ElevenLabsAuthError → TTSError("...401...")."""
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        side_effect=elevenlabs_client.ElevenLabsAuthError("bad key"),
+    ):
+        with pytest.raises(TTSError, match="401"):
+            await _elevenlabs_synthesize("hi")
+
+
+def test_google_tts_synthesize_helper_wraps_audio():
+    with patch.object(
+        google_tts_client, "synthesize", return_value=b"g-bytes",
+    ):
+        result = _google_tts_synthesize("안녕")
     assert result.provider == "google_tts"
-    assert result.audio_bytes == b"google-tts-audio"
-    assert result.duration_seconds > 0
+    assert result.audio_bytes == b"g-bytes"
+
+
+def test_google_tts_synthesize_helper_translates_errors():
+    with patch.object(
+        google_tts_client, "synthesize",
+        side_effect=google_tts_client.GoogleTTSServerError("503"),
+    ):
+        with pytest.raises(TTSError, match="Google TTS"):
+            _google_tts_synthesize("hi")
+
+
+# ── 모듈 export sanity ──────────────────────────────────────────────────────
+
+
+def test_module_exports():
+    """기존 caller 가 import 하는 심볼이 그대로 살아있는지 확인."""
+    assert hasattr(tts, "synthesize")
+    assert hasattr(tts, "TTSResult")
+    assert hasattr(tts, "TTSError")
