@@ -1,0 +1,258 @@
+"""ElevenLabs HTTP 클라이언트.
+
+음성 합성(Text-to-Speech) + Instant Voice Cloning(IVC) 호출을 캡슐화한다.
+401 / 429 / 5xx 를 명시 도메인 예외로 변환해 호출부(tts.py 폴백 분기) 가
+응답 코드 분석을 다시 하지 않아도 되도록 한다.
+
+- 재시도 정책: ``app.core.retry.retry_external`` 적용 (3회 · exp backoff)
+- 4xx (401/403 등 영구 오류) 는 즉시 raise — 폴백 판단은 호출부 책임
+- 5xx / 429 / Timeout 은 재시도 후 한도 초과 시 ServerError/QuotaError 로 분류
+"""
+from __future__ import annotations
+
+import json as _json
+import logging
+from typing import Any
+
+import httpx
+
+from app.core.config import settings
+from app.core.retry import (
+    DEFAULT_MAX_ATTEMPTS,
+    RetryableHTTPError,
+    retry_external,
+)
+
+logger = logging.getLogger(__name__)
+
+# ── 상수 ─────────────────────────────────────────────────────────────────────
+
+_BASE_URL = "https://api.elevenlabs.io/v1"
+_DEFAULT_TIMEOUT = 120.0  # 합성은 긴 문장에서 수십 초 소요 — 통상 30s 보다 길게
+
+
+# ── 도메인 예외 ──────────────────────────────────────────────────────────────
+
+
+class ElevenLabsError(Exception):
+    """ElevenLabs API 호출 실패 (기반 클래스)."""
+
+
+class ElevenLabsAuthError(ElevenLabsError):
+    """401: 인증 실패 (잘못된/만료된 API 키)."""
+
+
+class ElevenLabsQuotaError(ElevenLabsError):
+    """429: 쿼터/레이트 리밋 — 재시도 후에도 해소되지 않으면 폴백 권고."""
+
+
+class ElevenLabsServerError(ElevenLabsError):
+    """5xx / 네트워크 타임아웃 — 재시도 후에도 실패 시 폴백 권고."""
+
+
+# ── 합성 (TTS) ───────────────────────────────────────────────────────────────
+
+
+def _voice_id_or_default(voice_id: str | None) -> str:
+    vid = (voice_id or settings.ELEVENLABS_VOICE_ID or "").strip()
+    if not vid:
+        raise ElevenLabsError(
+            "ELEVENLABS_VOICE_ID 가 비어있고 voice_id 인자도 전달되지 않음"
+        )
+    return vid
+
+
+def _default_voice_settings() -> dict[str, Any]:
+    return {
+        "stability": 0.5,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": True,
+    }
+
+
+async def synthesize(
+    text: str,
+    *,
+    voice_id: str | None = None,
+    model_id: str | None = None,
+    output_format: str = "mp3_44100_128",
+    voice_settings: dict[str, Any] | None = None,
+    timeout: float = _DEFAULT_TIMEOUT,
+) -> bytes:
+    """ElevenLabs TTS 합성. 성공 시 mp3 audio bytes 반환.
+
+    voice_id: Cloned voice (IVC) 를 사용하려면 user 의 elevenlabs_voice_id 를 전달.
+              None 이면 settings.ELEVENLABS_VOICE_ID (시스템 기본값) 사용.
+    """
+    if not (settings.ELEVENLABS_API_KEY or "").strip():
+        raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
+    vid = _voice_id_or_default(voice_id)
+    mid = (model_id or settings.ELEVENLABS_MODEL_ID).strip()
+    payload_settings = voice_settings or _default_voice_settings()
+
+    try:
+        return await _synthesize_with_retry(
+            text=text,
+            voice_id=vid,
+            model_id=mid,
+            output_format=output_format,
+            voice_settings=payload_settings,
+            timeout=timeout,
+        )
+    except (RetryableHTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
+        # 재시도 한도까지 5xx/429/timeout 였다면 도메인 예외로 분류해 호출부 폴백 단순화
+        status = _status_from_exc(exc)
+        if status == 429:
+            raise ElevenLabsQuotaError(
+                f"ElevenLabs 쿼터/레이트리밋 — 재시도 {DEFAULT_MAX_ATTEMPTS}회 초과"
+            ) from exc
+        raise ElevenLabsServerError(
+            f"ElevenLabs 서버 오류 — 재시도 {DEFAULT_MAX_ATTEMPTS}회 초과: {exc}"
+        ) from exc
+
+
+@retry_external(label="elevenlabs.synthesize")
+async def _synthesize_with_retry(
+    *,
+    text: str,
+    voice_id: str,
+    model_id: str,
+    output_format: str,
+    voice_settings: dict[str, Any],
+    timeout: float,
+) -> bytes:
+    url = f"{_BASE_URL}/text-to-speech/{voice_id}"
+    headers = {
+        "xi-api-key": settings.ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "audio/mpeg",
+    }
+    payload = {"text": text, "model_id": model_id, "voice_settings": voice_settings}
+    params = {"output_format": output_format}
+    logger.info(
+        "ElevenLabs TTS 요청: voice_id=%s, model=%s, chars=%d",
+        voice_id, model_id, len(text),
+    )
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        resp = await client.post(url, headers=headers, json=payload, params=params)
+    return _interpret_synth_response(resp)
+
+
+def _interpret_synth_response(resp: httpx.Response) -> bytes:
+    """200 → bytes 반환, 4xx/5xx → 분류해 raise (재시도 데코와 합치)."""
+    if resp.status_code == 200:
+        return resp.content
+    if resp.status_code == 401:
+        raise ElevenLabsAuthError(f"ElevenLabs 401: {resp.text[:300]}")
+    if resp.status_code in (429, 500, 502, 503, 504):
+        # retry_external 데코레이터가 재시도하도록 httpx.HTTPStatusError 로 띄움
+        raise httpx.HTTPStatusError(
+            f"ElevenLabs HTTP {resp.status_code}",
+            request=resp.request,
+            response=resp,
+        )
+    if 400 <= resp.status_code < 500:
+        raise ElevenLabsError(
+            f"ElevenLabs HTTP {resp.status_code}: {resp.text[:300]}"
+        )
+    raise ElevenLabsServerError(
+        f"ElevenLabs HTTP {resp.status_code}: {resp.text[:300]}"
+    )
+
+
+def _status_from_exc(exc: BaseException) -> int | None:
+    if isinstance(exc, RetryableHTTPError):
+        return exc.status_code
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code
+    return None
+
+
+# ── Instant Voice Cloning (IVC) ──────────────────────────────────────────────
+
+
+async def clone_voice(
+    name: str,
+    audio_files: list[tuple[str, bytes]],
+    *,
+    description: str | None = None,
+    labels: dict[str, str] | None = None,
+    timeout: float = _DEFAULT_TIMEOUT,
+) -> dict[str, Any]:
+    """ElevenLabs Instant Voice Cloning 으로 cloned voice 생성.
+
+    - audio_files: ``[(filename, bytes), ...]`` — 30초~수분 분량 샘플
+    - 반환: ``{"voice_id": "...", ...}`` (생성된 voice 메타데이터)
+
+    ``custom_voices`` 테이블 INSERT 시 ``elevenlabs_voice_id`` 로 사용한다.
+    """
+    if not (settings.ELEVENLABS_API_KEY or "").strip():
+        raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
+    if not audio_files:
+        raise ElevenLabsError("clone_voice: 음성 샘플이 비어있음")
+
+    try:
+        return await _clone_voice_with_retry(
+            name=name,
+            audio_files=audio_files,
+            description=description,
+            labels=labels,
+            timeout=timeout,
+        )
+    except (RetryableHTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
+        status = _status_from_exc(exc)
+        if status == 429:
+            raise ElevenLabsQuotaError(
+                f"ElevenLabs IVC 쿼터/레이트리밋 — 재시도 {DEFAULT_MAX_ATTEMPTS}회 초과"
+            ) from exc
+        raise ElevenLabsServerError(
+            f"ElevenLabs IVC 서버 오류 — 재시도 {DEFAULT_MAX_ATTEMPTS}회 초과: {exc}"
+        ) from exc
+
+
+@retry_external(label="elevenlabs.clone_voice")
+async def _clone_voice_with_retry(
+    *,
+    name: str,
+    audio_files: list[tuple[str, bytes]],
+    description: str | None,
+    labels: dict[str, str] | None,
+    timeout: float,
+) -> dict[str, Any]:
+    url = f"{_BASE_URL}/voices/add"
+    headers = {"xi-api-key": settings.ELEVENLABS_API_KEY}
+    files = [
+        ("files", (fname, data, "audio/mpeg")) for fname, data in audio_files
+    ]
+    data: dict[str, Any] = {"name": name}
+    if description:
+        data["description"] = description
+    if labels:
+        data["labels"] = _json.dumps(labels)
+    logger.info(
+        "ElevenLabs IVC 요청: name=%s, samples=%d", name, len(audio_files),
+    )
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        resp = await client.post(url, headers=headers, data=data, files=files)
+    return _interpret_clone_response(resp)
+
+
+def _interpret_clone_response(resp: httpx.Response) -> dict[str, Any]:
+    if resp.status_code == 200:
+        return resp.json()
+    if resp.status_code == 401:
+        raise ElevenLabsAuthError(f"ElevenLabs IVC 401: {resp.text[:300]}")
+    if resp.status_code in (429, 500, 502, 503, 504):
+        raise httpx.HTTPStatusError(
+            f"ElevenLabs IVC HTTP {resp.status_code}",
+            request=resp.request,
+            response=resp,
+        )
+    if 400 <= resp.status_code < 500:
+        raise ElevenLabsError(
+            f"ElevenLabs IVC HTTP {resp.status_code}: {resp.text[:300]}"
+        )
+    raise ElevenLabsServerError(
+        f"ElevenLabs IVC HTTP {resp.status_code}: {resp.text[:300]}"
+    )
