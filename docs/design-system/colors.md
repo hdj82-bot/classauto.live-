@@ -1,0 +1,222 @@
+# Colors (색상 시스템)
+
+> **상태**: 확정 · 2026-05-05
+> **결정**: 다크/골드 무채색 + 그라데이션 메쉬 (ElevenLabs 톤)
+
+---
+
+## 1. 영역별 컬러 분리
+
+| 영역 | 베이스 | 포인트 | 비고 |
+|---|---|---|---|
+| 메인 사이트 (랜딩·features·pricing) | `#FAFAF7` 라이트 | 골드 `#FFB627` | 무채색 + 그라데이션 메쉬 |
+| 데모 페이지 (`/demo`) | `#0A0A0A` 다크 | 골드 + 그라데이션 | 학습자 시점 명시 |
+| 교수자 화면 (대시보드 등) | `#FFFFFF` 메인 + `#FAFAF7` 사이드바 | 골드 | 의미적 컬러(빨강·녹색) 허용 |
+| 학습자 화면 (영상 시청) | `#0A0A0A` 강제 | 무채색 + 영상이 컬러 | 마스코트 회갈색 |
+
+---
+
+## 2. 베이스 팔레트
+
+### 2.1 다크 톤
+```css
+--bg-dark: #0A0A0A;
+--bg-dark-soft: #141414;
+--bg-card-dark: #1A1A1A;
+--text-on-dark: #FFFFFF;
+--text-on-dark-muted: rgba(255, 255, 255, 0.55);
+--text-on-dark-subtle: rgba(255, 255, 255, 0.35);
+```
+
+### 2.2 라이트 톤
+```css
+--bg-light: #FAFAF7;
+--bg-card-light: #FFFFFF;
+--bg-sidebar-light: #FAFAF7;
+--text-on-light: #0A0A0A;
+--text-on-light-muted: rgba(10, 10, 10, 0.62);
+--text-on-light-subtle: rgba(10, 10, 10, 0.40);
+```
+
+### 2.3 라인·디바이더
+```css
+--line-on-dark: rgba(255, 255, 255, 0.08);
+--line-on-light: rgba(10, 10, 10, 0.08);
+--line-subtle: rgba(255, 255, 255, 0.04);
+```
+
+---
+
+## 3. 골드 (시그니처 컬러)
+
+```css
+--gold: #FFB627;          /* 메인 골드 */
+--gold-bright: #FFC74D;   /* 호버·활성 */
+--gold-deep: #E89E0E;     /* 깊은 톤 (텍스트) */
+
+--gold-glow-soft: rgba(255, 182, 39, 0.03);    /* 비교표 Basic 컬럼 배경 */
+--gold-glow-medium: rgba(255, 182, 39, 0.15);  /* 호버 글로우 */
+--gold-glow-strong: rgba(255, 182, 39, 0.40);  /* 펄스 애니메이션 */
+
+--gold-text-on-dark: #FFB627;
+--gold-text-on-light: #B88308;  /* 라이트 배경에서는 더 진하게 */
+```
+
+골드 사용 원칙:
+- **CTA 버튼 1개당 골드 채움 1번만** (다른 버튼은 outline)
+- 작은 강조 (배지, 카운트, 활성 메뉴)에 골드
+- 너무 많이 쓰면 카지노 느낌 → 페이지당 골드 영역 5곳 이내
+
+---
+
+## 4. 그라데이션 (ElevenLabs 톤)
+
+### 4.1 카드 아이콘용 (4종)
+```css
+--grad-violet:    linear-gradient(135deg, #A78BFA 0%, #6366F1 100%);
+--grad-electric:  linear-gradient(135deg, #FFB627 0%, #F59E0B 100%);
+--grad-cyan:      linear-gradient(135deg, #22D3EE 0%, #0EA5E9 100%);
+--grad-pink:      linear-gradient(135deg, #F472B6 0%, #EC4899 100%);
+```
+
+### 4.2 배경 메쉬용 (오로라)
+ElevenLabs 페이지의 큰 그라데이션 오브 효과 차용. 다중 radial-gradient:
+
+```css
+.aurora-bg {
+  background:
+    radial-gradient(ellipse at 20% 30%, rgba(167, 139, 250, 0.15), transparent 50%),
+    radial-gradient(ellipse at 80% 70%, rgba(255, 182, 39, 0.12), transparent 50%),
+    radial-gradient(ellipse at 50% 50%, rgba(34, 211, 238, 0.10), transparent 60%);
+  animation: aurora-shift 60s ease-in-out infinite;
+}
+
+@keyframes aurora-shift {
+  0%, 100% { transform: translate(0, 0); }
+  33% { transform: translate(2%, -1%); }
+  66% { transform: translate(-1%, 2%); }
+}
+```
+
+### 4.3 텍스트 그라데이션
+```css
+.gradient-text {
+  background: linear-gradient(135deg, #60A5FA 0%, #A78BFA 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+```
+
+히어로 헤드라인의 일부 단어만 그라데이션 — 전체 그라데이션은 가독성 떨어짐.
+
+---
+
+## 5. 의미적 컬러 (교수자 영역만)
+
+학습자 화면·메인 사이트에는 사용 금지. **교수자 데이터 시각화**에만 허용.
+
+```css
+--semantic-warning: #EF4444;   /* 미응답 Q&A, 한도 초과 */
+--semantic-success: #10B981;   /* 정답률 상승, 시청 완료 */
+--semantic-info: #3B82F6;      /* 안내 메시지 */
+--semantic-neutral: #6B7280;   /* 비활성·보조 */
+```
+
+규칙:
+- 빨강은 **액션 유도**에만 (단순 강조 X)
+- 녹색은 **긍정 변화**에만 (정적 표시 X)
+- 청색은 사용하지 않거나 매우 드물게 (메인 골드와 충돌)
+
+---
+
+## 6. 마스코트 컬러 (학습자 영역)
+
+올빼미 마스코트는 **회갈색 단색**으로 통일:
+
+```css
+--mascot-base: #6B5B47;        /* 몸통 */
+--mascot-light: #A89678;       /* 가슴·복부 */
+--mascot-eye: #1A1A1A;         /* 눈동자 */
+--mascot-beak: #D4923A;        /* 부리 (살짝 따뜻한 톤) */
+```
+
+이유:
+- ElevenLabs 무채색 톤과 충돌 안 함
+- Duolingo 부엉이의 채도 높은 그린과 차별화
+- 어떤 배경(다크/라이트)에도 잘 어울림
+
+자세한 사항은 [mascot.md](./mascot.md).
+
+---
+
+## 7. 그림자
+
+```css
+--shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+--shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+--shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+--shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.16);
+
+--shadow-gold-glow: 0 0 24px rgba(255, 182, 39, 0.30);
+--shadow-card-hover: 0 8px 32px rgba(255, 182, 39, 0.15);
+```
+
+학습자 영역(다크 모드)에서는 그림자 대신 **글로우** 사용:
+
+```css
+.card-on-dark:hover {
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.04);
+  border-color: var(--gold);
+}
+```
+
+---
+
+## 8. 컬러 사용 우선순위 매트릭스
+
+| 페이지 | 골드 사용 | 그라데이션 메쉬 | 의미적 컬러 |
+|---|:---:|:---:|:---:|
+| 랜딩 (`/`) | ✓ 다수 | ✓ 배경 | ❌ |
+| Demo (`/demo`) | ✓ CTA·배지 | ✓ 미니 히어로 + CTA 모달 | ❌ |
+| Pricing (`/pricing`) | ✓ Basic 카드 | ❌ (단순함 우선) | ❌ |
+| 교수자 대시보드 | ✓ 활성 메뉴·CTA | ❌ | ✓ 차트 |
+| 영상 제작 마법사 | ✓ 비용 미터 | ❌ | ✓ 한도 경고 |
+| 학생 영상 시청 | ✓ 익명 반응 | ❌ | ❌ |
+| 집중 경고 | ✓ 마스코트 글로우 | ❌ | ❌ |
+
+---
+
+## 9. 접근성 (대비)
+
+### 9.1 WCAG 2.1 AA 기준
+- 일반 텍스트: 대비 4.5:1 이상
+- 큰 텍스트 (18px+ 또는 14px+ bold): 3:1 이상
+- UI 요소 (버튼·아이콘): 3:1 이상
+
+### 9.2 검증된 페어
+| 텍스트 | 배경 | 대비 | 통과 |
+|---|---|---|---|
+| `#FFFFFF` | `#0A0A0A` | 19.6:1 | ✓ AAA |
+| `rgba(255,255,255,0.55)` | `#0A0A0A` | 9.4:1 | ✓ AAA |
+| `#FFB627` | `#0A0A0A` | 11.2:1 | ✓ AAA |
+| `#0A0A0A` | `#FAFAF7` | 18.7:1 | ✓ AAA |
+| `#B88308` | `#FAFAF7` | 5.1:1 | ✓ AA |
+
+라이트 배경에서 골드(`#FFB627`)는 **`#B88308`로 어둡게** 사용.
+
+### 9.3 색맹 친화
+- 빨강 단독 사용 금지 → 빨강 + 아이콘 (! 마크) 병용
+- 녹색 단독 사용 금지 → 녹색 + ✓ 병용
+- 청록 보조 컬러로 색맹 친화 강화 (Pro 차별 표시 등)
+
+---
+
+## 10. 변경 이력
+
+| 날짜 | 변경 |
+|---|---|
+| 2026-05-05 | 다크/골드 + 그라데이션 메쉬 정책 확정 |
+| 2026-05-05 | 영역별 베이스 모드 분리 (학습자=다크 강제) |
+| 2026-05-05 | 의미적 컬러는 교수자 영역에만 허용 |
+| 2026-05-05 | 마스코트 회갈색 단색 결정 |

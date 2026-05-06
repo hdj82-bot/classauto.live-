@@ -1,267 +1,199 @@
-# IFL Platform — Interactive Flipped Learning
+# CLAUDE.md
 
-> **통합 백엔드** — FastAPI + Celery + PostgreSQL(pgvector) + Redis
-> 프론트엔드: Next.js (frontend/)
-> **프로덕션 호스팅**: Vercel(프론트) + Railway(백엔드/Celery/Redis) + Supabase(DB/pgvector)
+이 파일은 Claude Code가 이 저장소에서 작업할 때 참조하는 컨텍스트입니다.
 
 ---
 
-## 프로젝트 구조
+## 프로젝트 개요
 
-```
-Interactive-flipped-learning/
-├── .github/workflows/ci.yml    # GitHub Actions CI/CD
-├── docker-compose.yml           # 개발 환경 (6개 서비스)
-├── docker-compose.prod.yml      # 프로덕션 환경 (9개 서비스 + nginx + certbot)
-├── .env.example                 # 환경변수 템플릿
-├── .env.staging                 # 스테이징 환경 템플릿
-├── .env.production              # 프로덕션 환경 템플릿
-├── nginx/nginx.conf             # 리버스 프록시 + SSL
-├── scripts/init-ssl.sh          # Let's Encrypt SSL 초기화
-│
-├── backend/                     # ★ 통합 FastAPI 백엔드 (유일한 서버)
-│   ├── Dockerfile               # 개발용
-│   ├── Dockerfile.prod          # 프로덕션용 (멀티스테이지)
-│   ├── requirements.txt
-│   ├── alembic.ini
-│   ├── alembic/versions/        # 0001~0006 마이그레이션
-│   ├── app/
-│   │   ├── main.py              # FastAPI 앱 진입점 + 미들웨어
-│   │   ├── celery_app.py        # Celery 인스턴스
-│   │   ├── api/
-│   │   │   ├── deps.py          # 인증, 권한 의존성
-│   │   │   └── v1/
-│   │   │       ├── auth.py         # Google OAuth + JWT
-│   │   │       ├── courses.py      # 강좌 CRUD
-│   │   │       ├── lectures.py     # 강의 CRUD
-│   │   │       ├── questions.py    # 평가 시스템
-│   │   │       ├── videos.py       # 스크립트 에디터
-│   │   │       ├── sessions.py     # 세션 관리 (6단계 상태머신)
-│   │   │       ├── dashboard.py    # 교수자 대시보드 분석
-│   │   │       ├── render.py       # HeyGen 렌더링 요청 + PPT 업로드
-│   │   │       ├── webhooks.py     # HeyGen 웹훅 (HMAC 검증)
-│   │   │       ├── attention.py    # 집중도 모니터링
-│   │   │       ├── subscription.py # 구독 플랜
-│   │   │       ├── qa.py           # RAG 기반 Q&A
-│   │   │       └── translate.py    # 번역
-│   │   ├── core/
-│   │   │   ├── config.py        # pydantic-settings 전체 설정
-│   │   │   ├── security.py      # JWT 생성/검증
-│   │   │   ├── logging.py       # 구조화 JSON 로깅
-│   │   │   ├── middleware.py     # Request ID 미들웨어
-│   │   │   └── redis.py         # Redis 클라이언트
-│   │   ├── db/
-│   │   │   ├── base.py          # DeclarativeBase + 모델 임포트
-│   │   │   └── session.py       # AsyncSession + SyncSession
-│   │   ├── models/              # 통합 ORM 모델 (15개)
-│   │   ├── schemas/             # Pydantic 스키마
-│   │   ├── services/            # 비즈니스 로직
-│   │   │   └── pipeline/        # PPT→TTS→HeyGen 파이프라인 서비스
-│   │   └── tasks/               # Celery 태스크
-│   │       ├── pipeline.py      # 5단계 PPT→스크립트 체인
-│   │       ├── render.py        # TTS→S3→HeyGen 렌더
-│   │       └── polling.py       # HeyGen 폴백 폴링
-│   └── tests/                   # 통합 테스트 (16개 파일)
-│
-└── frontend/                    # Next.js 프론트엔드
-    ├── Dockerfile               # 개발용
-    ├── Dockerfile.prod          # 프로덕션용 (standalone 멀티스테이지)
-    └── src/app/                 # 페이지 (auth, dashboard, lecture, professor)
-```
+**ClassAuto** (정식 학술명: *Interactive Flipped Learning Platform*, 약칭 IFL)
+
+AI 기반 플립러닝(거꾸로 수업) 플랫폼. PPT 업로드 → AI 스크립트 생성 → HeyGen 아바타 영상 렌더링 → 학생 학습 세션·평가·집중도 모니터링까지 포함한 종합 교육 플랫폼.
+
+- **메인 도메인**: classauto.live (구매 완료)
+- **현재 단계**: Phase 2 베타 (학계 무료 배포)
+- **타겟**: 한국 대학 교수자 → 아시아 학계 → 글로벌
+- **저장소 소유자**: 河斗振 (하두진) · 경기대학교 중어중문학과 교수
 
 ---
 
-## 로컬 실행
+## 정체성과 차별점
 
-```bash
-cp .env.example .env
-# .env 편집 (JWT_SECRET_KEY, Google OAuth, API 키)
-docker-compose up -d
-docker-compose exec backend alembic upgrade head
-```
+ClassAuto는 일반 EdTech가 아닙니다. **학자가 학자를 위해 만든 도구**라는 정체성이 가장 강력한 차별점입니다. 모든 작업 결정은 이 정체성 안에서 이루어져야 합니다.
 
-| 서비스 | URL |
-|--------|-----|
-| 프론트엔드 | http://localhost:3000 |
-| 백엔드 API | http://localhost:8000 |
-| Swagger UI | http://localhost:8000/docs |
+### 핵심 차별점 4가지
+1. **RAG 범위 제한 Q&A** — 강의 자료 밖 질문은 자동 거부 (유사도 임계값 0.7)
+2. **비용 투명성** — 영상 1편 생성 원가, API 사용량 공개
+3. **부정행위 방지** — 인터스티셜 퀴즈, 동시 재생 제한, 매크로 탐지
+4. **학생 데이터 보호** — 광고 미사용, 졸업 후 자동 삭제
 
 ---
 
-## 프로덕션 배포 — Vercel + Railway + Supabase (2026-04 결정)
+## 기획 문서 (작업 전 필수 확인)
 
-> **선정 사유**: 1인 사용자 단계에서 Lightsail/EC2 같은 고정비 VPS 대신 종량제 무료 티어로 시작.
-> 기존 `docker-compose.prod.yml` + nginx 구성은 자체 호스팅 옵션으로 보존.
-> **단계별 체크리스트**: [DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) — Phase 0~7
+이 프로젝트의 모든 디자인·기획 결정은 `docs/planning/`과 `docs/design-system/`에 정리되어 있습니다. **새 페이지나 기능 작업 전에 다음 문서를 우선 확인**하세요:
 
-### 구성 매핑
+### 정책·기획 (`docs/planning/`)
+- `00-README.md` — 기획 문서 인덱스 및 읽는 순서
+- `01-pricing-policy.md` — 요금 정책 (Free / Basic / Pro)
+- `02-guardrails.md` — 4중 비용 가드레일 시스템
+- `03-sitemap.md` — 전체 사이트 구조 (28개 영역)
+- `04-demo-page.md` — `/demo` 페이지 상세 기획
+- `05-instructor-pages.md` — 교수자 화면 (대시보드, studio 마법사 등)
+- `06-student-pages.md` — 학생 화면 (진입, 시청, 집중경고)
+- `07-additional-pages.md` — 보조 페이지 (use-cases, trust, security 등)
 
-| 컴포넌트 | 프로덕션 호스팅 | 비고 |
-|---------|----------------|------|
-| Next.js 프론트엔드 | **Vercel** | `frontend/` 루트, GitHub 연결 시 자동 배포 |
-| FastAPI 백엔드 | **Railway** | `backend/Dockerfile.prod` 재사용 |
-| Celery Worker | **Railway** (별도 서비스) | 동일 이미지, 명령만 변경 |
-| Celery Beat | **Railway** (별도 서비스) | 동일 이미지, 명령만 변경 |
-| Redis | **Railway** 플러그인 | `REDIS_URL` 자동 주입 |
-| PostgreSQL + pgvector | **Supabase** | `create extension vector;` 후 `DATABASE_URL` 사용 (Pooler 모드) |
-| Auth (Google OAuth) | Supabase Auth 또는 기존 자체 JWT | 단계적 마이그레이션 가능 |
-| Storage (PPT/오디오) | Supabase Storage 또는 기존 S3 | 환경변수 분기 |
-| nginx / Let's Encrypt | **사용 안 함** | TLS는 Vercel/Railway가 자동 처리 |
+### 디자인 시스템 (`docs/design-system/`)
+- `00-README.md` — 디자인 시스템 인덱스
+- `typography.md` — 폰트 정책 (Pretendard + Paperlogy)
+- `colors.md` — 색상 시스템 (다크/골드)
+- `animations.md` — 동적 요소 가이드 (16가지 개선)
+- `icons.md` — 그라데이션 SVG 아이콘 정책
+- `mascot.md` — 올빼미 마스코트 가이드
 
-### 배포 절차 (요약)
-
-1. **Supabase**: 프로젝트 생성 (Tokyo) → `create extension if not exists vector;` → `DATABASE_URL`(Pooler) 발급 → 로컬에서 `alembic upgrade head`
-2. **Railway**: GitHub 레포 연결 → 서비스 3개 (backend / celery-worker / celery-beat) — 모두 `backend/Dockerfile.prod` 사용, 시작 명령만 차별화. Redis 플러그인 추가
-3. **Vercel**: GitHub 레포 연결 → Root Directory `frontend` → `NEXT_PUBLIC_API_URL` 등록
-4. **CI/CD**: Vercel/Railway가 GitHub push 자동 감지 — 별도 GitHub Actions 불필요
-
-### 비용 단계
-
-| 단계 | MAU | 월 비용 |
-|------|-----|---------|
-| 1 (현재) | ~10 | $0~5 (모두 Free) |
-| 2 | 100~1,000 | $25~50 |
-| 3 | 1,000~10,000 | $100~300 (Pro) |
-| 4 | 10,000+ | AWS ECS/EKS 검토 |
-
-### DB 백업/복원
-
-- Supabase는 자동 일일 백업 (Pro 7일 보관). Free 티어는 PITR 미지원
-- 수동: `pg_dump $DATABASE_URL > backup.sql` / `psql $DATABASE_URL < backup.sql`
+### 기존 명세서
+- `IFL_서비스기획서_v7.docx` — 전체 서비스 기획서 (참조용 원본)
+- `IFL_기능명세서_v7_DevSpec.docx` — 개발 기능 명세서
 
 ---
 
-## (참고) 자체 호스팅 — Docker Compose VPS
+## 핵심 디자인 원칙 (요약)
 
-기존 단일 서버(VPS) 배포 방식 — 트래픽이 충분히 누적된 후 비용 효율을 위해 사용 가능.
-**전체 운영 플레이북은 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** 참조.
+세부 사항은 `docs/design-system/`을 참조하되, 어떤 작업이든 다음 원칙을 위반하면 안 됩니다.
 
-### 신규 서버 1회 셋업 (Ubuntu 22.04/24.04)
+### 폰트
+- **Pretendard** (본문, UI, 숫자) + **Paperlogy** (디스플레이 헤드라인)
+- Geist · Geist Mono 등 다른 폰트 사용 금지
+- 가격·통계 숫자는 Pretendard tabular-nums 적용 (Geist Mono 대체)
 
-```bash
-# 0. 사전: 도메인 DNS A 레코드 → 서버 IP, SSH 키 등록, GHCR PAT(private 패키지 시)
+### 컬러
+- 메인 사이트: 다크 베이스 + 골드 포인트 + 무채색 그라데이션 (오로라 스타일)
+- **학습자 화면은 다크 모드 강제** (`#0A0A0A`)
+- 교수자 화면은 라이트 베이스 + 골드 포인트
+- 의미적 컬러(빨강·녹색)는 교수자 대시보드의 데이터 시각화에서만 허용
 
-# 1. 서버 초기화 — Docker/UFW/fail2ban/swap/chrony/unattended-upgrades 자동 설치
-sudo apt-get install -y git
-sudo git clone https://github.com/hdj82-bot/Interactive-flipped-learning.git /opt/ifl-platform
-cd /opt/ifl-platform
-sudo ./scripts/setup-server.sh              # 옵션: SWAP_SIZE_GB / TIMEZONE / GHCR_USER / GHCR_TOKEN
+### 아이콘
+- 모든 이모지는 **그라데이션 SVG로 통일** (옵션 C 정책)
+- 페이지 전체에서 같은 의미는 같은 SVG 사용 (📹→video-svg, 👥→users-svg 등)
+- 단색 stroke 아이콘은 호버 시 그라데이션 stroke로 전환
 
-# 2. (private 패키지 시) GHCR 로그인
-echo "$GHCR_TOKEN" | sudo docker login ghcr.io -u <user> --password-stdin
+### 마스코트
+- 올빼미 캐릭터 (이름 미정 — "오우" 또는 "후" 후보)
+- 회갈색 단색, 도형 기반 미니멀 스타일
+- 학습자 화면에서만 등장 (집중 경고, 인터스티셜 퀴즈, demo CTA)
+- 교수자 화면·메인 사이트에는 등장하지 않음
 
-# 3. .env 작성
-sudo cp .env.production .env && sudo vi .env
-
-# 4. 환경변수 검증
-./scripts/validate-env.sh --strict
-
-# 5. 최초 배포
-DOMAIN=your-domain.com EMAIL=admin@your-domain.com ./scripts/deploy.sh init
-
-# 6. 스모크 테스트
-./scripts/smoke-test.sh your-domain.com
-```
-
-### 배포 명령어
-
-```bash
-./scripts/deploy.sh init       # 최초 배포 (SSL 포함)
-./scripts/deploy.sh update     # 무중단 rolling 업데이트
-./scripts/deploy.sh rollback   # 직전 버전 롤백
-./scripts/deploy.sh status     # 서비스 상태 확인
-./scripts/deploy.sh logs backend  # 로그 조회
-./scripts/backup.sh backup | list | restore <file>
-```
-
-### 무중단 (Rolling) 업데이트 / 롤백
-
-`update`는 backend / frontend를 다음 패턴으로 교체:
-1. 새 컨테이너 1개 추가 (`compose up -d --no-recreate --scale=2`)
-2. healthcheck `healthy` 대기 (최대 120s)
-3. 기존 컨테이너 graceful stop (SIGTERM, `stop_grace_period`)
-4. 기존 컨테이너 제거 → 새 인스턴스 단독 운영
-
-worker는 `docker compose stop -t 60`으로 SIGTERM + 60초 대기 후 재기동 (Celery `acks_late=True` 가정).
-beat는 단일 인스턴스라 `--force-recreate`로 즉시 교체.
-
-`rollback`은 직전 update 시 저장한 `$STATE_DIR/rollback.env` 스냅샷을 사용해 GHCR에서 이전 이미지 pull → 동일 rolling 패턴.
-1단계 뒤로만 자동 롤백 가능. DB 스키마는 자동 복귀 대상 아님 — `./scripts/backup.sh restore` 또는 `alembic downgrade` 별도 처리.
-
-### GitHub Actions CD
-
-자체 호스팅 시에만 활성화. 필요 Variables/Secrets:
-- Variables: `DEPLOY_ENABLED=true`
-- Secrets: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`
-- `production` environment에 Required reviewers 권장
+### 동적 요소
+- 페이지 진입 시 카운트업 애니메이션 (통계, 가격)
+- 그라데이션 stroke 애니메이션
+- IntersectionObserver 기반 fade-in
+- `prefers-reduced-motion` 반드시 지원
+- localStorage 사용 금지 (artifact 환경 호환)
 
 ---
 
-## 테스트
+## 작업 우선순위
 
-```bash
-cd backend
-pip install -r requirements.txt
-pip install pytest pytest-asyncio pytest-cov aiosqlite httpx python-pptx
-pytest --tb=short --cov=app -q
-```
+### 진행 중
+- [x] 폰트·동적 요소·이모지 정책 확정 (`docs/design-system/`)
+- [x] Pricing 정책 확정 (`docs/planning/01-pricing-policy.md`)
+- [x] 4중 가드레일 시스템 확정 (`docs/planning/02-guardrails.md`)
+- [x] 전체 사이트맵 확정 (`docs/planning/03-sitemap.md`)
+- [x] /demo 페이지 상세 기획 (`docs/planning/04-demo-page.md`)
+
+### 다음 작업 (우선순위 순)
+
+**1단계** — `/demo` 페이지 구현
+- 베타 보급 전환 핵심
+- 두 분야 영상(사회과학 / 자연과학) 준비 필요
+- 회원가입 없이 학습자 입장 체험
+
+**2단계** — 학생 진입 흐름 3종
+- `/v/[강의ID]` 학생 진입 페이지
+- 학생 회원가입 흐름 (학교 이메일·학번)
+- 학생 첫 사용 30초 온보딩
+
+**3단계** — 기존 페이지 동적 요소 개선
+- index.html (랜딩) — 6가지 개선
+- features.html — 4가지 개선
+- dashboard.html — 6가지 개선
+- pricing.html — 새 정책 반영하여 전면 재작성
+
+**4단계** — 교수자 첫 사용 온보딩
+- 빈 대시보드 empty state
+- 5단계 가이드 체크리스트
+- 학과·강의 정보 입력
+
+**5단계** — 영업·신뢰 페이지
+- `/use-cases` 활용 사례
+- `/trust` 학생 데이터 보호
+- `/security` 보안 정책
+- `/beta-apply` 베타 신청 폼
+- `/contact` 기관 견적 문의
+
+이후 단계는 `docs/planning/03-sitemap.md` 참조.
 
 ---
 
-## 세션 상태머신
+## 기술 스택 (변경 없음)
 
 ```
-NOT_STARTED → IN_PROGRESS
-IN_PROGRESS → QA_MODE | PAUSED | ASSESSMENT | COMPLETED
-QA_MODE     → IN_PROGRESS | PAUSED
-PAUSED      → IN_PROGRESS
-ASSESSMENT  → IN_PROGRESS | COMPLETED
-COMPLETED   → (terminal)
+Backend:  FastAPI + Celery + PostgreSQL(pgvector) + Redis
+Frontend: Next.js 16 + React 19 + Tailwind CSS 4
+Infra (개발):  Docker Compose
+Infra (프로덕션): Vercel(프론트) + Railway(백엔드/Celery/Redis) + Supabase(DB/pgvector/Auth/Storage)
+AI:       Anthropic Claude (스크립트/문제) + OpenAI (임베딩)
+Video:    HeyGen (아바타) + ElevenLabs/Google TTS
+Monitor:  Sentry (에러) + Prometheus (메트릭) + 구조화 JSON 로깅
 ```
 
-## Video 상태 전이
+배포 가이드는 `README.md`와 `DEPLOYMENT_ROADMAP.md` 참조.
 
-```
-draft → pending_review → rendering → done
-                  ↓
-               archived  (모든 상태에서 가능)
-```
+---
 
-## 아키텍처 (프로덕션)
+## Claude Code 작업 규칙
 
-```
-                  ┌─────────────┐
-   사용자 ─HTTPS─▶│   Vercel    │  ← Next.js 프론트엔드 (CDN/Edge)
-                  └──────┬──────┘
-                         │ NEXT_PUBLIC_API_URL
-                         ▼
-                  ┌─────────────┐
-                  │   Railway   │  ← FastAPI / Celery Worker / Celery Beat / Redis
-                  └──────┬──────┘
-                         │ DATABASE_URL
-                         ▼
-                  ┌─────────────┐
-                  │  Supabase   │  ← Postgres + pgvector + Auth + Storage
-                  └─────────────┘
-```
+### 새 페이지 작업 시
+1. **반드시 먼저** 해당 페이지의 기획 문서를 읽기 (`docs/planning/` 안의 관련 파일)
+2. 디자인 시스템 문서 확인 (`docs/design-system/`)
+3. 기존 컴포넌트가 있는지 확인 (`frontend/components/`)
+4. 작업 시작 후 Phase별 코밋 단위로 분할
 
-## 아키텍처 (로컬 개발)
+### 새 기능 작업 시
+1. `IFL_기능명세서_v7_DevSpec.docx` 확인 (기능 정의)
+2. `docs/planning/02-guardrails.md` 확인 (가드레일 정책 위반 여부)
+3. 백엔드 API 변경 시 기존 패턴 따르기 (`backend/app/api/`)
+4. 프론트엔드 페이지 추가 시 i18n 키도 함께 추가 (`frontend/messages/`)
 
-```
-┌────────┐ ┌─────────┐
-│Frontend│ │Backend  │
-│Next.js │ │FastAPI  │
-│ :3000  │ │ :8000   │
-└────────┘ └──┬──────┘
-              │
-       ┌──────▼───────┐
-       │PostgreSQL     │
-       │(pgvector)     │
-       │Redis          │
-       └──────┬────────┘
-              │
-       ┌──────▼────────┐
-       │Celery Worker  │
-       │Celery Beat    │
-       └───────────────┘
-```
+### 절대 하지 말아야 할 것
+- ❌ 기획 문서 없이 추측으로 페이지 만들기
+- ❌ Pretendard·Paperlogy 외 폰트 도입
+- ❌ 학습자 화면을 라이트 모드로 만들기
+- ❌ 학생 측에 무제한 Q&A 허용 (가드레일 위반)
+- ❌ 강의 자료 밖 질문에 답변 허용 (RAG 임계값 무시)
+- ❌ localStorage 사용 (대신 React state 또는 서버 세션)
+- ❌ 기획서에 없는 새 가격 플랜 추가
+
+### 적극 권장
+- ✅ 작업 전 관련 기획 문서를 명시적으로 읽었음을 확인
+- ✅ 변경 사항이 어떤 정책에 근거하는지 PR 본문에 기재
+- ✅ 새로운 결정이 필요한 경우 작업 중단하고 사용자에게 확인
+- ✅ 기획에 명시되지 않은 기능은 만들지 않거나, 별도 PR로 분리
+
+---
+
+## 사용자 정보
+
+- **이름**: 河斗振 (하두진, 어흥)
+- **소속**: 경기대학교 중어중문학과 교수
+- **연구 분야**: AI 번역 오류 분석, 중국어 교수법, 플립러닝, 코퍼스 언어학
+- **개발 환경**: Claude Code 사용 (병렬 worktree 활용)
+
+작업 결과를 보고할 때는 한국어로, 공손한 톤으로 작성하되 불필요한 칭찬이나 사과는 생략. 결정 사항은 명확한 근거와 함께 제시.
+
+---
+
+## 변경 이력
+
+- 2026-05-05: 초기 기획 문서 패키지 추가 (12개 마크다운 + CLAUDE.md 재구성)
+- 그 이전: 기존 명세서(`IFL_서비스기획서_v7.docx` 등) 기준으로 백엔드·인프라 구축
