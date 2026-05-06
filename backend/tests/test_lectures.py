@@ -131,6 +131,129 @@ async def test_public_lecture_not_found(client):
     assert resp.status_code == 404
 
 
+# ── R2W2: BACKEND_ASKS.W4 #1·#2 — 부가 정보 노출 ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_public_lecture_exposes_professor_and_course_names(
+    client, professor, course, lecture,
+):
+    """``/v/[slug]`` 의 trust line 용 ``professor_name`` / ``course_name`` 노출.
+
+    fixtures: professor.name="테스트 교수", course.title="통합테스트 강좌".
+    """
+    resp = await client.get(f"/api/lectures/{lecture.slug}/public")
+    assert resp.status_code == 200
+    data = resp.json()
+    # 키는 항상 존재 (None 가능) — frontend 호환성 보장.
+    assert "professor_name" in data
+    assert "course_name" in data
+    assert "duration_sec" in data
+    assert data["professor_name"] == professor.name
+    assert data["course_name"] == course.title
+
+
+@pytest.mark.asyncio
+async def test_public_lecture_duration_sec_is_none_when_no_video(client, lecture):
+    """Video 가 아직 없으면 duration_sec=None — frontend 가 자연스럽게 숨김."""
+    resp = await client.get(f"/api/lectures/{lecture.slug}/public")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["duration_sec"] is None
+
+
+@pytest.mark.asyncio
+async def test_public_lecture_duration_sec_picks_video_duration(
+    client, lecture, db,
+):
+    """Video.duration_seconds 가 있으면 그 값을 노출."""
+    from app.models.video import Video, VideoStatus
+
+    v = Video(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        status=VideoStatus.done,
+        duration_seconds=312,
+    )
+    db.add(v)
+    await db.flush()
+
+    resp = await client.get(f"/api/lectures/{lecture.slug}/public")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["duration_sec"] == 312
+
+
+@pytest.mark.asyncio
+async def test_public_lecture_duration_sec_picks_latest_video(
+    client, lecture, db,
+):
+    """Video 가 여럿이면 가장 최근 (created_at 큰) 것의 duration_seconds 채택."""
+    from datetime import datetime, timezone, timedelta
+
+    from app.models.video import Video, VideoStatus
+
+    older = Video(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        status=VideoStatus.done,
+        duration_seconds=100,
+        created_at=datetime.now(timezone.utc) - timedelta(hours=2),
+    )
+    newer = Video(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        status=VideoStatus.done,
+        duration_seconds=900,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add_all([older, newer])
+    await db.flush()
+
+    resp = await client.get(f"/api/lectures/{lecture.slug}/public")
+    assert resp.status_code == 200
+    assert resp.json()["duration_sec"] == 900
+
+
+@pytest.mark.asyncio
+async def test_public_lecture_skips_video_without_duration(
+    client, lecture, db,
+):
+    """duration_seconds 가 NULL 인 Video 는 무시 (rendering 중 등)."""
+    from app.models.video import Video, VideoStatus
+
+    v_no_dur = Video(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        status=VideoStatus.rendering,
+        duration_seconds=None,
+    )
+    db.add(v_no_dur)
+    await db.flush()
+
+    resp = await client.get(f"/api/lectures/{lecture.slug}/public")
+    assert resp.status_code == 200
+    assert resp.json()["duration_sec"] is None
+
+
+@pytest.mark.asyncio
+async def test_public_lecture_response_keys_are_backward_compatible(
+    client, lecture,
+):
+    """기존 키 (id/slug/title/is_expired/video_url/...) 가 모두 그대로 존재.
+
+    R2W2 추가는 순전히 additive — 기존 W4 frontend 가 추가 키를 무시하고도 동작.
+    """
+    resp = await client.get(f"/api/lectures/{lecture.slug}/public")
+    assert resp.status_code == 200
+    data = resp.json()
+    expected_legacy_keys = {
+        "id", "course_id", "title", "description", "thumbnail_url",
+        "slug", "is_expired", "video_url",
+    }
+    assert expected_legacy_keys.issubset(data.keys())
+
+
 # ── DELETE /api/lectures/{id} — High E: HeyGen cancel pre-hook ──────────────
 
 @pytest.mark.asyncio

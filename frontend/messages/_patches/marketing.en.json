@@ -1,0 +1,395 @@
+{
+  "marketing": {
+    "common": {
+      "backToHome": "Back to home",
+      "footerCopyright": "© 2026 ClassAuto · Interactive Flipped Learning",
+      "ctaApplyBeta": "Apply for beta",
+      "ctaContactSales": "Contact sales"
+    },
+    "useCases": {
+      "meta": {
+        "title": "Use cases — ClassAuto",
+        "description": "See how ClassAuto is used across languages, humanities, engineering, and social sciences."
+      },
+      "hero": {
+        "eyebrow": "USE CASES · By department",
+        "title": "Will it work in my field?",
+        "subtitle": "If you have a deck and an instructor, ClassAuto produces a video lecture in about 12 minutes — regardless of discipline.",
+        "anchorBadge": "Anchor case · Prof. Ha"
+      },
+      "anchor": {
+        "field": "Chinese studies · Languages",
+        "professor": "Prof. Ha Doo-jin (real user)",
+        "school": "Kyonggi Univ., Dept. of Chinese Language and Literature",
+        "before": "I wanted weekly current-affairs Chinese videos, but never had time to refresh the materials.",
+        "after": "One slide + AI script + dual TTS = 12 minutes. A 14-week semester is now prepared in a single week.",
+        "metricLabel": "Attendance change",
+        "metricFrom": "78%",
+        "metricTo": "92%",
+        "features": [
+          "Dual TTS (Korean + Chinese)",
+          "RAG-scoped Q&A",
+          "Weak-spot heatmap"
+        ]
+      },
+      "cards": {
+        "social": {
+          "field": "Social sciences · International studies",
+          "professor": "Prof. Kim (composite)",
+          "school": "Univ. A, Dept. of Political Science",
+          "before": "Current affairs move fast and video material goes stale. I couldn't refresh weekly.",
+          "after": "One slide + AI script = 12 minutes. Attendance went from 78% to 92%.",
+          "features": [
+            "Dual TTS (Korean + English)",
+            "Interstitial quizzes",
+            "Weak-spot heatmap"
+          ]
+        },
+        "humanities": {
+          "field": "Humanities · Literature",
+          "professor": "Prof. Park (composite)",
+          "school": "Univ. B, Dept. of Korean Literature",
+          "before": "Classics need pre-reading for discussion to work. Pre-reading rates were low.",
+          "after": "5-minute pre-class video + Q&A bot to confirm comprehension. Discussion participation doubled.",
+          "features": [
+            "RAG Q&A",
+            "Engagement heatmap",
+            "Multi-language captions"
+          ]
+        },
+        "engineering": {
+          "field": "Engineering · STEM",
+          "professor": "Prof. Lee (composite)",
+          "school": "Univ. C, Dept. of Computer Science",
+          "before": "Equations and diagrams meant 4 hours per video.",
+          "after": "Use the slides as-is, synthesize voice only — now 15 minutes per video.",
+          "features": [
+            "LaTeX rendering",
+            "Code-block highlighting",
+            "Source-slide jump"
+          ]
+        },
+        "lab": {
+          "field": "Labs · Practicum",
+          "professor": "Prof. Choi (composite)",
+          "school": "Univ. D, Dept. of Life Sciences",
+          "before": "Lab safety briefings repeated identical content every semester.",
+          "after": "One video, 6 semesters of reuse + auto-refreshed quizzes from incident data.",
+          "features": [
+            "Versioning",
+            "Required-watch certification",
+            "Safety quiz"
+          ]
+        },
+        "arts": {
+          "field": "Arts · Music",
+          "professor": "Prof. Jeong (composite)",
+          "school": "Univ. E, Dept. of Music",
+          "before": "Theory lectures lost student focus when videofied.",
+          "after": "5-minute units + interstitial quizzes keep focus. Average accuracy rose to 82%.",
+          "features": [
+            "5-min microlearning",
+            "Interstitial quizzes",
+            "4 anonymous reactions"
+          ]
+        }
+      },
+      "labels": {
+        "before": "Before",
+        "after": "After",
+        "keyFeatures": "Key features",
+        "viewDetail": "View detail",
+        "modalClose": "Close",
+        "comingMore": "More disciplines coming soon"
+      },
+      "ctaSection": {
+        "title": "See if ClassAuto fits your field",
+        "description": "Free during beta. Apply with a school email and we'll respond in 1–2 business days.",
+        "applyButton": "Apply for beta",
+        "demoButton": "Try the demo first"
+      }
+    },
+    "trust": {
+      "meta": {
+        "title": "Student data trust — ClassAuto",
+        "description": "How ClassAuto handles student data, in plain terms."
+      },
+      "hero": {
+        "eyebrow": "TRUST · Student data",
+        "title": "ClassAuto is a tool for students.",
+        "subtitle": "We don't use student data for ads. Data is auto-deleted after graduation."
+      },
+      "principles": {
+        "title": "Four promises",
+        "items": {
+          "ragLimit": {
+            "title": "RAG-scoped Q&A",
+            "description": "The AI auto-rejects questions outside the lecture's own materials (similarity threshold 0.7). The chatbot is not a general-purpose search engine."
+          },
+          "transparentCost": {
+            "title": "Transparent costs",
+            "description": "We expose the actual API cost of each generated lecture to instructors. No hidden margins."
+          },
+          "antiCheat": {
+            "title": "Anti-cheating",
+            "description": "Interstitial quizzes, concurrent-stream limits, and macro detection are on by default. Video lectures are not separated from assessment."
+          },
+          "studentData": {
+            "title": "Student data protection",
+            "description": "Not used for ads. Auto-deleted after graduation, and any student can request immediate deletion."
+          }
+        }
+      },
+      "sections": {
+        "collected": {
+          "title": "What we collect",
+          "items": [
+            "Video watch history (minutes watched)",
+            "Q&A questions",
+            "Quiz responses",
+            "Attendance records"
+          ]
+        },
+        "access": {
+          "title": "Who can see it",
+          "items": [
+            "Only the lecture's instructor",
+            "We do not use it for ads",
+            "We do not sell it to third parties"
+          ]
+        },
+        "deletion": {
+          "title": "When we delete it",
+          "items": [
+            "Auto-deleted after graduation",
+            "Immediate deletion on student request",
+            "Backups purged within 30 days"
+          ]
+        },
+        "location": {
+          "title": "Where it lives",
+          "items": [
+            "Korea data centers",
+            "KISA guideline compliant",
+            "TLS 1.3 in transit, AES-256 at rest"
+          ]
+        }
+      },
+      "rights": {
+        "title": "Student rights",
+        "items": [
+          "Download your own data",
+          "Request deletion (immediate)",
+          "View usage history",
+          "Request processing pause"
+        ],
+        "contact": "Contact: privacy@classauto.live"
+      },
+      "footerLink": "For the legal text, see the privacy policy."
+    },
+    "security": {
+      "meta": {
+        "title": "Security — ClassAuto",
+        "description": "Infrastructure, access control, and incident response. Aimed at department heads and IT teams."
+      },
+      "hero": {
+        "eyebrow": "SECURITY · For department heads & IT",
+        "title": "Security info for institutional review",
+        "subtitle": "Runs on Vercel · Railway · Supabase, complies with Korean PIPA."
+      },
+      "sections": {
+        "encryption": {
+          "title": "1. Encryption",
+          "items": [
+            "In transit: TLS 1.3 (Let's Encrypt + HSTS)",
+            "At rest: AES-256 (Supabase Postgres)",
+            "Per-column encryption for identifiers (student no., email)"
+          ]
+        },
+        "access": {
+          "title": "2. Access control",
+          "items": [
+            "RBAC (Role-Based Access Control)",
+            "Instructors see only their own courses",
+            "Department heads (Phase 4) see only aggregate, never individuals",
+            "JWT + httpOnly refresh token (XSS defense)"
+          ]
+        },
+        "incident": {
+          "title": "3. Incident response",
+          "items": [
+            "Sentry + Prometheus 24/7 monitoring",
+            "Breach notification within 72h (PIPA §34)",
+            "Quarterly security audits, external review planned"
+          ]
+        },
+        "audit": {
+          "title": "4. External audit (planned)",
+          "items": [
+            "ISMS-P certification (target 2027)",
+            "SOC 2 Type II (when expanding globally)",
+            "Annual penetration test"
+          ]
+        },
+        "korea": {
+          "title": "5. Korean compliance",
+          "items": [
+            "PIPA (개인정보보호법)",
+            "Information Network Act (정보통신망법)",
+            "KISA guidelines, including processor delegation"
+          ]
+        },
+        "api": {
+          "title": "6. API security",
+          "items": [
+            "OAuth 2.0 (Google school accounts)",
+            "Rate limiting per IP / user",
+            "API key rotation policy (90 days)",
+            "One-time CSRF state via sessionStorage"
+          ]
+        }
+      },
+      "infrastructure": {
+        "title": "Infrastructure",
+        "rows": [
+          { "name": "Frontend", "vendor": "Vercel", "region": "ICN1 (Seoul)" },
+          { "name": "Backend / Celery", "vendor": "Railway", "region": "Asia-Northeast" },
+          { "name": "Database / Auth / Storage", "vendor": "Supabase", "region": "ap-northeast-2 (Seoul)" },
+          { "name": "AI models", "vendor": "Anthropic / OpenAI", "region": "Global (processor agreements)" },
+          { "name": "Avatar / TTS", "vendor": "HeyGen / ElevenLabs / Google TTS", "region": "Global (cross-border consent)" }
+        ]
+      },
+      "downloads": {
+        "title": "Documents (on request)",
+        "items": [
+          "Security whitepaper",
+          "Data processing agreement (DPA)",
+          "Sub-processor list"
+        ],
+        "note": "Some documents are still in draft during beta. Email us if you need them for institutional review."
+      },
+      "contact": {
+        "title": "Security contact / vulnerability disclosure",
+        "general": "General: security@classauto.live",
+        "vuln": "Vulnerability disclosure: 90-day responsible disclosure window before public release.",
+        "vulnEmail": "vuln@classauto.live"
+      }
+    },
+    "betaApply": {
+      "meta": {
+        "title": "Beta application — ClassAuto",
+        "description": "Apply to the ClassAuto beta. We respond in 1–2 business days."
+      },
+      "hero": {
+        "eyebrow": "BETA APPLICATION",
+        "title": "Join the ClassAuto beta",
+        "subtitle": "Korean university faculty have priority. Use a school email (.ac.kr / .edu) for fastest review."
+      },
+      "fields": {
+        "name": "Name",
+        "namePlaceholder": "e.g. Ha Doo-jin",
+        "school": "School",
+        "schoolPlaceholder": "e.g. Kyonggi University",
+        "department": "Department",
+        "departmentPlaceholder": "e.g. Chinese Language and Literature",
+        "title": "Title",
+        "titlePlaceholder": "Professor / Associate / Assistant / Instructor",
+        "email": "School email",
+        "emailPlaceholder": "name@school.ac.kr",
+        "subject": "Course you teach",
+        "subjectPlaceholder": "e.g. Modern Chinese Society",
+        "studentCount": "Approx. student count (optional)",
+        "studentCountPlaceholder": "e.g. 60",
+        "startTiming": "Preferred start",
+        "startOptions": {
+          "now": "Right away",
+          "nextSemester": "Next semester",
+          "undecided": "Undecided"
+        },
+        "channel": "How did you hear about us?",
+        "channelOptions": {
+          "referral": "Colleague referral",
+          "conference": "Conference / seminar",
+          "search": "Search",
+          "other": "Other"
+        },
+        "message": "Anything else? (optional)",
+        "messagePlaceholder": "Expectations, questions, anything you'd like to share."
+      },
+      "validation": {
+        "required": "This field is required",
+        "emailFormat": "Please enter a valid email address",
+        "schoolEmail": "A school email (.ac.kr / .edu) is preferred but not required.",
+        "studentNumberFormat": "Numbers only please"
+      },
+      "submitButton": "Submit application",
+      "submittingButton": "Submitting…",
+      "successTitle": "Application received",
+      "successBody": "We'll get back to you at your school email in 1–2 business days.\nMeanwhile, try the demo as a student.",
+      "successCtaDemo": "Try the demo",
+      "successCtaHome": "Back to home",
+      "errorBanner": "Submission failed. Please try again in a moment.",
+      "mockNotice": "The beta application API is not wired to the backend yet — we currently validate client-side and show a mock success screen.",
+      "footerNote": "Contact: beta@classauto.live"
+    },
+    "contact": {
+      "meta": {
+        "title": "Institutional inquiry — ClassAuto",
+        "description": "Send an institutional inquiry and our sales team responds within 1 business day."
+      },
+      "hero": {
+        "eyebrow": "CONTACT · Institutions",
+        "title": "Institutional license inquiry",
+        "subtitle": "Department, college, or full-institution adoption — we'll match the conversation to your stage."
+      },
+      "fields": {
+        "organization": "Organization",
+        "organizationPlaceholder": "e.g. ○○ University",
+        "name": "Contact name",
+        "namePlaceholder": "e.g. Hong Gil-dong",
+        "title": "Title",
+        "titlePlaceholder": "Dept. head / Dean / Registrar / IT",
+        "email": "Email",
+        "emailPlaceholder": "name@organization.ac.kr",
+        "phone": "Phone",
+        "phonePlaceholder": "e.g. +82-2-1234-5678",
+        "stage": "Adoption stage",
+        "stageOptions": {
+          "info": "Gathering info",
+          "internal": "Internal discussion",
+          "decision": "Decision-maker review",
+          "ready": "Ready to adopt"
+        },
+        "professorCount": "Expected instructor count",
+        "professorCountPlaceholder": "e.g. 12",
+        "studentCount": "Expected student count",
+        "studentCountPlaceholder": "e.g. 600",
+        "lms": "LMS in use / under review",
+        "lmsOptions": {
+          "moodle": "Moodle",
+          "canvas": "Canvas",
+          "blackboard": "Blackboard",
+          "klas": "KLAS",
+          "eclass": "eClass",
+          "other": "Other / none"
+        },
+        "callTime": "Best time for a call",
+        "callTimePlaceholder": "e.g. weekdays 2–5 pm",
+        "message": "Additional notes",
+        "messagePlaceholder": "Background, budget, timeline — anything that helps."
+      },
+      "validation": {
+        "required": "This field is required",
+        "emailFormat": "Please enter a valid email address",
+        "numberOnly": "Numbers only please"
+      },
+      "submitButton": "Send inquiry",
+      "submittingButton": "Sending…",
+      "successTitle": "Inquiry received",
+      "successBody": "Sales will respond within 1 business day.\nFor anything urgent, email contact@classauto.live.",
+      "errorBanner": "Failed to send. Please try again in a moment.",
+      "mockNotice": "The inquiry API is not wired to the backend yet — we currently validate client-side and show a mock success screen.",
+      "footerNote": "Urgent: contact@classauto.live"
+    }
+  }
+}

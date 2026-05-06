@@ -101,7 +101,12 @@
     "myLectures": "My Lectures",
     "demo": "Try Demo",
     "pricing": "Pricing",
-    "public": "Browse"
+    "public": "Browse",
+    "useCases": "Use cases",
+    "trust": "Trust",
+    "security": "Security",
+    "betaApply": "Apply for beta",
+    "contact": "Contact"
   },
   "professor": {
     "lectureManage": "Lecture Management",

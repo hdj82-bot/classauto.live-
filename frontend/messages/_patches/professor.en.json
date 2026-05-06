@@ -1,0 +1,75 @@
+{
+  "professorOnboarding": {
+    "welcomeEyebrow": "Welcome",
+    "welcomeTitle": "Professor {name}, welcome to ClassAuto",
+    "welcomeTitleAnonymous": "Welcome to ClassAuto",
+    "welcomeSubtitle": "One PPT is all it takes — your first lecture clip is ready in about 12 minutes. We'll walk you through it in five steps.",
+    "primaryCta": "Create your first lecture",
+    "secondaryCta": "Browse a sample lecture",
+    "skip": "Skip for now",
+    "checklistTitle": "First-lecture setup",
+    "checklistSubtitle": "Complete these five steps and your students can start watching.",
+    "progressLabel": "{done} / {total} done",
+    "checklistComplete": "🎉 You've completed all five steps! Open the analytics report to follow learning trends.",
+    "checklistCompleteCta": "Open analytics",
+    "stepStatusDone": "Done",
+    "stepStatusActive": "Current step",
+    "stepStatusPending": "Up next",
+    "stepProfile": {
+      "title": "Department & profile",
+      "desc": "Add your school, department and position so the dashboard's semester context lights up.",
+      "cta": "Add profile"
+    },
+    "stepCourse": {
+      "title": "Create your first course",
+      "desc": "Group your lectures under a course (one per term).",
+      "cta": "Create a course"
+    },
+    "stepUpload": {
+      "title": "Upload a PPT",
+      "desc": "Drop in your existing slides — the AI extracts speaker notes and structure.",
+      "cta": "Upload PPT"
+    },
+    "stepScript": {
+      "title": "Review & approve the AI script",
+      "desc": "Accept, reject or tweak each slide's AI-polished script, then start the render.",
+      "cta": "Review script"
+    },
+    "stepShare": {
+      "title": "Share the lecture with students",
+      "desc": "Distribute via QR code or short code — the lecture is now live for your class.",
+      "cta": "Open share panel"
+    },
+    "modalTitle": "Profile & department",
+    "modalSubtitle": "We use this for semester context on the dashboard and for student notification copy.",
+    "modalSchoolLabel": "School",
+    "modalSchoolPlaceholder": "e.g., Kyonggi University",
+    "modalDepartmentLabel": "Department",
+    "modalDepartmentPlaceholder": "e.g., Chinese Language & Literature",
+    "modalPositionLabel": "Position",
+    "modalPositionPlaceholder": "Select a position",
+    "positionProfessor": "Professor",
+    "positionAssociate": "Associate Professor",
+    "positionAssistant": "Assistant Professor",
+    "positionLecturer": "Full-time Lecturer",
+    "positionAdjunct": "Adjunct / Visiting",
+    "positionOther": "Other",
+    "modalSubmit": "Save & continue",
+    "modalSubmitting": "Saving...",
+    "modalSavedToast": "Profile saved.",
+    "modalErrorRequired": "School and department are required.",
+    "modalErrorBackend": "Could not save your profile. Please try again in a moment.",
+    "modalDeferred": "Saved locally — your profile will sync once the backend endpoint goes live.",
+    "snapshotTitle": "This semester at a glance",
+    "snapshotCourses": "Courses",
+    "snapshotLectures": "Lectures",
+    "snapshotPublished": "Published",
+    "snapshotUpcoming": "—",
+    "tips": "💡 Tips",
+    "tipDraftFirst": "It's fine to leave a draft and polish later — nothing bills until you start the render.",
+    "tipQrFromPpt": "Put the QR on your final slide so attendance and access take one tap from students.",
+    "tipPolicy": "One lecture at a time is plenty — pace yourself.",
+    "openProfile": "Edit profile",
+    "openSampleHint": "The sample demo opens in a new tab"
+  }
+}
