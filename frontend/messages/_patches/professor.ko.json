@@ -1,0 +1,75 @@
+{
+  "professorOnboarding": {
+    "welcomeEyebrow": "환영합니다",
+    "welcomeTitle": "{name} 교수님, ClassAuto에 오신 걸 환영합니다",
+    "welcomeTitleAnonymous": "ClassAuto에 오신 걸 환영합니다",
+    "welcomeSubtitle": "PPT 한 장만 있으면 약 12분 만에 첫 강의 영상이 완성됩니다. 다섯 단계로 안내해드릴게요.",
+    "primaryCta": "첫 강의 만들기",
+    "secondaryCta": "샘플 강의로 둘러보기",
+    "skip": "지금은 건너뛰기",
+    "checklistTitle": "첫 영상 제작 가이드",
+    "checklistSubtitle": "다섯 단계를 모두 마치면 학생들이 강의를 시청할 수 있어요.",
+    "progressLabel": "{done} / {total} 완료",
+    "checklistComplete": "🎉 다섯 단계를 모두 마치셨어요! 분석 리포트로 학습 추세를 확인해보세요.",
+    "checklistCompleteCta": "분석 리포트 보기",
+    "stepStatusDone": "완료",
+    "stepStatusActive": "지금 단계",
+    "stepStatusPending": "다음 단계",
+    "stepProfile": {
+      "title": "학과·소속 정보 입력",
+      "desc": "학교, 학과, 직위를 입력하면 대시보드 학기 컨텍스트가 활성화됩니다.",
+      "cta": "정보 입력하기"
+    },
+    "stepCourse": {
+      "title": "첫 강좌(course) 만들기",
+      "desc": "한 학기에 여러 강의를 묶을 강좌(course) 단위를 먼저 생성하세요.",
+      "cta": "강좌 만들기"
+    },
+    "stepUpload": {
+      "title": "PPT 업로드",
+      "desc": "기존 강의 PPT를 그대로 업로드하면 AI가 슬라이드 노트를 분석합니다.",
+      "cta": "PPT 업로드하기"
+    },
+    "stepScript": {
+      "title": "AI 스크립트 검토 / 승인",
+      "desc": "AI가 다듬은 스크립트를 [채택] / [거부] / [수정]으로 검토하고 영상 생성을 시작하세요.",
+      "cta": "스크립트 검토하기"
+    },
+    "stepShare": {
+      "title": "학생에게 강의 링크 공유",
+      "desc": "QR 코드 또는 단축 코드로 학생들에게 강의를 배포하세요.",
+      "cta": "공유 설정 열기"
+    },
+    "modalTitle": "학과·소속 정보",
+    "modalSubtitle": "이 정보는 대시보드의 학기 컨텍스트와 학생 알림 메시지에 사용됩니다.",
+    "modalSchoolLabel": "학교명",
+    "modalSchoolPlaceholder": "예) 경기대학교",
+    "modalDepartmentLabel": "소속 학과",
+    "modalDepartmentPlaceholder": "예) 중어중문학과",
+    "modalPositionLabel": "직위",
+    "modalPositionPlaceholder": "직위를 선택하세요",
+    "positionProfessor": "정교수",
+    "positionAssociate": "부교수",
+    "positionAssistant": "조교수",
+    "positionLecturer": "전임강사·강의전담",
+    "positionAdjunct": "겸임·외래강사",
+    "positionOther": "기타",
+    "modalSubmit": "저장하고 다음으로",
+    "modalSubmitting": "저장 중...",
+    "modalSavedToast": "소속 정보가 저장되었습니다.",
+    "modalErrorRequired": "학교명과 학과는 필수입니다.",
+    "modalErrorBackend": "정보 저장에 실패했습니다. 잠시 후 다시 시도해주세요.",
+    "modalDeferred": "정보를 임시로 저장했어요. 백엔드 연결이 활성화되면 자동으로 동기화됩니다.",
+    "snapshotTitle": "이번 학기 한눈에",
+    "snapshotCourses": "강좌",
+    "snapshotLectures": "강의",
+    "snapshotPublished": "공개",
+    "snapshotUpcoming": "—",
+    "tips": "💡 도움말",
+    "tipDraftFirst": "초안을 만든 뒤 천천히 다듬어도 됩니다. 영상 생성 전에는 비용이 발생하지 않아요.",
+    "tipQrFromPpt": "강의 마지막 슬라이드에 QR을 붙이면 학생 출석·접속이 한 단계로 끝납니다.",
+    "tipPolicy": "한 번에 한 영상만 만들면서 호흡을 잡으셔도 충분합니다.",
+    "openProfile": "학과 정보 수정",
+    "openSampleHint": "샘플 데모는 별도 창으로 열려요"
+  }
+}

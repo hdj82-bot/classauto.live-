@@ -1,0 +1,137 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import type { ReactNode } from "react";
+import ProfessorDashboardPage from "@/app/professor/dashboard/page";
+import { I18nProvider } from "@/contexts/I18nContext";
+import { ToastProvider } from "@/components/ui/Toast";
+
+// API 모킹 — 강의 0개 케이스 vs 1개 케이스 테스트별로 변경
+const apiGet = vi.fn();
+const apiPatch = vi.fn().mockResolvedValue({ data: { ok: true } });
+vi.mock("@/lib/api", () => ({
+  api: {
+    get: (url: string) => apiGet(url),
+    patch: (url: string, body: unknown) => apiPatch(url, body),
+  },
+}));
+
+const renderPage = (ui: ReactNode) =>
+  render(
+    <I18nProvider>
+      <ToastProvider>{ui}</ToastProvider>
+    </I18nProvider>,
+  );
+
+beforeEach(() => {
+  apiGet.mockReset();
+  apiPatch.mockClear();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("ProfessorDashboardPage", () => {
+  it("shows the empty-state onboarding when the professor has zero lectures", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/courses") return { data: [] };
+      return { data: [] };
+    });
+
+    renderPage(<ProfessorDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("professor-empty-dashboard")).toBeTruthy(),
+    );
+    expect(screen.getByTestId("professor-onboarding-checklist")).toBeTruthy();
+    // 5단계 모두 노출
+    expect(screen.getByTestId("professor-onboarding-step-profile")).toBeTruthy();
+    expect(screen.getByTestId("professor-onboarding-step-share")).toBeTruthy();
+    // 첫 강의 만들기 CTA
+    expect(screen.getByTestId("professor-empty-primary-cta")).toBeTruthy();
+  });
+
+  it("automatically opens the profile modal on first empty-dashboard render", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/courses") return { data: [] };
+      return { data: [] };
+    });
+
+    renderPage(<ProfessorDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("professor-profile-form")).toBeTruthy(),
+    );
+  });
+
+  it("falls back to the regular lecture grid when at least one lecture exists", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/courses") {
+        return { data: [{ id: "c1", title: "강좌 A" }] };
+      }
+      if (url === "/api/courses/c1/lectures") {
+        return {
+          data: [
+            {
+              id: "l1",
+              title: "현대중국사회의이해 1주차",
+              slug: "ccs-1",
+              is_published: true,
+              video_url: "https://cdn/x.mp4",
+              pipeline_task_id: "task-1",
+            },
+          ],
+        };
+      }
+      return { data: [] };
+    });
+
+    renderPage(<ProfessorDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByText("현대중국사회의이해 1주차")).toBeTruthy(),
+    );
+    // empty-state 는 노출되지 않아야 한다
+    expect(screen.queryByTestId("professor-empty-dashboard")).toBeNull();
+    // 자동 모달도 안 뜬다
+    expect(screen.queryByTestId("professor-profile-form")).toBeNull();
+  });
+
+  it("ticks the profile step once the modal is submitted with valid values", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/courses") return { data: [] };
+      return { data: [] };
+    });
+
+    renderPage(<ProfessorDashboardPage />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("professor-profile-form")).toBeTruthy(),
+    );
+
+    fireEvent.change(screen.getByTestId("professor-profile-school"), {
+      target: { value: "경기대학교" },
+    });
+    fireEvent.change(screen.getByTestId("professor-profile-department"), {
+      target: { value: "중어중문학과" },
+    });
+
+    await act(async () => {
+      fireEvent.submit(screen.getByTestId("professor-profile-form"));
+    });
+
+    await waitFor(() =>
+      expect(
+        screen
+          .getByTestId("professor-onboarding-step-profile")
+          .getAttribute("data-status"),
+      ).toBe("done"),
+    );
+    // course 가 다음 active 단계로 승격된다
+    expect(
+      screen
+        .getByTestId("professor-onboarding-step-course")
+        .getAttribute("data-status"),
+    ).toBe("active");
+  });
+});
