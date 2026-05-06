@@ -1,0 +1,49 @@
+{
+  "student": {
+    "entry": {
+      "fromProfessor": "Lecture shared by Prof. {name}",
+      "fromProfessorAnon": "Lecture shared by your instructor",
+      "watchToProceed": "Sign in or create an account to watch this lecture",
+      "loginCta": "Sign in with school Google account",
+      "signupCta": "New here? Sign up as a student",
+      "guestNotice": "ClassAuto is a learning tool. We don't run ads and your data is auto-deleted after graduation.",
+      "privacyLink": "Read the student data policy",
+      "lectureNotFoundTitle": "Lecture not found",
+      "lectureNotFoundDesc": "The link may be wrong or the lecture has been removed.",
+      "backToHome": "Back to home",
+      "loadingLecture": "Loading lecture…",
+      "metaPlaceholder": "Loading lecture details",
+      "openInPlayer": "Open in lecture player"
+    },
+    "signup": {
+      "title": "Student sign-up",
+      "subtitle": "Sign up quickly with your Google account and start watching",
+      "googleCta": "Continue with Google",
+      "googleRedirecting": "Redirecting to Google…",
+      "name": "Name",
+      "namePlaceholder": "e.g. Jane Doe",
+      "preferredLanguage": "Preferred language",
+      "studentNumber": "Student number (optional)",
+      "studentNumberPlaceholder": "e.g. 20240001",
+      "agreement": "By signing up you agree to the terms and privacy policy",
+      "validation": {
+        "nameRequired": "Please enter your name",
+        "nameTooShort": "Name must be at least 1 character",
+        "studentNumberFormat": "Student number must be 4–12 digits"
+      },
+      "alreadyHaveAccount": "Already have an account?",
+      "loginLink": "Sign in",
+      "noteOAuth": "After Google sign-up you will be redirected to complete your profile."
+    },
+    "onboarding": {
+      "title": "One quick thing",
+      "description": "For a better experience, confirm your name and language. You can change these later in your profile.",
+      "nameLabel": "What should we call you?",
+      "namePlaceholder": "Name or nickname",
+      "languageLabel": "Preferred language",
+      "saveButton": "Save & continue",
+      "skipButton": "Skip",
+      "saved": "Welcome!"
+    }
+  }
+}

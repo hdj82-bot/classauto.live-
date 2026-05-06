@@ -10,10 +10,43 @@ import {
 } from "react";
 import ko from "../../messages/ko.json";
 import en from "../../messages/en.json";
+// Patch files allow worktree-scoped string additions without editing the
+// canonical ko.json/en.json (those are owned by main and other worktrees may
+// be editing them in parallel). New keys live under their own top-level
+// namespace (e.g. "student") and are merged at module load.
+import studentKo from "../../messages/_patches/student.ko.json";
+import studentEn from "../../messages/_patches/student.en.json";
 
 export type Locale = "ko" | "en";
 
-const messages: Record<Locale, typeof ko> = { ko, en };
+type Messages = Record<string, unknown>;
+
+// Recursive deep-merge — patches add new keys / new branches, never overwrite
+// canonical keys from ko.json / en.json (would indicate a collision).
+function mergePatch<T extends Messages>(base: T, patch: Messages): T {
+  const out: Messages = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    const existing = out[key];
+    if (
+      existing &&
+      typeof existing === "object" &&
+      !Array.isArray(existing) &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      out[key] = mergePatch(existing as Messages, value as Messages);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out as T;
+}
+
+const koMerged = mergePatch(ko as Messages, studentKo as Messages);
+const enMerged = mergePatch(en as Messages, studentEn as Messages);
+
+const messages: Record<Locale, Messages> = { ko: koMerged, en: enMerged };
 
 const LOCALE_STORAGE_KEY = "ifl-locale";
 
