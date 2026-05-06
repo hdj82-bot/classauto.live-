@@ -353,7 +353,7 @@ def test_e2e_polling_completed_render():
     with patch("app.tasks.polling.SyncSessionLocal") as mock_session_cls, \
          patch("app.tasks.polling.get_video_status", new_callable=AsyncMock, return_value=mock_status), \
          patch("app.tasks.polling.s3_svc.upload_from_url", new_callable=AsyncMock, return_value=("https://s3/video.mp4", 3.5)), \
-         patch("app.tasks.polling.cost_log.record"), \
+         patch("app.tasks.polling.cost_log.record_once"), \
          patch("app.tasks.polling.notification.notify_instructor", new_callable=AsyncMock) as mock_notify:
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.all.return_value = [mock_render]
