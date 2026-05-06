@@ -16,6 +16,21 @@ class HeyGenError(Exception):
     """HeyGen API 호출 실패."""
 
 
+# ── 비용 추정 ────────────────────────────────────────────────────────────────
+
+
+def estimate_cost_usd(duration_seconds: float | None) -> float:
+    """렌더 결과 영상 길이(초) × ``HEYGEN_COST_USD_PER_SECOND``.
+
+    HeyGen 은 제출 시점에 실제 청구 금액을 알려주지 않으므로 영상 길이 기반
+    근사치를 회계에 기록한다. ``duration`` 이 비어있거나 음수면 ``0.0`` 반환
+    (cost_log 는 0 행도 기록 — 정산 시점에 실제 청구로 보정).
+    """
+    if duration_seconds is None or duration_seconds <= 0:
+        return 0.0
+    return round(duration_seconds * settings.HEYGEN_COST_USD_PER_SECOND, 6)
+
+
 # ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
 
 

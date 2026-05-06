@@ -10,7 +10,7 @@ from app.db.session import SyncSessionLocal
 from app.models.lecture import Lecture
 from app.models.video_render import RenderStatus, VideoRender
 from app.services.pipeline import cost_log, notification, s3 as s3_svc
-from app.services.pipeline.heygen import get_video_status
+from app.services.pipeline.heygen import estimate_cost_usd, get_video_status
 from app.services.pipeline.thumbnail import generate_thumbnail_from_video_url
 
 logger = logging.getLogger(__name__)
@@ -64,9 +64,14 @@ def poll_pending_renders() -> dict:
                     render.status = RenderStatus.ready
                     render.completed_at = datetime.now(timezone.utc)
 
-                    cost_log.record(db, render.id, "s3", "upload_video", duration_seconds=elapsed)
-                    cost_log.record(db, render.id, "heygen", "video_render", cost_usd=0.0,
-                                    duration_seconds=status_data.get("duration"))
+                    # record_once: 폴링 + 웹훅 race / 폴링 다회 실행 시 (video_render_id, operation)
+                    # UNIQUE 인덱스로 중복 비용 기록 방지. duration × HEYGEN_COST_USD_PER_SECOND.
+                    duration = status_data.get("duration")
+                    cost_log.record_once(db, render.id, "s3", "upload_video",
+                                         duration_seconds=elapsed)
+                    cost_log.record_once(db, render.id, "heygen", "video_render",
+                                         cost_usd=estimate_cost_usd(duration),
+                                         duration_seconds=duration)
 
                     # 첫 슬라이드인 경우 강의 썸네일 생성
                     if render.slide_number in (0, 1) and s3_url:

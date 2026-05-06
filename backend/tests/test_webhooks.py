@@ -62,7 +62,7 @@ async def test_heygen_webhook_success(client, professor, lecture, db):
          patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db), \
          patch("app.api.v1.webhooks.s3_svc.upload_from_url", new_callable=AsyncMock, return_value=("https://s3.amazonaws.com/video.mp4", 2.5)), \
          patch("app.api.v1.webhooks.notification.notify_instructor", new_callable=AsyncMock), \
-         patch("app.api.v1.webhooks.cost_log.record"):
+         patch("app.api.v1.webhooks.cost_log.record_once"):
         resp = await client.post(
             "/api/v1/webhooks/heygen",
             content=body,
