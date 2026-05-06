@@ -93,8 +93,16 @@ async def get_lecture_or_404(db: AsyncSession, lecture_id: uuid.UUID) -> Lecture
 async def get_public_lecture_by_slug(
     db: AsyncSession, slug: str
 ) -> LecturePublicResponse:
+    """공개 강의 조회 + R2W2: professor_name / course_name / duration_sec 채움.
+
+    Lecture → Course → User(instructor) 체인을 ``selectinload`` 로 함께 로드하고,
+    별도 쿼리로 가장 최근에 길이 메타가 채워진 Video.duration_seconds 를 끌어
+    온다. 어느 한 쪽이라도 없으면 해당 필드는 ``None`` (frontend 가 안전하게 무시).
+    """
     result = await db.execute(
-        select(Lecture).where(Lecture.slug == slug, Lecture.is_published == True)  # noqa: E712
+        select(Lecture)
+        .options(selectinload(Lecture.course).selectinload(Course.instructor))
+        .where(Lecture.slug == slug, Lecture.is_published == True)  # noqa: E712
     )
     lecture = result.scalar_one_or_none()
     if not lecture:
@@ -102,6 +110,15 @@ async def get_public_lecture_by_slug(
 
     now = datetime.now(timezone.utc)
     is_expired = lecture.expires_at is not None and lecture.expires_at < now
+
+    # ── R2W2 부가 정보 ────────────────────────────────────────────────────
+    professor_name = (
+        lecture.course.instructor.name
+        if lecture.course and lecture.course.instructor
+        else None
+    )
+    course_name = lecture.course.title if lecture.course else None
+    duration_sec = await _resolve_lecture_duration_seconds(db, lecture.id)
 
     return LecturePublicResponse(
         id=lecture.id,
@@ -112,7 +129,33 @@ async def get_public_lecture_by_slug(
         slug=lecture.slug,
         is_expired=is_expired,
         video_url=None if is_expired else lecture.video_url,
+        professor_name=professor_name,
+        course_name=course_name,
+        duration_sec=duration_sec,
     )
+
+
+async def _resolve_lecture_duration_seconds(
+    db: AsyncSession, lecture_id: uuid.UUID
+) -> int | None:
+    """강의에 연결된 가장 최근 Video.duration_seconds (없으면 None).
+
+    Lecture 당 보통 하나의 Video 가 활성이지만, 모델이 1:N 을 허용하므로
+    ``duration_seconds is not None`` 인 row 중 가장 최근 ``created_at`` 을 채택.
+    Video 자체가 없거나 모두 길이 메타 누락이면 ``None`` — 학생 진입 페이지의
+    duration UI 가 자연스럽게 숨김 처리된다.
+    """
+    stmt = (
+        select(Video.duration_seconds)
+        .where(
+            Video.lecture_id == lecture_id,
+            Video.duration_seconds.is_not(None),
+        )
+        .order_by(Video.created_at.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
 
 
 # ── 생성 / 수정 ───────────────────────────────────────────────────────────────

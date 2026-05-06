@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class TokenResponse(BaseModel):
@@ -32,12 +32,47 @@ class StudentProfileIn(BaseModel):
 
 
 class CompleteProfileRequest(BaseModel):
+    """추가 정보 입력 후 가입 완료.
+
+    BACKEND_ASKS.W4 #3: 회원가입 폼이 OAuth 라운드트립 전에 sessionStorage 로
+    name / locale / student_number 를 stash 해두면 이 엔드포인트로 함께 보내
+    재입력을 없앤다. 모두 Optional — 안 보내도 기존 동작 유지 (PATCH 의미).
+    """
+
     temp_token: str
-    # 교수자 전용
-    school: str | None = None
-    department: str | None = None
-    # 학습자 전용
-    student_number: str | None = None
+
+    # ── pre-OAuth 힌트 (옵셔널, R2W2 추가) ──────────────────────────────
+    name: str | None = Field(
+        default=None,
+        max_length=100,
+        description=(
+            "회원가입 폼에서 입력한 표시명. 비어있지 않으면 Google 의 name 을 "
+            "덮어써 user.name 으로 저장된다."
+        ),
+    )
+    locale: Literal["ko", "en"] | None = Field(
+        default=None,
+        description=(
+            "선호 언어 힌트. User 모델에 컬럼이 없어 현재는 로깅만 — 추후 "
+            "users.locale 마이그레이션이 추가되면 자동으로 채워진다."
+        ),
+    )
+
+    # ── 교수자 전용 (기존 동작 유지) ───────────────────────────────────
+    school: str | None = Field(default=None, max_length=200)
+    department: str | None = Field(default=None, max_length=200)
+
+    # ── 학습자 전용 (기존 동작 유지) ───────────────────────────────────
+    student_number: str | None = Field(default=None, max_length=50)
+
+    @field_validator("name", "school", "department", "student_number", mode="before")
+    @classmethod
+    def _empty_string_to_none(cls, v):
+        """공백/빈 문자열은 미입력으로 간주 — 기존 호출자 호환 + PATCH 의미."""
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped if stripped else None
+        return v
 
 
 class RefreshRequest(BaseModel):
