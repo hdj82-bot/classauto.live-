@@ -1,0 +1,49 @@
+{
+  "student": {
+    "entry": {
+      "fromProfessor": "{name} 교수님이 보낸 강의입니다",
+      "fromProfessorAnon": "교수님이 공유한 강의입니다",
+      "watchToProceed": "이 강의를 시청하려면 로그인 또는 가입이 필요합니다",
+      "loginCta": "학교 Google 계정으로 로그인",
+      "signupCta": "처음이신가요? 학생으로 가입하기",
+      "guestNotice": "ClassAuto는 학생 학습 도구입니다. 광고를 사용하지 않으며, 졸업 후 데이터가 자동 삭제됩니다.",
+      "privacyLink": "학생 데이터 보호 정책 보기",
+      "lectureNotFoundTitle": "강의를 찾을 수 없습니다",
+      "lectureNotFoundDesc": "링크가 잘못됐거나 강의가 삭제되었을 수 있습니다.",
+      "backToHome": "처음으로",
+      "loadingLecture": "강의를 불러오는 중...",
+      "metaPlaceholder": "강의 정보 불러오는 중",
+      "openInPlayer": "강의 시청 화면으로 이동"
+    },
+    "signup": {
+      "title": "학생 가입",
+      "subtitle": "Google 계정으로 빠르게 가입하고 강의를 시청하세요",
+      "googleCta": "Google 계정으로 가입",
+      "googleRedirecting": "Google로 이동 중...",
+      "name": "이름",
+      "namePlaceholder": "예) 홍길동",
+      "preferredLanguage": "선호 언어",
+      "studentNumber": "학번 (선택)",
+      "studentNumberPlaceholder": "예) 20240001",
+      "agreement": "가입 시 이용약관과 개인정보처리방침에 동의합니다",
+      "validation": {
+        "nameRequired": "이름을 입력해주세요",
+        "nameTooShort": "이름은 최소 1자 이상이어야 합니다",
+        "studentNumberFormat": "학번은 숫자 4-12자리로 입력해주세요"
+      },
+      "alreadyHaveAccount": "이미 계정이 있으신가요?",
+      "loginLink": "로그인",
+      "noteOAuth": "Google 가입 후 추가 정보 입력 화면으로 이동합니다."
+    },
+    "onboarding": {
+      "title": "잠시만요, 한 가지만 확인할게요",
+      "description": "더 나은 학습 경험을 위해 이름과 언어를 확인해주세요. 나중에 프로필에서 변경할 수 있습니다.",
+      "nameLabel": "어떻게 불러드릴까요?",
+      "namePlaceholder": "이름 또는 닉네임",
+      "languageLabel": "선호하는 언어",
+      "saveButton": "저장하고 시작",
+      "skipButton": "건너뛰기",
+      "saved": "환영합니다!"
+    }
+  }
+}
