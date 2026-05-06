@@ -26,10 +26,20 @@ export default function Header() {
 
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
 
-  // 비로그인 + 로그인 모두 노출되는 공개 메뉴 — 모바일 드롭다운에서도 동일.
-  const publicLinks = [
+  // 비로그인 + 로그인 모두 노출되는 공개 메뉴.
+  // - corePublicLinks: 데스크톱 nav + 모바일 드롭다운 둘 다. 핵심 진입로.
+  // - extendedPublicLinks: 모바일 드롭다운 전용. marketing 페이지 (use-cases /
+  //   trust / security). 데스크톱은 빽빽해지지 않게 모바일에서만 노출.
+  // - betaApply 는 amber 강조 (CTA 성격).
+  const corePublicLinks = [
     { href: "/demo", label: t("nav.demo"), accent: "amber" as const },
     { href: "/pricing", label: t("nav.pricing"), accent: "indigo" as const },
+    { href: "/beta-apply", label: t("nav.betaApply"), accent: "amber" as const },
+  ];
+  const extendedPublicLinks = [
+    { href: "/use-cases", label: t("nav.useCases"), accent: "indigo" as const },
+    { href: "/trust", label: t("nav.trust"), accent: "indigo" as const },
+    { href: "/security", label: t("nav.security"), accent: "indigo" as const },
   ];
 
   const handleLocaleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -51,7 +61,7 @@ export default function Header() {
             className="hidden sm:flex items-center gap-1 ml-3"
             aria-label={t("nav.public")}
           >
-            {publicLinks.map((link) => {
+            {corePublicLinks.map((link) => {
               const active = pathname?.startsWith(link.href);
               const activeCls = link.accent === "amber"
                 ? "text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 font-medium"
@@ -142,18 +152,19 @@ export default function Header() {
             className="md:hidden relative z-40 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-4 py-3 space-y-1 animate-scale-in"
             aria-label={t("nav.public")}
           >
-            {/* 공개 메뉴 — 항상 노출 */}
-            {publicLinks.map((link) => {
+            {/* 공개 메뉴 — 항상 노출 (core + extended). data-testid 는 첫 path 단어 기준. */}
+            {[...corePublicLinks, ...extendedPublicLinks].map((link) => {
               const active = pathname?.startsWith(link.href);
               const activeCls = link.accent === "amber"
                 ? "text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 font-medium"
                 : "text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 font-medium";
+              const slug = link.href.replace(/^\//, "").replace(/\//g, "-");
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   onClick={closeMenu}
-                  data-testid={`header-mobile-link-${link.href.replace("/", "")}`}
+                  data-testid={`header-mobile-link-${slug}`}
                   className={`block text-sm rounded-lg px-3 py-2 transition ${
                     active
                       ? activeCls

@@ -20,6 +20,10 @@ import studentKo from "../../messages/_patches/student.ko.json";
 import studentEn from "../../messages/_patches/student.en.json";
 import demoKo from "../../messages/_patches/demo.ko.json";
 import demoEn from "../../messages/_patches/demo.en.json";
+import professorKo from "../../messages/_patches/professor.ko.json";
+import professorEn from "../../messages/_patches/professor.en.json";
+import marketingKo from "../../messages/_patches/marketing.ko.json";
+import marketingEn from "../../messages/_patches/marketing.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -47,15 +51,28 @@ function mergePatch<T extends Messages>(base: T, patch: Messages): T {
   return out as T;
 }
 
-// 패치는 누적 적용 — student → demo 순. 같은 키 충돌 시 뒤가 이김.
-// 현재 두 패치는 서로 다른 namespace 라 충돌 없음.
-const koMerged = mergePatch(
-  mergePatch(ko as Messages, studentKo as Messages),
+// 패치는 누적 적용 — student → demo → professor → marketing 순.
+// 모두 서로 다른 top-level namespace 라 충돌 없음. 추후 새 patch 는 배열에 추가.
+const koPatches: Messages[] = [
+  studentKo as Messages,
   demoKo as Messages,
-);
-const enMerged = mergePatch(
-  mergePatch(en as Messages, studentEn as Messages),
+  professorKo as Messages,
+  marketingKo as Messages,
+];
+const enPatches: Messages[] = [
+  studentEn as Messages,
   demoEn as Messages,
+  professorEn as Messages,
+  marketingEn as Messages,
+];
+
+const koMerged = koPatches.reduce(
+  (acc, p) => mergePatch(acc, p),
+  ko as Messages,
+);
+const enMerged = enPatches.reduce(
+  (acc, p) => mergePatch(acc, p),
+  en as Messages,
 );
 
 const messages: Record<Locale, Messages> = { ko: koMerged, en: enMerged };

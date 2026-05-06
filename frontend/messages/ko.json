@@ -101,7 +101,12 @@
     "myLectures": "내 강의",
     "demo": "데모 체험",
     "pricing": "가격",
-    "public": "둘러보기"
+    "public": "둘러보기",
+    "useCases": "활용 사례",
+    "trust": "학생 데이터 보호",
+    "security": "보안",
+    "betaApply": "베타 신청",
+    "contact": "기관 문의"
   },
   "professor": {
     "lectureManage": "강의 관리",

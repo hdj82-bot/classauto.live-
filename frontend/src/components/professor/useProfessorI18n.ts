@@ -2,54 +2,28 @@
 
 import { useCallback } from "react";
 import { useI18n } from "@/contexts/I18nContext";
-import professorKo from "../../../messages/_patches/professor.ko.json";
-import professorEn from "../../../messages/_patches/professor.en.json";
 
 /**
- * 교수자 온보딩 전용 i18n 훅.
+ * 교수자 온보딩 전용 i18n 훅 — `useI18n` 의 thin adapter.
  *
- * 메인 `messages/ko.json` / `messages/en.json` 을 직접 수정하지 않고
- * `messages/_patches/professor.{ko,en}.json` 의 키를 사용하기 위한 격리 레이어.
+ * R2 통합 이전 (R2W3 워크트리 단독 시점) 에는 자체 messages dict 를 들고 다니는
+ * 격리 레이어였음. R2 통합 이후: `I18nContext` 가
+ * `_patches/professor.{ko,en}.json` 도 deep-merge 하므로 데이터는 통일됐고,
+ * 본 훅은 호출자 코드를 깨지 않기 위한 얇은 어댑터(자동 `"professorOnboarding."`
+ * prefix)로만 남는다.
  *
- * 키는 `professorOnboarding.` 프리픽스가 자동으로 붙는다고 가정합니다 —
- * 호출자는 짧은 키만 넘깁니다. (예: `t("checklistTitle")`)
+ * 호출자는 `t("checklistTitle")` 형태로 짧은 키를 그대로 쓸 수 있고,
+ * 내부적으로 `"professorOnboarding.checklistTitle"` 가 lookup 된다.
  *
- * R2W1 (i18n + Header) 워크트리가 `I18nContext.tsx` 의 deep-merge 목록에
- * `professor.{ko,en}.json` 까지 추가해주면 (한 줄 import + 한 번 mergePatch),
- * 이 훅을 제거하고 그냥 `useI18n().t("professorOnboarding.checklistTitle")` 로
- * 갈아끼울 수 있습니다. 자세한 머지 절차는 MERGE_NOTES.R2W3.md 참조.
+ * 후속 PR 권장: 호출자들을 `useI18n()` + `t("professorOnboarding.<key>")`
+ * 직접 호출로 점진 마이그레이션한 뒤 본 어댑터를 제거.
  */
-
-type ProfessorMessages = typeof professorKo;
-
-const messages: Record<"ko" | "en", ProfessorMessages> = {
-  ko: professorKo,
-  en: professorEn,
-};
-
 export function useProfessorI18n() {
-  const { locale } = useI18n();
-  const dict = messages[locale] ?? messages.ko;
-
+  const { t: tBase, locale } = useI18n();
   const t = useCallback(
-    (key: string, params?: Record<string, string | number>): string => {
-      const parts = key.split(".");
-      let value: unknown = dict.professorOnboarding as unknown;
-      for (const part of parts) {
-        if (value && typeof value === "object") {
-          value = (value as Record<string, unknown>)[part];
-        } else {
-          return key;
-        }
-      }
-      if (typeof value !== "string") return key;
-      if (!params) return value;
-      return value.replace(/\{(\w+)\}/g, (_, k) =>
-        String(params[k] ?? `{${k}}`),
-      );
-    },
-    [dict],
+    (key: string, params?: Record<string, string | number>): string =>
+      tBase(`professorOnboarding.${key}`, params),
+    [tBase],
   );
-
   return { t, locale };
 }
