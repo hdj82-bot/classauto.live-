@@ -98,7 +98,10 @@
     "lectureManage": "강의 관리",
     "newLecture": "새 강의",
     "subscription": "구독",
-    "myLectures": "내 강의"
+    "myLectures": "내 강의",
+    "demo": "데모 체험",
+    "pricing": "가격",
+    "public": "둘러보기"
   },
   "professor": {
     "lectureManage": "강의 관리",

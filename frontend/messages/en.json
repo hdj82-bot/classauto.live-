@@ -98,7 +98,10 @@
     "lectureManage": "Lectures",
     "newLecture": "New Lecture",
     "subscription": "Subscription",
-    "myLectures": "My Lectures"
+    "myLectures": "My Lectures",
+    "demo": "Try Demo",
+    "pricing": "Pricing",
+    "public": "Browse"
   },
   "professor": {
     "lectureManage": "Lecture Management",

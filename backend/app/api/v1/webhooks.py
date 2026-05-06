@@ -15,6 +15,7 @@ from app.db.session import SyncSessionLocal
 from app.models.lecture import Lecture
 from app.models.video_render import RenderStatus, VideoRender, WebhookEventLog
 from app.services.pipeline import cost_log, notification, s3 as s3_svc
+from app.services.pipeline.heygen import estimate_cost_usd
 from app.services.pipeline.thumbnail import generate_thumbnail_from_video_url
 
 logger = logging.getLogger(__name__)
@@ -115,8 +116,13 @@ async def heygen_webhook(
             render.status = RenderStatus.ready
             render.completed_at = datetime.now(timezone.utc)
 
-            cost_log.record(db, render.id, "heygen", "video_render", cost_usd=0.0,
-                            duration_seconds=event_data.get("duration"))
+            # record_once: 폴링 폴백과의 race / 웹훅 재발급 시 (video_render_id, operation)
+            # UNIQUE 인덱스로 중복 비용 기록 방지. WebhookEventLog UNIQUE 가 1차 방어,
+            # 이건 2차 안전망 — 두 경로(웹훅/폴링)가 같은 render 에 도달해도 1회만 기록.
+            duration = event_data.get("duration")
+            cost_log.record_once(db, render.id, "heygen", "video_render",
+                                 cost_usd=estimate_cost_usd(duration),
+                                 duration_seconds=duration)
 
             # 첫 번째 슬라이드(slide_number=0 또는 1)인 경우 강의 썸네일 자동 생성
             video_url_for_thumb = render.s3_video_url or render.heygen_video_url

@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     HEYGEN_AVATAR_ID: str = ""
     HEYGEN_WEBHOOK_SECRET: str = ""
     HEYGEN_CALLBACK_URL: str = "http://localhost:8000/api/v1/webhooks/heygen"
+    # 영상 1초당 USD 단가 — Creator 플랜 추정치(약 $0.50/min). 운영 시 실측값으로 교체.
+    # 0 으로 두면 비용 기록은 duration 만 남기고 cost_usd=0 (회계 비활성).
+    HEYGEN_COST_USD_PER_SECOND: float = 0.0083
 
     # ── TTS: ElevenLabs (primary) ───────────────────────────────
     ELEVENLABS_API_KEY: str = ""

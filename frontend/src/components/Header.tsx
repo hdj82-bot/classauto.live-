@@ -31,10 +31,38 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-40 bg-white/80 dark:bg-gray-900/80 backdrop-blur border-b border-gray-200 dark:border-gray-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <Link href={homeHref} className="flex items-center gap-2" aria-label="IFL Platform Home">
-          <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold" aria-hidden="true">IFL</span>
-          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 hidden sm:inline">Interactive Flipped Learning</span>
-        </Link>
+        <div className="flex items-center">
+          <Link href={homeHref} className="flex items-center gap-2" aria-label="IFL Platform Home">
+            <span className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold" aria-hidden="true">IFL</span>
+            <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 hidden sm:inline">Interactive Flipped Learning</span>
+          </Link>
+          {/* 비로그인 + 로그인 모두 노출되는 공개 메뉴 — /demo 는 베타 신청 전환의 1순위 진입로. */}
+          <nav
+            className="hidden sm:flex items-center gap-1 ml-3"
+            aria-label={t("nav.public")}
+          >
+            <Link
+              href="/demo"
+              className={`text-sm px-3 py-1.5 rounded-lg transition ${
+                pathname?.startsWith("/demo")
+                  ? "text-amber-600 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 font-medium"
+                  : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              {t("nav.demo")}
+            </Link>
+            <Link
+              href="/pricing"
+              className={`text-sm px-3 py-1.5 rounded-lg transition ${
+                pathname?.startsWith("/pricing")
+                  ? "text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/50 font-medium"
+                  : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+              }`}
+            >
+              {t("nav.pricing")}
+            </Link>
+          </nav>
+        </div>
 
         <div className="flex items-center gap-2">
           {/* Language Selector */}
