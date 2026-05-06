@@ -1,3 +1,4 @@
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Literal
@@ -39,6 +40,8 @@ from app.services.auth import (
     save_temp_code,
     validate_and_delete_refresh_token,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -243,6 +246,14 @@ async def complete_profile(
 
     - **교수자**: `school`, `department` 필수
     - **학습자**: `student_number` 필수
+
+    **R2W2 추가 (BACKEND_ASKS.W4 #3)**: 학생 회원가입 폼이 OAuth 라운드트립 전에
+    수집한 옵션 힌트 — `name` / `locale` 도 옵셔널로 수용한다. 모두 빈 값이면
+    무시되고 기존 호출자 동작이 그대로 유지된다 (PATCH 의미).
+
+    - `name`: 비어있지 않으면 Google 의 표시명을 덮어써 ``user.name`` 으로 저장.
+    - `locale`: ``ko`` / ``en`` — User 모델에 컬럼이 없어 현재는 로깅만 (추후
+      ``users.locale`` 컬럼이 추가되면 자동 채움).
     """
     try:
         payload = decode_token(body.temp_token)
@@ -273,11 +284,24 @@ async def complete_profile(
                 detail="학습자는 student_number가 필수입니다.",
             )
 
+    # R2W2: 폼에서 입력한 표시명이 있으면 Google 의 name 을 덮어쓴다.
+    # CompleteProfileRequest 의 _empty_string_to_none 가 공백/빈 문자열을 None
+    # 으로 정규화해두어 ``body.name`` 이 truthy 면 곧 사용자 의도 입력이다.
+    final_name = body.name or payload["name"]
+
+    if body.locale:
+        # users.locale 컬럼이 추가되면 ``create_user_from_google`` 인자로 추가.
+        # 그 전까지는 분석/디버깅 목적으로 로그에만 남긴다.
+        logger.info(
+            "complete_profile locale hint accepted (no column yet): role=%s, locale=%s",
+            role_str, body.locale,
+        )
+
     user = await create_user_from_google(
         db=db,
         google_sub=payload["sub"],
         email=payload["email"],
-        name=payload["name"],
+        name=final_name,
         role=UserRole(role_str),
         school=body.school,
         department=body.department,
