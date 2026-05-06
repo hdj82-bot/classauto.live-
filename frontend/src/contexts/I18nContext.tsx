@@ -13,9 +13,13 @@ import en from "../../messages/en.json";
 // Patch files allow worktree-scoped string additions without editing the
 // canonical ko.json/en.json (those are owned by main and other worktrees may
 // be editing them in parallel). New keys live under their own top-level
-// namespace (e.g. "student") and are merged at module load.
+// namespace (e.g. "student", "demo") and are merged at module load — the
+// canonical files keep nothing under those namespaces, so deep-merge is a
+// pure addition.
 import studentKo from "../../messages/_patches/student.ko.json";
 import studentEn from "../../messages/_patches/student.en.json";
+import demoKo from "../../messages/_patches/demo.ko.json";
+import demoEn from "../../messages/_patches/demo.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -43,8 +47,16 @@ function mergePatch<T extends Messages>(base: T, patch: Messages): T {
   return out as T;
 }
 
-const koMerged = mergePatch(ko as Messages, studentKo as Messages);
-const enMerged = mergePatch(en as Messages, studentEn as Messages);
+// 패치는 누적 적용 — student → demo 순. 같은 키 충돌 시 뒤가 이김.
+// 현재 두 패치는 서로 다른 namespace 라 충돌 없음.
+const koMerged = mergePatch(
+  mergePatch(ko as Messages, studentKo as Messages),
+  demoKo as Messages,
+);
+const enMerged = mergePatch(
+  mergePatch(en as Messages, studentEn as Messages),
+  demoEn as Messages,
+);
 
 const messages: Record<Locale, Messages> = { ko: koMerged, en: enMerged };
 
