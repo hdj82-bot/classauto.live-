@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720" role="img" aria-label="특수상대성이론 입문 — 데모 영상 미리보기">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#0E2233"/>
+      <stop offset="100%" stop-color="#0A0A0A"/>
+    </radialGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="720" fill="url(#bg)"/>
+  <circle cx="960" cy="220" r="180" fill="url(#accent)" opacity="0.18"/>
+  <circle cx="320" cy="540" r="220" fill="#FFB627" opacity="0.10"/>
+  <text x="640" y="320" text-anchor="middle" fill="#FFFFFF" font-family="'Pretendard Variable', sans-serif" font-size="56" font-weight="700">특수상대성이론 입문</text>
+  <text x="640" y="380" text-anchor="middle" fill="rgba(255,255,255,0.55)" font-family="'Pretendard Variable', sans-serif" font-size="22">자연과학·공학 데모 · 약 5분</text>
+  <text x="640" y="500" text-anchor="middle" fill="#FFB627" font-family="'Pretendard Variable', sans-serif" font-size="18" letter-spacing="6">▶ 데모 영상 placeholder</text>
+</svg>

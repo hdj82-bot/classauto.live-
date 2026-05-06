@@ -1,0 +1,129 @@
+{
+  "demo": {
+    "meta": {
+      "pageTitle": "Demo — ClassAuto",
+      "pageDescription": "Step into a student's seat and try the ClassAuto AI tutor in 3 minutes. No sign-up."
+    },
+    "hero": {
+      "eyebrow": "DEMO · Student view",
+      "headline1": "Professor,",
+      "headline2": "spend 30 seconds as a student.",
+      "subtitle": "Watch a real lecture clip and ask the AI tutor anything. No sign-up required.",
+      "metaTime": "About 3 minutes",
+      "metaQuestions": "3 free questions",
+      "metaMobile": "Mobile-friendly",
+      "scrollHint": "Pick a field below to start"
+    },
+    "fieldSelect": {
+      "title": "Which field would you like to try?",
+      "subtitle": "We'll instantly show you a 5-minute lecture clip and AI tutor tailored to your choice.",
+      "social": {
+        "label": "Social Sciences",
+        "title": "Understanding Modern Chinese Society",
+        "duration": "~5 min",
+        "tag": "Real lecture by Prof. Eoheung",
+        "start": "▶ Start"
+      },
+      "natural": {
+        "label": "Natural Sciences · Engineering",
+        "title": "Intro to Special Relativity",
+        "duration": "~5 min",
+        "tag": "Re-synthesized with AI avatar voice",
+        "start": "▶ Start"
+      },
+      "switch": "Pick a different field"
+    },
+    "experience": {
+      "statusBar": "Demo mode · {field} edition · {elapsed} / 5:00",
+      "videoPlaceholderTitle": "Demo video coming soon",
+      "videoPlaceholderDesc": "Real clips are being prepared for the beta launch. For now you'll see the still preview frame.",
+      "videoTodo": "TODO: drop /public/demo/{slug}.mp4 and wire <video src>",
+      "videoControlsPlay": "Play",
+      "videoControlsPause": "Pause",
+      "videoCaption": "Lecture preview re-synthesized with the AI avatar voice",
+      "chatTitle": "Lecture assistant",
+      "chatGreeting": "Hi! Ask me anything about the lecture.",
+      "suggestedHeader": "👇 Suggested questions",
+      "questionsLeft": "{used}/{max} used",
+      "questionsRemaining": "{remaining} / {max} left",
+      "inputPlaceholder": "Type your question...",
+      "inputCounter": "{count}/{max}",
+      "send": "Send question",
+      "sending": "AI is drafting an answer...",
+      "limitReachedTitle": "🎉 You've used all 3 questions",
+      "limitReachedDesc": "Want real questions from real students? Build your own lecture.",
+      "limitReachedCta": "Apply for the beta",
+      "lastQuestionHint": "💡 One question left. Try something off-topic — see how ClassAuto reacts!"
+    },
+    "toast": {
+      "offTopicTitle": "💡 Try this",
+      "offTopicBody": "Type something off-topic like \"What's for lunch today?\" — see how the AI responds.",
+      "offTopicCta": "Try now",
+      "challengeBadge": "🏆 Challenge: ask an off-topic question",
+      "challengeDone": "✓ Differentiator unlocked!"
+    },
+    "answer": {
+      "sourceLabel": "Source",
+      "sourceSlideSocial": "Slides 7-8",
+      "sourceSlideNatural": "Slides 4-5",
+      "videoTime": "Video timestamp",
+      "videoTimeRangeSocial": "2:14-3:02",
+      "videoTimeRangeNatural": "1:48-2:36",
+      "replayAudio": "🔄 Replay audio",
+      "jumpToVideo": "📌 Jump to this part",
+      "offTopicTitle": "This question is outside the lecture's scope.",
+      "offTopicBody": "I couldn't find an answer in the lecture materials. Other EdTech chatbots will answer anything — ClassAuto is designed to keep students focused on learning.",
+      "offTopicTag": "RAG scope limit"
+    },
+    "mockAnswers": {
+      "socialQ1": "GDP measures everything produced inside a country, while GNP measures what a country's nationals produce at home and abroad. Since launching the digital yuan, China has improved the accuracy of its GDP statistics.",
+      "socialQ2": "The digital yuan is fundamentally different from Bitcoin: it's issued directly by the central bank and every transaction is traceable. The design prioritizes policy visibility over anonymity.",
+      "naturalQ1": "The constancy of the speed of light means the speed measured in any inertial frame is always about 299,792,458 m/s. From this single assumption, time dilation and length contraction follow naturally.",
+      "naturalQ2": "The twin paradox is a thought experiment in which one twin travels near light speed and returns younger than the twin who stayed home. The asymmetry from the traveling twin's acceleration is the key."
+    },
+    "suggested": {
+      "socialQ1": "What is the difference between GDP and GNP?",
+      "socialQ2": "How is the digital yuan different from Bitcoin?",
+      "naturalQ1": "Why is the speed of light constant?",
+      "naturalQ2": "What is the twin paradox?"
+    },
+    "ctaModal": {
+      "title": "How was the experience?",
+      "body": "The clip you just watched is a real lecture by Prof. Eoheung — built from a single PPT in about 12 minutes.",
+      "primary": "🎓 Apply for the beta and build your own",
+      "secondary": "💰 See pricing",
+      "shareTitle": "Share with a fellow professor",
+      "shareEmail": "Email",
+      "shareKakao": "KakaoTalk",
+      "shareX": "X",
+      "shareUrl": "Copy URL",
+      "shareUrlDone": "URL copied to clipboard",
+      "replay": "✕ Try again"
+    },
+    "faq": {
+      "title": "Demo FAQ",
+      "q1": "Can I really try everything without signing up?",
+      "a1": "Yes — watching the video and chatting with the AI tutor are both available without an account.",
+      "q2": "Will my own lecture turn into a video like this?",
+      "a2": "Yes — a single PPT is all you need.",
+      "q3": "Is this the same screen students actually see?",
+      "a3": "It's identical to what students experience.",
+      "q4": "Can I try both demo videos?",
+      "a4": "One video per session, but \"Try again\" lets you switch to the other one."
+    },
+    "footerCta": {
+      "title": "Now it's your turn to build one",
+      "subtitle": "The beta is free. With one PPT you can ship your first lecture in under 12 minutes.",
+      "primary": "Apply for the beta →",
+      "secondary": "See pricing"
+    },
+    "a11y": {
+      "fieldCardSocial": "Start the social sciences demo",
+      "fieldCardNatural": "Start the natural sciences demo",
+      "switchField": "Re-select demo field",
+      "closeToast": "Dismiss hint toast",
+      "questionInput": "Question for the lecture assistant",
+      "answerSection": "AI answer"
+    }
+  }
+}
