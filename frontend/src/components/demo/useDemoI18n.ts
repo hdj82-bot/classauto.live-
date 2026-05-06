@@ -2,52 +2,27 @@
 
 import { useCallback } from "react";
 import { useI18n } from "@/contexts/I18nContext";
-import demoKo from "../../../messages/_patches/demo.ko.json";
-import demoEn from "../../../messages/_patches/demo.en.json";
 
 /**
- * Demo 페이지 전용 i18n 훅.
+ * Demo 페이지 전용 i18n 훅 — `useI18n` 의 thin adapter.
  *
- * 메인 messages/ko.json / messages/en.json 을 직접 수정하지 않고
- * messages/_patches/demo.{ko,en}.json 의 키를 사용하기 위한 격리 레이어.
+ * R2W1 통합 이전: 자체 messages dict 를 들고 다니는 격리 레이어였음.
+ * R2W1 이후:    `I18nContext` 가 `_patches/demo.{ko,en}.json` 도 deep-merge
+ *               하므로 데이터는 통일됐고, 본 훅은 호출자 코드를 깨지 않기 위한
+ *               얇은 어댑터(자동 `"demo."` prefix)로만 남는다.
  *
- * 사용 시 키는 점(`.`) 표기법을 그대로 사용하되, 자동으로 `demo.` 프리픽스가
- * 붙어있다고 가정합니다. (예: `t("hero.headline2")` → `demo.hero.headline2`)
+ * 호출자는 `t("hero.headline2")` 형태로 짧은 키를 그대로 쓸 수 있고,
+ * 내부적으로 `"demo.hero.headline2"` 가 lookup 된다.
  *
- * 워크트리 머지 후 `_patches` 가 본체에 합쳐지면 이 훅을 제거하고
- * 메인 `useI18n().t("demo.hero.headline2")` 형태로 자동 치환할 수 있습니다.
+ * **후속 PR 권장**: demo 컴포넌트 호출자들을 `useI18n()` + `t("demo.<key>")`
+ * 직접 호출로 점진 마이그레이션한 뒤 본 어댑터를 제거.
  */
-
-type DemoMessages = typeof demoKo;
-
-const messages: Record<"ko" | "en", DemoMessages> = {
-  ko: demoKo,
-  en: demoEn,
-};
-
 export function useDemoI18n() {
-  const { locale } = useI18n();
-  const dict = messages[locale] ?? messages.ko;
-
+  const { t: tBase, locale } = useI18n();
   const t = useCallback(
-    (key: string, params?: Record<string, string | number>): string => {
-      const parts = key.split(".");
-      let value: unknown = dict.demo as unknown;
-      for (const part of parts) {
-        if (value && typeof value === "object") {
-          value = (value as Record<string, unknown>)[part];
-        } else {
-          return key;
-        }
-      }
-      if (typeof value !== "string") return key;
-      if (!params) return value;
-      return value.replace(/\{(\w+)\}/g, (_, k) =>
-        String(params[k] ?? `{${k}}`),
-      );
-    },
-    [dict],
+    (key: string, params?: Record<string, string | number>): string =>
+      tBase(`demo.${key}`, params),
+    [tBase],
   );
-
   return { t, locale };
 }
