@@ -33,11 +33,17 @@ export default function ActivityFeed({ activity }: ActivityFeedProps) {
       if (!seenRef.current.has(a.id)) fresh.add(a.id);
       seenRef.current.add(a.id);
     }
-    if (fresh.size > 0) {
-      setNewIds(fresh);
-      const timer = setTimeout(() => setNewIds(new Set()), 3500);
-      return () => clearTimeout(timer);
-    }
+    if (fresh.size === 0) return;
+
+    // react-hooks/set-state-in-effect 룰 회피: effect body 의 sync setState
+    // 호출 X. rAF 로 다음 frame 으로 비동기화하면 cascading render 위험 없이
+    // 동일 효과 (mount 직후 NEW 표시 → 3.5초 후 해제).
+    const showHandle = requestAnimationFrame(() => setNewIds(fresh));
+    const clearTimer = setTimeout(() => setNewIds(new Set()), 3500);
+    return () => {
+      cancelAnimationFrame(showHandle);
+      clearTimeout(clearTimer);
+    };
   }, [activity]);
 
   if (activity.length === 0) {

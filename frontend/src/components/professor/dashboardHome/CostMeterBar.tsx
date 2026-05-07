@@ -31,7 +31,10 @@ export default function CostMeterBar({
 }: CostMeterBarProps) {
   const { t } = useDashboardHubI18n();
   const idBase = useId().replace(/:/g, "-");
-  const used = useCountUp(usedUsd, { decimals: 2 });
+  // react-hooks/refs 룰: 객체 형태 (`used.ref`, `used.value`) 로 받으면
+  // ref-like 객체로 추적되어 .value 접근까지 ref read 로 잡힌다. StatCard.tsx
+  // 와 동일하게 destructure 로 분리해 lint 통과.
+  const { value: amount, ref: meterRef } = useCountUp(usedUsd, { decimals: 2 });
 
   const pct =
     limitUsd && limitUsd > 0
@@ -43,7 +46,7 @@ export default function CostMeterBar({
 
   return (
     <div
-      ref={used.ref as React.RefObject<HTMLDivElement>}
+      ref={meterRef as React.RefObject<HTMLDivElement>}
       className={`rounded-2xl border bg-white ${compact ? "px-4 py-3" : "px-5 py-4"} border-gray-200`}
       role="group"
       aria-label={t("costMeter.title")}
@@ -63,10 +66,10 @@ export default function CostMeterBar({
           >
             {hasLimit
               ? t("costMeter.amountOfLimit", {
-                  used: used.value.toFixed(2),
+                  used: amount.toFixed(2),
                   limit: (limitUsd as number).toFixed(2),
                 })
-              : t("costMeter.amountAlone", { used: used.value.toFixed(2) })}
+              : t("costMeter.amountAlone", { used: amount.toFixed(2) })}
           </p>
         </div>
         {(warn80 || warn100) && (

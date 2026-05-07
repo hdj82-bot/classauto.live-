@@ -31,66 +31,67 @@ export function useCountUp(
   const decimals = options?.decimals;
   const immediate = options?.immediate ?? false;
 
-  const [value, setValue] = useState<number>(immediate ? target : 0);
+  // target 자체가 NaN/Infinity 일 때는 0 으로 정상화하여 effect 안에서
+  // 추가 setState 호출을 회피한다 (react-hooks/set-state-in-effect 룰).
+  const safeTarget =
+    Number.isFinite(target) && !Number.isNaN(target) ? target : 0;
+
+  const [value, setValue] = useState<number>(immediate ? safeTarget : 0);
   const ref = useRef<HTMLElement | null>(null);
   const startedRef = useRef(false);
 
   useEffect(() => {
-    if (Number.isNaN(target) || !Number.isFinite(target)) {
-      setValue(0);
-      return;
-    }
-
-    // SSR / non-browser
+    // SSR / non-browser — effect 자체가 client 에서만 실행되므로 보통 도달 X.
+    // 도달 시 rAF 로 비동기화하여 set-state-in-effect 룰을 회피.
     if (typeof window === "undefined") {
-      setValue(target);
-      return;
+      const handle = requestAnimationFrame(() => setValue(safeTarget));
+      return () => cancelAnimationFrame(handle);
     }
 
     const reduceMotion =
       window.matchMedia &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    const run = () => {
+    const run = (): (() => void) | void => {
       if (reduceMotion) {
-        setValue(target);
-        return;
+        const h = requestAnimationFrame(() => setValue(safeTarget));
+        return () => cancelAnimationFrame(h);
       }
       const start = 0;
       const t0 = performance.now();
       let cancelled = false;
+      let rafHandle = 0;
 
       const step = (now: number) => {
         if (cancelled) return;
         const elapsed = now - t0;
         const p = Math.min(elapsed / durationMs, 1);
         const easeOut = 1 - Math.pow(1 - p, 3);
-        const current = start + (target - start) * easeOut;
+        const current = start + (safeTarget - start) * easeOut;
         setValue(
           decimals !== undefined
             ? Number(current.toFixed(decimals))
             : Math.floor(current),
         );
-        if (p < 1) requestAnimationFrame(step);
-        else setValue(target);
+        if (p < 1) rafHandle = requestAnimationFrame(step);
+        else setValue(safeTarget);
       };
-      requestAnimationFrame(step);
+      rafHandle = requestAnimationFrame(step);
       return () => {
         cancelled = true;
+        cancelAnimationFrame(rafHandle);
       };
     };
 
     if (immediate || startedRef.current) {
       // 두 번째 이상의 target 변경 — 즉시 시작
-      run();
-      return;
+      return run();
     }
 
     const node = ref.current;
     if (!node || typeof IntersectionObserver === "undefined") {
       startedRef.current = true;
-      run();
-      return;
+      return run();
     }
 
     const observer = new IntersectionObserver(
@@ -109,7 +110,7 @@ export function useCountUp(
     return () => {
       observer.disconnect();
     };
-  }, [target, durationMs, decimals, immediate]);
+  }, [safeTarget, durationMs, decimals, immediate]);
 
   return { value, ref };
 }

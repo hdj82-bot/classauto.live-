@@ -143,11 +143,16 @@ function aggregateStats(input: FanOutInput): DashboardStats {
   }
   const avgAccuracyPct = totalQ > 0 ? round1(weightedAcc / totalQ) : 0;
 
-  // 3) 미응답 Q&A — 모든 강의의 logs 중 responded=false 합산
+  // 3) 미응답 Q&A — 모든 강의의 logs 중 responded=false 합산.
+  // q.logs 가 undefined/null 인 응답 (백엔드 일부 endpoint 가 빈 강의에
+  // 대해 logs 필드 자체를 생략) 에 대비해 nullish coalescing 으로 가드.
+  // CI Frontend Test 의 unhandled TypeError ('Cannot read properties of
+  // undefined (reading filter)') 를 해소.
   let pendingQaCount = 0;
   for (const q of qa.values()) {
     if (!q) continue;
-    pendingQaCount += q.logs.filter((l) => !l.responded).length;
+    const logs = Array.isArray(q.logs) ? q.logs : [];
+    pendingQaCount += logs.filter((l) => !l.responded).length;
   }
 
   // 4) 활성 학습자 — 세션 기준 unique
@@ -197,11 +202,13 @@ function aggregateStats(input: FanOutInput): DashboardStats {
 function aggregateAttention(input: FanOutInput): AttentionData {
   const { qa, attendance, engagement } = input;
 
-  // 답변 대기 질문 — 모든 강의에서 responded=false, 최신 5건
+  // 답변 대기 질문 — 모든 강의에서 responded=false, 최신 5건.
+  // q.logs nullable 가드 (위 3) 와 동일 사유).
   const allPending: AttentionData["pendingQa"] = [];
   for (const [lectureId, q] of qa.entries()) {
     if (!q) continue;
-    for (const log of q.logs) {
+    const logs = Array.isArray(q.logs) ? q.logs : [];
+    for (const log of logs) {
       if (log.responded) continue;
       allPending.push({
         id: log.id,
@@ -274,7 +281,9 @@ function aggregateActivity(input: FanOutInput): RecentActivity[] {
   const events: RecentActivity[] = [];
   for (const [lectureId, q] of qa.entries()) {
     if (!q) continue;
-    for (const log of q.logs) {
+    // q.logs nullable 가드 — 위 두 곳과 동일 사유.
+    const logs = Array.isArray(q.logs) ? q.logs : [];
+    for (const log of logs) {
       const kind: RecentActivity["kind"] = !log.in_scope
         ? "qa-out-of-scope"
         : log.responded
