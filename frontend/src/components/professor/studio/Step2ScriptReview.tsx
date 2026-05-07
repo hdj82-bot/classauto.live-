@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useStudioI18n } from "./useStudioI18n";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import type { ScriptResponse, ScriptSegment, SlideReviewStatus } from "./studioTypes";
@@ -47,7 +47,12 @@ export default function Step2ScriptReview({
   onNext,
 }: Step2Props) {
   const { t } = useStudioI18n();
-  const [activeIdx, setActiveIdx] = useState(0);
+  // raw 는 사용자 input (이전/다음 버튼 클릭 결과). 실제 화면이 사용하는
+  // activeIdx 는 segments 길이로 clamp 된 derived 값 — segments 가 줄어들어
+  // raw 가 범위를 벗어나도 즉시 정상화되고, 다시 늘어나면 자연 복귀한다.
+  // React 19 의 react-hooks/set-state-in-effect 룰을 우회하기 위해
+  // useEffect 안에서 setActiveIdx 호출 대신 derived 값으로 처리.
+  const [rawActiveIdx, setActiveIdx] = useState(0);
   const [dirty, setDirty] = useState(false);
 
   // 현재 표시되는 segment 배열 — 편집 본이 있으면 그걸, 없으면 백엔드 응답.
@@ -56,12 +61,8 @@ export default function Step2ScriptReview({
     [editedSegments, script],
   );
 
-  // segments 가 처음 들어오면 첫 슬라이드를 active 로.
-  useEffect(() => {
-    if (activeIdx >= segments.length && segments.length > 0) {
-      setActiveIdx(0);
-    }
-  }, [segments.length, activeIdx]);
+  const activeIdx =
+    segments.length > 0 ? Math.min(rawActiveIdx, segments.length - 1) : 0;
 
   if (!script || loading) {
     return (

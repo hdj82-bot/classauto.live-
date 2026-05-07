@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import ProgressBar from "./ProgressBar";
 import RiskBadge from "./RiskBadge";
 import { computeRisk, daysSince, type RiskLevel } from "./risk";
@@ -149,7 +149,12 @@ export default function LearnerTable({
   now,
 }: Props) {
   const { t, locale } = useLearnersI18n();
-  const nowTs = now ?? Date.now();
+  // React 19 의 react-hooks/purity 룰: 컴포넌트 본문에서 Date.now() 같은
+  // impure 함수 직접 호출 금지. lazy useState initializer 로 마운트 시 한 번만
+  // 평가 → 이후 렌더에서는 동일 값 재사용. now prop 이 명시적으로 전달되면
+  // 그쪽 우선 (테스트가 시간 고정용으로 사용).
+  const [defaultNow] = useState(() => Date.now());
+  const nowTs = now ?? defaultNow;
 
   const visible = useMemo(() => {
     const decorated = rows.map((r) => decorate(r, nowTs));
