@@ -3,6 +3,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import { useI18n } from "@/contexts/I18nContext";
 import Header from "@/components/Header";
@@ -42,7 +43,7 @@ export default function DashboardPage() {
       }
       setLoading(false);
     })();
-  }, [user]);
+  }, [user, t]);
 
   if (isLoading || !user) return <LoadingSpinner fullScreen label={t("common.loading")} />;
 
@@ -105,9 +106,15 @@ export default function DashboardPage() {
                         onClick={() => user.role === "student" ? router.push(`/lecture/${lec.slug}`) : router.push(`/professor/lecture/${lec.id}`)}
                         aria-label={`${lec.title} - ${lec.is_published ? t("common.published") : t("common.unpublished")}`}
                         className="text-left w-full border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-white dark:bg-gray-900 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition group">
-                        <div className="aspect-video bg-gray-100 dark:bg-gray-800 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
+                        <div className="relative aspect-video bg-gray-100 dark:bg-gray-800 rounded-lg mb-3 flex items-center justify-center overflow-hidden">
                           {lec.thumbnail_url ? (
-                            <img src={lec.thumbnail_url} alt={`${lec.title} thumbnail`} className="w-full h-full object-cover rounded-lg" />
+                            <Image
+                              src={lec.thumbnail_url}
+                              alt={`${lec.title} thumbnail`}
+                              fill
+                              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                              className="object-cover rounded-lg"
+                            />
                           ) : (
                             <svg className="w-10 h-10 text-gray-300 dark:text-gray-600 group-hover:text-indigo-400 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />

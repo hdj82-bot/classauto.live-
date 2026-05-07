@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 interface StatCounterProps {
   target: number;
@@ -34,6 +35,8 @@ export default function StatCounter({
   const [value, setValue] = useState(immediate ? target : 0);
   const ref = useRef<HTMLDivElement | null>(null);
   const startedRef = useRef(immediate);
+  // R5: useSyncExternalStore helper 로 통일 (FadeInSection 등과 동일 패턴).
+  const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
     if (immediate) return;
@@ -41,9 +44,6 @@ export default function StatCounter({
     const node = ref.current;
     if (!node) return;
 
-    const reduced =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const hasObserver = typeof IntersectionObserver !== "undefined";
 
     // react-hooks/set-state-in-effect 룰 회피: effect body 에서 동기 setState
@@ -84,7 +84,7 @@ export default function StatCounter({
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [target, durationMs, immediate]);
+  }, [target, durationMs, immediate, reduced]);
 
   const display = groupDigits ? value.toLocaleString() : String(value);
 

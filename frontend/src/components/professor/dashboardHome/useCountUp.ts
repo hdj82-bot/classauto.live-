@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 /**
  * 진입 시 1회 카운트업 — animations.md §2.2 / §4.1 의 `animateCount` 포팅.
@@ -39,6 +40,9 @@ export function useCountUp(
   const [value, setValue] = useState<number>(immediate ? safeTarget : 0);
   const ref = useRef<HTMLElement | null>(null);
   const startedRef = useRef(false);
+  // R5: useSyncExternalStore helper 통일. 사용자가 OS 설정을 토글하면 즉시
+  // 카운트업 동작이 바뀐다 (이전에는 mount 시점 한 번만 evaluate).
+  const reduceMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     // SSR / non-browser — effect 자체가 client 에서만 실행되므로 보통 도달 X.
@@ -47,10 +51,6 @@ export function useCountUp(
       const handle = requestAnimationFrame(() => setValue(safeTarget));
       return () => cancelAnimationFrame(handle);
     }
-
-    const reduceMotion =
-      window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const run = (): (() => void) | void => {
       if (reduceMotion) {
@@ -110,7 +110,7 @@ export function useCountUp(
     return () => {
       observer.disconnect();
     };
-  }, [safeTarget, durationMs, decimals, immediate]);
+  }, [safeTarget, durationMs, decimals, immediate, reduceMotion]);
 
   return { value, ref };
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFeaturesHubI18n } from "./useFeaturesHubI18n";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 /**
  * §3.3 Progress shimmer + 100% 도달 시 ✓ 그리기.
@@ -32,32 +33,12 @@ const STEPS = [
 const TOTAL_DURATION_MS = 6000;
 const FRAME_MS = 80;
 
-const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
-
-function subscribeReducedMotion(callback: () => void): () => void {
-  if (typeof window === "undefined" || !window.matchMedia) return () => {};
-  const mq = window.matchMedia(REDUCED_QUERY);
-  mq.addEventListener?.("change", callback);
-  return () => mq.removeEventListener?.("change", callback);
-}
-
-function getReducedMotionSnapshot(): boolean {
-  if (typeof window === "undefined" || !window.matchMedia) return false;
-  return window.matchMedia(REDUCED_QUERY).matches;
-}
-
-function getReducedMotionServerSnapshot(): boolean {
-  return false;
-}
-
 export default function ProgressShimmer() {
   const { t } = useFeaturesHubI18n();
-
-  const reduced = useSyncExternalStore(
-    subscribeReducedMotion,
-    getReducedMotionSnapshot,
-    getReducedMotionServerSnapshot,
-  );
+  // R5: inline 정의했던 subscribeReducedMotion / getReducedMotionSnapshot
+  // helper 들을 frontend/src/lib/usePrefersReducedMotion.ts 의 공유 helper 로
+  // 통합. 동작 1:1 동치 — 4 + 1 컴포넌트가 모두 같은 store 를 구독한다.
+  const reduced = usePrefersReducedMotion();
 
   // 사용자 인터랙션 (replay) 으로 변하는 진행률은 별도 state. reduced 모드는
   // 렌더 단계에서 100 으로 override 하므로 여기에는 영향 없음.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 interface FadeInSectionProps {
   children: ReactNode;
@@ -35,19 +36,20 @@ export default function FadeInSection({
 }: FadeInSectionProps) {
   const ref = useRef<HTMLElement | null>(null);
   const [visible, setVisible] = useState(immediate);
+  // R5: matchMedia 를 effect 안에서 일회성 체크하던 패턴 → useSyncExternalStore
+  // 기반 helper 로 통일. 사용자가 OS 설정을 토글하면 즉시 반영되며
+  // react-hooks/set-state-in-effect 룰 위반 위험도 0.
+  const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
     if (immediate) return;
     if (typeof window === "undefined") return;
 
-    const reduced =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const node = ref.current;
     const hasObserver = typeof IntersectionObserver !== "undefined";
 
-    // react-hooks/set-state-in-effect 룰 회피: effect body 에서 동기 setState
-    // 호출 X. reduced motion / Observer 미지원 fallback 도 rAF 비동기화.
+    // reduced motion / Observer 미지원 fallback 은 rAF 비동기화로 effect body
+    // sync setState 회피.
     if (reduced || !node || !hasObserver) {
       const handle = requestAnimationFrame(() => setVisible(true));
       return () => cancelAnimationFrame(handle);
@@ -66,7 +68,7 @@ export default function FadeInSection({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [threshold, immediate]);
+  }, [threshold, immediate, reduced]);
 
   const Tag = as;
   return (

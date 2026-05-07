@@ -29,7 +29,9 @@ export default function CostMeter({ data, monthlyLimitUsd }: CostMeterProps) {
     totalOutputTokens: 0,
     totalCostUsd: 0,
   };
-  const byCategory = data.byCategory ?? [];
+  // R5 lint: ?? [] fallback 이 매 렌더마다 새 배열 reference 를 만들어 아래
+  // useMemo 가 매 렌더 재실행 → useMemo 로 안정화.
+  const byCategory = useMemo(() => data.byCategory ?? [], [data.byCategory]);
 
   const sorted = useMemo(
     () => [...byCategory].sort((a, b) => b.costUsd - a.costUsd),

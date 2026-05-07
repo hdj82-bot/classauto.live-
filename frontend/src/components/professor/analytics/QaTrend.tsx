@@ -19,7 +19,8 @@ interface QaTrendProps {
 
 export default function QaTrend({ data }: QaTrendProps) {
   const { t } = useAnalyticsI18n();
-  const logs = data?.logs ?? [];
+  // R5 lint: ?? [] fallback 을 useMemo 로 안정화 (CostMeter 와 동일 패턴).
+  const logs = useMemo(() => data?.logs ?? [], [data?.logs]);
 
   const stats = useMemo(() => {
     const total = data?.totalCount ?? logs.length;
