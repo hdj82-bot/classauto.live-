@@ -1,0 +1,38 @@
+{
+  "changelogHub": {
+    "meta": {
+      "title": "Changelog — ClassAuto",
+      "description": "New features, improvements, and fixes for ClassAuto. Following the Keep a Changelog standard."
+    },
+    "hero": {
+      "eyebrow": "Changelog",
+      "title": "What's new",
+      "subtitle": "Listed reverse-chronologically per the Keep a Changelog standard. Use the filters to narrow it down.",
+      "rss": "RSS feed",
+      "rssDisabled": "RSS feed coming soon"
+    },
+    "filters": {
+      "all": "All",
+      "feature": "Feature",
+      "fix": "Fix",
+      "improvement": "Improvement",
+      "breaking": "Breaking",
+      "selectedSummary": "Showing {count} entries"
+    },
+    "labels": {
+      "version": "Version",
+      "category": "Category",
+      "relatedPr": "Related PR",
+      "viewPr": "View PR ↗",
+      "loadMore": "Load older entries",
+      "noMatch": "No entries match the current filter.",
+      "noMatchHint": "Try selecting a different category."
+    },
+    "cta": {
+      "title": "What's next?",
+      "description": "See the public roadmap, then apply for the beta or request a quote.",
+      "primary": "Apply for beta",
+      "secondary": "Institutional contact"
+    }
+  }
+}

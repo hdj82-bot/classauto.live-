@@ -1,0 +1,178 @@
+{
+  "helpHub": {
+    "meta": {
+      "title": "Help Center — ClassAuto",
+      "description": "Frequently asked questions and guides for ClassAuto."
+    },
+    "hero": {
+      "eyebrow": "Help Center",
+      "title": "Find answers fast",
+      "subtitle": "Browse by category or search by keyword. During the beta we still answer directly.",
+      "badge": "Beta · direct support available"
+    },
+    "search": {
+      "label": "Search the help center",
+      "placeholder": "e.g., PPT upload / refund / student notification",
+      "clear": "Clear",
+      "resultsTitle": "Search results",
+      "matches": "{count} matches",
+      "noResults": "No matching items.",
+      "noResultsHint": "Try a different keyword or browse the categories below.",
+      "matchedIn": "Matched in {field}",
+      "fieldQuestion": "question",
+      "fieldAnswer": "answer",
+      "fieldCategory": "category"
+    },
+    "categories": {
+      "title": "Categories",
+      "all": "All",
+      "getting-started": {
+        "title": "Getting started",
+        "description": "Account, department info, your first lecture"
+      },
+      "video-creation": {
+        "title": "Video creation",
+        "description": "PPT upload, AI script review, avatar / voice"
+      },
+      "students": {
+        "title": "Student management",
+        "description": "Sharing lectures, tracking progress, sending nudges"
+      },
+      "billing": {
+        "title": "Billing & subscription",
+        "description": "Plans, limits, refund / cancellation"
+      },
+      "security": {
+        "title": "Security & data",
+        "description": "Student data protection, backup, SSO"
+      },
+      "troubleshooting": {
+        "title": "Troubleshooting",
+        "description": "Common errors and how to fix them"
+      }
+    },
+    "categoryView": {
+      "back": "← All categories",
+      "count": "{count} items",
+      "empty": "This category is being prepared.",
+      "emptyDesc": "Items will be filled in after general availability."
+    },
+    "faqs": {
+      "getting-started": [
+        {
+          "q": "How do I create a ClassAuto account?",
+          "a": "During the beta, sign up requires school-email verification. Submit the form at /beta-apply and you will receive a sign-up email within 1–2 business days."
+        },
+        {
+          "q": "What should I do right after signing in for the first time?",
+          "a": "Follow the welcome modal's 5-step guide: department info → create a course → upload a PPT → review the AI script → share with students."
+        },
+        {
+          "q": "Why does ClassAuto need my department info?",
+          "a": "It powers the dashboard's semester context (e.g., 'Week 8') and student notification copy. It is never exposed publicly and you can edit it any time."
+        },
+        {
+          "q": "Can I explore a sample lecture first?",
+          "a": "Yes — visit /demo to experience the full learner-side flow in 5 minutes, no sign-up required."
+        }
+      ],
+      "video-creation": [
+        {
+          "q": "What PPT formats can I upload?",
+          "a": "We currently accept .pptx only. Including speaker notes dramatically improves the AI script quality."
+        },
+        {
+          "q": "Can I publish AI-generated scripts as is?",
+          "a": "We recommend reviewing them before [Adopt]. Slides flagged ⚠ are ones the AI judged 'insufficient information' — those benefit most from manual edits."
+        },
+        {
+          "q": "How long does it take to render one video?",
+          "a": "Usually 12–20 minutes depending on slide count and avatar queue. With background mode on we email you when it finishes."
+        },
+        {
+          "q": "Can I render multiple videos at once?",
+          "a": "We currently recommend one render at a time per user. Concurrent queues can collide with cost guardrails — when broader concurrency ships, we'll announce it."
+        }
+      ],
+      "students": [
+        {
+          "q": "How do I share a lecture with students?",
+          "a": "Once rendering finishes, the share panel offers URL, QR, and a short code. Sticking the QR on the last PPT slide or on the bulletin board makes attendance + access a single step."
+        },
+        {
+          "q": "Where can I see student progress?",
+          "a": "/professor/dashboard shows the learner progress mix donut, and per-lecture analytics live at /professor/analytics/{lecture_id}."
+        },
+        {
+          "q": "Can I send a nudge to lagging students?",
+          "a": "Use the Needs Attention widget's 'Lagging learners' section and click [Send nudge]. The button activates automatically once the notification endpoint ships."
+        },
+        {
+          "q": "Can I prevent students from watching without a password?",
+          "a": "In the share panel you can enable 'school email only', 'password protect', and 'expire after a date' simultaneously."
+        }
+      ],
+      "billing": [
+        {
+          "q": "Is there any charge during the beta?",
+          "a": "Academic users pay nothing during the beta. There is a per-user monthly limit on video renders and Q&A calls (visible on the dashboard cost meter)."
+        },
+        {
+          "q": "What happens if I cross 80% of the limit?",
+          "a": "The cost meter pulses red as a warning. At 100%, new renders are blocked until you register payment or the limit resets next month."
+        },
+        {
+          "q": "What happens if I upgrade to Pro mid-month?",
+          "a": "Limits expand immediately and Pro features (vulnerability heatmap, replay heatmap, etc.) activate. Downgrades take effect at the next billing cycle."
+        },
+        {
+          "q": "Can I get a refund?",
+          "a": "Yes, within 7 days of payment if usage stays below a small threshold. See the refund clause in /legal/terms for details."
+        }
+      ],
+      "security": [
+        {
+          "q": "How is student data protected?",
+          "a": "No ads, automatic deletion after graduation, and per-school data isolation are the defaults. See /security and /trust for details."
+        },
+        {
+          "q": "Can anyone watch the lecture videos?",
+          "a": "The default is 'school-email-verified students only'; you can additionally require a password, an expiration date, or an IP/domain restriction."
+        },
+        {
+          "q": "Can I export data to an external LMS?",
+          "a": "You can export your own lecture data as CSV / SCORM at any time via the [Export CSV] button on the analytics page."
+        },
+        {
+          "q": "When I leave, is my data deleted right away?",
+          "a": "After deletion, data stays recoverable for 60 days and is then permanently removed. For immediate erasure, email contact@classauto.live."
+        }
+      ],
+      "troubleshooting": [
+        {
+          "q": "My PPT upload is stuck.",
+          "a": "1) Confirm the file extension is .pptx 2) Confirm size < 100MB 3) Refresh the browser 4) If it still fails, attach the file in an email to contact@classauto.live."
+        },
+        {
+          "q": "Video playback keeps stuttering.",
+          "a": "Common on iOS Safari and some campus networks. Ask the student to try Chrome or switch from Wi-Fi to cellular."
+        },
+        {
+          "q": "The AI script is too short.",
+          "a": "Usually means the speaker notes were sparse. Add 1–2 sentences per slide to the notes pane and re-upload."
+        },
+        {
+          "q": "Q&A keeps rejecting my student's questions.",
+          "a": "Q&A only answers questions whose similarity to the lecture material is above 0.7. Out-of-scope questions are intentionally rejected — that is policy, not a bug."
+        }
+      ]
+    },
+    "cta": {
+      "title": "Didn't find what you need?",
+      "description": "We answer directly during the beta. For institutional adoption, contact us for a custom quote.",
+      "primary": "Institutional contact",
+      "secondary": "Community (Discord)"
+    },
+    "communityHref": "https://discord.gg/classauto"
+  }
+}

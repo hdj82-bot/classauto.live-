@@ -46,6 +46,18 @@ import dashboardHubKo from "../../messages/_patches/dashboardHub.ko.json";
 import dashboardHubEn from "../../messages/_patches/dashboardHub.en.json";
 import pricingHubKo from "../../messages/_patches/pricingHub.ko.json";
 import pricingHubEn from "../../messages/_patches/pricingHub.en.json";
+// ── R5 통합 (2026-05-07): 약관·방침 / 도움말·changelog / 학생 mypage·접근성 ──
+// profileHub patch 는 단일 파일에 `profileHub` + `accessibilityHub` 두 top-level
+// namespace 를 모두 담고 있다 (W4 결정 — A11y 가 profile 의 일부로 함께
+// 마운트되므로 같은 patch 에 묶음). deep-merge 가 두 namespace 모두 풀어줌.
+import legalHubKo from "../../messages/_patches/legalHub.ko.json";
+import legalHubEn from "../../messages/_patches/legalHub.en.json";
+import helpHubKo from "../../messages/_patches/helpHub.ko.json";
+import helpHubEn from "../../messages/_patches/helpHub.en.json";
+import changelogHubKo from "../../messages/_patches/changelogHub.ko.json";
+import changelogHubEn from "../../messages/_patches/changelogHub.en.json";
+import profileHubKo from "../../messages/_patches/profileHub.ko.json";
+import profileHubEn from "../../messages/_patches/profileHub.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -75,7 +87,8 @@ function mergePatch<T extends Messages>(base: T, patch: Messages): T {
 
 // 패치는 누적 적용 — student → demo → professor → marketing → studio →
 // inbox → analyticsHub → learners → landingHub → featuresHub → dashboardHub
-// → pricingHub 순. 모두 서로 다른 top-level namespace 라 충돌 없음.
+// → pricingHub → legalHub → helpHub → changelogHub → profileHub
+// (+ accessibilityHub) 순. 모두 서로 다른 top-level namespace 라 충돌 없음.
 // 추후 새 patch 는 배열에 추가.
 const koPatches: Messages[] = [
   studentKo as Messages,
@@ -90,6 +103,10 @@ const koPatches: Messages[] = [
   featuresHubKo as Messages,
   dashboardHubKo as Messages,
   pricingHubKo as Messages,
+  legalHubKo as Messages,
+  helpHubKo as Messages,
+  changelogHubKo as Messages,
+  profileHubKo as Messages,
 ];
 const enPatches: Messages[] = [
   studentEn as Messages,
@@ -104,6 +121,10 @@ const enPatches: Messages[] = [
   featuresHubEn as Messages,
   dashboardHubEn as Messages,
   pricingHubEn as Messages,
+  legalHubEn as Messages,
+  helpHubEn as Messages,
+  changelogHubEn as Messages,
+  profileHubEn as Messages,
 ];
 
 const koMerged = koPatches.reduce(

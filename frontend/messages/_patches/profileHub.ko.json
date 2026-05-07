@@ -1,0 +1,138 @@
+{
+  "profileHub": {
+    "meta": {
+      "title": "내 학습 — ClassAuto",
+      "description": "학습 스트릭, 시청 통계, 인증서, 받은 격려를 한 곳에서 확인하세요. 광고 미사용, 졸업 후 자동 삭제."
+    },
+    "headerEyebrow": "MY LEARNING",
+    "headerSubtitle": "{school} · {department}",
+    "headerSubtitleFallback": "학교 · 학과 정보 미입력",
+    "loading": "내 학습 정보를 불러오는 중...",
+    "loadError": "내 학습 정보를 불러오지 못했습니다. 일부 데이터는 아직 백엔드 준비 중입니다.",
+    "previewBadge": "샘플 데이터",
+    "privacy": {
+      "heading": "내 데이터는 안전합니다",
+      "bullet1": "내 시청·Q&A 기록은 해당 강의를 만든 교수자에게만 보입니다.",
+      "bullet2": "광고를 위한 데이터 사용·외부 마케팅 공유는 일절 없습니다.",
+      "bullet3": "졸업 후 보존 기간이 지나면 개인 식별 데이터는 자동으로 삭제됩니다.",
+      "moreLink": "학생 데이터 보호 정책 자세히 보기",
+      "moreHref": "/trust"
+    },
+
+    "streak": {
+      "title": "학습 스트릭",
+      "subtitle": "{days}일 연속 학습 중",
+      "subtitleZero": "오늘 첫 영상부터 시작해 볼까요?",
+      "thisWeek": "이번 주 {count}일",
+      "longest": "최장 연속 {count}일",
+      "legendLess": "적게",
+      "legendMore": "많이",
+      "cellAria": "{date} — 시청 {count}분",
+      "cellAriaEmpty": "{date} — 시청 기록 없음",
+      "monthLabels": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
+      "weekdayLabels": ["일", "월", "화", "수", "목", "금", "토"]
+    },
+
+    "stats": {
+      "title": "누적 통계",
+      "watchTimeLabel": "총 학습 시간",
+      "watchTimeUnitHour": "{count}시간",
+      "watchTimeUnitMinute": "{count}분",
+      "videosWatchedLabel": "시청 완료 영상",
+      "videosWatchedUnit": "{count}편",
+      "accuracyLabel": "평균 정답률",
+      "accuracyUnit": "{value}%",
+      "questionsLabel": "보낸 질문",
+      "questionsUnit": "{count}회",
+      "encouragementsLabel": "받은 격려",
+      "encouragementsUnit": "{count}회",
+      "noData": "—"
+    },
+
+    "courses": {
+      "inProgressTitle": "수강 중",
+      "completedTitle": "완료한 강의",
+      "courseProgress": "{percent}% 진행",
+      "lastWatched": "최근 시청 {date}",
+      "noneInProgress": "수강 중인 강의가 없습니다.",
+      "noneCompleted": "아직 완료한 강의가 없습니다."
+    },
+
+    "certificates": {
+      "title": "수강 완료 인증서",
+      "subtitle": "강의를 모두 시청·평가 통과한 강의에 대해 PDF 인증서가 발급됩니다.",
+      "downloadCta": "PDF 다운로드",
+      "shareCta": "공유 링크 복사",
+      "shareCopied": "공유 링크가 복사되었습니다.",
+      "shareCopyError": "복사에 실패했습니다. 브라우저가 클립보드 권한을 차단했을 수 있습니다.",
+      "issuedOn": "발급일 {date}",
+      "backendPending": "PDF 다운로드와 공유 링크는 백엔드 endpoint 준비가 완료되면 활성화됩니다.",
+      "empty": "아직 발급된 인증서가 없습니다."
+    },
+
+    "encouragements": {
+      "title": "받은 격려 메시지",
+      "subtitle": "교수자가 보낸 자동 격려가 누적됩니다.",
+      "from": "{professor} 교수님",
+      "empty": "아직 받은 격려 메시지가 없습니다.",
+      "loadingMessage": "격려 메시지를 불러오는 중..."
+    },
+
+    "questionsRecent": {
+      "title": "최근 보낸 질문",
+      "subtitle": "강의 자료 기반(RAG)으로 답변한 질문 기록입니다.",
+      "empty": "아직 보낸 질문이 없습니다.",
+      "outOfScopeBadge": "범위 외",
+      "answeredBadge": "응답 완료",
+      "pendingBadge": "응답 대기"
+    },
+
+    "celebration": {
+      "title": "축하해요, {name} 학생!",
+      "body": "{course} 강의를 모두 마쳤어요. 인증서가 발급되었습니다.",
+      "primary": "인증서 보기",
+      "secondary": "닫기"
+    }
+  },
+
+  "accessibilityHub": {
+    "panel": {
+      "openLabel": "접근성 옵션 열기",
+      "closeLabel": "접근성 옵션 닫기",
+      "title": "접근성 옵션",
+      "subtitle": "내 화면에만 적용됩니다. 설정은 현재 세션 동안만 유지됩니다.",
+      "captionsLabel": "자막 표시",
+      "captionsHint": "영상 시청 시 자동 생성된 자막을 표시합니다.",
+      "fontSizeLabel": "글씨 크기",
+      "fontSizeNormal": "보통",
+      "fontSizeLarge": "크게",
+      "fontSizeXLarge": "매우 크게",
+      "highContrastLabel": "고대비 모드",
+      "highContrastHint": "텍스트와 배경의 대비를 강화합니다.",
+      "reduceMotionLabel": "동작 줄이기",
+      "reduceMotionHint": "애니메이션을 최소화합니다 (시스템 prefers-reduced-motion 와 함께 동작).",
+      "shortcutsLabel": "키보드 단축키 안내",
+      "shortcutsCta": "단축키 보기",
+      "footerNote": "이 설정은 학습자 데이터 보호 정책에 따라 외부로 전송되지 않습니다.",
+      "shortcutsHint": "? 키를 눌러도 안내가 열립니다."
+    },
+    "shortcutsModal": {
+      "title": "키보드 단축키",
+      "subtitle": "영상 시청 화면에서 사용할 수 있는 단축키입니다.",
+      "closeLabel": "닫기",
+      "rows": [
+        { "keys": ["Space"], "desc": "재생 / 일시정지" },
+        { "keys": ["←"], "desc": "10초 뒤로" },
+        { "keys": ["→"], "desc": "10초 앞으로" },
+        { "keys": ["F"], "desc": "전체 화면 전환" },
+        { "keys": ["C"], "desc": "자막 켜기 / 끄기" },
+        { "keys": ["?"], "desc": "이 안내 다시 보기" }
+      ],
+      "footerNote": "입력 필드(Q&A 등)에 포커스가 있으면 단축키가 작동하지 않습니다."
+    },
+    "captionsBanner": {
+      "on": "자막 표시 켜짐",
+      "off": "자막 표시 꺼짐"
+    }
+  }
+}

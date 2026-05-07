@@ -114,7 +114,9 @@ export function aggregateDashboardHub(input: FanOutInput): DashboardHubData {
 
 /** 6 stat 카드 입력값 합산. */
 function aggregateStats(input: FanOutInput): DashboardStats {
-  const { lectures, attendance, scores, engagement, qa, cost } = input;
+  // engagement 는 본 함수가 직접 사용 X (aggregateAttention 이 처리). lint
+  // unused-vars 회피 위해 destructure 에서 제외.
+  const { lectures, attendance, scores, qa, cost } = input;
 
   // 1) 시청 완료율 — sum(completed)/sum(total)
   let totalLearners = 0;

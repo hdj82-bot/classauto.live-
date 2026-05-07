@@ -1,0 +1,138 @@
+{
+  "profileHub": {
+    "meta": {
+      "title": "My learning — ClassAuto",
+      "description": "Streak, watch stats, certificates and encouragement, all in one place. No advertising, auto-deletion after graduation."
+    },
+    "headerEyebrow": "MY LEARNING",
+    "headerSubtitle": "{school} · {department}",
+    "headerSubtitleFallback": "School · department not set",
+    "loading": "Loading your learning data...",
+    "loadError": "Could not load full learning data — some endpoints are still in development.",
+    "previewBadge": "Sample data",
+    "privacy": {
+      "heading": "Your data is safe",
+      "bullet1": "Your watch and Q&A history is visible only to the instructor of each lecture.",
+      "bullet2": "No data is used for advertising or shared with third parties for marketing.",
+      "bullet3": "Personally identifiable data is auto-deleted after the post-graduation retention window.",
+      "moreLink": "Read the student data protection policy",
+      "moreHref": "/trust"
+    },
+
+    "streak": {
+      "title": "Learning streak",
+      "subtitle": "{days}-day streak",
+      "subtitleZero": "Start your first video today.",
+      "thisWeek": "{count} days this week",
+      "longest": "Longest streak: {count} days",
+      "legendLess": "less",
+      "legendMore": "more",
+      "cellAria": "{date} — {count} minutes watched",
+      "cellAriaEmpty": "{date} — no activity",
+      "monthLabels": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+      "weekdayLabels": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    },
+
+    "stats": {
+      "title": "Lifetime stats",
+      "watchTimeLabel": "Total watch time",
+      "watchTimeUnitHour": "{count}h",
+      "watchTimeUnitMinute": "{count}m",
+      "videosWatchedLabel": "Videos completed",
+      "videosWatchedUnit": "{count}",
+      "accuracyLabel": "Average accuracy",
+      "accuracyUnit": "{value}%",
+      "questionsLabel": "Questions sent",
+      "questionsUnit": "{count}",
+      "encouragementsLabel": "Encouragements received",
+      "encouragementsUnit": "{count}",
+      "noData": "—"
+    },
+
+    "courses": {
+      "inProgressTitle": "In progress",
+      "completedTitle": "Completed",
+      "courseProgress": "{percent}% complete",
+      "lastWatched": "Last watched {date}",
+      "noneInProgress": "No active enrolments.",
+      "noneCompleted": "No completed lectures yet."
+    },
+
+    "certificates": {
+      "title": "Completion certificates",
+      "subtitle": "PDF certificate is issued for lectures you've watched and passed.",
+      "downloadCta": "Download PDF",
+      "shareCta": "Copy share link",
+      "shareCopied": "Share link copied to clipboard.",
+      "shareCopyError": "Couldn't copy — your browser may be blocking clipboard access.",
+      "issuedOn": "Issued {date}",
+      "backendPending": "PDF download and share link will be enabled once the backend endpoint ships.",
+      "empty": "No certificates issued yet."
+    },
+
+    "encouragements": {
+      "title": "Encouragement received",
+      "subtitle": "Auto-encouragement messages from instructors accumulate here.",
+      "from": "Prof. {professor}",
+      "empty": "No encouragements yet.",
+      "loadingMessage": "Loading messages..."
+    },
+
+    "questionsRecent": {
+      "title": "Recent questions",
+      "subtitle": "Logs of questions answered with course-material RAG.",
+      "empty": "No questions sent yet.",
+      "outOfScopeBadge": "Out of scope",
+      "answeredBadge": "Answered",
+      "pendingBadge": "Pending"
+    },
+
+    "celebration": {
+      "title": "Congratulations, {name}!",
+      "body": "You've completed {course}. A certificate has been issued.",
+      "primary": "View certificate",
+      "secondary": "Close"
+    }
+  },
+
+  "accessibilityHub": {
+    "panel": {
+      "openLabel": "Open accessibility options",
+      "closeLabel": "Close accessibility options",
+      "title": "Accessibility",
+      "subtitle": "Settings apply to your view only and last for the current session.",
+      "captionsLabel": "Show captions",
+      "captionsHint": "Display auto-generated captions during playback.",
+      "fontSizeLabel": "Text size",
+      "fontSizeNormal": "Normal",
+      "fontSizeLarge": "Large",
+      "fontSizeXLarge": "X-Large",
+      "highContrastLabel": "High contrast",
+      "highContrastHint": "Increase contrast between text and background.",
+      "reduceMotionLabel": "Reduce motion",
+      "reduceMotionHint": "Minimise animations (works alongside system prefers-reduced-motion).",
+      "shortcutsLabel": "Keyboard shortcuts",
+      "shortcutsCta": "Show shortcuts",
+      "footerNote": "These settings stay on your device per the student data protection policy.",
+      "shortcutsHint": "Press ? to open the shortcut help."
+    },
+    "shortcutsModal": {
+      "title": "Keyboard shortcuts",
+      "subtitle": "Available on the lecture viewer.",
+      "closeLabel": "Close",
+      "rows": [
+        { "keys": ["Space"], "desc": "Play / pause" },
+        { "keys": ["←"], "desc": "Skip back 10s" },
+        { "keys": ["→"], "desc": "Skip forward 10s" },
+        { "keys": ["F"], "desc": "Toggle fullscreen" },
+        { "keys": ["C"], "desc": "Toggle captions" },
+        { "keys": ["?"], "desc": "Show this help again" }
+      ],
+      "footerNote": "Shortcuts are disabled while typing into Q&A or another input."
+    },
+    "captionsBanner": {
+      "on": "Captions on",
+      "off": "Captions off"
+    }
+  }
+}
