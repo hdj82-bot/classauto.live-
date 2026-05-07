@@ -14,9 +14,17 @@ export default function Header() {
 
   const homeHref = user?.role === "professor" ? "/professor/dashboard" : "/dashboard";
 
+  // W1–W4 통합 (2026-05-07): 마법사·인박스·분석·학습자 4 항목 추가.
+  // dashboard 가 시작점, studio 가 신규 작성 흐름의 entry, lecture/new 는 기존
+  // 단순 폼 (병행 유지). 모바일 햄버거에서 너무 빽빽해지면 후속 PR 에서
+  // 그룹핑 검토.
   const navLinks = user?.role === "professor"
     ? [
         { href: "/professor/dashboard", label: t("nav.lectureManage") },
+        { href: "/professor/studio", label: t("nav.studio") },
+        { href: "/professor/inbox", label: t("nav.inbox") },
+        { href: "/professor/analytics", label: t("nav.analytics") },
+        { href: "/professor/learners", label: t("nav.learners") },
         { href: "/professor/lecture/new", label: t("nav.newLecture") },
         { href: "/professor/subscription", label: t("nav.subscription") },
       ]

@@ -106,7 +106,11 @@
     "trust": "학생 데이터 보호",
     "security": "보안",
     "betaApply": "베타 신청",
-    "contact": "기관 문의"
+    "contact": "기관 문의",
+    "studio": "스튜디오",
+    "inbox": "Q&A 인박스",
+    "analytics": "분석",
+    "learners": "학습자"
   },
   "professor": {
     "lectureManage": "강의 관리",

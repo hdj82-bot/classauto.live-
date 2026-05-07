@@ -1,0 +1,153 @@
+{
+  "inbox": {
+    "page": {
+      "title": "Q&A Inbox",
+      "subtitle": "Review questions answered automatically by RAG and respond to questions that need a professor's attention.",
+      "loading": "Loading inbox...",
+      "loadError": "Could not load the inbox.",
+      "retry": "Retry",
+      "deferredNotice": "The backend inbox API isn't wired yet — showing preview data. Replies and confirmations are stored locally for now.",
+      "empty": "No questions to display.",
+      "emptyDesc": "Try changing filters or selecting another lecture."
+    },
+    "filter": {
+      "courseAll": "All courses",
+      "lectureAll": "All lectures",
+      "tabAuto": "AI auto-answered",
+      "tabNeedsProfessor": "Needs professor",
+      "tabOffTopic": "Off-topic forwarded",
+      "tabAutoHint": "for monitoring",
+      "tabNeedsProfessorHint": "action items",
+      "tabOffTopicHint": "forwarded by students",
+      "unansweredOnly": "Unanswered only",
+      "sortLabel": "Sort",
+      "sortNewest": "Newest first",
+      "sortOldest": "Oldest first",
+      "sortSimilarity": "By RAG similarity",
+      "searchPlaceholder": "Search question text...",
+      "courseFilterTitle": "Filter by course",
+      "selectAll": "Select all",
+      "deselectAll": "Clear selection",
+      "selectedCount": "{count} selected",
+      "filterSummary": "{total} total · {unanswered} unanswered"
+    },
+    "list": {
+      "ariaLabel": "Q&A inbox list",
+      "selectItem": "Select question",
+      "openItem": "Open question detail",
+      "studentAnonymous": "Anonymous learner",
+      "noStudentName": "Learner",
+      "slideRef": "Slide {slides}",
+      "similarityLabel": "Similarity {value}%",
+      "respondedTag": "AI replied",
+      "needsReviewTag": "Needs review",
+      "offTopicTag": "Out of scope",
+      "professorAnsweredTag": "Professor confirmed",
+      "noItems": "No questions in this tab.",
+      "timeJustNow": "just now",
+      "timeMinutesAgo": "{n}m ago",
+      "timeHoursAgo": "{n}h ago",
+      "timeDaysAgo": "{n}d ago"
+    },
+    "thread": {
+      "panelTitle": "Question detail",
+      "selectPrompt": "Select a question on the left to see details here.",
+      "studentLabel": "Learner",
+      "lectureLabel": "Lecture video",
+      "slideLabel": "Slide context",
+      "slidePreview": "Slide #{n}",
+      "noSlideContext": "No RAG slide context.",
+      "askedAt": "Asked at",
+      "questionLabel": "Student question",
+      "aiDraftLabel": "RAG-drafted answer",
+      "aiDraftMissing": "RAG could not produce a draft.",
+      "outOfScope": "Out-of-scope question — auto-rejected",
+      "outOfScopeDesc": "Similarity fell below the 0.7 threshold so RAG declined to answer. If the student forwarded it, reply directly.",
+      "professorAnswerLabel": "Professor-confirmed answer",
+      "noProfessorAnswer": "No professor-confirmed answer yet.",
+      "similarCluster": "{n} other students asked something similar.",
+      "similarClusterCta": "Add to next-lecture reinforcement notes",
+      "openLecture": "Open lecture video",
+      "ragOriginalLabel": "Original RAG answer",
+      "showRagOriginal": "Show original",
+      "hideRagOriginal": "Hide original"
+    },
+    "composer": {
+      "label": "Compose professor answer",
+      "placeholder": "Confirm the RAG draft as-is, or edit and send your refined answer to the student.",
+      "useDraft": "Use draft as-is",
+      "clear": "Clear",
+      "draftLoaded": "RAG draft inserted into the composer.",
+      "confirmAndSend": "Confirm & send to student",
+      "saveDraft": "Save draft only",
+      "saving": "Saving...",
+      "sending": "Sending...",
+      "savedToast": "Draft saved.",
+      "sentToast": "Answer sent to the student.",
+      "deferredToast": "Backend not wired — answer stored locally.",
+      "errorEmpty": "Answer body is empty.",
+      "errorBackend": "Failed to send the answer. Please try again shortly.",
+      "notifyToggle": "Notify the student after sending",
+      "charCount": "{count} chars"
+    },
+    "bulk": {
+      "barLabel": "Bulk actions",
+      "selected": "{count} selected",
+      "confirmAllAi": "Confirm all selected RAG drafts",
+      "confirmAllAiHint": "Sends each question's RAG draft to the student. Out-of-scope items are skipped.",
+      "markReviewed": "Mark as reviewed",
+      "cancelSelection": "Clear selection",
+      "bulkSubmitting": "Processing...",
+      "bulkSuccess": "{count} items processed.",
+      "bulkPartial": "{success} succeeded · {failed} failed",
+      "bulkDeferred": "Backend not wired — stored locally ({count} items)",
+      "confirmTitle": "Confirm all selected answers?",
+      "confirmDesc": "Each selected question's RAG draft will be sent verbatim. To refine an answer, confirm it individually.",
+      "confirmYes": "Confirm all",
+      "confirmNo": "Cancel"
+    },
+    "mock": {
+      "courses": {
+        "ccs": "Modern Chinese Society",
+        "trans": "AI Translation Error Analysis",
+        "corpus": "Intro to Corpus Linguistics"
+      },
+      "lectures": {
+        "ccs1": "Week 1 — Understanding the digital yuan",
+        "ccs2": "Week 2 — Hukou system and urbanisation",
+        "trans1": "Week 1 — Limits of neural translation",
+        "corpus1": "Week 1 — Building a Korean–Chinese parallel corpus"
+      },
+      "students": {
+        "kim": "Jiyoon Kim",
+        "lee": "Taewoong Lee",
+        "park": "Seoyeon Park",
+        "choi": "Hansol Choi",
+        "jung": "Yujin Jung"
+      },
+      "questions": {
+        "q1": "What's the biggest difference between the digital yuan and Bitcoin?",
+        "q2": "Is the anonymity level of PBOC's CBDC equivalent to physical cash?",
+        "q3": "Could you explain how the hukou system limits migrant workers settling in cities, with concrete cases?",
+        "q4": "What are the main causes of hallucination in neural translation?",
+        "q5": "Could you contrast BLEU and chrF in parallel-corpus alignment?",
+        "q6": "Could I get a sneak peek of next semester's syllabus?",
+        "q7": "How does yuan digitisation affect Korean small business owners?",
+        "q8": "What is the scope of this exam?"
+      },
+      "answers": {
+        "a1": "The digital yuan (e-CNY) is a central-bank digital currency (CBDC) issued by the PBOC. Its issuer and trust model differ fundamentally from Bitcoin's decentralised proof-of-work ledger. e-CNY is distributed through a two-tier model (central bank → commercial banks → users) under PBOC backing.",
+        "a2": "As covered in lecture, e-CNY adopts a 'controllable anonymity' policy — small-value transactions are near-anonymous, but high-value transactions remain traceable. So it's not fully equivalent to cash.",
+        "a3": "The hukou system controls residence registration so migrant workers are excluded from urban welfare (healthcare, education) until they obtain urban hukou. Slides 7–9 cover the Beijing migrant-children education case.",
+        "a4": "Hallucination occurs when models produce plausible-but-fake outputs on inputs outside their training distribution. The main causes — exposure bias and the train/inference mismatch — are covered in week 4."
+      }
+    },
+    "stats": {
+      "total": "Total questions",
+      "unanswered": "Unanswered",
+      "autoAnswered": "AI auto-answered",
+      "offTopic": "Out of scope",
+      "avgResponseHours": "Avg response time {h}h"
+    }
+  }
+}
