@@ -2,7 +2,6 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -102,12 +101,19 @@ export function A11yProvider({ children, initialState }: ProviderProps) {
   }));
 
   // 마운트 후 1회 sessionStorage 동기화 (initialState 가 명시되지 않은 경우만).
+  // react-hooks/set-state-in-effect 룰 회피 — effect body 의 sync setState
+  // 호출을 rAF callback 안으로 이동. Hydration 직후 한 frame 후 sessionStorage
+  // 흡수가 일어나는데, 이건 사용자 시각으론 거의 0ms (다음 paint 직전).
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (!hydrated && !initialState) {
-      setState((prev) => ({ ...prev, ...readSession() }));
-    }
-    setHydrated(true);
+    if (hydrated) return;
+    const handle = requestAnimationFrame(() => {
+      if (!initialState) {
+        setState((prev) => ({ ...prev, ...readSession() }));
+      }
+      setHydrated(true);
+    });
+    return () => cancelAnimationFrame(handle);
   }, [hydrated, initialState]);
 
   // 상태 변화는 sessionStorage 에 즉시 반영. 단, 마운트 직후 동기화 1회는 제외

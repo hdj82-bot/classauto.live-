@@ -91,18 +91,21 @@ describe("useVideoShortcuts", () => {
 
   it("C toggles a11y captions state", () => {
     mountVideoStub();
-    let snap: ReturnType<typeof useA11y> | null = null;
+    // react-hooks/globals 룰 회피: `let snap` 외부 변수를 component 본문에서
+    // 직접 reassign 하면 룰 위반. 대신 mutable container object 의 .current
+    // 를 mutation 하면 reassignment 가 아니라 OK (ref-style snapshot).
+    const snapRef: { current: ReturnType<typeof useA11y> | null } = { current: null };
     function Spy() {
-      snap = useA11y();
+      snapRef.current = useA11y();
       useVideoShortcuts();
       return null;
     }
     renderHook(() => Spy(), { wrapper: wrap });
-    expect(snap!.captions).toBe(false);
+    expect(snapRef.current!.captions).toBe(false);
     act(() => fireKey("c"));
-    expect(snap!.captions).toBe(true);
+    expect(snapRef.current!.captions).toBe(true);
     act(() => fireKey("c"));
-    expect(snap!.captions).toBe(false);
+    expect(snapRef.current!.captions).toBe(false);
   });
 
   it("? key invokes onShowHelp callback", () => {

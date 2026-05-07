@@ -31,7 +31,10 @@ interface ScoredHit extends HelpSearchHit {
   score: number;
 }
 
-const MIN_SCORE = 1;
+// 답변 단독 (0.8) / 카테고리 단독 (0.5) 매칭도 fallback 으로 노출되도록
+// 임계값을 0.5 로 낮춘다. 테스트 명세 (falls back to answer / category label)
+// 와 정합. 1.0 이상은 질문 매칭 / 다중 토큰 매칭일 때만 발생.
+const MIN_SCORE = 0.5;
 
 export function buildSearchIndex(
   byCategory: Record<HelpCategoryId, HelpFaqItem[]>,
