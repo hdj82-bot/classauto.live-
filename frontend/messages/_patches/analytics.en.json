@@ -1,0 +1,130 @@
+{
+  "analyticsHub": {
+    "indexTitle": "Analytics",
+    "indexSubtitle": "Per-lecture attendance, accuracy, engagement, Q&A and cost — all in one place.",
+    "indexEmptyTitle": "No lectures to analyze yet",
+    "indexEmptyDesc": "Once you create a lecture and students start watching, this page will fill up.",
+    "indexEmptyCta": "Create your first lecture",
+    "indexLectureCount": "{count} lectures",
+    "indexLoading": "Loading lectures...",
+    "indexLoadError": "Failed to load the lecture list.",
+    "indexCardOpen": "Open analytics",
+    "indexCardPublished": "Published",
+    "indexCardDraft": "Draft",
+    "lectureBack": "← Back to analytics list",
+    "lectureTitle": "{title} — analytics",
+    "lectureSubtitle": "Visualizing learning activity for this lecture.",
+    "lectureLoading": "Loading analytics data...",
+    "lectureLoadError": "Failed to load analytics data.",
+    "lectureRetry": "Retry",
+    "section": {
+      "attendance": "Attendance distribution",
+      "scores": "Accuracy heatmap",
+      "engagement": "Learner engagement",
+      "watch": "Watch heatmap",
+      "qa": "Q&A trend",
+      "cost": "Cost meter"
+    },
+    "attendance": {
+      "summaryTotal": "Total",
+      "summaryLive": "Live",
+      "summaryVod": "On-demand",
+      "summaryAbsent": "No-show",
+      "barLegend": "Distribution against roster",
+      "live": "Live",
+      "vod": "VOD",
+      "students": "{count} students",
+      "empty": "No attendance recorded yet.",
+      "emptyDesc": "As soon as one student starts watching, this section fills in.",
+      "ariaBar": "Out of {total} students, {live} attended live and {vod} watched on-demand",
+      "progressTitle": "Per-student progress",
+      "progressEmpty": "No per-student progress yet."
+    },
+    "scores": {
+      "overall": "Overall accuracy",
+      "totalQuestions": "{count} questions answered",
+      "byCategoryTitle": "Accuracy by category",
+      "byTypeTitle": "Accuracy by type",
+      "wrongTopTitle": "Top 10 most-missed questions",
+      "wrongCount": "{count} times",
+      "noCategory": "Uncategorized",
+      "empty": "No assessment data yet.",
+      "emptyDesc": "Accuracy will appear once students respond to interstitial quizzes.",
+      "ariaCell": "{category} accuracy {accuracy}%",
+      "scaleLabel": "Accuracy",
+      "patternLow": "Low",
+      "patternMid": "Medium",
+      "patternHigh": "High"
+    },
+    "engagement": {
+      "summaryStudents": "Active learners",
+      "summaryQA": "Q&A questions",
+      "summaryResponseRate": "Response rate",
+      "summaryNoResponse": "No-response events",
+      "watchRatio": "Watch ratio",
+      "ratioBins": ["0–20%", "20–40%", "40–60%", "60–80%", "80–100%"],
+      "ratioLegend": "Learners per bin",
+      "studentsTitle": "Per-student engagement",
+      "tableName": "Name",
+      "tableNumber": "Student ID",
+      "tableWatch": "Watch %",
+      "tableQA": "Questions",
+      "tableResponseRate": "Response rate",
+      "tableNoResponse": "No-response",
+      "empty": "No engagement data yet.",
+      "emptyDesc": "The curve appears once students start watching and asking."
+    },
+    "watch": {
+      "intro": "Replay density and drop-offs per slide.",
+      "comingSoon": "Watch heatmap is being prepared.",
+      "comingSoonDesc": "It will activate automatically once the backend exposes per-slide replay counts and drop-off timings.",
+      "fallbackHint": "Required raw shape is documented in BACKEND_ASKS.ANALYTICS.md.",
+      "slide": "Slide {n}",
+      "replays": "{count} replays",
+      "drops": "{count} drops",
+      "ariaCell": "Slide {n}: {replays} replays, {drops} drops"
+    },
+    "qa": {
+      "totalQuestions": "Total questions",
+      "responded": "Responded",
+      "inScope": "In scope",
+      "outOfScope": "Out of scope",
+      "responseRate": "Response rate {rate}%",
+      "trend": "Recent trend",
+      "empty": "No Q&A logs yet.",
+      "emptyDesc": "Trends will appear once students ask questions inside the player.",
+      "loadError": "Failed to load Q&A data."
+    },
+    "cost": {
+      "total": "Cumulative cost",
+      "totalRequests": "{count} total requests",
+      "inputTokens": "Input tokens",
+      "outputTokens": "Output tokens",
+      "byCategoryTitle": "Cost by category",
+      "categoryRequests": "{count} reqs",
+      "empty": "No cost yet.",
+      "emptyDesc": "Cost will accumulate as you generate videos and serve Q&A.",
+      "warningPrefix": "⚠",
+      "warning80": "You crossed 80% of this month's quota.",
+      "ariaTotal": "Cumulative cost {amount} dollars"
+    },
+    "export": {
+      "label": "Export CSV",
+      "loading": "Exporting...",
+      "success": "CSV file downloaded.",
+      "error": "CSV export failed.",
+      "ariaLabel": "Download per-student progress CSV for the current lecture"
+    },
+    "legend": {
+      "patternHigh": "Diagonal (high accuracy)",
+      "patternMid": "Dotted (medium accuracy)",
+      "patternLow": "Cross (low accuracy)",
+      "title": "Legend — colorblind-friendly patterns",
+      "desc": "Values are encoded with both color and fill pattern."
+    },
+    "empty": {
+      "noData": "No data",
+      "noDataDesc": "Nothing matches the current filter yet."
+    }
+  }
+}

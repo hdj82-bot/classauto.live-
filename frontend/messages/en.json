@@ -106,7 +106,11 @@
     "trust": "Trust",
     "security": "Security",
     "betaApply": "Apply for beta",
-    "contact": "Contact"
+    "contact": "Contact",
+    "studio": "Studio",
+    "inbox": "Inbox",
+    "analytics": "Analytics",
+    "learners": "Learners"
   },
   "professor": {
     "lectureManage": "Lecture Management",

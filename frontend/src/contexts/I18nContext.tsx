@@ -24,6 +24,17 @@ import professorKo from "../../messages/_patches/professor.ko.json";
 import professorEn from "../../messages/_patches/professor.en.json";
 import marketingKo from "../../messages/_patches/marketing.ko.json";
 import marketingEn from "../../messages/_patches/marketing.en.json";
+// ── W1–W4 통합 (2026-05-07): 영상 제작 마법사 / Q&A 인박스 / 분석 / 학습자 ──
+import studioKo from "../../messages/_patches/studio.ko.json";
+import studioEn from "../../messages/_patches/studio.en.json";
+import inboxKo from "../../messages/_patches/inbox.ko.json";
+import inboxEn from "../../messages/_patches/inbox.en.json";
+// 주의: analytics patch 는 namespace 가 `analyticsHub` (기존 ko.json `analytics.*`
+// 와 충돌 회피). 통합 시 그대로 deep-merge 적용 — 충돌 0건.
+import analyticsKo from "../../messages/_patches/analytics.ko.json";
+import analyticsEn from "../../messages/_patches/analytics.en.json";
+import learnersKo from "../../messages/_patches/learners.ko.json";
+import learnersEn from "../../messages/_patches/learners.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -51,19 +62,28 @@ function mergePatch<T extends Messages>(base: T, patch: Messages): T {
   return out as T;
 }
 
-// 패치는 누적 적용 — student → demo → professor → marketing 순.
-// 모두 서로 다른 top-level namespace 라 충돌 없음. 추후 새 patch 는 배열에 추가.
+// 패치는 누적 적용 — student → demo → professor → marketing → studio →
+// inbox → analyticsHub → learners 순. 모두 서로 다른 top-level namespace 라
+// 충돌 없음. 추후 새 patch 는 배열에 추가.
 const koPatches: Messages[] = [
   studentKo as Messages,
   demoKo as Messages,
   professorKo as Messages,
   marketingKo as Messages,
+  studioKo as Messages,
+  inboxKo as Messages,
+  analyticsKo as Messages,
+  learnersKo as Messages,
 ];
 const enPatches: Messages[] = [
   studentEn as Messages,
   demoEn as Messages,
   professorEn as Messages,
   marketingEn as Messages,
+  studioEn as Messages,
+  inboxEn as Messages,
+  analyticsEn as Messages,
+  learnersEn as Messages,
 ];
 
 const koMerged = koPatches.reduce(
