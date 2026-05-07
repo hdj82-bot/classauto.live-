@@ -1,0 +1,38 @@
+{
+  "changelogHub": {
+    "meta": {
+      "title": "업데이트 로그 — ClassAuto",
+      "description": "ClassAuto 의 신규 기능 · 개선 · 수정 이력. Keep a Changelog 표준."
+    },
+    "hero": {
+      "eyebrow": "업데이트 로그",
+      "title": "최신 변경 사항",
+      "subtitle": "Keep a Changelog 표준에 따라 시간 역순으로 노출합니다. 카테고리 필터로 좁혀볼 수 있어요.",
+      "rss": "RSS 구독",
+      "rssDisabled": "RSS 피드 준비 중"
+    },
+    "filters": {
+      "all": "전체",
+      "feature": "Feature",
+      "fix": "Fix",
+      "improvement": "Improvement",
+      "breaking": "Breaking",
+      "selectedSummary": "{count}개 항목 표시 중"
+    },
+    "labels": {
+      "version": "버전",
+      "category": "카테고리",
+      "relatedPr": "관련 PR",
+      "viewPr": "PR 보기 ↗",
+      "loadMore": "이전 항목 더 보기",
+      "noMatch": "조건에 맞는 항목이 없습니다.",
+      "noMatchHint": "다른 카테고리를 선택해보세요."
+    },
+    "cta": {
+      "title": "다음에 무엇이 추가될까요?",
+      "description": "공개 로드맵과 베타 신청을 함께 확인하세요.",
+      "primary": "베타 신청",
+      "secondary": "기관 견적 문의"
+    }
+  }
+}

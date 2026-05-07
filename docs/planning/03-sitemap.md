@@ -31,8 +31,8 @@
 | 🔴 | `/security` | 보안 정책 (학과장용) | 기획 → [07](./07-additional-pages.md) |
 | 🔴 | `/beta-apply` | 베타 신청 폼 | 기획 → [07](./07-additional-pages.md) |
 | 🔴 | `/contact` | 기관 견적 문의 폼 | 기획 → [07](./07-additional-pages.md) |
-| 🟡 | `/legal/terms` | 이용약관 | 기획 → [07](./07-additional-pages.md) |
-| 🟡 | `/legal/privacy` | 개인정보처리방침 | 기획 → [07](./07-additional-pages.md) |
+| 🟡 | `/terms` | 이용약관 | 기획·구현 완료 (2026-05-21 시행 예정) → [07](./07-additional-pages.md) |
+| 🟡 | `/privacy` | 개인정보처리방침 | 기획·구현 완료 (2026-05-21 시행 예정) → [07](./07-additional-pages.md) |
 | 🟡 | `/help` | 도움말 센터 | 기획 → [07](./07-additional-pages.md) |
 | 🟡 | `/changelog` | 업데이트 로그 | 기획 → [07](./07-additional-pages.md) |
 | 🟢 | `/integrations` | LMS 연동 가이드 | 기획 → [07](./07-additional-pages.md) |
@@ -139,3 +139,4 @@
 | 2026-05-05 | 28개 영역으로 사이트맵 확정 |
 | 2026-05-05 | 우선순위 4단계 분류 |
 | 2026-05-05 | 페이지 간 전환 흐름 매트릭스 추가 |
+| 2026-05-07 | `/legal/terms` · `/legal/privacy` 표기를 실제 라우트인 `/terms` · `/privacy` 로 정정 (feat/legal-pages 워크트리). MarketingShell 푸터·TrustContent 등 다수 컴포넌트가 이미 후자를 참조하고 있어 코드 측을 우선 정합 — 외부 SEO·SNS 링크 보존 |

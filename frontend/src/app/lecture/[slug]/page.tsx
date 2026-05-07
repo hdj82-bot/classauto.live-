@@ -5,12 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { tokens } from "@/lib/tokens";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/components/ui/Toast";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAttention } from "@/hooks/useAttention";
 import Header from "@/components/Header";
 import AttentionPauseOverlay from "@/components/AttentionPauseOverlay";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+// feat/profile-a11y — 접근성 panel 마운트 (lecture body 무수정 제약).
+// AccessibilityPanel 자체가 A11yProvider 를 동봉하므로 추가 wrapper 불필요.
+import AccessibilityPanel from "@/components/student/accessibility/AccessibilityPanel";
 
 interface LectureData {
   id: string;
@@ -47,7 +49,6 @@ export default function LectureViewerPage() {
   const qaEndRef = useRef<HTMLDivElement>(null);
 
   // Video
-  const { toast } = useToast();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -250,6 +251,8 @@ export default function LectureViewerPage() {
           </section>
         </div>
       </main>
+      {/* feat/profile-a11y — 단일 마운트 (panel + 단축키 + provider 동봉) */}
+      <AccessibilityPanel />
     </div>
   );
 }
