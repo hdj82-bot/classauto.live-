@@ -295,7 +295,11 @@ export default function ProfessorDashboardPage() {
       onOpenProfile={() => setProfileModalOpen(true)}
       onJumpToInbox={() => router.push("/professor/inbox")}
       onOpenLectureAnalytics={(id) =>
-        router.push(`/professor/lecture/${id}/dashboard`)
+        // R5 라우팅 매트릭스: 단일 진입점 정책 — /professor/analytics/[id] 로
+        // 통일. 기존 /professor/lecture/[id]/dashboard 는 redirect 페이지로
+        // 단순화되어 있어 어느 쪽으로 가도 같은 화면에 도달하지만 단일
+        // 진입점이 사용자 혼동 적음.
+        router.push(`/professor/analytics/${id}`)
       }
       onEditLecture={(id) => router.push(`/professor/lecture/${id}`)}
       profileModalOpen={profileModalOpen}

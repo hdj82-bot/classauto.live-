@@ -33,7 +33,8 @@ export default function EngagementCurve({ data }: EngagementCurveProps) {
     overallResponseRate: 0,
     totalNoResponseEvents: 0,
   };
-  const students = data.students ?? [];
+  // R5 lint: ?? [] fallback 을 useMemo 로 안정화 (CostMeter 와 동일 패턴).
+  const students = useMemo(() => data.students ?? [], [data.students]);
 
   const binLabels = (tValue<string[]>("engagement.ratioBins") ??
     ["0–20%", "20–40%", "40–60%", "60–80%", "80–100%"]).slice(0, BIN_COUNT);

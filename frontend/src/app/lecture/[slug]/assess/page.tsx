@@ -62,7 +62,7 @@ export default function AssessmentPage() {
       }
       setLoading(false);
     })();
-  }, [slug]);
+  }, [slug, t]);
 
   const currentQuestion = questions[currentIndex];
   const isFirst = currentIndex === 0;

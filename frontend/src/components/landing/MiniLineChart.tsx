@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useLandingI18n } from "./useLandingI18n";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 interface MiniLineChartProps {
   // 0~100 비율 데이터 두 시리즈 (주차별).
@@ -31,17 +32,16 @@ export default function MiniLineChart({
   const [drawn, setDrawn] = useState(immediate);
   const [hover, setHover] = useState<number | null>(null);
 
+  // R5: useSyncExternalStore helper 통일.
+  const reduced = usePrefersReducedMotion();
+
   useEffect(() => {
     if (immediate || drawn) return;
     if (typeof window === "undefined") return;
 
-    const reduced =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const node = ref.current;
     const hasObserver = typeof IntersectionObserver !== "undefined";
 
-    // react-hooks/set-state-in-effect 룰 회피 — rAF 비동기화 fallback.
     if (reduced || !node || !hasObserver) {
       const handle = requestAnimationFrame(() => setDrawn(true));
       return () => cancelAnimationFrame(handle);
@@ -60,7 +60,7 @@ export default function MiniLineChart({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [immediate, drawn]);
+  }, [immediate, drawn, reduced]);
 
   // 정규화: 데이터 길이를 chart width 에 매핑
   const W = 480;

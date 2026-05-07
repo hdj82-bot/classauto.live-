@@ -27,7 +27,8 @@ interface WatchHeatmapProps {
 
 export default function WatchHeatmap({ data }: WatchHeatmapProps) {
   const { t } = useAnalyticsI18n();
-  const slides = data?.slides ?? [];
+  // R5 lint: ?? [] fallback 을 useMemo 로 안정화 (CostMeter 와 동일 패턴).
+  const slides = useMemo(() => data?.slides ?? [], [data?.slides]);
 
   const maxReplays = useMemo(() => {
     return slides.reduce((m, s) => Math.max(m, s.replays ?? 0), 0);

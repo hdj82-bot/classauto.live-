@@ -30,7 +30,6 @@ export default function StepIndicator({
           const stepKey = ["upload", "scriptReview", "avatarVoice", "render", "share"][idx];
           const isActive = step === current;
           const isDone = step < current;
-          const isPending = step > current;
           const clickable = reviewable && (isDone || isActive) && Boolean(onJump);
 
           return (

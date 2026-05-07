@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useFeaturesHubI18n } from "./useFeaturesHubI18n";
+import { usePrefersReducedMotion } from "@/lib/usePrefersReducedMotion";
 
 /**
  * §3.4 Isometric 그리드 패럴랙스 — 페이지 스크롤 1/8 속도로 따라움직임.
@@ -24,10 +25,13 @@ export default function IsoGrid() {
   const { t } = useFeaturesHubI18n();
   const wrapRef = useRef<HTMLDivElement>(null);
   const isoRef = useRef<HTMLDivElement>(null);
+  // R5: useSyncExternalStore helper 통일. reduced 토글 시 effect 재실행되어
+  // scroll listener 가 즉시 detach/attach 된다.
+  const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (reduced) return;
 
     const wrap = wrapRef.current;
     const iso = isoRef.current;
@@ -57,7 +61,7 @@ export default function IsoGrid() {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, []);
+  }, [reduced]);
 
   return (
     <div
