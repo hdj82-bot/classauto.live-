@@ -91,21 +91,24 @@ describe("useVideoShortcuts", () => {
 
   it("C toggles a11y captions state", () => {
     mountVideoStub();
-    // react-hooks/globals 룰 회피: `let snap` 외부 변수를 component 본문에서
-    // 직접 reassign 하면 룰 위반. 대신 mutable container object 의 .current
-    // 를 mutation 하면 reassignment 가 아니라 OK (ref-style snapshot).
-    const snapRef: { current: ReturnType<typeof useA11y> | null } = { current: null };
-    function Spy() {
-      snapRef.current = useA11y();
-      useVideoShortcuts();
-      return null;
-    }
-    renderHook(() => Spy(), { wrapper: wrap });
-    expect(snapRef.current!.captions).toBe(false);
+    // React 19 의 react-hooks/immutability 룰이 외부 plain object 의 mutation
+    // 까지 차단 (PR #92 fix attempt 에서 확인). 표준 testing-library 패턴 —
+    // renderHook callback 안에서 두 hook 을 함께 호출하고 useA11y 반환값을
+    // result.current 로 받는다. useVideoShortcuts 는 같은 컴포넌트 트리·동일
+    // Provider 컨텍스트를 공유하므로 fireKey("c") 가 captions 토글에 반영.
+    const { result } = renderHook(
+      () => {
+        const snap = useA11y();
+        useVideoShortcuts();
+        return snap;
+      },
+      { wrapper: wrap },
+    );
+    expect(result.current.captions).toBe(false);
     act(() => fireKey("c"));
-    expect(snapRef.current!.captions).toBe(true);
+    expect(result.current.captions).toBe(true);
     act(() => fireKey("c"));
-    expect(snapRef.current!.captions).toBe(false);
+    expect(result.current.captions).toBe(false);
   });
 
   it("? key invokes onShowHelp callback", () => {

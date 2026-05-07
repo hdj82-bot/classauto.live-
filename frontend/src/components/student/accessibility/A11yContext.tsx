@@ -104,24 +104,20 @@ export function A11yProvider({ children, initialState }: ProviderProps) {
   // react-hooks/set-state-in-effect 룰 회피 — effect body 의 sync setState
   // 호출을 rAF callback 안으로 이동. Hydration 직후 한 frame 후 sessionStorage
   // 흡수가 일어나는데, 이건 사용자 시각으론 거의 0ms (다음 paint 직전).
-  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (hydrated) return;
+    if (initialState) return;
     const handle = requestAnimationFrame(() => {
-      if (!initialState) {
-        setState((prev) => ({ ...prev, ...readSession() }));
-      }
-      setHydrated(true);
+      setState((prev) => ({ ...prev, ...readSession() }));
     });
     return () => cancelAnimationFrame(handle);
-  }, [hydrated, initialState]);
+  }, [initialState]);
 
-  // 상태 변화는 sessionStorage 에 즉시 반영. 단, 마운트 직후 동기화 1회는 제외
-  // (그 호출은 sessionStorage 로부터 읽어왔으므로 다시 쓰는 건 무의미).
-  useEffect(() => {
-    if (!hydrated) return;
-    writeSession(state);
-  }, [hydrated, state]);
+  // sessionStorage 반영은 effect 가 아니라 setter 안에서 직접 호출 (아래
+  // useMemo 의 setCaptions 등). effect 패턴은 react-hooks/set-state-in-effect
+  // 룰 + testing 의 act() 가 rAF 를 flush 하지 않는 이슈를 피하기 어렵고,
+  // hydrated 가드 도입 시 첫 setState 호출이 storage 에 안 들어가는 회귀가
+  // 발생 (PR #92 fix attempt 에서 확인). setter 안 직접 호출은 사용자 action
+  // 시점에 결정론적으로 storage 갱신.
 
   // body 클래스 토글 + 자체 주입 <style> 로 a11y 효과를 가시화한다. globals.css
   // 를 수정하지 않고도 동작하도록 본 컴포넌트가 1회만 style 태그를 마운트한다 —
@@ -174,11 +170,39 @@ export function A11yProvider({ children, initialState }: ProviderProps) {
     () => ({
       ...state,
       effectiveReduceMotion: state.reduceMotion || systemReduce,
-      setCaptions: (next) => setState((s) => ({ ...s, captions: next })),
-      setFontSize: (next) => setState((s) => ({ ...s, fontSize: next })),
-      setHighContrast: (next) => setState((s) => ({ ...s, highContrast: next })),
-      setReduceMotion: (next) => setState((s) => ({ ...s, reduceMotion: next })),
-      reset: () => setState({ ...DEFAULT_STATE }),
+      // 각 setter 가 setState 와 writeSession 을 함께 호출. 사용자 action
+      // 시점에 sessionStorage 즉시 반영 — testing-library 의 act() 동기 흐름
+      // 안에서도 storage 검증이 결정론적.
+      setCaptions: (next) =>
+        setState((s) => {
+          const v = { ...s, captions: next };
+          writeSession(v);
+          return v;
+        }),
+      setFontSize: (next) =>
+        setState((s) => {
+          const v = { ...s, fontSize: next };
+          writeSession(v);
+          return v;
+        }),
+      setHighContrast: (next) =>
+        setState((s) => {
+          const v = { ...s, highContrast: next };
+          writeSession(v);
+          return v;
+        }),
+      setReduceMotion: (next) =>
+        setState((s) => {
+          const v = { ...s, reduceMotion: next };
+          writeSession(v);
+          return v;
+        }),
+      reset: () =>
+        setState(() => {
+          const v = { ...DEFAULT_STATE };
+          writeSession(v);
+          return v;
+        }),
     }),
     [state, systemReduce],
   );
