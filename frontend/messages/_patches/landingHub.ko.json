@@ -1,0 +1,46 @@
+{
+  "landingHub": {
+    "heroAccent": "AI",
+    "heroAccentSuffix": " 시대의 강의실",
+    "stats": {
+      "educatorsValue": 320,
+      "educatorsLabel": "교수자가 이미 사용 중",
+      "educatorsSuffix": "+",
+      "lecturesValue": 1840,
+      "lecturesLabel": "생성된 강의 영상",
+      "lecturesSuffix": "+",
+      "hoursValue": 12000,
+      "hoursLabel": "절약된 강의 준비 시간",
+      "hoursSuffix": "h"
+    },
+    "platform": {
+      "eyebrow": "플랫폼",
+      "title": "한 번 업로드, 모든 학습이 연결됩니다",
+      "subtitle": "PPT 한 장에서 시작해 영상·평가·집중도·다국어까지 자동으로 흐릅니다.",
+      "node": {
+        "ppt": "PPT",
+        "ai": "AI 스크립트",
+        "video": "아바타 영상",
+        "rag": "RAG Q&A",
+        "assess": "자동 평가",
+        "translate": "다국어"
+      }
+    },
+    "adoption": {
+      "eyebrow": "검증된 학습 효과",
+      "title": "참여도와 완료율이 함께 올라갑니다",
+      "subtitle": "기존 비대면 강의 대비 시청 완료율 평균 32%p 상승, Q&A 참여 2.4배 증가.",
+      "chart": {
+        "completionLabel": "시청 완료율",
+        "participationLabel": "Q&A 참여",
+        "weekLabel": "{n}주차",
+        "yAxisLabel": "비율 (%)"
+      }
+    },
+    "a11y": {
+      "auroraDecoration": "히어로 배경 장식",
+      "meshDecoration": "플랫폼 연결성 시각화",
+      "chartDescription": "주차별 시청 완료율과 Q&A 참여 비율 변화 추이"
+    }
+  }
+}

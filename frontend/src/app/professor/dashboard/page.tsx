@@ -14,6 +14,17 @@ import {
   type OnboardingSignals,
 } from "@/components/professor/onboardingSteps";
 import { useProfessorI18n } from "@/components/professor/useProfessorI18n";
+import {
+  StatGrid,
+  MainChart,
+  Donut,
+  AttentionWidget,
+  ActivityFeed,
+  CostMeterBar,
+  useDashboardHubI18n,
+  aggregateDashboardHub,
+  type DashboardHubData,
+} from "@/components/professor/dashboardHome";
 
 interface Course {
   id: string;
@@ -27,6 +38,7 @@ interface Lecture {
   is_published: boolean;
   video_url?: string | null;
   pipeline_task_id?: string | null;
+  created_at?: string | null;
 }
 
 /**
@@ -43,7 +55,6 @@ interface Lecture {
 export default function ProfessorDashboardPage() {
   const router = useRouter();
   const { t } = useI18n();
-  const { t: tp } = useProfessorI18n();
   const [courses, setCourses] = useState<Course[]>([]);
   const [lectures, setLectures] = useState<Lecture[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,6 +137,93 @@ export default function ProfessorDashboardPage() {
     setProfileDraft(profile);
   }, []);
 
+  // ── 대시보드 홈 통계 fan-out (강의 1개 이상일 때만 활성) ──────────────────
+  // dashboard.py 6 endpoint 가 lecture_id 단위라 클라이언트에서 합산.
+  // 합산 로직은 `aggregate.ts` 에 있고, 본 페이지는 fetch 와 wiring 만 담당.
+  const [hub, setHub] = useState<DashboardHubData | null>(null);
+  const [hubLoading, setHubLoading] = useState(false);
+
+  useEffect(() => {
+    if (lectures.length === 0) return; // 빈 대시보드 분기는 EmptyDashboard 가 처리
+    let cancelled = false;
+    setHubLoading(true);
+
+    (async () => {
+      const ids = lectures.map((l) => l.id);
+
+      // 5 endpoint × N lectures 를 Promise.allSettled 로 병렬 호출
+      const [attendanceR, scoresR, engagementR, qaR, costR] = await Promise.all(
+        [
+          Promise.allSettled(
+            ids.map((id) =>
+              api.get(`/api/v1/dashboard/${id}/attendance`),
+            ),
+          ),
+          Promise.allSettled(
+            ids.map((id) => api.get(`/api/v1/dashboard/${id}/scores`)),
+          ),
+          Promise.allSettled(
+            ids.map((id) => api.get(`/api/v1/dashboard/${id}/engagement`)),
+          ),
+          Promise.allSettled(
+            ids.map((id) =>
+              api.get(`/api/v1/dashboard/${id}/qa?limit=50`),
+            ),
+          ),
+          Promise.allSettled(
+            ids.map((id) => api.get(`/api/v1/dashboard/${id}/cost`)),
+          ),
+        ],
+      );
+
+      if (cancelled) return;
+
+      const toMap = <T,>(rs: PromiseSettledResult<{ data: T }>[]) => {
+        const m = new Map<string, T | null>();
+        ids.forEach((id, i) => {
+          const r = rs[i];
+          m.set(id, r.status === "fulfilled" ? r.value.data : null);
+        });
+        return m;
+      };
+
+      const allFailed = (rs: PromiseSettledResult<unknown>[]) =>
+        rs.length > 0 && rs.every((r) => r.status === "rejected");
+
+      const aggregated = aggregateDashboardHub({
+        lectures: lectures.map((l) => ({
+          id: l.id,
+          title: l.title,
+          is_published: l.is_published,
+          created_at: l.created_at ?? null,
+          video_url: l.video_url ?? null,
+        })),
+        attendance: toMap(attendanceR),
+        scores: toMap(scoresR),
+        engagement: toMap(engagementR),
+        qa: toMap(qaR),
+        cost: toMap(costR),
+        failures: {
+          attendance: allFailed(attendanceR),
+          scores: allFailed(scoresR),
+          engagement: allFailed(engagementR),
+          qa: allFailed(qaR),
+          cost: allFailed(costR),
+        },
+        // 월 한도는 백엔드 미도착 — null 로 두면 UI 가 placeholder 표시.
+        // BACKEND_ASKS.DASHBOARDHUB.md §7 도착 후 사용자 플랜에서 가져옴.
+        monthlyVideoLimit: null,
+        monthlyCostLimitUsd: null,
+      });
+      setHub(aggregated);
+      setHubLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lectures]);
+
   if (loading) {
     return (
       <LoadingSpinner fullScreen label={t("lecture.lectureLoadingList")} />
@@ -189,76 +287,222 @@ export default function ProfessorDashboardPage() {
 
   // ── 정상 대시보드 ──────────────────────────────────────────────────────────
   return (
+    <DashboardHomeView
+      lectures={lectures}
+      hub={hub}
+      hubLoading={hubLoading}
+      onCreateLecture={handleCreateLecture}
+      onOpenProfile={() => setProfileModalOpen(true)}
+      onJumpToInbox={() => router.push("/professor/inbox")}
+      onOpenLectureAnalytics={(id) =>
+        router.push(`/professor/lecture/${id}/dashboard`)
+      }
+      onEditLecture={(id) => router.push(`/professor/lecture/${id}`)}
+      profileModalOpen={profileModalOpen}
+      onCloseProfileModal={() => setProfileModalOpen(false)}
+      onProfileSaved={handleProfileSaved}
+      profileDraft={profileDraft}
+    />
+  );
+}
+
+/**
+ * 대시보드 홈 뷰 (강의 1개 이상). EmptyDashboard 분기와 분리해서 R2W3 의 빈
+ * 상태 회귀를 막는다. props 만 받는 순수 함수처럼 구성 — useEffect 등 외부
+ * 사이드 이펙트는 모두 부모(`ProfessorDashboardPage`)가 책임진다.
+ */
+function DashboardHomeView({
+  lectures,
+  hub,
+  hubLoading,
+  onCreateLecture,
+  onOpenProfile,
+  onJumpToInbox,
+  onOpenLectureAnalytics,
+  onEditLecture,
+  profileModalOpen,
+  onCloseProfileModal,
+  onProfileSaved,
+  profileDraft,
+}: {
+  lectures: Lecture[];
+  hub: DashboardHubData | null;
+  hubLoading: boolean;
+  onCreateLecture: () => void;
+  onOpenProfile: () => void;
+  onJumpToInbox: () => void;
+  onOpenLectureAnalytics: (id: string) => void;
+  onEditLecture: (id: string) => void;
+  profileModalOpen: boolean;
+  onCloseProfileModal: () => void;
+  onProfileSaved: (profile: InstructorProfileDraft) => void;
+  profileDraft: InstructorProfileDraft | null;
+}) {
+  const { t } = useI18n();
+  const { t: tp } = useProfessorI18n();
+  const { t: th } = useDashboardHubI18n();
+
+  return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          {t("professor.lectureManage")}
-        </h1>
+      {/* 컨텍스트 바 + 인사 카드 (§4.1) */}
+      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {profileDraft?.school
+              ? th("greetingNamed", {
+                  name: profileDraft.school,
+                })
+              : th("greetingDefault")}
+          </h1>
+          {hub && (
+            <p className="mt-1 text-sm text-gray-500">
+              {th("summaryWeek", {
+                qa: hub.activity.filter((a) => a.kind === "qa-asked").length,
+                lagging: hub.attention.laggingLearners.length,
+              })}
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
-            onClick={() => setProfileModalOpen(true)}
-            className="hidden sm:inline-flex items-center text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-lg px-3 py-2 transition"
+            onClick={onOpenProfile}
+            className="hidden sm:inline-flex items-center text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-lg px-3 py-2 motion-safe:transition"
           >
             {tp("openProfile")}
           </button>
           <button
-            onClick={handleCreateLecture}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-5 py-2.5 text-sm font-medium transition w-full sm:w-auto"
+            onClick={onCreateLecture}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-5 py-2.5 text-sm font-medium motion-safe:transition w-full sm:w-auto"
           >
             {t("professor.createLecture")}
           </button>
         </div>
+      </header>
+
+      {/* §4.2 — 통계 카드 6 종 */}
+      {hub && (
+        <section aria-labelledby="dashboard-stats-title" className="mb-8">
+          <h2
+            id="dashboard-stats-title"
+            className="sr-only"
+          >
+            {th("stats.title")}
+          </h2>
+          <StatGrid stats={hub.stats} onJumpToInbox={onJumpToInbox} />
+        </section>
+      )}
+
+      {/* §4.3 메인 차트 (좌 2/3) + §4.4 우측 위젯 (1/3) */}
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          {hub ? (
+            <MainChart series={hub.mainChart} />
+          ) : (
+            <div className="rounded-2xl border border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-500">
+              {hubLoading ? "..." : th("loadError")}
+            </div>
+          )}
+        </div>
+        <div className="space-y-4">
+          {hub && <AttentionWidget data={hub.attention} />}
+          {hub && (
+            <CostMeterBar
+              usedUsd={hub.stats.totalCostUsd}
+              limitUsd={hub.stats.monthlyCostLimitUsd}
+            />
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {lectures.map((lec) => (
-          <article
-            key={lec.id}
-            className="bg-white border border-gray-200 rounded-2xl p-5 hover:shadow-md hover:border-gray-300 transition group"
-          >
-            <h3 className="font-semibold text-gray-900 mb-2 truncate">
-              {lec.title}
-            </h3>
-            <span
-              className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
-                lec.is_published
-                  ? "bg-green-100 text-green-700"
-                  : "bg-gray-100 text-gray-500"
-              }`}
-            >
-              <span
-                className={`w-1.5 h-1.5 rounded-full ${
-                  lec.is_published ? "bg-green-500" : "bg-gray-400"
-                }`}
-                aria-hidden="true"
-              />
-              {lec.is_published ? t("common.published") : t("common.unpublished")}
-            </span>
-            <div className="mt-4 flex gap-2">
-              <button
-                onClick={() => router.push(`/professor/lecture/${lec.id}`)}
-                className="flex-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-3 py-2 transition font-medium"
-              >
-                {t("professor.editScript")}
-              </button>
-              <button
-                onClick={() =>
-                  router.push(`/professor/lecture/${lec.id}/dashboard`)
-                }
-                className="flex-1 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg px-3 py-2 transition font-medium"
-              >
-                {t("professor.analytics")}
-              </button>
-            </div>
-          </article>
-        ))}
+      {/* 도넛 + 활동 피드 */}
+      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <section
+          aria-label={th("donut.title")}
+          className="rounded-2xl border border-gray-200 bg-white p-6"
+        >
+          <h2 className="mb-4 text-base font-semibold text-gray-900">
+            {th("donut.title")}
+          </h2>
+          {hub && <Donut data={hub.donut} />}
+        </section>
+        <section
+          aria-label={th("activity.title")}
+          className="lg:col-span-2"
+        >
+          <h2 className="mb-3 text-base font-semibold text-gray-900">
+            {th("activity.title")}
+          </h2>
+          {hub && <ActivityFeed activity={hub.activity} />}
+        </section>
       </div>
+
+      {/* §4.5 최근 강의 영상 그리드 — 상단 4개 미리보기. */}
+      <section aria-labelledby="recent-lectures-title">
+        <header className="mb-3 flex items-center justify-between">
+          <h2
+            id="recent-lectures-title"
+            className="text-base font-semibold text-gray-900"
+          >
+            {th("lectureGrid.title")}
+          </h2>
+          {lectures.length > 4 && (
+            <span className="text-xs text-gray-400">
+              {th("lectureGrid.more", { count: lectures.length - 4 })}
+            </span>
+          )}
+        </header>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {lectures.slice(0, 4).map((lec) => (
+            <article
+              key={lec.id}
+              className="rounded-2xl border border-gray-200 bg-white p-5 motion-safe:transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
+            >
+              <h3 className="mb-2 truncate font-semibold text-gray-900">
+                {lec.title}
+              </h3>
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
+                  lec.is_published
+                    ? "bg-green-100 text-green-700"
+                    : "bg-gray-100 text-gray-500"
+                }`}
+              >
+                <span
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    lec.is_published ? "bg-green-500" : "bg-gray-400"
+                  }`}
+                  aria-hidden="true"
+                />
+                {lec.is_published
+                  ? t("common.published")
+                  : t("common.unpublished")}
+              </span>
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => onEditLecture(lec.id)}
+                  className="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 motion-safe:transition"
+                >
+                  {th("lectureGrid.edit")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onOpenLectureAnalytics(lec.id)}
+                  className="flex-1 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100 motion-safe:transition"
+                >
+                  {th("lectureGrid.openAnalytics")}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <InstructorProfileModal
         open={profileModalOpen}
-        onClose={() => setProfileModalOpen(false)}
-        onSaved={handleProfileSaved}
+        onClose={onCloseProfileModal}
+        onSaved={onProfileSaved}
         initial={profileDraft ?? undefined}
       />
     </div>

@@ -1,0 +1,227 @@
+{
+  "pricingHub": {
+    "meta": {
+      "title": "Pricing — ClassAuto",
+      "description": "Free, Basic and Pro plans plus the student-side usage limits, on one page. No advertising, auto-deletion after graduation."
+    },
+    "hero": {
+      "eyebrow": "PRICING · Academic-first",
+      "title": "Per-semester pricing without surprises",
+      "subtitle": "Cost is contained by a dual cap on episode count and active learners. No credits, no per-minute billing."
+    },
+    "billingToggle": {
+      "label": "Billing cycle",
+      "monthly": "Monthly",
+      "annual": "Annual",
+      "annualNote": "Save 20%",
+      "ariaLabel": "Toggle monthly vs annual billing"
+    },
+    "popularBadge": "Popular",
+    "plans": {
+      "free": {
+        "name": "Free",
+        "tagline": "First-time pilots",
+        "ctaLabel": "Start free",
+        "ctaHref": "/auth/signup",
+        "perMonthLabel": "Free forever",
+        "currencySymbol": "₩",
+        "priceFree": "Free",
+        "features": [
+          "AI avatar lectures (basic)",
+          "2 video renders / month",
+          "30 monthly active learners",
+          "Script editor (basic)",
+          "Attendance dashboard",
+          "Watermark included",
+          "Community forum support"
+        ]
+      },
+      "basic": {
+        "name": "Basic",
+        "tagline": "Language & active instructors",
+        "ctaLabel": "Start Basic",
+        "ctaHref": "/professor/subscription",
+        "ctaNote": "Continue checkout from the subscription page.",
+        "features": [
+          "8 video renders / month",
+          "80 monthly active learners",
+          "Persona avatar + dual TTS",
+          "Voice Q&A · unlimited chat Q&A",
+          "Attendance quizzes + anti-cheat",
+          "Anonymous reactions · auto encouragement",
+          "Accuracy · Q&A · cost meter dashboards",
+          "Distraction reports",
+          "No watermark · priority email support"
+        ]
+      },
+      "pro": {
+        "name": "Pro",
+        "tagline": "Researchers · multi-course faculty",
+        "ctaLabel": "Start Pro",
+        "ctaHref": "/professor/subscription",
+        "features": [
+          "20 video renders / month",
+          "150 monthly active learners",
+          "Multilingual subtitles + custom voice tags",
+          "Q&A clustering",
+          "AI reverse-explanation · summary PDF",
+          "Weakness heatmap · replay heatmap",
+          "Auto-generated in-class briefings",
+          "Adaptive learning engine + LMS integration",
+          "Raw research CSV export",
+          "Dedicated success manager"
+        ]
+      }
+    },
+    "priceUnit": "/mo",
+    "annualHint": "Annualised: {price} / mo",
+    "annualSavings": "Save {amount} / yr",
+    "viewLimits": "See full limits",
+    "viewLimitsAria": "View detailed limits for {plan}",
+    "limitsTable": {
+      "title": "Student-side usage limits",
+      "subtitle": "Student interaction guardrails apply to every plan (Guardrail system §5).",
+      "linkLabel": "Read the guardrail system",
+      "linkHref": "/security",
+      "headerCategory": "Item",
+      "rowLabels": {
+        "perEpisodeQa": "Chat Q&A per video",
+        "dailyQa": "Daily Q&A per student",
+        "monthlyQa": "Monthly Q&A per student",
+        "inputChars": "Input character cap",
+        "concurrent24h": "Concurrent watchers / 24h",
+        "concurrentPlay": "Concurrent playback per student"
+      },
+      "values": {
+        "free": {
+          "perEpisodeQa": "20",
+          "dailyQa": "—",
+          "monthlyQa": "—",
+          "inputChars": "500",
+          "concurrent24h": "30",
+          "concurrentPlay": "1"
+        },
+        "basic": {
+          "perEpisodeQa": "100",
+          "dailyQa": "30",
+          "monthlyQa": "500",
+          "inputChars": "500",
+          "concurrent24h": "80",
+          "concurrentPlay": "1"
+        },
+        "pro": {
+          "perEpisodeQa": "Unlimited",
+          "dailyQa": "100",
+          "monthlyQa": "2,000",
+          "inputChars": "500",
+          "concurrent24h": "Unlimited",
+          "concurrentPlay": "1"
+        }
+      },
+      "footnote": "Canonical definitions: docs/planning/02-guardrails.md §5.1."
+    },
+    "limitsModal": {
+      "title": "{plan} — full limits",
+      "close": "Close",
+      "footer": "Part of the §3 frequency layer of the 4-stage cost guardrail system."
+    },
+    "enterprise": {
+      "eyebrow": "INSTITUTIONAL · Phase 4 (planned)",
+      "title": "Institutional license",
+      "subtitle": "Unlimited learners, negotiated render quota, multi-tenant + SSO. Department- or college-wide deployment.",
+      "items": [
+        "Unlimited learners · negotiated render quota",
+        "Multi-tenant (department / college)",
+        "Campus attendance roll-up + volume discount per faculty seat",
+        "SSO (SAML, OIDC) · 99.9% SLA",
+        "Onboarding consulting · power-user advisory"
+      ],
+      "ctaLabel": "Contact sales",
+      "ctaHref": "/contact"
+    },
+    "policies": {
+      "title": "Billing, cancellation & refund",
+      "items": [
+        {
+          "term": "Monthly · annual",
+          "desc": "Annual is the default (monthly-equivalent shown). Toggle smoothly animates the price; honors prefers-reduced-motion."
+        },
+        {
+          "term": "Payment methods",
+          "desc": "Credit cards (Visa, MasterCard, AMEX), KakaoPay, TossPay, NaverPay. Institutional payments accept tax invoice + bank transfer."
+        },
+        {
+          "term": "Cancellation",
+          "desc": "1-click cancellation (Stripe Customer Portal). Continue using until the end of the current cycle; data retained 60 days; auto-restored on re-signup within that window."
+        },
+        {
+          "term": "Downgrade",
+          "desc": "Pro→Basic keeps existing videos as-is. Basic→Free hides episodes beyond the 8-cap (no deletion). Excess learners grace until next billing cycle."
+        },
+        {
+          "term": "Refund",
+          "desc": "100% refund within 7 days if no video has been generated. No refunds afterwards. hello@classauto.live"
+        },
+        {
+          "term": "Data export",
+          "desc": "Every plan can download lecture mp4s (up to 60 days post-cancellation). Pro adds anonymised student CSV and Q&A logs for research."
+        }
+      ]
+    },
+    "faq": {
+      "title": "Frequently asked",
+      "items": [
+        {
+          "q": "Do unused renders carry over to next month?",
+          "a": "No, they don't. The 8-render Basic cap is tuned for the 3–4 courses a typical Korean professor teaches in a month."
+        },
+        {
+          "q": "What happens to existing videos when I upgrade Free → Basic?",
+          "a": "They stay in place; the watermark is automatically removed, and the share links don't change."
+        },
+        {
+          "q": "Is there a learner cap?",
+          "a": "Yes — by monthly active learner (anyone who watched a video in the month). Free 30, Basic 80, Pro 150. Larger classes need an institutional license."
+        },
+        {
+          "q": "Can I switch plans mid-cycle?",
+          "a": "Anytime. Upgrades apply immediately; downgrades start at the next billing cycle."
+        },
+        {
+          "q": "Any benefit for the beta period?",
+          "a": "During the 2026 Phase 2 beta, university faculty get the full Pro feature set for free. Beta users keep a lifetime 30% discount after launch."
+        },
+        {
+          "q": "Can students use the Q&A chatbot for off-topic questions?",
+          "a": "No. ClassAuto's Q&A is RAG-bound to the lecture material; out-of-scope questions are refused (similarity threshold 0.7). See the security page for the policy."
+        },
+        {
+          "q": "What if a student leaves the video playing unattended?",
+          "a": "Interstitial quizzes appear every 5–15 minutes. Failing to respond within 30 seconds auto-pauses the video; three accumulated misses voids that watch session. Concurrent playback is capped at 1 per student."
+        },
+        {
+          "q": "Which payment methods are supported?",
+          "a": "Visa, MasterCard, AMEX, KakaoPay, TossPay, NaverPay. Institutional buyers can also pay via tax invoice + bank transfer."
+        },
+        {
+          "q": "What's the refund policy?",
+          "a": "Within 7 days of payment, with no videos generated yet, 100% refund. Otherwise no refund. Contact hello@classauto.live."
+        }
+      ]
+    },
+    "betaCallout": {
+      "title": "Beta — Pro free for academia",
+      "body": "Until the end of the 2026 beta, university faculty can use the full Pro tier free of charge. Beta users keep a lifetime 30% discount.",
+      "ctaLabel": "Apply for beta",
+      "ctaHref": "/beta-apply"
+    },
+    "footerCta": {
+      "title": "First lecture ships in 12 minutes",
+      "body": "One PPT deck is all it takes — every plan ships your first lecture in about 12 minutes.",
+      "primaryLabel": "Start free",
+      "primaryHref": "/auth/signup",
+      "secondaryLabel": "Try the demo",
+      "secondaryHref": "/demo"
+    }
+  }
+}

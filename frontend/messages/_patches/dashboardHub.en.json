@@ -1,0 +1,101 @@
+{
+  "dashboardHub": {
+    "greetingDefault": "Hello, professor",
+    "greetingNamed": "Hello, professor {name}",
+    "context": "{semester} · {courseName}",
+    "summaryWeek": "{qa} new questions this week, {lagging} learners behind on watching.",
+    "loadError": "Failed to load dashboard data.",
+    "loadRetry": "Retry",
+    "stats": {
+      "title": "Snapshot",
+      "watchCompletion": "Watch completion",
+      "watchCompletionUnit": "%",
+      "scoreAccuracy": "Avg. accuracy",
+      "scoreAccuracyUnit": "%",
+      "pendingQa": "Pending Q&A",
+      "pendingQaUnit": "",
+      "activeLearners": "Active learners",
+      "activeLearnersUnit": "",
+      "monthlyVideos": "Videos this month",
+      "monthlyVideosUnit": "",
+      "totalCost": "Cumulative cost",
+      "totalCostUnit": "$",
+      "deltaUp": "▲ {delta} vs last week",
+      "deltaDown": "▼ {delta} vs last week",
+      "deltaFlat": "No change vs last week",
+      "trendCaption": "Last 7 days",
+      "trendUnavailable": "Trend data pending",
+      "ariaCard": "{label} {value}",
+      "active": "Active",
+      "warn": "Needs attention"
+    },
+    "mainChart": {
+      "title": "Weekly watch trend",
+      "subtitle": "Watch completion by week (up to {count} lectures)",
+      "range7": "7 days",
+      "range30": "30 days",
+      "rangeSemester": "Semester",
+      "yLabel": "Watch completion %",
+      "xLabel": "Week",
+      "empty": "Not enough watch data yet.",
+      "emptyDesc": "Publish a lecture and the curve will fill in as students watch.",
+      "tooltip": "{label} · {value}%"
+    },
+    "donut": {
+      "title": "Learner progress mix",
+      "completed": "Completed",
+      "inProgress": "In progress",
+      "notStarted": "Not started",
+      "centerLabel": "{count} total",
+      "empty": "No learners enrolled yet.",
+      "ariaSegment": "{label}: {count} learners ({pct}%)"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "pendingQa": "Pending Q&A",
+      "pendingQaEmpty": "No questions waiting for a reply.",
+      "pendingQaCount": "{count} pending",
+      "viewAll": "Open Q&A inbox →",
+      "lagging": "Lagging learners",
+      "laggingEmpty": "No lagging learners.",
+      "laggingHint": "Inactive 3+ days (auto-fills once backend ships).",
+      "laggingCount": "{count} learners",
+      "notify": "Send nudge",
+      "frequentPause": "Replayed slides",
+      "frequentPauseEmpty": "Replay data appears once the backend exposes it.",
+      "frequentPauseHint": "See BACKEND_ASKS.DASHBOARDHUB.md.",
+      "slide": "Slide {n}",
+      "boost": "Reinforce next lecture"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "empty": "No recent activity yet.",
+      "newBadge": "NEW",
+      "qaAsked": "{name} asked a new question.",
+      "qaResponded": "{name}'s question got a reply.",
+      "qaOutOfScope": "{name}'s question was rejected as out of scope.",
+      "viewSource": "View"
+    },
+    "costMeter": {
+      "title": "Cost this month",
+      "amountOfLimit": "${used} / ${limit}",
+      "amountAlone": "${used}",
+      "limitHint": "No monthly limit set",
+      "warn80": "You crossed 80% of the monthly limit.",
+      "warn100": "You exceeded the monthly limit.",
+      "ariaProgress": "Cost progress {pct}%"
+    },
+    "lectureGrid": {
+      "title": "Recent lectures",
+      "openLecture": "Open lecture",
+      "openAnalytics": "Open analytics",
+      "edit": "Edit script",
+      "more": "+{count} more",
+      "empty": "No lectures yet."
+    },
+    "fallback": {
+      "noBackend": "Data source not yet wired.",
+      "partial": "Some sections failed to load."
+    }
+  }
+}

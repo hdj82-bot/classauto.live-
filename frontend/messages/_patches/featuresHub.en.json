@@ -1,0 +1,129 @@
+{
+  "featuresHub": {
+    "meta": {
+      "title": "Features — ClassAuto",
+      "description": "Tour ClassAuto's nine core capabilities on a single page. From a single slide deck to learner-level analytics, in one continuous flow."
+    },
+    "hero": {
+      "eyebrow": "FEATURES · at a glance",
+      "title": "From one slide deck to learner-level analytics — in one flow",
+      "subtitle": "ClassAuto is nine modules wired together. You don't pick one — you turn the platform on and the whole pipeline starts working.",
+      "primaryCta": "Apply for beta",
+      "secondaryCta": "Open the demo",
+      "topCta": "Apply"
+    },
+    "morph": {
+      "eyebrow": "PIPELINE · the core flow",
+      "title": "One PowerPoint → one ready-to-share lecture video",
+      "subtitle": "Upload a PowerPoint as-is and the platform extracts text, drafts a script, runs dual-language TTS and renders a HeyGen avatar — slide by slide, with your approval at each step. About twelve minutes from upload to share.",
+      "stagePpt": "PPT",
+      "stageScript": "Script",
+      "stageVideo": "Video",
+      "altMorph": "Morph animation: a slide rectangle gradually becomes a video play icon",
+      "stepExtract": "Extract text",
+      "stepDraft": "AI draft script",
+      "stepTts": "Bilingual TTS",
+      "stepRender": "HeyGen avatar render"
+    },
+    "modules": {
+      "eyebrow": "MODULES · four axes",
+      "title": "Four modules, one system",
+      "subtitle": "Content · Assessment · Analytics · Operations — four modules sharing the same data plane. Hover the card to see them split apart.",
+      "hint": "Hover to split apart",
+      "altModuleQuad": "Four module cards (Content, Assessment, Analytics, Operations). On hover they slide apart in four directions.",
+      "content": {
+        "label": "Content",
+        "desc": "PPT → video + script + multilingual translation"
+      },
+      "assess": {
+        "label": "Assessment",
+        "desc": "AI-authored quizzes · formative · summative · auto-grading"
+      },
+      "analytics": {
+        "label": "Analytics",
+        "desc": "Attendance · accuracy · engagement · cost meter"
+      },
+      "ops": {
+        "label": "Operations",
+        "desc": "Subscriptions · users · video lifecycle"
+      }
+    },
+    "cards": {
+      "eyebrow": "CAPABILITIES · nine baseline features",
+      "title": "Nine things you can already do in beta",
+      "subtitle": "Each card mirrors the one-line description from the README. Detailed specs live in the planning docs.",
+      "items": {
+        "pipeline": {
+          "title": "PPT → video pipeline",
+          "desc": "Upload deck → extract text → Claude-drafted script → TTS (ElevenLabs / Google) → HeyGen avatar."
+        },
+        "assess": {
+          "title": "Assessment",
+          "desc": "Claude AI authors multiple-choice and short-answer items. Formative checks during the lecture, summative after."
+        },
+        "session": {
+          "title": "Learning sessions",
+          "desc": "Six-stage state machine, real-time progress tracking, CSV export."
+        },
+        "attention": {
+          "title": "Attention monitoring",
+          "desc": "Heartbeat-based tracking. The lecture pauses automatically when the learner stops responding."
+        },
+        "rag": {
+          "title": "RAG-scoped Q&A",
+          "desc": "pgvector finds the relevant slides, Claude answers using only the lecture's own material — off-topic questions are declined."
+        },
+        "billing": {
+          "title": "Subscriptions",
+          "desc": "Stripe-powered Basic and Pro plans, with usage caps and automatic receipts."
+        },
+        "translate": {
+          "title": "Translation",
+          "desc": "DeepL + Google Cloud Translate convert the lecture script into other languages."
+        },
+        "i18n": {
+          "title": "Bilingual UI",
+          "desc": "Korean and English (next-intl). Student-side multilingual UI lands during the semester."
+        },
+        "dashboard": {
+          "title": "Instructor dashboard",
+          "desc": "Attendance, accuracy, engagement and cost in one place — with one-click CSV export."
+        }
+      }
+    },
+    "progress": {
+      "eyebrow": "SESSIONS · learning progress",
+      "title": "Each learner's progress, traced in a single line",
+      "subtitle": "A learning session walks a six-stage state machine. When the bar reaches 100% the completion check is drawn automatically.",
+      "demoTitle": "Demo: progress simulation",
+      "stepEnter": "Enter",
+      "stepWatch": "Watch",
+      "stepQuiz": "Interstitial",
+      "stepAssess": "Assess",
+      "stepSummary": "Summary",
+      "stepDone": "Done",
+      "completeBadge": "Complete",
+      "controlPlay": "Restart demo",
+      "controlPause": "Pause",
+      "ariaProgress": "Learning progress {value}%"
+    },
+    "iso": {
+      "eyebrow": "ANALYTICS · one plane",
+      "title": "One lecture's data — laid out on one isometric plane",
+      "subtitle": "Attendance · accuracy · engagement · cost — four signal types compared on the same grid. The grid drifts gently as you scroll.",
+      "altGrid": "Isometric visualisation showing attendance, accuracy, engagement and cost signals distributed across a grid"
+    },
+    "cta": {
+      "title": "Start with a single slide deck",
+      "subtitle": "Try one lecture first, see what it does to your class, then expand a step at a time.",
+      "primary": "Apply for beta",
+      "secondary": "Open the demo",
+      "tertiary": "Talk to sales"
+    },
+    "common": {
+      "scrollHint": "Scroll down",
+      "altPlay": "Play icon",
+      "altSlide": "Slide icon"
+    }
+  }
+}
