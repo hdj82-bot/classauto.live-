@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { I18nProvider } from "@/contexts/I18nContext";
 import StatCard from "@/components/professor/dashboardHome/StatCard";
 
@@ -74,13 +74,12 @@ describe("StatCard", () => {
     // 레이블이 화면에 그려짐
     expect(screen.getByText("시청 완료율")).toBeTruthy();
 
-    // prefers-reduced-motion=reduce 를 가정해 즉시 target 표시 — useCountUp
-    // 의 IntersectionObserver step 도 함께 동기 호출되도록 트리거.
-    await act(async () => {
-      // microtask flush
-      await Promise.resolve();
-    });
-    expect(screen.getByText(/78/)).toBeTruthy();
+    // prefers-reduced-motion=reduce 를 가정해 useCountUp 이 카운트업을
+    // 스킵하고 target 으로 이행. PR #90 lint fix 후 reduce-motion 분기도
+    // requestAnimationFrame 으로 한 frame 뒤에 setValue(target) 호출되므로
+    // microtask flush 만으론 부족 — findByText 의 polling retry 로 한 frame
+    // 대기 후 검증한다 (default timeout 1000ms 안에 충분히 fire).
+    expect(await screen.findByText(/78/)).toBeTruthy();
   });
 
   it("shows the warn glyph and pulse class when warn=true", () => {
