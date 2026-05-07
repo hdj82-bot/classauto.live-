@@ -1,0 +1,46 @@
+{
+  "landingHub": {
+    "heroAccent": "AI",
+    "heroAccentSuffix": "-era classroom",
+    "stats": {
+      "educatorsValue": 320,
+      "educatorsLabel": "Educators already onboard",
+      "educatorsSuffix": "+",
+      "lecturesValue": 1840,
+      "lecturesLabel": "Lecture videos generated",
+      "lecturesSuffix": "+",
+      "hoursValue": 12000,
+      "hoursLabel": "Hours of prep time saved",
+      "hoursSuffix": "h"
+    },
+    "platform": {
+      "eyebrow": "Platform",
+      "title": "One upload, every learning step connected",
+      "subtitle": "Start from a single PPT — video, assessment, attention, and translation flow automatically.",
+      "node": {
+        "ppt": "PPT",
+        "ai": "AI script",
+        "video": "Avatar video",
+        "rag": "RAG Q&A",
+        "assess": "Auto assess",
+        "translate": "Multi-lang"
+      }
+    },
+    "adoption": {
+      "eyebrow": "Proven learning impact",
+      "title": "Engagement and completion rise together",
+      "subtitle": "Average +32%p completion vs traditional online lectures; 2.4× Q&A participation.",
+      "chart": {
+        "completionLabel": "Completion rate",
+        "participationLabel": "Q&A participation",
+        "weekLabel": "Wk {n}",
+        "yAxisLabel": "Ratio (%)"
+      }
+    },
+    "a11y": {
+      "auroraDecoration": "Hero background decoration",
+      "meshDecoration": "Platform connectivity visualization",
+      "chartDescription": "Weekly trend of completion rate and Q&A participation"
+    }
+  }
+}

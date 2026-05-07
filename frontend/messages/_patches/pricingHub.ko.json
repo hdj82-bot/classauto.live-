@@ -1,0 +1,227 @@
+{
+  "pricingHub": {
+    "meta": {
+      "title": "요금제 — ClassAuto",
+      "description": "Free·Basic·Pro 세 가지 플랜과 학생 측 사용 한도를 한 페이지에 정리했습니다. 광고 미사용, 졸업 후 자동 삭제."
+    },
+    "hero": {
+      "eyebrow": "PRICING · 학계 보급 우선",
+      "title": "한 학기 강의를 책임지는 요금",
+      "subtitle": "편수 + 학생 수 이중 한도로 비용을 통제합니다. 크레딧·분 단위 과금은 없습니다."
+    },
+    "billingToggle": {
+      "label": "결제 주기",
+      "monthly": "월 결제",
+      "annual": "연 결제",
+      "annualNote": "20% 할인",
+      "ariaLabel": "월·연 결제 전환"
+    },
+    "popularBadge": "인기",
+    "plans": {
+      "free": {
+        "name": "Free",
+        "tagline": "처음 써보는 분 (시범 운영)",
+        "ctaLabel": "무료로 시작",
+        "ctaHref": "/auth/signup",
+        "perMonthLabel": "영원히 무료",
+        "currencySymbol": "₩",
+        "priceFree": "무료",
+        "features": [
+          "AI 아바타 강의 (기본)",
+          "월 영상 2편 생성",
+          "월 활성 학습자 30명",
+          "스크립트 에디터 기본",
+          "출석 현황 대시보드",
+          "워터마크 포함",
+          "커뮤니티 포럼 지원"
+        ]
+      },
+      "basic": {
+        "name": "Basic",
+        "tagline": "어학 · 활성 교수자",
+        "ctaLabel": "Basic 시작하기",
+        "ctaHref": "/professor/subscription",
+        "ctaNote": "결제 흐름은 구독 페이지에서 이어집니다.",
+        "features": [
+          "월 영상 8편 생성",
+          "월 활성 학습자 80명",
+          "교수자 페르소나 아바타 + 이중 TTS",
+          "음성 Q&A · 무제한 채팅 Q&A",
+          "출석 인증 퀴즈 + 부정행위 방지",
+          "익명 반응 · 격려 메시지 자동 발송",
+          "정답률 · Q&A · 비용 미터 대시보드",
+          "딴짓 포착 리포트",
+          "워터마크 없음 · 우선 이메일 지원"
+        ]
+      },
+      "pro": {
+        "name": "Pro",
+        "tagline": "연구자 · 다과목 교수자",
+        "ctaLabel": "Pro 시작하기",
+        "ctaHref": "/professor/subscription",
+        "features": [
+          "월 영상 20편 생성",
+          "월 활성 학습자 150명",
+          "다국어 자막 오버레이 + 커스텀 발화 톤",
+          "유사 질문 클러스터링 (Q&A)",
+          "AI 역설명 · AI 요약 노트 PDF",
+          "취약점 히트맵 · 재생 구간 히트맵",
+          "대면 수업 브리핑 자동 생성",
+          "적응형 학습 엔진 + LMS 연동",
+          "논문용 원시 데이터 CSV export",
+          "전담 담당자 지원"
+        ]
+      }
+    },
+    "priceUnit": "/월",
+    "annualHint": "연 결제 시 월 환산 {price}",
+    "annualSavings": "연 {amount} 절약",
+    "viewLimits": "세부 한도 보기",
+    "viewLimitsAria": "{plan} 세부 한도 보기",
+    "limitsTable": {
+      "title": "학생 측 사용 한도 비교",
+      "subtitle": "학생 인터랙션 비용 가드레일은 모든 플랜에 적용됩니다 (가드레일 시스템 §5).",
+      "linkLabel": "가드레일 시스템 자세히",
+      "linkHref": "/security",
+      "headerCategory": "항목",
+      "rowLabels": {
+        "perEpisodeQa": "영상당 채팅 Q&A",
+        "dailyQa": "학생당 일일 Q&A",
+        "monthlyQa": "학생당 월 Q&A 총량",
+        "inputChars": "학생 입력 글자 한도",
+        "concurrent24h": "영상당 24h 동시 시청",
+        "concurrentPlay": "학생당 동시 재생"
+      },
+      "values": {
+        "free": {
+          "perEpisodeQa": "20건",
+          "dailyQa": "—",
+          "monthlyQa": "—",
+          "inputChars": "500자",
+          "concurrent24h": "30명",
+          "concurrentPlay": "1개"
+        },
+        "basic": {
+          "perEpisodeQa": "100건",
+          "dailyQa": "30건",
+          "monthlyQa": "500건",
+          "inputChars": "500자",
+          "concurrent24h": "80명",
+          "concurrentPlay": "1개"
+        },
+        "pro": {
+          "perEpisodeQa": "무제한",
+          "dailyQa": "100건",
+          "monthlyQa": "2,000건",
+          "inputChars": "500자",
+          "concurrent24h": "무제한",
+          "concurrentPlay": "1개"
+        }
+      },
+      "footnote": "정확한 정의는 docs/planning/02-guardrails.md §5.1 참조."
+    },
+    "limitsModal": {
+      "title": "{plan} 세부 한도",
+      "close": "닫기",
+      "footer": "이 한도는 학생 인터랙션 비용을 통제하기 위한 4중 가드레일 시스템 §3차의 일부입니다."
+    },
+    "enterprise": {
+      "eyebrow": "INSTITUTIONAL · Phase 4 예정",
+      "title": "기관 라이선스",
+      "subtitle": "학생 수 무제한, 영상 편수 협의, 멀티 테넌트 + SSO. 학과·단과대 단위 도입을 위한 별도 협의안입니다.",
+      "items": [
+        "학생 수 무제한 · 영상 편수 협의",
+        "멀티 테넌트 (학과·단과대 단위)",
+        "전교 출석 통합 관리 + 교수자 수 기준 볼륨 할인",
+        "SSO (SAML, OIDC) · SLA 99.9% 보장",
+        "전담 도입 컨설팅 · 헤비유저 자문"
+      ],
+      "ctaLabel": "기관 문의하기",
+      "ctaHref": "/contact"
+    },
+    "policies": {
+      "title": "결제·해지·환불 정책",
+      "items": [
+        {
+          "term": "월·연 결제",
+          "desc": "연 결제 기본값 (월 환산가 표시). 토글 변경 시 가격 숫자가 부드럽게 전환되며 prefers-reduced-motion 시 즉시 전환합니다."
+        },
+        {
+          "term": "결제 수단",
+          "desc": "신용카드(Visa, MasterCard, AMEX), 카카오페이, 토스페이, 네이버페이. 학교/기관 결제는 세금계산서 + 계좌 이체 가능."
+        },
+        {
+          "term": "해지",
+          "desc": "1클릭 해지 (Stripe Customer Portal). 결제 주기 끝까지 사용 가능, 데이터는 60일 보존, 60일 이내 재가입 시 자동 복구."
+        },
+        {
+          "term": "다운그레이드",
+          "desc": "Pro→Basic 시 기존 영상 그대로 유지, Basic→Free 시 8편 초과 영상은 비공개(삭제 X). 학생 수 초과는 다음 결제 주기까지 유예."
+        },
+        {
+          "term": "환불",
+          "desc": "결제 후 7일 이내, 영상 미생성 시 100% 환불. 그 외엔 환불 불가. 문의: hello@classauto.live"
+        },
+        {
+          "term": "데이터 export",
+          "desc": "모든 플랜에 강의 영상 mp4 다운로드 권리(해지 후 60일까지). Pro는 학생 데이터 CSV(개인정보 제거 옵션) + Q&A 익명화 데이터."
+        }
+      ]
+    },
+    "faq": {
+      "title": "자주 묻는 질문",
+      "items": [
+        {
+          "q": "월 8편/20편을 다 못 쓰면 다음 달로 넘어가나요?",
+          "a": "이월되지 않습니다. 한국 대학 교수자 평균 3~4과목 기준 한 달 8편이면 충분하도록 설계했습니다."
+        },
+        {
+          "q": "Free에서 Basic으로 업그레이드하면 그동안 만든 영상은?",
+          "a": "기존 영상은 그대로 유지되며, 워터마크가 자동으로 제거됩니다. 영상 링크도 변하지 않습니다."
+        },
+        {
+          "q": "학생 수 제한이 있나요?",
+          "a": "월간 활성 학습자(해당 월에 영상을 시청한 학생) 기준으로 Free 30명, Basic 80명, Pro 150명까지 지원합니다. 더 큰 강의는 기관 라이선스로 무제한 이용 가능합니다."
+        },
+        {
+          "q": "플랜을 중간에 변경할 수 있나요?",
+          "a": "언제든지 가능합니다. 업그레이드는 즉시 반영, 다운그레이드는 다음 결제 주기부터 적용됩니다."
+        },
+        {
+          "q": "베타 기간엔 어떤 혜택이 있나요?",
+          "a": "Phase 2 베타 기간(2026) 학계 대학 교수자 누구나 Pro 기능 전체를 무료로 이용하실 수 있습니다. 베타 참여자는 정식 출시 후 평생 30% 할인이 적용됩니다."
+        },
+        {
+          "q": "Q&A 챗봇으로 학습 외 질문도 할 수 있나요?",
+          "a": "아니요. ClassAuto의 Q&A는 강의 자료 기반 RAG 방식으로 동작하며, 강의 범위 밖 질문은 자동으로 거부됩니다(유사도 임계값 0.7). 자세한 정책은 보안 문서 참조."
+        },
+        {
+          "q": "학생이 영상을 틀어놓고 자리를 비우면 어떻게 되나요?",
+          "a": "영상 시청 중 5~15분 간격으로 인터스티셜 퀴즈가 등장합니다. 30초 내 응답하지 않으면 영상이 자동 일시정지되고, 누적 3회 미응답 시 해당 시청은 무효 처리됩니다. 동일 학생의 동시 재생도 1개로 제한됩니다."
+        },
+        {
+          "q": "결제 수단은 어떤 것을 지원하나요?",
+          "a": "신용카드(Visa, MasterCard, AMEX), 카카오페이, 토스페이, 네이버페이를 지원합니다. 학교/기관 결제의 경우 세금계산서 발행 및 계좌 이체도 가능합니다."
+        },
+        {
+          "q": "환불 정책은 어떻게 되나요?",
+          "a": "결제 후 7일 이내, 해당 기간 동안 영상을 생성하지 않은 경우 100% 환불 가능합니다. 자세한 사항은 hello@classauto.live로 문의해주세요."
+        }
+      ]
+    },
+    "betaCallout": {
+      "title": "베타 기간 — 학계 무료 Pro",
+      "body": "2026 베타 기간 동안 대학 교수자는 Pro 기능 전체를 무료로 사용할 수 있습니다. 정식 출시 후 평생 30% 할인.",
+      "ctaLabel": "베타 신청하기",
+      "ctaHref": "/beta-apply"
+    },
+    "footerCta": {
+      "title": "모든 플랜은 첫 영상 12분",
+      "body": "PPT 한 장만 있으면 약 12분 안에 첫 강의 영상이 완성됩니다.",
+      "primaryLabel": "무료로 시작",
+      "primaryHref": "/auth/signup",
+      "secondaryLabel": "데모 체험",
+      "secondaryHref": "/demo"
+    }
+  }
+}

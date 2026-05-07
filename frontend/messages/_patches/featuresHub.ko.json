@@ -1,0 +1,129 @@
+{
+  "featuresHub": {
+    "meta": {
+      "title": "기능 — ClassAuto",
+      "description": "ClassAuto의 9가지 핵심 기능을 한 페이지에서 살펴보세요. PPT 한 장에서 시작해 학생 분석까지 이어지는 전 과정."
+    },
+    "hero": {
+      "eyebrow": "FEATURES · 기능 한눈에",
+      "title": "PPT 한 장에서 시작해, 학생 분석까지 한 흐름으로",
+      "subtitle": "ClassAuto는 9개 모듈이 한 줄로 연결된 플랫폼입니다. 따로따로 도입하지 않고, 한 번 켜면 전체가 함께 작동합니다.",
+      "primaryCta": "베타 신청하기",
+      "secondaryCta": "데모 둘러보기",
+      "topCta": "베타 신청"
+    },
+    "morph": {
+      "eyebrow": "PIPELINE · 핵심 흐름",
+      "title": "PPT 한 장 → 영상 한 편",
+      "subtitle": "PowerPoint를 그대로 올리면 텍스트 추출 · AI 스크립트 · TTS · HeyGen 아바타까지 하나의 흐름으로 처리합니다. 슬라이드 단위 편집·승인을 거쳐 약 12분 만에 완성됩니다.",
+      "stagePpt": "PPT",
+      "stageScript": "스크립트",
+      "stageVideo": "영상",
+      "altMorph": "PPT 슬라이드가 영상 재생 아이콘으로 변환되는 모핑 애니메이션",
+      "stepExtract": "텍스트 추출",
+      "stepDraft": "AI 스크립트 초안",
+      "stepTts": "이중 TTS 합성",
+      "stepRender": "HeyGen 아바타 렌더링"
+    },
+    "modules": {
+      "eyebrow": "MODULES · 4축 구성",
+      "title": "기능은 4축, 합쳐서 한 시스템",
+      "subtitle": "콘텐츠 · 평가 · 분석 · 운영 — 네 모듈이 같은 데이터 위에서 작동합니다. 카드 위에 마우스를 올려 분리되는 모습을 확인해보세요.",
+      "hint": "마우스를 올리면 분리됩니다",
+      "altModuleQuad": "콘텐츠·평가·분석·운영 네 가지 모듈 카드. 호버 시 네 방향으로 분리됩니다.",
+      "content": {
+        "label": "콘텐츠",
+        "desc": "PPT → 영상 + 스크립트 + 다국어 번역"
+      },
+      "assess": {
+        "label": "평가",
+        "desc": "AI 자동 출제 · 형성평가 · 총괄평가 · 채점"
+      },
+      "analytics": {
+        "label": "분석",
+        "desc": "출석 · 정답률 · 참여도 · 비용 미터"
+      },
+      "ops": {
+        "label": "운영",
+        "desc": "구독 · 사용자 · 강의 영상 라이프사이클"
+      }
+    },
+    "cards": {
+      "eyebrow": "CAPABILITIES · 9가지 기본 기능",
+      "title": "지금 베타에서 쓸 수 있는 9가지",
+      "subtitle": "각 기능은 README의 1-line 설명을 그대로 옮겼습니다. 기획서와 기능 명세는 별도 문서로 정리되어 있습니다.",
+      "items": {
+        "pipeline": {
+          "title": "PPT → 영상 파이프라인",
+          "desc": "PPT 업로드 → 텍스트 추출 → Claude AI 스크립트 생성 → TTS(ElevenLabs/Google) → HeyGen 아바타 영상."
+        },
+        "assess": {
+          "title": "평가 시스템",
+          "desc": "Claude AI 자동 문제 생성 (객관식/주관식). 형성평가는 강의 중, 총괄평가는 강의 후."
+        },
+        "session": {
+          "title": "학습 세션",
+          "desc": "6단계 상태머신, 시청 진행률 추적, CSV 내보내기."
+        },
+        "attention": {
+          "title": "집중도 모니터링",
+          "desc": "하트비트 기반 실시간 추적. 무응답이 감지되면 자동으로 일시정지합니다."
+        },
+        "rag": {
+          "title": "RAG Q&A",
+          "desc": "pgvector 임베딩으로 강의 자료 안에서만 찾고, Claude AI가 답합니다. 자료 밖 질문은 자동 거부."
+        },
+        "billing": {
+          "title": "구독 / 결제",
+          "desc": "Stripe 연동. Basic / Pro 두 플랜 + 사용량 한도 + 영수증 자동 발급."
+        },
+        "translate": {
+          "title": "번역",
+          "desc": "DeepL + Google Cloud 번역으로 스크립트를 다국어로 변환합니다."
+        },
+        "i18n": {
+          "title": "다국어 UI",
+          "desc": "한국어 · 영어 (next-intl). 학생 향 다국어 인터페이스는 학기 중 추가 예정."
+        },
+        "dashboard": {
+          "title": "교수자 대시보드",
+          "desc": "출석 · 정답률 · 참여도 · 비용을 한 화면에서. CSV 내보내기까지 한 번에."
+        }
+      }
+    },
+    "progress": {
+      "eyebrow": "SESSIONS · 학습 진도",
+      "title": "한 학습자의 진도, 한 줄로 따라갑니다",
+      "subtitle": "학습 세션은 6단계 상태머신으로 진행률을 따라가고, 100%에 도달하면 자동으로 완료 표시가 그려집니다.",
+      "demoTitle": "데모: 학습 진도 시뮬레이션",
+      "stepEnter": "입장",
+      "stepWatch": "시청",
+      "stepQuiz": "인터스티셜 퀴즈",
+      "stepAssess": "평가",
+      "stepSummary": "요약",
+      "stepDone": "완료",
+      "completeBadge": "완료",
+      "controlPlay": "데모 다시 재생",
+      "controlPause": "일시정지",
+      "ariaProgress": "학습 진도 {value}%"
+    },
+    "iso": {
+      "eyebrow": "ANALYTICS · 한눈에",
+      "title": "한 강의가 만들어내는 데이터, 한 평면 위에서",
+      "subtitle": "출석 · 정답률 · 참여도 · 비용 — 네 종류의 시그널을 같은 그리드 위에서 비교합니다. 페이지를 스크롤하면 격자가 천천히 따라옵니다.",
+      "altGrid": "출석·정답률·참여도·비용 네 종류 시그널이 격자에 분포된 아이소메트릭 시각화"
+    },
+    "cta": {
+      "title": "PPT 한 장으로 시작하세요",
+      "subtitle": "학기 중 한 영상부터 가볍게 시도해보고, 효과를 확인한 뒤 단계적으로 확장하시면 됩니다.",
+      "primary": "베타 신청하기",
+      "secondary": "데모 둘러보기",
+      "tertiary": "기관 문의하기"
+    },
+    "common": {
+      "scrollHint": "아래로 스크롤",
+      "altPlay": "재생 아이콘",
+      "altSlide": "슬라이드 아이콘"
+    }
+  }
+}

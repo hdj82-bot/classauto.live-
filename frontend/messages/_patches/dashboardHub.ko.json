@@ -1,0 +1,101 @@
+{
+  "dashboardHub": {
+    "greetingDefault": "안녕하세요, 교수님",
+    "greetingNamed": "안녕하세요, {name} 교수님",
+    "context": "{semester} · {courseName}",
+    "summaryWeek": "이번 주 새 질문 {qa}건, 시청 미완료 학습자 {lagging}명",
+    "loadError": "대시보드 데이터를 불러오지 못했습니다.",
+    "loadRetry": "다시 시도",
+    "stats": {
+      "title": "이번 학기 한눈에",
+      "watchCompletion": "시청 완료율",
+      "watchCompletionUnit": "%",
+      "scoreAccuracy": "평균 정답률",
+      "scoreAccuracyUnit": "%",
+      "pendingQa": "미응답 Q&A",
+      "pendingQaUnit": "건",
+      "activeLearners": "활성 학습자",
+      "activeLearnersUnit": "명",
+      "monthlyVideos": "이번 달 영상",
+      "monthlyVideosUnit": "편",
+      "totalCost": "누적 사용 비용",
+      "totalCostUnit": "$",
+      "deltaUp": "전주 대비 ▲ {delta}",
+      "deltaDown": "전주 대비 ▼ {delta}",
+      "deltaFlat": "전주 대비 변동 없음",
+      "trendCaption": "지난 7일",
+      "trendUnavailable": "추이 데이터 준비 중",
+      "ariaCard": "{label} {value}",
+      "active": "활성",
+      "warn": "주의 필요"
+    },
+    "mainChart": {
+      "title": "강의별 시청 추이",
+      "subtitle": "주차별 시청 완료율 (최대 {count}개 강의)",
+      "range7": "최근 7일",
+      "range30": "최근 30일",
+      "rangeSemester": "이번 학기",
+      "yLabel": "시청 완료율 %",
+      "xLabel": "주차",
+      "empty": "아직 시청 데이터가 충분하지 않습니다.",
+      "emptyDesc": "강의를 게시하고 학생이 시청을 시작하면 추이가 그려집니다.",
+      "tooltip": "{label} · {value}%"
+    },
+    "donut": {
+      "title": "학습자 진도 분포",
+      "completed": "완료",
+      "inProgress": "진행 중",
+      "notStarted": "미시작",
+      "centerLabel": "총 {count}명",
+      "empty": "아직 학습자 등록이 없습니다.",
+      "ariaSegment": "{label}: {count}명 ({pct}%)"
+    },
+    "attention": {
+      "title": "주의 필요",
+      "pendingQa": "답변 대기 질문",
+      "pendingQaEmpty": "응답 대기 중인 질문이 없습니다.",
+      "pendingQaCount": "{count}건",
+      "viewAll": "Q&A 인박스 열기 →",
+      "lagging": "시청 부진 학습자",
+      "laggingEmpty": "시청 부진 학습자가 없습니다.",
+      "laggingHint": "3일 이상 미시청 (백엔드 준비 시 자동 채워집니다)",
+      "laggingCount": "{count}명",
+      "notify": "알림 발송",
+      "frequentPause": "자주 멈춘 구간",
+      "frequentPauseEmpty": "재생 구간 데이터가 도착하면 표시됩니다.",
+      "frequentPauseHint": "BACKEND_ASKS.DASHBOARDHUB.md 참조",
+      "slide": "슬라이드 {n}",
+      "boost": "다음 강의 보강 추천"
+    },
+    "activity": {
+      "title": "최근 활동",
+      "empty": "아직 활동 기록이 없습니다.",
+      "newBadge": "NEW",
+      "qaAsked": "{name} 학생이 새 질문을 남겼습니다.",
+      "qaResponded": "{name} 학생의 질문에 답변이 달렸습니다.",
+      "qaOutOfScope": "{name} 학생의 질문이 범위 외로 거부되었습니다.",
+      "viewSource": "보기"
+    },
+    "costMeter": {
+      "title": "이번 달 사용 비용",
+      "amountOfLimit": "${used} / ${limit}",
+      "amountAlone": "${used}",
+      "limitHint": "월 한도 미설정",
+      "warn80": "한도의 80%를 넘었습니다.",
+      "warn100": "한도를 초과했습니다.",
+      "ariaProgress": "비용 진행률 {pct}%"
+    },
+    "lectureGrid": {
+      "title": "최근 강의 영상",
+      "openLecture": "강의 열기",
+      "openAnalytics": "분석 보기",
+      "edit": "스크립트 편집",
+      "more": "+{count}개 더보기",
+      "empty": "아직 강의가 없습니다."
+    },
+    "fallback": {
+      "noBackend": "데이터 출처가 아직 연결되지 않았습니다.",
+      "partial": "일부 섹션의 데이터를 불러오지 못했습니다."
+    }
+  }
+}
