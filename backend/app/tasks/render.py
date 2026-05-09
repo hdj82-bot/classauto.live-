@@ -59,6 +59,7 @@ def render_slide(
     Critical 8: 각 단계는 산출물 존재 여부로 idempotent — 재시도/중복 enqueue 시 skip.
     """
     import asyncio
+    from app.models.lecture import Lecture, VoiceGender
     from app.services.pipeline.tts import synthesize
     from app.services.pipeline.heygen import create_video
 
@@ -66,6 +67,15 @@ def render_slide(
     loop = asyncio.new_event_loop()
     try:
         render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
+
+        # 강의 단위 voice_gender 를 한 번만 조회. lecture 가 사라졌거나 컬럼이 NULL 인
+        # 엣지 케이스(0016 마이그레이션 전 row 등) 는 'male' 로 안전하게 fallback.
+        lecture = db.query(Lecture).filter(Lecture.id == render.lecture_id).first()
+        voice_gender = (
+            lecture.voice_gender.value
+            if lecture and isinstance(lecture.voice_gender, VoiceGender)
+            else (str(lecture.voice_gender) if lecture and lecture.voice_gender else "male")
+        )
 
         # ── Critical 7: 호출자 소유권 검증 ──
         if caller_user_id is not None:
@@ -99,7 +109,9 @@ def render_slide(
         tts_already_done = bool(audio_url) and s3_svc.file_exists(s3_audio_key)
 
         if not tts_already_done:
-            tts_result = loop.run_until_complete(synthesize(script_text))
+            tts_result = loop.run_until_complete(
+                synthesize(script_text, gender=voice_gender)
+            )
 
             # H: TTS API 성공 직후 별도 트랜잭션으로 비용을 즉시 commit.
             # 이후 S3 업로드(또는 HeyGen 단계)가 실패해 메인 트랜잭션이 rollback 돼도
@@ -136,7 +148,12 @@ def render_slide(
             db.commit()
 
         heygen_job_id = loop.run_until_complete(
-            create_video(audio_url=audio_url, avatar_id=render.avatar_id, callback_id=str(render.id))
+            create_video(
+                audio_url=audio_url,
+                avatar_id=render.avatar_id,
+                gender=voice_gender,
+                callback_id=str(render.id),
+            )
         )
 
         # H: HeyGen 제출 성공 직후 비용을 별도 트랜잭션으로 즉시 commit —

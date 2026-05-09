@@ -6,6 +6,7 @@ import type {
   SlideReviewStatus,
   StudioStep,
   TtsProvider,
+  VoiceGender,
 } from "./studioTypes";
 
 /**
@@ -25,6 +26,9 @@ export interface StudioWizardState {
   editedSegments: ScriptSegment[] | null;
   selectedAvatarId: string | null;
   ttsProvider: TtsProvider;
+  // 강의 단위 아바타·보이스 성별. 기본 male — Step3 의 토글에서 변경되며,
+  // Step4 의 approve 직전에 PATCH /api/lectures/{id} 로 백엔드에 반영된다.
+  voiceGender: VoiceGender;
   expiresAt: string | null;
   emailNotify: boolean;
 }
@@ -35,6 +39,7 @@ const initialState: StudioWizardState = {
   editedSegments: null,
   selectedAvatarId: null,
   ttsProvider: "elevenlabs",
+  voiceGender: "male",
   expiresAt: null,
   emailNotify: false,
 };
@@ -71,6 +76,10 @@ export function useStudioWizard(initialStep: StudioStep = 1) {
     setState((prev) => ({ ...prev, ttsProvider: provider }));
   }, []);
 
+  const setVoiceGender = useCallback((g: VoiceGender) => {
+    setState((prev) => ({ ...prev, voiceGender: g }));
+  }, []);
+
   const setExpiresAt = useCallback((iso: string | null) => {
     setState((prev) => ({ ...prev, expiresAt: iso }));
   }, []);
@@ -86,6 +95,7 @@ export function useStudioWizard(initialStep: StudioStep = 1) {
     setEditedSegments,
     setSelectedAvatar,
     setTtsProvider,
+    setVoiceGender,
     setExpiresAt,
     setEmailNotify,
   };

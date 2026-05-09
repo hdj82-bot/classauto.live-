@@ -185,6 +185,7 @@ async def create_lecture(
         slug=slug,
         order=data.order,
         expires_at=data.expires_at,
+        voice_gender=data.voice_gender,
     )
     db.add(lecture)
     await db.commit()

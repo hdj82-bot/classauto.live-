@@ -22,6 +22,8 @@ export interface Course {
   title: string;
 }
 
+export type VoiceGender = "male" | "female";
+
 export interface Lecture {
   id: string;
   course_id: string;
@@ -32,6 +34,7 @@ export interface Lecture {
   video_url: string | null;
   pipeline_task_id?: string | null;
   expires_at: string | null;
+  voice_gender: VoiceGender;
 }
 
 // ── 스크립트 ─────────────────────────────────────────────────────────────────

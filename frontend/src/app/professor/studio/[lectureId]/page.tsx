@@ -123,6 +123,16 @@ export default function StudioWizardPage() {
     };
   }, [lectureId, fetchLecture]);
 
+  // 첫 lecture 로드 시 wizard 의 voiceGender 를 백엔드 값으로 동기화 — 사용자가
+  // 새로고침해도 토글이 기존 선택을 반영. lectureId 가 바뀔 때만 발동해
+  // 사용자가 Step3 에서 변경 중인 dirty 상태를 덮어쓰지 않는다.
+  useEffect(() => {
+    if (lecture && lecture.id === lectureId) {
+      wizard.setVoiceGender(lecture.voice_gender);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lectureId, lecture?.id]);
+
   // video.id 미확보 시 주기 폴링 (파이프라인 진행 중).
   useEffect(() => {
     if (videoId) return;
@@ -280,6 +290,16 @@ export default function StudioWizardPage() {
         });
         wizard.setEditedSegments(null);
       }
+      // 사용자가 Step3 에서 변경했을 수 있는 voice_gender 를 렌더 시작 직전에 반영.
+      // 백엔드 render task 가 lecture.voice_gender 를 읽어 _MALE/_FEMALE 분기하므로
+      // approve 전에 PATCH 가 commit 되어야 한다. 현재 값과 동일해도 idempotent.
+      if (lecture && wizard.state.voiceGender !== lecture.voice_gender) {
+        const { data } = await api.patch<Lecture>(
+          `/api/lectures/${lecture.id}`,
+          { voice_gender: wizard.state.voiceGender },
+        );
+        setLecture(data);
+      }
       await api.post(`/api/videos/${videoId}/approve`);
       setApproved(true);
       setApproveModalOpen(false);
@@ -288,7 +308,7 @@ export default function StudioWizardPage() {
     } finally {
       setApproving(false);
     }
-  }, [videoId, wizard, toast, t]);
+  }, [videoId, wizard, lecture, toast, t]);
 
   // 렌더 진행 폴링 — Step 4 진입 시 + approved 인 동안.
   useEffect(() => {
@@ -413,6 +433,8 @@ export default function StudioWizardPage() {
           onSelectAvatar={wizard.setSelectedAvatar}
           ttsProvider={wizard.state.ttsProvider}
           onChangeTtsProvider={wizard.setTtsProvider}
+          voiceGender={wizard.state.voiceGender}
+          onChangeVoiceGender={wizard.setVoiceGender}
           expiresAt={wizard.state.expiresAt}
           onChangeExpiresAt={wizard.setExpiresAt}
           usage={usage}

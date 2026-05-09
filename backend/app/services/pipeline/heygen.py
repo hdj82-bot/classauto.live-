@@ -79,13 +79,34 @@ async def _request_with_retry(
 # ── 비디오 생성 ──────────────────────────────────────────────────────────────
 
 
+def pick_avatar_id(gender: str | None = None) -> str:
+    """강의 성별 → HEYGEN_AVATAR_ID_{MALE,FEMALE} 환경변수 매핑.
+
+    gender 가 ``"male"`` | ``"female"`` 이면 해당 ID, 비거나 None 이면 MALE 을 기본.
+    _MALE/_FEMALE 가 비어 있으면 deprecated ``HEYGEN_AVATAR_ID`` 로 fallback —
+    1단계 단일 ID 운영 환경에서도 호출이 깨지지 않도록.
+    VoiceGender enum 도 .value 를 통해 str 로 비교되므로 그대로 받을 수 있다.
+    """
+    g = (str(gender) if gender is not None else "male").strip().lower()
+    if g == "female":
+        primary = settings.HEYGEN_AVATAR_ID_FEMALE
+    else:
+        primary = settings.HEYGEN_AVATAR_ID_MALE
+    return (primary or settings.HEYGEN_AVATAR_ID or "").strip()
+
+
 async def create_video(
     audio_url: str,
     avatar_id: str | None = None,
+    gender: str | None = None,
     callback_id: str | None = None,
 ) -> str:
-    """HeyGen v2 API로 아바타 립싱크 비디오 생성 요청. video_id를 반환."""
-    avatar = avatar_id or settings.HEYGEN_AVATAR_ID
+    """HeyGen v2 API로 아바타 립싱크 비디오 생성 요청. video_id를 반환.
+
+    avatar_id: 명시 시 그것 우선(custom 아바타 등), 아니면 ``pick_avatar_id(gender)``.
+    gender:    ``"male"`` | ``"female"`` — avatar_id 가 None 일 때 _MALE/_FEMALE 분기 키.
+    """
+    avatar = avatar_id or pick_avatar_id(gender)
     url = f"{settings.HEYGEN_BASE_URL}/v2/video/generate"
     payload = {
         "video_inputs": [

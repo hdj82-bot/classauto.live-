@@ -68,14 +68,18 @@ async def synthesize(
     output_path: Path | None = None,
     *,
     voice_id: str | None = None,
+    gender: str | None = None,
     sessionmaker=None,
     video_render_id: uuid.UUID | None = None,
     s3_render_id: str | None = None,
 ) -> TTSResult:
     """ElevenLabs 합성 시도, 실패 시 Google TTS 폴백.
 
-    voice_id: ElevenLabs voice ID. None 이면 settings.ELEVENLABS_VOICE_ID 사용.
+    voice_id: ElevenLabs voice ID. None 이면 ``elevenlabs_client.pick_voice_id(gender)``.
               Cloned voice (IVC 결과) 를 쓰려면 user 의 elevenlabs_voice_id 전달.
+    gender:   ``"male"`` | ``"female"`` — voice_id 가 None 일 때 _MALE/_FEMALE 분기 키.
+              Lecture.voice_gender 를 흘려보내는 용도. Google TTS 폴백에는 미적용
+              (현재 폴백은 단일 GOOGLE_TTS_VOICE_NAME 만 지원).
     sessionmaker, video_render_id: 둘 다 주어지면 cost_logs 에 즉시 기록.
                                    (별도 트랜잭션 — record_once_committed 위임)
     s3_render_id: 주어지면 audio 를 S3 의 표준 경로에 업로드.
@@ -87,11 +91,13 @@ async def synthesize(
     fallback_reason: str | None = None
     start = time.monotonic()
     try:
-        audio_bytes = await elevenlabs_client.synthesize(text, voice_id=voice_id)
+        audio_bytes = await elevenlabs_client.synthesize(
+            text, voice_id=voice_id, gender=gender,
+        )
         provider = "elevenlabs"
         logger.info(
-            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s",
-            len(text), voice_id or "<default>",
+            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s",
+            len(text), voice_id or "<default>", gender or "<default>",
         )
     except elevenlabs_client.ElevenLabsError as exc:
         fallback_reason = f"{type(exc).__name__}: {exc}"
