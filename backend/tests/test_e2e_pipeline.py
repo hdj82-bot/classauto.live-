@@ -214,6 +214,12 @@ def test_e2e_render_slide_pipeline():
     mock_render.audio_url = None
     mock_render.heygen_job_id = None
 
+    # 0016 마이그레이션 이후 render task 가 lecture.voice_gender 를 추가 lookup 한다.
+    # mock 으로 voice_gender 를 명시하지 않으면 MagicMock 객체가 그대로 흘러
+    # synthesize/create_video 의 gender 인자에 들어가 assert 가 깨진다.
+    mock_lecture = MagicMock()
+    mock_lecture.voice_gender = "male"
+
     mock_tts_result = TTSResult(audio_bytes=b"tts-audio", provider="elevenlabs", duration_seconds=1.2)
 
     with patch("app.tasks.render.SyncSessionLocal") as mock_session_cls, \
@@ -225,6 +231,8 @@ def test_e2e_render_slide_pipeline():
          patch("app.services.pipeline.cost_log.record"):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.one.return_value = mock_render
+        # render task 의 두 번째 query — Lecture lookup (first()) 도 명시 매핑.
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_lecture
         mock_session_cls.return_value = mock_db
 
         # Critical 7: caller_user_id 일치 시 통과 — instructor_id 그대로 전달
@@ -232,16 +240,17 @@ def test_e2e_render_slide_pipeline():
             args=[str(render_id), "안녕하세요, 테스트 스크립트입니다.", str(instructor_id)],
         ).get(propagate=True)
 
-    # TTS 호출 검증
-    mock_tts.assert_called_once_with("안녕하세요, 테스트 스크립트입니다.")
+    # TTS 호출 검증 — 0016 이후 gender 인자 함께 전달
+    mock_tts.assert_called_once_with("안녕하세요, 테스트 스크립트입니다.", gender="male")
 
     # S3 오디오 업로드 검증
     mock_s3_audio.assert_called_once_with(b"tts-audio", str(render_id))
 
-    # HeyGen 비디오 생성 검증
+    # HeyGen 비디오 생성 검증 — 0016 이후 gender 인자 함께 전달
     mock_heygen.assert_called_once_with(
         audio_url="https://s3/audio/test.mp3",
         avatar_id="avatar-test",
+        gender="male",
         callback_id=str(render_id),
     )
 

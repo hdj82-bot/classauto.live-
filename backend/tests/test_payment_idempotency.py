@@ -123,11 +123,15 @@ async def test_cors_preflight_max_age_is_86400(client):
     "blank_value",
     ["", " ", "\t", "\n   "],
 )
-def test_production_blank_stripe_price_basic_raises(blank_value, monkeypatch):
-    """STRIPE_PRICE_BASIC 가 빈 문자열/공백뿐이면 production 부팅 차단."""
-    # config 모듈을 새로 평가하지 않고 Settings 인스턴스를 직접 만든 뒤
-    # _validate_settings 를 흉내. 하지만 _validate_settings 는 모듈 스코프
-    # settings 를 참조하므로, 동등 검증을 위해 patch 후 직접 함수 호출.
+def test_production_blank_stripe_no_longer_raises(blank_value, monkeypatch):
+    """1단계 베타 정책 회귀: STRIPE_* 빈값이어도 production 부팅이 통과해야 함.
+
+    이전(0015 이전) 정책은 STRIPE_SECRET_KEY/WEBHOOK_SECRET/PRICE_BASIC/PRICE_PRO 를
+    _REQUIRED_IN_PROD 에 포함시켜 빈값 시 RuntimeError 로 부팅을 차단했다. 베타
+    무료 배포 단계에서는 결제 비활성이라 이 검증을 제거했다 — config.py 의
+    `_REQUIRED_IN_PROD` 가 다시 STRIPE_* 를 포함하도록 회귀하지 않았는지 확인.
+    실제 결제 차단은 app/api/v1/payment.py:_require_stripe() 가 503 으로 담당.
+    """
     from app.core import config as cfg
 
     fresh = Settings(
@@ -136,15 +140,15 @@ def test_production_blank_stripe_price_basic_raises(blank_value, monkeypatch):
         GOOGLE_OAUTH_CLIENT_ID="g_id",
         GOOGLE_OAUTH_CLIENT_SECRET="g_secret",
         HEYGEN_WEBHOOK_SECRET="h_sec",
-        STRIPE_SECRET_KEY="sk_live",
-        STRIPE_WEBHOOK_SECRET="whsec_x",
+        STRIPE_SECRET_KEY=blank_value,
+        STRIPE_WEBHOOK_SECRET=blank_value,
         STRIPE_PRICE_BASIC=blank_value,
-        STRIPE_PRICE_PRO="price_pro",
+        STRIPE_PRICE_PRO=blank_value,
         ANTHROPIC_API_KEY="anth_x",
     )
     monkeypatch.setattr(cfg, "settings", fresh)
-    with pytest.raises(RuntimeError, match="STRIPE_PRICE_BASIC"):
-        cfg._validate_settings()
+    # raise 하지 않으면 통과 — 명시적으로 호출해서 회귀 시 즉시 실패하도록.
+    cfg._validate_settings()
 
 
 def test_production_all_present_passes(monkeypatch):

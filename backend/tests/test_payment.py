@@ -269,7 +269,11 @@ async def test_webhook_unknown_event(db):
 
 @pytest.mark.asyncio
 async def test_checkout_endpoint(client, professor):
-    with patch("app.api.v1.payment.create_checkout_session", new_callable=AsyncMock) as mock_checkout:
+    # 1단계 베타 정책: STRIPE_SECRET_KEY 미설정이면 _require_stripe() 가 503 차단.
+    # 결제 정상 흐름을 검증하려면 키가 설정된 상태로 우회.
+    from app.core.config import settings
+    with patch.object(settings, "STRIPE_SECRET_KEY", "sk_test_dummy"), \
+         patch("app.api.v1.payment.create_checkout_session", new_callable=AsyncMock) as mock_checkout:
         mock_checkout.return_value = "https://checkout.stripe.com/test"
         resp = await client.post(
             "/api/v1/payment/checkout",
@@ -278,6 +282,19 @@ async def test_checkout_endpoint(client, professor):
         )
     assert resp.status_code == 200
     assert resp.json()["checkout_url"] == "https://checkout.stripe.com/test"
+
+
+@pytest.mark.asyncio
+async def test_checkout_blocked_when_stripe_disabled(client, professor):
+    """1단계 베타: STRIPE_SECRET_KEY 빈값이면 결제 엔드포인트는 503 으로 차단."""
+    from app.core.config import settings
+    with patch.object(settings, "STRIPE_SECRET_KEY", ""):
+        resp = await client.post(
+            "/api/v1/payment/checkout",
+            params={"plan": "BASIC"},
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 503
 
 
 @pytest.mark.asyncio
@@ -302,7 +319,10 @@ async def test_checkout_unauthorized(client):
 
 @pytest.mark.asyncio
 async def test_portal_endpoint(client, professor):
-    with patch("app.api.v1.payment.create_portal_session", new_callable=AsyncMock) as mock_portal:
+    # checkout 과 동일 — 503 가드 우회를 위해 STRIPE_SECRET_KEY 임시 설정.
+    from app.core.config import settings
+    with patch.object(settings, "STRIPE_SECRET_KEY", "sk_test_dummy"), \
+         patch("app.api.v1.payment.create_portal_session", new_callable=AsyncMock) as mock_portal:
         mock_portal.return_value = "https://billing.stripe.com/test"
         resp = await client.post(
             "/api/v1/payment/portal",
@@ -327,7 +347,11 @@ async def test_webhook_invalid_signature(client):
 
 @pytest.mark.asyncio
 async def test_stripe_webhook_missing_secret(client):
-    """STRIPE_WEBHOOK_SECRET 미설정(빈 문자열) 시 500 `Webhook not configured` 반환."""
+    """STRIPE_WEBHOOK_SECRET 미설정(빈 문자열) 시 503 `Webhook not configured` 반환.
+
+    1단계 베타에서 webhook secret 미구성을 외부 호출 차단 신호로 명시 — 500(서버 오류)
+    대신 503(서비스 미가용) 으로 반환해 Sentry 노이즈를 줄였다.
+    """
     from app.core.config import settings
     with patch.object(settings, "STRIPE_WEBHOOK_SECRET", ""):
         resp = await client.post(
@@ -335,4 +359,4 @@ async def test_stripe_webhook_missing_secret(client):
             content=b'{"type": "test"}',
             headers={"stripe-signature": "t=1,v1=abc"},
         )
-    assert resp.status_code in (400, 403, 500)
+    assert resp.status_code in (400, 403, 500, 503)
