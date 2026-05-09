@@ -1,10 +1,31 @@
+import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func, SmallInteger
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum as SAEnum,
+    ForeignKey,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+
+class VoiceGender(str, enum.Enum):
+    """강의 단위 아바타·보이스 성별 — HeyGen avatar / ElevenLabs voice 분기 키.
+
+    PlanType 과 동일하게 ``str + enum.Enum`` 쌍으로 두어 SAEnum 컬럼이 PG 에서
+    네이티브 enum 타입을 자동 생성하도록 한다. 신규 강의의 기본값은 ``male``.
+    """
+    male = "male"
+    female = "female"
 
 
 class Lecture(Base):
@@ -23,6 +44,14 @@ class Lecture(Base):
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     live_deadline_minutes: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     pipeline_task_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    # 강의 단위 아바타·보이스 성별. NULL 허용 X — 기본 male.
+    # services/pipeline/heygen.py:pick_avatar_id 와 elevenlabs_client.py:pick_voice_id 가 분기 키로 사용.
+    voice_gender: Mapped[VoiceGender] = mapped_column(
+        SAEnum(VoiceGender, name="voice_gender"),
+        nullable=False,
+        default=VoiceGender.male,
+        server_default=VoiceGender.male.value,
+    )
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

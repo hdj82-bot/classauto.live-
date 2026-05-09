@@ -53,8 +53,28 @@ class ElevenLabsServerError(ElevenLabsError):
 # ── 합성 (TTS) ───────────────────────────────────────────────────────────────
 
 
-def _voice_id_or_default(voice_id: str | None) -> str:
-    vid = (voice_id or settings.ELEVENLABS_VOICE_ID or "").strip()
+def pick_voice_id(gender: str | None = None) -> str:
+    """강의 성별 → ELEVENLABS_VOICE_ID_{MALE,FEMALE} 환경변수 매핑.
+
+    gender 가 ``"male"`` | ``"female"`` 이면 해당 ID, 비거나 None 이면 MALE 을 기본.
+    _MALE/_FEMALE 가 비어 있으면 deprecated ``ELEVENLABS_VOICE_ID`` 로 fallback —
+    1단계 단일 ID 운영 환경에서도 호출이 깨지지 않도록.
+    VoiceGender enum 도 .value 를 통해 str 로 비교되므로 그대로 받을 수 있다.
+    """
+    g = (str(gender) if gender is not None else "male").strip().lower()
+    if g == "female":
+        primary = settings.ELEVENLABS_VOICE_ID_FEMALE
+    else:
+        primary = settings.ELEVENLABS_VOICE_ID_MALE
+    vid = (primary or settings.ELEVENLABS_VOICE_ID or "").strip()
+    return vid
+
+
+def _voice_id_or_default(voice_id: str | None, gender: str | None = None) -> str:
+    """호출자가 ``voice_id`` 를 명시했으면 그것 우선(IVC cloned voice 등),
+    아니면 ``pick_voice_id(gender)`` 결과를 사용한다.
+    """
+    vid = (voice_id or pick_voice_id(gender) or "").strip()
     if not vid:
         raise ElevenLabsError(
             "ELEVENLABS_VOICE_ID 가 비어있고 voice_id 인자도 전달되지 않음"
@@ -75,6 +95,7 @@ async def synthesize(
     text: str,
     *,
     voice_id: str | None = None,
+    gender: str | None = None,
     model_id: str | None = None,
     output_format: str = "mp3_44100_128",
     voice_settings: dict[str, Any] | None = None,
@@ -83,11 +104,13 @@ async def synthesize(
     """ElevenLabs TTS 합성. 성공 시 mp3 audio bytes 반환.
 
     voice_id: Cloned voice (IVC) 를 사용하려면 user 의 elevenlabs_voice_id 를 전달.
-              None 이면 settings.ELEVENLABS_VOICE_ID (시스템 기본값) 사용.
+              None 이면 ``pick_voice_id(gender)`` 의 시스템 기본 voice 사용.
+    gender:   ``"male"`` | ``"female"`` — voice_id 가 None 일 때 _MALE/_FEMALE 분기 키.
+              None 이면 male.
     """
     if not (settings.ELEVENLABS_API_KEY or "").strip():
         raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
-    vid = _voice_id_or_default(voice_id)
+    vid = _voice_id_or_default(voice_id, gender)
     mid = (model_id or settings.ELEVENLABS_MODEL_ID).strip()
     payload_settings = voice_settings or _default_voice_settings()
 

@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.models.lecture import VoiceGender
+
 
 class LectureCreate(BaseModel):
     course_id: uuid.UUID
@@ -12,6 +14,10 @@ class LectureCreate(BaseModel):
     thumbnail_url: str | None = None
     order: int = Field(default=0, ge=0)
     expires_at: datetime | None = None
+    voice_gender: VoiceGender = Field(
+        default=VoiceGender.male,
+        description="HeyGen 아바타·ElevenLabs 보이스 성별. 'male' | 'female'. 기본 male.",
+    )
 
 
 class LectureUpdate(BaseModel):
@@ -22,6 +28,10 @@ class LectureUpdate(BaseModel):
     order: int | None = Field(None, ge=0)
     expires_at: datetime | None = None
     is_published: bool | None = None
+    voice_gender: VoiceGender | None = Field(
+        default=None,
+        description="변경 시 다음 렌더부터 적용. 기존 렌더된 영상은 재생성 전까지 유지.",
+    )
 
 
 class LectureResponse(BaseModel):
@@ -37,6 +47,7 @@ class LectureResponse(BaseModel):
     order: int
     expires_at: datetime | None
     is_published: bool
+    voice_gender: VoiceGender
     created_at: datetime
     updated_at: datetime
 

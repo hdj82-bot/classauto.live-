@@ -67,7 +67,11 @@ class Settings(BaseSettings):
     # ── HeyGen ──────────────────────────────────────────────────
     HEYGEN_API_KEY: str = ""
     HEYGEN_BASE_URL: str = "https://api.heygen.com"
+    # 단일 변수(HEYGEN_AVATAR_ID)는 deprecated alias — _MALE 의 fallback 으로만 사용.
+    # 신규 코드는 services/pipeline/heygen.py:pick_avatar_id(gender) 를 써야 함.
     HEYGEN_AVATAR_ID: str = ""
+    HEYGEN_AVATAR_ID_MALE: str = ""
+    HEYGEN_AVATAR_ID_FEMALE: str = ""
     HEYGEN_WEBHOOK_SECRET: str = ""
     HEYGEN_CALLBACK_URL: str = "http://localhost:8000/api/v1/webhooks/heygen"
     # 영상 1초당 USD 단가 — Creator 플랜 추정치(약 $0.50/min). 운영 시 실측값으로 교체.
@@ -76,7 +80,11 @@ class Settings(BaseSettings):
 
     # ── TTS: ElevenLabs (primary) ───────────────────────────────
     ELEVENLABS_API_KEY: str = ""
+    # 단일 변수(ELEVENLABS_VOICE_ID)는 deprecated alias — _MALE 의 fallback 으로만 사용.
+    # 신규 코드는 services/pipeline/elevenlabs_client.py:pick_voice_id(gender) 를 써야 함.
     ELEVENLABS_VOICE_ID: str = ""
+    ELEVENLABS_VOICE_ID_MALE: str = ""
+    ELEVENLABS_VOICE_ID_FEMALE: str = ""
     ELEVENLABS_MODEL_ID: str = "eleven_multilingual_v2"
 
     # ── TTS: Google Cloud (fallback) ────────────────────────────
@@ -129,12 +137,11 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+# 1단계(베타 무료 배포)는 결제 비활성화 — STRIPE_* 는 검증에서 제외.
+# 결제 엔드포인트는 STRIPE_SECRET_KEY 가 비어 있으면 런타임에 503 으로 차단된다
+# (app/api/v1/payment.py 의 _require_stripe). Phase 7 유료 전환 시 다시 추가.
 _REQUIRED_IN_PROD = [
     "HEYGEN_WEBHOOK_SECRET",
-    "STRIPE_SECRET_KEY",
-    "STRIPE_WEBHOOK_SECRET",
-    "STRIPE_PRICE_BASIC",
-    "STRIPE_PRICE_PRO",
     "ANTHROPIC_API_KEY",
 ]
 

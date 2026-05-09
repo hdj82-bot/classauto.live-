@@ -11,6 +11,7 @@ import type {
   PlanUsage,
   ScriptSegment,
   TtsProvider,
+  VoiceGender,
 } from "./studioTypes";
 
 interface Step3Props {
@@ -22,6 +23,8 @@ interface Step3Props {
   onSelectAvatar: (id: string) => void;
   ttsProvider: TtsProvider;
   onChangeTtsProvider: (p: TtsProvider) => void;
+  voiceGender: VoiceGender;
+  onChangeVoiceGender: (g: VoiceGender) => void;
   expiresAt: string | null;
   onChangeExpiresAt: (iso: string | null) => void;
   usage: PlanUsage;
@@ -43,6 +46,8 @@ export default function Step3AvatarVoice({
   onSelectAvatar,
   ttsProvider,
   onChangeTtsProvider,
+  voiceGender,
+  onChangeVoiceGender,
   expiresAt,
   onChangeExpiresAt,
   usage,
@@ -89,6 +94,53 @@ export default function Step3AvatarVoice({
           <h3 className="text-sm font-semibold text-gray-900 mb-3">
             {t("step3.voiceSection")}
           </h3>
+
+          {/* 성별 선택 — HEYGEN_AVATAR_ID_{MALE,FEMALE} / ELEVENLABS_VOICE_ID_{MALE,FEMALE}
+              매핑. Step4 의 approve 직전에 PATCH /api/lectures/{id} 로 백엔드 반영. */}
+          <fieldset
+            className="grid grid-cols-2 gap-2 mb-3"
+            aria-label={t("step3.voiceGenderLabel")}
+          >
+            <label
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition ${
+                voiceGender === "male"
+                  ? "border-indigo-500 bg-indigo-50"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <input
+                type="radio"
+                name="voiceGender"
+                value="male"
+                checked={voiceGender === "male"}
+                onChange={() => onChangeVoiceGender("male")}
+                className="sr-only"
+              />
+              <span className="text-xs font-medium text-gray-700">
+                {t("step3.voiceGenderMale")}
+              </span>
+            </label>
+            <label
+              className={`flex items-center justify-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition ${
+                voiceGender === "female"
+                  ? "border-indigo-500 bg-indigo-50"
+                  : "border-gray-200 hover:border-gray-300"
+              }`}
+            >
+              <input
+                type="radio"
+                name="voiceGender"
+                value="female"
+                checked={voiceGender === "female"}
+                onChange={() => onChangeVoiceGender("female")}
+                className="sr-only"
+              />
+              <span className="text-xs font-medium text-gray-700">
+                {t("step3.voiceGenderFemale")}
+              </span>
+            </label>
+          </fieldset>
+
           <fieldset
             className="grid grid-cols-1 sm:grid-cols-2 gap-2"
             aria-label={t("step3.ttsProviderLabel")}
