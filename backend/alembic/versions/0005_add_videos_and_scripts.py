@@ -20,11 +20,16 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ── enum 타입 ──────────────────────────────────────────────────────────────
-    op.execute(
-        "CREATE TYPE videostatus AS ENUM "
-        "('draft', 'pending_review', 'rendering', 'done', 'archived')"
-    )
+    # ── enum 타입 (idempotent — 이전 실패 잔재 안전 처리) ───────────────────────
+    # PG 의 CREATE TYPE 은 트랜잭션 ROLLBACK 으로 되돌려지지 않는 알려진 함정.
+    # DO $$ ... EXCEPTION 으로 감싸서 already exists 시에도 안전 통과.
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE videostatus AS ENUM
+                ('draft', 'pending_review', 'rendering', 'done', 'archived');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
     # ── videos 테이블 ──────────────────────────────────────────────────────────
     op.create_table(
