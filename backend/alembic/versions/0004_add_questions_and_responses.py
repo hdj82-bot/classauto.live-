@@ -9,8 +9,6 @@ Create Date: 2026-03-26 00:04:00.000000
 - responses 테이블 생성 (타임스탬프 검증 필드 포함)
 """
 from alembic import op
-import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
 
 revision = "0004"
 down_revision = "0003"
@@ -42,77 +40,43 @@ def upgrade() -> None:
         END $$;
     """)
 
-    # ── questions 테이블 ──────────────────────────────────────────────────────
-    op.create_table(
-        "questions",
-        sa.Column("id", sa.UUID(), primary_key=True),
-        sa.Column(
-            "lecture_id",
-            sa.UUID(),
-            sa.ForeignKey("lectures.id", ondelete="CASCADE"),
-            nullable=False,
-            index=True,
-        ),
-        sa.Column(
-            "assessment_type",
-            sa.Enum("formative", "summative", name="assessmenttype", create_type=False),
-            nullable=False,
-            index=True,
-        ),
-        sa.Column(
-            "question_type",
-            sa.Enum("multiple_choice", "short_answer", name="questiontype", create_type=False),
-            nullable=False,
-        ),
-        sa.Column(
-            "difficulty",
-            sa.Enum("easy", "medium", "hard", name="difficulty", create_type=False),
-            nullable=False,
-            server_default="medium",
-        ),
-        sa.Column("content", sa.Text(), nullable=False),
-        sa.Column("options", JSONB(), nullable=True),
-        sa.Column("correct_answer", sa.Text(), nullable=True),
-        sa.Column("explanation", sa.Text(), nullable=True),
-        sa.Column("timestamp_seconds", sa.Integer(), nullable=True),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-    )
+    # ── questions / responses 테이블 ───────────────────────────────────────────
+    # SQLAlchemy 2.x 의 sa.Enum 은 op.create_table 안에서 create_type=False 가
+    # 무시되고 자동으로 CREATE TYPE 을 시도해 위에서 만든 enum 과 충돌한다.
+    # raw SQL 로 테이블을 만들어 자동 동작을 완전 우회.
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS questions (
+            id UUID PRIMARY KEY,
+            lecture_id UUID NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+            assessment_type assessmenttype NOT NULL,
+            question_type questiontype NOT NULL,
+            difficulty difficulty NOT NULL DEFAULT 'medium',
+            content TEXT NOT NULL,
+            options JSONB,
+            correct_answer TEXT,
+            explanation TEXT,
+            timestamp_seconds INTEGER,
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_questions_lecture_id ON questions (lecture_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_questions_assessment_type ON questions (assessment_type);")
 
-    # ── responses 테이블 ──────────────────────────────────────────────────────
-    op.create_table(
-        "responses",
-        sa.Column("id", sa.UUID(), primary_key=True),
-        sa.Column(
-            "session_id",
-            sa.UUID(),
-            sa.ForeignKey("learning_sessions.id", ondelete="CASCADE"),
-            nullable=False,
-            index=True,
-        ),
-        sa.Column(
-            "question_id",
-            sa.UUID(),
-            sa.ForeignKey("questions.id", ondelete="CASCADE"),
-            nullable=False,
-            index=True,
-        ),
-        sa.Column("user_answer", sa.Text(), nullable=False),
-        sa.Column("is_correct", sa.Boolean(), nullable=True),
-        sa.Column("video_timestamp_seconds", sa.Integer(), nullable=False),
-        sa.Column("timestamp_valid", sa.Boolean(), nullable=False, server_default="true"),
-        sa.Column(
-            "responded_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-    )
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS responses (
+            id UUID PRIMARY KEY,
+            session_id UUID NOT NULL REFERENCES learning_sessions(id) ON DELETE CASCADE,
+            question_id UUID NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+            user_answer TEXT NOT NULL,
+            is_correct BOOLEAN,
+            video_timestamp_seconds INTEGER NOT NULL,
+            timestamp_valid BOOLEAN NOT NULL DEFAULT TRUE,
+            responded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_responses_session_id ON responses (session_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_responses_question_id ON responses (question_id);")
 
 
 def downgrade() -> None:

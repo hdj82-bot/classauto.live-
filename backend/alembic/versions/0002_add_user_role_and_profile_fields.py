@@ -17,7 +17,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # userrole Enum 타입 생성 (idempotent — 이전 실패 잔재 안전 처리)
+    # userrole Enum 타입 생성 (idempotent — 이전 실패 잔재 안전 처리).
     # PG 의 CREATE TYPE 은 트랜잭션 ROLLBACK 으로 되돌려지지 않는 알려진 함정.
     # DO $$ ... EXCEPTION 으로 감싸서 already exists 시에도 안전 통과.
     op.execute("""
@@ -27,19 +27,18 @@ def upgrade() -> None:
         END $$;
     """)
 
-    # users 테이블에 컬럼 추가
-    op.add_column("users", sa.Column(
-        "role",
-        sa.Enum("professor", "student", name="userrole"),
-        nullable=False,
-        server_default="student",
-    ))
+    # users 테이블에 컬럼 추가 — sa.Enum 의 SQLAlchemy 2.x 자동 CREATE TYPE
+    # 동작이 create_type=False 를 무시하는 함정이 있어, role 컬럼은 raw SQL 로 추가.
+    op.execute("""
+        ALTER TABLE users
+            ADD COLUMN role userrole NOT NULL DEFAULT 'student';
+    """)
     op.add_column("users", sa.Column("school", sa.String(200), nullable=True))
     op.add_column("users", sa.Column("department", sa.String(200), nullable=True))
     op.add_column("users", sa.Column("student_number", sa.String(50), nullable=True))
 
     # server_default 제거 (기존 데이터 마이그레이션 후 DEFAULT 불필요)
-    op.alter_column("users", "role", server_default=None)
+    op.execute("ALTER TABLE users ALTER COLUMN role DROP DEFAULT;")
 
 
 def downgrade() -> None:
