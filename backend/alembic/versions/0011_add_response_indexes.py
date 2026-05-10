@@ -19,7 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_index("ix_responses_question_id", "responses", ["question_id"])
+    # IF NOT EXISTS — 우리 raw SQL 변환 (PR #96) 으로 0004 시점에 이미 같은
+    # 이름 인덱스가 만들어진 환경에서도 안전 통과. 원본 op.create_index 는
+    # IF NOT EXISTS 를 지원 안 해 raw SQL 사용.
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_responses_question_id ON responses (question_id);"
+    )
 
 
 def downgrade() -> None:
