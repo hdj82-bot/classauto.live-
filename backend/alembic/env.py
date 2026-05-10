@@ -11,10 +11,35 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# 환경변수에서 DATABASE_URL을 읽어 alembic.ini의 sqlalchemy.url을 덮어씀
-database_url = os.environ.get("DATABASE_URL", "").replace(
-    "postgresql+asyncpg://", "postgresql://"
-)
+# 환경변수에서 마이그레이션용 sync URL 을 결정.
+#
+# 우선순위:
+#   1) DATABASE_URL_SYNC (psycopg2 호환 — Pooler 환경에서 권장)
+#   2) DATABASE_URL 의 +asyncpg 제거 + asyncpg 전용 옵션 제거 (fallback)
+#
+# 왜 옵션 제거가 필요한가:
+#   Supabase Pooler + asyncpg 조합에서 statement_cache_size=0 같은 옵션을
+#   DATABASE_URL 에 붙여야 런타임이 prepared statement 충돌 없이 동작한다.
+#   하지만 alembic 은 psycopg2(동기) 로 접속하는데 psycopg2 는 이 옵션을
+#   인식하지 못하고 ``invalid dsn: invalid connection option`` 으로 죽는다.
+#   안전을 위해 fallback 경로에서 명시적으로 제거.
+def _resolve_alembic_url() -> str:
+    sync_url = os.environ.get("DATABASE_URL_SYNC")
+    if sync_url:
+        return sync_url
+    raw = os.environ.get("DATABASE_URL", "")
+    url = raw.replace("postgresql+asyncpg://", "postgresql://")
+    if "?" in url:
+        base, query = url.split("?", 1)
+        keep = [
+            p for p in query.split("&")
+            if p and not p.startswith("statement_cache_size=")
+        ]
+        url = base + ("?" + "&".join(keep) if keep else "")
+    return url
+
+
+database_url = _resolve_alembic_url()
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
