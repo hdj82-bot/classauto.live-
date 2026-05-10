@@ -68,30 +68,40 @@ def upgrade() -> None:
     )
     op.execute("ALTER TABLE slide_embeddings ADD COLUMN embedding vector(1536) NOT NULL;")
 
-    # ── RenderStatus enum ────────────────────────────────────
-    render_status = sa.Enum("PENDING", "TTS_PROCESSING", "RENDERING", "UPLOADING", "READY", "FAILED", name="renderstatus")
-    render_status.create(op.get_bind(), checkfirst=True)
-
-    # ── video_renders ────────────────────────────────────────
-    op.create_table(
-        "video_renders",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("lecture_id", UUID(as_uuid=True), sa.ForeignKey("lectures.id", ondelete="CASCADE"), nullable=False, index=True),
-        sa.Column("instructor_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=False, index=True),
-        sa.Column("heygen_job_id", sa.String(255), unique=True, index=True),
-        sa.Column("avatar_id", sa.String(255), nullable=False),
-        sa.Column("tts_provider", sa.String(50), nullable=False, server_default="elevenlabs"),
-        sa.Column("audio_url", sa.String(1024)),
-        sa.Column("script_text", sa.Text()),
-        sa.Column("slide_number", sa.Integer()),
-        sa.Column("status", render_status, nullable=False, server_default="PENDING", index=True),
-        sa.Column("heygen_video_url", sa.String(1024)),
-        sa.Column("s3_video_url", sa.String(1024)),
-        sa.Column("error_message", sa.Text()),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("completed_at", sa.DateTime(timezone=True)),
-    )
+    # ── RenderStatus enum + video_renders 테이블 (raw SQL) ──────────────────
+    # SQLAlchemy 2.x sa.Enum 자동 CREATE TYPE 함정 우회. enum 미리 안전 생성 후
+    # 테이블도 raw SQL 로 만들어 SQLAlchemy 자동 동작 완전 우회.
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE renderstatus AS ENUM
+                ('PENDING', 'TTS_PROCESSING', 'RENDERING', 'UPLOADING', 'READY', 'FAILED');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS video_renders (
+            id UUID PRIMARY KEY,
+            lecture_id UUID NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+            instructor_id UUID NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+            heygen_job_id VARCHAR(255) UNIQUE,
+            avatar_id VARCHAR(255) NOT NULL,
+            tts_provider VARCHAR(50) NOT NULL DEFAULT 'elevenlabs',
+            audio_url VARCHAR(1024),
+            script_text TEXT,
+            slide_number INTEGER,
+            status renderstatus NOT NULL DEFAULT 'PENDING',
+            heygen_video_url VARCHAR(1024),
+            s3_video_url VARCHAR(1024),
+            error_message TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            completed_at TIMESTAMPTZ
+        );
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_video_renders_lecture_id ON video_renders (lecture_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_video_renders_instructor_id ON video_renders (instructor_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_video_renders_heygen_job_id ON video_renders (heygen_job_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_video_renders_status ON video_renders (status);")
 
     # ── render_cost_logs ─────────────────────────────────────
     op.create_table(
@@ -127,39 +137,48 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
 
-    # ── CostCategory enum ────────────────────────────────────
-    cost_category = sa.Enum("LLM_QA", "LLM_ASSESSMENT", "LLM_SUMMARY", "STT", "TTS", "OTHER", name="costcategory")
-    cost_category.create(op.get_bind(), checkfirst=True)
+    # ── CostCategory enum + platform_cost_logs (raw SQL, sa.Enum 우회) ──────
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE costcategory AS ENUM
+                ('LLM_QA', 'LLM_ASSESSMENT', 'LLM_SUMMARY', 'STT', 'TTS', 'OTHER');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS platform_cost_logs (
+            id UUID PRIMARY KEY,
+            lecture_id UUID NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+            category costcategory NOT NULL,
+            model VARCHAR(100),
+            input_tokens INTEGER DEFAULT 0,
+            output_tokens INTEGER DEFAULT 0,
+            cost_usd DOUBLE PRECISION DEFAULT 0,
+            memo TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_platform_cost_logs_lecture_id ON platform_cost_logs (lecture_id);")
 
-    # ── platform_cost_logs ───────────────────────────────────
-    op.create_table(
-        "platform_cost_logs",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("lecture_id", UUID(as_uuid=True), sa.ForeignKey("lectures.id", ondelete="CASCADE"), nullable=False, index=True),
-        sa.Column("category", cost_category, nullable=False),
-        sa.Column("model", sa.String(100)),
-        sa.Column("input_tokens", sa.Integer(), server_default="0"),
-        sa.Column("output_tokens", sa.Integer(), server_default="0"),
-        sa.Column("cost_usd", sa.Float(), server_default="0"),
-        sa.Column("memo", sa.Text()),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-
-    # ── PlanType enum ────────────────────────────────────────
-    plan_type = sa.Enum("FREE", "BASIC", "PRO", name="plantype")
-    plan_type.create(op.get_bind(), checkfirst=True)
-
-    # ── subscriptions ────────────────────────────────────────
-    op.create_table(
-        "subscriptions",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("user_id", UUID(as_uuid=True), sa.ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True),
-        sa.Column("plan", plan_type, nullable=False, server_default="FREE"),
-        sa.Column("started_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("expires_at", sa.DateTime(timezone=True)),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
+    # ── PlanType enum + subscriptions (raw SQL, sa.Enum 우회) ───────────────
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE plantype AS ENUM ('FREE', 'BASIC', 'PRO');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            id UUID PRIMARY KEY,
+            user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+            plan plantype NOT NULL DEFAULT 'FREE',
+            started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            expires_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_subscriptions_user_id ON subscriptions (user_id);")
 
     # ── script_translations ──────────────────────────────────
     op.create_table(
