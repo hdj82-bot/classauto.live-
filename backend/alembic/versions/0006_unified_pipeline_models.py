@@ -55,15 +55,18 @@ def upgrade() -> None:
     op.alter_column("learning_sessions", "started_at", nullable=True, server_default=None)
 
     # ── slide_embeddings ─────────────────────────────────────
+    # vector 컬럼은 op.create_table 에서 표현 불가 (sa.Column 안에 sa.Column
+    # 들어간 원본 코드는 SQLAlchemy 가 거부). 테이블 먼저 만들고 ALTER TABLE
+    # 로 pgvector 네이티브 타입 직접 추가.
     op.create_table(
         "slide_embeddings",
         sa.Column("id", sa.Integer(), autoincrement=True, primary_key=True),
         sa.Column("task_id", sa.String(64), nullable=False, index=True),
         sa.Column("slide_number", sa.Integer(), nullable=False),
         sa.Column("text_content", sa.Text(), nullable=False),
-        sa.Column("embedding", sa.Column("vector(1536)"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
+    op.execute("ALTER TABLE slide_embeddings ADD COLUMN embedding vector(1536) NOT NULL;")
 
     # ── RenderStatus enum ────────────────────────────────────
     render_status = sa.Enum("PENDING", "TTS_PROCESSING", "RENDERING", "UPLOADING", "READY", "FAILED", name="renderstatus")
