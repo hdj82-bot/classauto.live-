@@ -32,43 +32,21 @@ def upgrade() -> None:
     """)
 
     # ── videos 테이블 ──────────────────────────────────────────────────────────
-    op.create_table(
-        "videos",
-        sa.Column("id", sa.UUID(), primary_key=True),
-        sa.Column(
-            "lecture_id",
-            sa.UUID(),
-            sa.ForeignKey("lectures.id", ondelete="CASCADE"),
-            nullable=False,
-            index=True,
-        ),
-        sa.Column(
-            "status",
-            sa.Enum(
-                "draft", "pending_review", "rendering", "done", "archived",
-                name="videostatus",
-                create_type=False,
-            ),
-            nullable=False,
-            server_default="draft",
-            index=True,
-        ),
-        sa.Column("heygen_video_id", sa.String(255), nullable=True),
-        sa.Column("duration_seconds", sa.Integer(), nullable=True),
-        sa.Column("video_url", sa.String(1024), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-    )
+    # SQLAlchemy 2.x sa.Enum 자동 CREATE TYPE 함정 우회를 위해 raw SQL 사용.
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS videos (
+            id UUID PRIMARY KEY,
+            lecture_id UUID NOT NULL REFERENCES lectures(id) ON DELETE CASCADE,
+            status videostatus NOT NULL DEFAULT 'draft',
+            heygen_video_id VARCHAR(255),
+            duration_seconds INTEGER,
+            video_url VARCHAR(1024),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_videos_lecture_id ON videos (lecture_id);")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_videos_status ON videos (status);")
 
     # ── video_scripts 테이블 ───────────────────────────────────────────────────
     op.create_table(
