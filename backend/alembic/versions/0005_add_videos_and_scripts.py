@@ -62,7 +62,15 @@ def upgrade() -> None:
         # AI 최초 생성 원본 (불변)
         sa.Column("ai_segments", JSONB(), nullable=True),
         # 교수자가 편집 중인 세그먼트
-        sa.Column("segments", JSONB(), nullable=False, server_default="'[]'::jsonb"),
+        sa.Column(
+            "segments",
+            JSONB(),
+            nullable=False,
+            # sa.text 로 감싸야 SQLAlchemy 가 SQL expression 으로 인식.
+            # 문자열 그대로 두면 SQLAlchemy 2.x 가 따옴표를 추가 escape 해서
+            # 'INVALID JSON' 으로 PG 에 전달되어 syntax error 발생.
+            server_default=sa.text("'[]'::jsonb"),
+        ),
         sa.Column(
             "approved_at",
             sa.DateTime(timezone=True),
