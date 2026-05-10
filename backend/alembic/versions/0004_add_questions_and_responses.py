@@ -19,10 +19,28 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ── enum 타입 생성 ────────────────────────────────────────────────────────
-    op.execute("CREATE TYPE assessmenttype AS ENUM ('formative', 'summative')")
-    op.execute("CREATE TYPE questiontype AS ENUM ('multiple_choice', 'short_answer')")
-    op.execute("CREATE TYPE difficulty AS ENUM ('easy', 'medium', 'hard')")
+    # ── enum 타입 생성 (idempotent — 이전 실패 잔재 안전 처리) ──────────────────
+    # PG 의 CREATE TYPE 은 트랜잭션 ROLLBACK 으로 되돌려지지 않는 알려진 함정.
+    # 마이그레이션이 중간에 실패하면 enum 만 살아남아 다음 시도에서 already
+    # exists 로 무한 굴레. DO $$ ... EXCEPTION 으로 감싸서 안전 통과.
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE assessmenttype AS ENUM ('formative', 'summative');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE questiontype AS ENUM ('multiple_choice', 'short_answer');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE difficulty AS ENUM ('easy', 'medium', 'hard');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
     # ── questions 테이블 ──────────────────────────────────────────────────────
     op.create_table(

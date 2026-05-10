@@ -17,8 +17,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # userrole Enum 타입 생성
-    op.execute("CREATE TYPE userrole AS ENUM ('professor', 'student')")
+    # userrole Enum 타입 생성 (idempotent — 이전 실패 잔재 안전 처리)
+    # PG 의 CREATE TYPE 은 트랜잭션 ROLLBACK 으로 되돌려지지 않는 알려진 함정.
+    # DO $$ ... EXCEPTION 으로 감싸서 already exists 시에도 안전 통과.
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE userrole AS ENUM ('professor', 'student');
+        EXCEPTION WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
     # users 테이블에 컬럼 추가
     op.add_column("users", sa.Column(
