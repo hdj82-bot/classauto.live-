@@ -8,6 +8,16 @@ celery = Celery(
     "ifl_platform",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
+    # autodiscover_tasks 는 Django 컨벤션이라 app/tasks/tasks.py 만 찾는다.
+    # 우리 구조는 polling.py/cleanup.py/backup.py/render.py/pipeline.py 로 분산되어 있어
+    # include= 로 명시 등록해야 worker 가 task 를 받는다.
+    include=[
+        "app.tasks.polling",
+        "app.tasks.cleanup",
+        "app.tasks.backup",
+        "app.tasks.render",
+        "app.tasks.pipeline",
+    ],
 )
 
 celery.conf.update(
@@ -35,4 +45,4 @@ celery.conf.beat_schedule = {
     },
 }
 
-celery.autodiscover_tasks(["app.tasks"])
+# autodiscover_tasks 제거됨 — 위 include= 로 대체 (Django 스타일 tasks.py 탐색 회피)
