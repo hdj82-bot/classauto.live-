@@ -3,11 +3,14 @@
 import type { ReactNode } from "react";
 
 /**
- * 9-up "capability" 카드. 한 카드 = README 의 한 줄. PrincipleCard 와 비슷한
- * 톤이지만, 본 페이지는 4종 그라데이션을 한 페이지에서 모두 보여주려고 카드별
- * accent 를 명시적으로 받는다.
+ * 9-up "capability" 카드 — v2 라이트 톤.
+ *
+ * 한 카드 = README 의 한 줄. PrincipleCard 와 비슷한 톤이지만, 본 페이지는
+ * 4종 그라데이션을 한 페이지에서 모두 보여주려고 카드별 accent 를 명시적으로
+ * 받는다.
  *
  * accent → icon container gradient (icons.md §3 의 4종 + success).
+ * 카드 자체는 흰색 베이스, hover 시 골드 글로우.
  */
 export type FeatureAccent =
   | "electric"
@@ -16,12 +19,14 @@ export type FeatureAccent =
   | "pink"
   | "success";
 
+// 아이콘 컨테이너용 그라데이션 — 라이트 베이스에서도 명도 차이 확보를 위해
+// 색 강도를 조금 더 올림 (다크 톤 0.30 → 라이트 톤 0.85 채도).
 const ACCENT_BG: Record<FeatureAccent, string> = {
-  electric: "from-amber-400/30 to-amber-600/30",
-  violet: "from-violet-400/30 to-indigo-500/30",
-  cyan: "from-cyan-400/30 to-sky-500/30",
-  pink: "from-pink-400/30 to-rose-500/30",
-  success: "from-emerald-400/30 to-emerald-600/30",
+  electric: "linear-gradient(135deg, #FFB627 0%, #F59E0B 100%)",
+  violet: "linear-gradient(135deg, #A78BFA 0%, #6366F1 100%)",
+  cyan: "linear-gradient(135deg, #22D3EE 0%, #0EA5E9 100%)",
+  pink: "linear-gradient(135deg, #F472B6 0%, #EC4899 100%)",
+  success: "linear-gradient(135deg, #34D399 0%, #059669 100%)",
 };
 
 export default function FeatureCard({
@@ -40,10 +45,11 @@ export default function FeatureCard({
   return (
     <article
       data-testid={testId}
-      className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 transition motion-reduce:transition-none hover:bg-white/[0.04] hover:border-white/15"
+      className="group rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-6 transition motion-reduce:transition-none hover:border-[rgba(184,131,8,0.30)] hover:shadow-[0_8px_28px_rgba(255,182,39,0.10)] hover:-translate-y-0.5"
     >
       <div
-        className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 bg-gradient-to-br ${ACCENT_BG[accent]} text-white`}
+        className="w-11 h-11 rounded-xl flex items-center justify-center mb-4 text-white transition-transform duration-300 motion-reduce:transition-none group-hover:scale-110 group-hover:rotate-[-6deg]"
+        style={{ background: ACCENT_BG[accent] }}
         aria-hidden="true"
       >
         {typeof icon === "string" ? (
@@ -65,8 +71,12 @@ export default function FeatureCard({
           icon
         )}
       </div>
-      <h3 className="text-base font-semibold text-white mb-2">{title}</h3>
-      <p className="text-sm text-white/60 leading-relaxed">{description}</p>
+      <h3 className="text-base font-semibold text-[#0A0A0A] mb-2 tracking-tight">
+        {title}
+      </h3>
+      <p className="text-sm text-[rgba(10,10,10,0.62)] leading-relaxed">
+        {description}
+      </p>
     </article>
   );
 }

@@ -27,29 +27,34 @@ export default function ChangeLog({
     >
       <h2
         id={`${id}-heading`}
-        className="text-xl sm:text-2xl font-extrabold tracking-tight text-white mb-4"
+        className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#0A0A0A] mb-4"
+        style={{
+          fontFamily:
+            "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+          letterSpacing: "-0.025em",
+        }}
       >
         {t("common.changeHistoryTitle")}
       </h2>
 
       {entries.length === 0 ? (
-        <p className="text-sm text-white/60">
+        <p className="text-sm text-[rgba(10,10,10,0.62)]">
           {t("common.changeHistoryEmpty")}
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        <div className="overflow-x-auto rounded-xl border border-[rgba(10,10,10,0.08)]">
           <table className="w-full text-xs sm:text-sm border-collapse">
-            <thead className="bg-white/[0.03] text-white/85">
+            <thead className="bg-[#FAFAF7] text-[#0A0A0A]">
               <tr>
                 <th
                   scope="col"
-                  className="px-3 sm:px-4 py-2 text-left font-semibold border-b border-white/10 w-32 tabular-nums"
+                  className="px-3 sm:px-4 py-2 text-left font-semibold border-b border-[rgba(10,10,10,0.08)] w-32 tabular-nums"
                 >
                   {t("common.lastUpdatedLabel")}
                 </th>
                 <th
                   scope="col"
-                  className="px-3 sm:px-4 py-2 text-left font-semibold border-b border-white/10"
+                  className="px-3 sm:px-4 py-2 text-left font-semibold border-b border-[rgba(10,10,10,0.08)]"
                 >
                   {t("common.changeHistoryTitle")}
                 </th>
@@ -60,12 +65,12 @@ export default function ChangeLog({
                 <tr
                   key={entry.date + i}
                   data-testid={`legal-changelog-row-${i}`}
-                  className="border-b border-white/5 last:border-b-0 align-top"
+                  className="border-b border-[rgba(10,10,10,0.06)] last:border-b-0 align-top"
                 >
-                  <td className="px-3 sm:px-4 py-2 tabular-nums text-amber-300/90">
+                  <td className="px-3 sm:px-4 py-2 tabular-nums text-[#B88308] font-semibold">
                     {entry.date}
                   </td>
-                  <td className="px-3 sm:px-4 py-2 text-white/70 leading-relaxed">
+                  <td className="px-3 sm:px-4 py-2 text-[rgba(10,10,10,0.72)] leading-relaxed">
                     {entry.summary}
                   </td>
                 </tr>

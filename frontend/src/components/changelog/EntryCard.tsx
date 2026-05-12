@@ -40,19 +40,19 @@ export default function EntryCard({ entry }: EntryCardProps) {
       <div className="flex w-24 shrink-0 flex-col items-end pt-1">
         <span
           aria-hidden="true"
-          className="absolute left-[5.5rem] top-3 h-2.5 w-2.5 rounded-full border border-white/30"
+          className="absolute left-[5.5rem] top-3 h-2.5 w-2.5 rounded-full border border-[rgba(10,10,10,0.20)]"
           style={{ background: CATEGORY_COLOR[entry.category] }}
         />
-        <p className="text-xs font-semibold tabular-nums text-white/70">
+        <p className="text-xs font-semibold tabular-nums text-[#0A0A0A]">
           {entry.date}
         </p>
-        <p className="mt-0.5 text-[11px] tabular-nums text-white/40">
+        <p className="mt-0.5 text-[11px] tabular-nums text-[rgba(10,10,10,0.45)]">
           {t("labels.version")} {entry.version}
         </p>
       </div>
 
       {/* 본문 카드 */}
-      <div className="flex-1 rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+      <div className="flex-1 rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-5 shadow-[0_1px_2px_rgba(10,10,10,0.04)]">
         <header className="mb-2 flex flex-wrap items-center gap-2">
           <span
             className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider"
@@ -65,14 +65,14 @@ export default function EntryCard({ entry }: EntryCardProps) {
             {t(`filters.${entry.category}`)}
           </span>
         </header>
-        <h3 className="text-base font-semibold leading-snug text-white">
+        <h3 className="text-base font-semibold leading-snug text-[#0A0A0A]">
           {entry.title}
         </h3>
         {entry.bullets.length > 0 && (
-          <ul className="mt-3 space-y-1.5 text-sm leading-relaxed text-white/65">
+          <ul className="mt-3 space-y-1.5 text-sm leading-relaxed text-[rgba(10,10,10,0.65)]">
             {entry.bullets.map((b, i) => (
               <li key={i} className="flex gap-2">
-                <span aria-hidden="true" className="mt-1 text-white/30">
+                <span aria-hidden="true" className="mt-1 text-[rgba(10,10,10,0.30)]">
                   •
                 </span>
                 <span>{b}</span>
@@ -81,7 +81,7 @@ export default function EntryCard({ entry }: EntryCardProps) {
           </ul>
         )}
         {entry.prs && entry.prs.length > 0 && (
-          <p className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-white/45">
+          <p className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-[rgba(10,10,10,0.45)]">
             <span className="uppercase tracking-wider">
               {t("labels.relatedPr")}
             </span>
@@ -97,23 +97,21 @@ export default function EntryCard({ entry }: EntryCardProps) {
 
 function PrLink({ href, label }: { href: string; label: string }) {
   const isExternal = /^https?:\/\//.test(href);
+  const cls = "rounded-md border border-[rgba(10,10,10,0.10)] px-2 py-0.5 font-medium text-[rgba(10,10,10,0.72)] hover:border-[#B88308] hover:text-[#B88308] transition motion-reduce:transition-none";
   if (isExternal) {
     return (
       <a
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="rounded-md border border-white/10 px-2 py-0.5 font-medium text-white/75 hover:border-white/30 hover:text-white motion-reduce:transition-none"
+        className={cls}
       >
         {label}
       </a>
     );
   }
   return (
-    <Link
-      href={href}
-      className="rounded-md border border-white/10 px-2 py-0.5 font-medium text-white/75 hover:border-white/30 hover:text-white motion-reduce:transition-none"
-    >
+    <Link href={href} className={cls}>
       {label}
     </Link>
   );

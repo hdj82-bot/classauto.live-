@@ -2,8 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import MarketingShell from "./MarketingShell";
-import SectionHeader from "./SectionHeader";
+import LightMarketingShell from "./LightMarketingShell";
 import FormField from "./FormField";
 import { useMarketingI18n } from "./useMarketingI18n";
 import {
@@ -137,52 +136,77 @@ export default function BetaApplyContent() {
 
   if (submitted) {
     return (
-      <MarketingShell>
+      <LightMarketingShell>
         <section className="max-w-2xl mx-auto px-4 sm:px-6 py-24 text-center">
           <div
-            className="mx-auto w-14 h-14 rounded-full bg-amber-400/20 flex items-center justify-center text-amber-400 text-2xl mb-6"
+            className="mx-auto w-14 h-14 rounded-full flex items-center justify-center text-[#1A1A1A] text-2xl mb-6 font-bold"
+            style={{
+              background:
+                "linear-gradient(135deg, #FFC74D 0%, #FFB627 100%)",
+              boxShadow: "0 8px 24px rgba(255,182,39,0.30)",
+            }}
             aria-hidden="true"
           >
             ✓
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+          <h1
+            className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0A0A0A]"
+            style={{
+              fontFamily:
+                "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+              letterSpacing: "-0.025em",
+            }}
+          >
             {t("betaApply.successTitle")}
           </h1>
-          <p className="mt-4 text-white/70 leading-relaxed whitespace-pre-line">
+          <p className="mt-4 text-[rgba(10,10,10,0.72)] leading-relaxed whitespace-pre-line">
             {t("betaApply.successBody")}
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
             <Link
               href="/demo"
-              className="inline-flex justify-center rounded-xl bg-amber-400 text-black font-semibold px-5 py-2.5 text-sm hover:bg-amber-300 transition"
+              className="inline-flex justify-center rounded-xl bg-[#FFB627] text-[#1A1A1A] font-semibold px-5 py-2.5 text-sm hover:bg-[#FFC74D] transition motion-reduce:transition-none shadow-lg shadow-[rgba(255,182,39,0.30)]"
             >
               {t("betaApply.successCtaDemo")}
             </Link>
             <Link
               href="/"
-              className="inline-flex justify-center rounded-xl border border-white/15 px-5 py-2.5 text-sm text-white/90 hover:bg-white/5 transition"
+              className="inline-flex justify-center rounded-xl border border-[rgba(10,10,10,0.16)] px-5 py-2.5 text-sm text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none"
             >
               {t("betaApply.successCtaHome")}
             </Link>
           </div>
         </section>
-      </MarketingShell>
+      </LightMarketingShell>
     );
   }
 
   return (
-    <MarketingShell>
-      <section className="max-w-2xl mx-auto px-4 sm:px-6 pt-16 sm:pt-20 pb-10">
-        <SectionHeader
-          eyebrow={t("betaApply.hero.eyebrow")}
-          title={t("betaApply.hero.title")}
-          subtitle={t("betaApply.hero.subtitle")}
-        />
+    <LightMarketingShell>
+      <section className="max-w-2xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-10 text-center">
+        <p className="text-[11px] sm:text-xs font-semibold tracking-[0.22em] text-[#B88308] uppercase mb-5">
+          {t("betaApply.hero.eyebrow")}
+        </p>
+        <h1
+          className="text-[#0A0A0A] tracking-tight leading-[1.08]"
+          style={{
+            fontFamily:
+              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+            fontSize: "clamp(32px, 5vw, 56px)",
+            fontWeight: 800,
+            letterSpacing: "-0.035em",
+          }}
+        >
+          {t("betaApply.hero.title")}
+        </h1>
+        <p className="mt-5 text-base sm:text-lg text-[rgba(10,10,10,0.62)] max-w-xl mx-auto leading-relaxed">
+          {t("betaApply.hero.subtitle")}
+        </p>
       </section>
 
       <section className="max-w-2xl mx-auto px-4 sm:px-6 pb-24">
         <div
-          className="mb-6 rounded-xl border border-amber-400/30 bg-amber-400/[0.06] px-4 py-3 text-xs text-amber-200/90 leading-relaxed"
+          className="mb-6 rounded-xl border border-[rgba(184,131,8,0.30)] bg-[rgba(255,182,39,0.06)] px-4 py-3 text-xs text-[#7A5500] leading-relaxed"
           role="note"
         >
           {t("betaApply.mockNotice")}
@@ -191,7 +215,7 @@ export default function BetaApplyContent() {
         {submitError && (
           <div
             role="alert"
-            className="mb-6 rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+            className="mb-6 rounded-xl border border-[#FCA5A5] bg-[#FEF2F2] px-4 py-3 text-sm text-[#DC2626]"
           >
             {submitError}
           </div>
@@ -200,7 +224,7 @@ export default function BetaApplyContent() {
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.02] p-6 sm:p-8"
+          className="space-y-5 rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-6 sm:p-8 shadow-[0_4px_16px_rgba(10,10,10,0.04)]"
         >
           <FormField
             label={t("betaApply.fields.name")}
@@ -330,18 +354,24 @@ export default function BetaApplyContent() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-xl bg-amber-400 px-5 py-3 text-sm font-semibold text-black transition hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-xl px-5 py-3 text-sm font-semibold text-[#1A1A1A] transition motion-reduce:transition-none disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: submitting
+                  ? "#E89E0B"
+                  : "linear-gradient(135deg, #FFC74D 0%, #FFB627 50%, #E89E0B 100%)",
+                boxShadow: "0 8px 24px rgba(255,182,39,0.30)",
+              }}
             >
               {submitting
                 ? t("betaApply.submittingButton")
                 : t("betaApply.submitButton")}
             </button>
-            <p className="mt-3 text-center text-xs text-white/40">
+            <p className="mt-3 text-center text-xs text-[rgba(10,10,10,0.45)]">
               {t("betaApply.footerNote")}
             </p>
           </div>
         </form>
       </section>
-    </MarketingShell>
+    </LightMarketingShell>
   );
 }

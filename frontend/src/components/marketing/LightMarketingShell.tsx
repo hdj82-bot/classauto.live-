@@ -1,0 +1,197 @@
+"use client";
+
+import Link from "next/link";
+import { useI18n, type Locale } from "@/contexts/I18nContext";
+import { useMarketingI18n } from "./useMarketingI18n";
+
+/**
+ * v2 라이트 마케팅 셸 — 라이트 베이지(#FAFAF7) + 골드(#FFB627) dual surface
+ * 정책에 맞춘 상단/하단 chrome. `/use-cases`, `/trust`, `/security`,
+ * `/beta-apply`, `/contact`, `/changelog`, `/help`, `/privacy`, `/terms` 에서
+ * 공통으로 얹는다.
+ *
+ * 기존 `MarketingShell` (다크 + amber) 은 v1 흔적이라 v2 마케팅 페이지에서
+ * 더는 쓰지 않는다. 그러나 다른 워크트리·페이지가 의존할 가능성이 있어
+ * 본 파일과 별도로 그대로 둔다.
+ *
+ * 설계 근거:
+ *   - docs/design-system/colors.md §1 — 메인 마케팅은 라이트 베이스
+ *   - docs/design-system/typography.md §1 — 본문 Pretendard, 헤딩 Paperlogy
+ *   - docs/design-system/icons.md — IFL 로고 폐기, CA 워드마크만 사용
+ *   - docs/planning/01-pricing-policy.md §5 — 헤더 CTA 는 /beta-apply
+ *
+ * 토큰 fallback: 창 1 (design-system) 워크트리에서 `--font-display` /
+ * `--font-body` 변수를 globals.css 에 정의하기 전까지도 동작하도록
+ * fontFamily 에 한 줄 fallback 체인을 명시. 토큰이 들어오면 자동 우선 적용.
+ */
+export default function LightMarketingShell({
+  children,
+  /** 상단 우측 추가 CTA (기본 = 베타 신청). 페이지에서 override 가능. */
+  topCta,
+  /** 본문 영역 배경을 살짝 다른 톤(`#F6F4EE`)으로 그라데이션 처리할지. */
+  variant = "default",
+}: {
+  children: React.ReactNode;
+  topCta?: { href: string; label: string };
+  variant?: "default" | "soft";
+}) {
+  const { t } = useMarketingI18n();
+  const { locale, setLocale } = useI18n();
+
+  const finalCta =
+    topCta ?? { href: "/beta-apply", label: t("common.ctaApplyBeta") };
+
+  return (
+    <div
+      className="min-h-screen text-[#0A0A0A] antialiased"
+      style={{
+        backgroundColor: variant === "soft" ? "#F6F4EE" : "#FAFAF7",
+        fontFamily:
+          "var(--font-body, 'Pretendard Variable'), 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif",
+      }}
+    >
+      <header className="sticky top-0 z-30 backdrop-blur-md bg-[#FAFAF7]/80 border-b border-[rgba(10,10,10,0.08)]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center gap-2 group"
+            aria-label="ClassAuto home"
+          >
+            <span
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold tracking-wider text-[#1A1A1A] transition-transform group-hover:scale-105 motion-reduce:transition-none"
+              style={{
+                background:
+                  "linear-gradient(135deg, #FFC74D 0%, #FFB627 50%, #E89E0B 100%)",
+              }}
+              aria-hidden="true"
+            >
+              CA
+            </span>
+            <span
+              className="text-sm font-semibold tracking-wide hidden sm:inline"
+              style={{
+                fontFamily:
+                  "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+              }}
+            >
+              ClassAuto
+            </span>
+          </Link>
+
+          <nav
+            className="hidden md:flex items-center gap-1 text-sm text-[rgba(10,10,10,0.62)]"
+            aria-label={t("common.primaryNavLabel")}
+          >
+            <Link href="/features" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
+              {t("common.navFeatures")}
+            </Link>
+            <Link href="/pricing" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
+              {t("common.navPricing")}
+            </Link>
+            <Link href="/use-cases" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
+              {t("common.navUseCases")}
+            </Link>
+            <Link href="/demo" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
+              {t("common.navDemo")}
+            </Link>
+          </nav>
+
+          <div className="flex items-center gap-2">
+            <label htmlFor="marketing-lang" className="sr-only">
+              {t("common.languageSwitcherLabel")}
+            </label>
+            <select
+              id="marketing-lang"
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as Locale)}
+              className="text-xs bg-transparent border border-[rgba(10,10,10,0.12)] rounded-lg px-2 py-1 text-[rgba(10,10,10,0.62)] outline-none focus:border-[#B88308] hover:border-[rgba(10,10,10,0.24)] transition motion-reduce:transition-none"
+            >
+              <option value="ko">한국어</option>
+              <option value="en">English</option>
+            </select>
+
+            <Link
+              href={finalCta.href}
+              className="inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 transition motion-reduce:transition-none"
+              style={{
+                backgroundColor: "#FFB627",
+                color: "#1A1A1A",
+                boxShadow: "0 1px 2px rgba(184,131,8,0.18)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "#FFC74D";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "#FFB627";
+              }}
+            >
+              {finalCta.label}
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <main>{children}</main>
+
+      <footer className="border-t border-[rgba(10,10,10,0.08)] mt-24 bg-white/40">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+          <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span
+                className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold text-[#1A1A1A]"
+                style={{
+                  background:
+                    "linear-gradient(135deg, #FFC74D 0%, #FFB627 100%)",
+                }}
+                aria-hidden="true"
+              >
+                CA
+              </span>
+              <span className="text-sm font-semibold text-[#0A0A0A]">
+                ClassAuto
+              </span>
+            </div>
+
+            <nav
+              className="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-5 gap-y-2 text-xs text-[rgba(10,10,10,0.62)]"
+              aria-label={t("common.footerNavLabel")}
+            >
+              <Link href="/use-cases" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navUseCases")}
+              </Link>
+              <Link href="/trust" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navTrust")}
+              </Link>
+              <Link href="/security" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navSecurity")}
+              </Link>
+              <Link href="/beta-apply" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navBeta")}
+              </Link>
+              <Link href="/contact" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navContact")}
+              </Link>
+              <Link href="/changelog" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navChangelog")}
+              </Link>
+              <Link href="/help" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navHelp")}
+              </Link>
+              <Link href="/privacy" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navPrivacy")}
+              </Link>
+              <Link href="/terms" className="hover:text-[#0A0A0A] transition motion-reduce:transition-none">
+                {t("common.navTerms")}
+              </Link>
+            </nav>
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-[rgba(10,10,10,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-[rgba(10,10,10,0.45)]">
+            <p>{t("common.footerCopyright")}</p>
+            <p className="tabular-nums">{t("common.footerTagline")}</p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

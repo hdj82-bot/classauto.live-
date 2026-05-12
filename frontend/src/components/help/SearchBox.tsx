@@ -27,7 +27,7 @@ export default function SearchBox({ query, onQueryChange }: SearchBoxProps) {
       </label>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-white/40"
+        className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-[rgba(10,10,10,0.40)]"
       >
         <svg
           className="h-4 w-4"
@@ -52,14 +52,14 @@ export default function SearchBox({ query, onQueryChange }: SearchBoxProps) {
         onChange={(e) => onQueryChange(e.target.value)}
         placeholder={t("search.placeholder")}
         aria-label={t("search.label")}
-        className="w-full rounded-2xl border border-white/10 bg-white/[0.03] py-3.5 pl-11 pr-12 text-sm text-white placeholder:text-white/35 outline-none focus:border-amber-400/60 focus:bg-white/[0.05]"
+        className="w-full rounded-2xl border border-[rgba(10,10,10,0.10)] bg-white py-3.5 pl-11 pr-12 text-sm text-[#0A0A0A] placeholder:text-[rgba(10,10,10,0.40)] outline-none focus:border-[#B88308] focus:ring-2 focus:ring-[rgba(255,182,39,0.30)] transition motion-reduce:transition-none"
       />
       {query.length > 0 && (
         <button
           type="button"
           onClick={() => onQueryChange("")}
           aria-label={t("search.clear")}
-          className="absolute inset-y-0 right-0 flex items-center pr-4 text-xs font-medium text-white/50 hover:text-white"
+          className="absolute inset-y-0 right-0 flex items-center pr-4 text-xs font-medium text-[rgba(10,10,10,0.55)] hover:text-[#0A0A0A] transition motion-reduce:transition-none"
         >
           {t("search.clear")}
         </button>

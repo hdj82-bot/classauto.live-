@@ -55,7 +55,7 @@ export default function CategoryFilter({
           label={t("filters.all")}
           count={counts.all}
           glyph="●"
-          color="rgba(255,255,255,0.55)"
+          color="rgba(10,10,10,0.45)"
         />
       </li>
       {CHANGELOG_CATEGORIES.map((c) => (
@@ -96,8 +96,8 @@ function Chip({
       onClick={onClick}
       className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition motion-reduce:transition-none ${
         isActive
-          ? "border-amber-400/60 bg-amber-400/10 text-white"
-          : "border-white/10 bg-white/[0.02] text-white/65 hover:border-white/20 hover:text-white"
+          ? "border-[#B88308] bg-[rgba(255,182,39,0.10)] text-[#0A0A0A]"
+          : "border-[rgba(10,10,10,0.08)] bg-white text-[rgba(10,10,10,0.65)] hover:border-[rgba(10,10,10,0.20)] hover:text-[#0A0A0A]"
       }`}
     >
       <span aria-hidden="true" className="text-sm leading-none" style={{ color }}>
@@ -105,7 +105,7 @@ function Chip({
       </span>
       <span>{label}</span>
       <span
-        className="rounded-full bg-white/[0.05] px-1.5 py-0.5 text-[10px] tabular-nums text-white/55"
+        className="rounded-full bg-[#FAFAF7] border border-[rgba(10,10,10,0.05)] px-1.5 py-0.5 text-[10px] tabular-nums text-[rgba(10,10,10,0.55)]"
         aria-hidden="true"
       >
         {count}

@@ -37,23 +37,23 @@ export default function LimitsTable() {
     <section
       data-testid="pricing-limits-table"
       aria-labelledby="pricing-limits-heading"
-      className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 sm:p-7"
+      className="rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-5 sm:p-7 shadow-[0_1px_2px_rgba(10,10,10,0.04)]"
     >
       <header className="mb-5 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h2
             id="pricing-limits-heading"
-            className="text-xl font-semibold tracking-tight text-white"
+            className="text-xl font-semibold tracking-tight text-[#0A0A0A]"
           >
             {t("limitsTable.title")}
           </h2>
-          <p className="text-sm text-white/55 mt-1">
+          <p className="text-sm text-[rgba(10,10,10,0.55)] mt-1">
             {t("limitsTable.subtitle")}
           </p>
         </div>
         <Link
           href={t("limitsTable.linkHref")}
-          className="text-xs font-medium text-amber-300 hover:text-amber-200 self-start sm:self-auto"
+          className="text-xs font-medium text-[#B88308] hover:text-[#E89E0B] self-start sm:self-auto transition motion-reduce:transition-none"
         >
           {t("limitsTable.linkLabel")} →
         </Link>
@@ -62,7 +62,7 @@ export default function LimitsTable() {
       <div className="overflow-x-auto -mx-2 px-2">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
-            <tr className="text-left text-white/45 text-xs uppercase tracking-wider">
+            <tr className="text-left text-[rgba(10,10,10,0.45)] text-xs uppercase tracking-wider">
               <th scope="col" className="pb-3 pr-3 font-medium">
                 {t("limitsTable.headerCategory")}
               </th>
@@ -73,7 +73,7 @@ export default function LimitsTable() {
                   data-testid={`limits-col-${p}`}
                   className={[
                     "pb-3 px-3 font-medium text-center",
-                    p === "basic" ? "text-amber-300" : "text-white/70",
+                    p === "basic" ? "text-[#B88308]" : "text-[rgba(10,10,10,0.72)]",
                   ].join(" ")}
                 >
                   {t(`plans.${p}.name`)}
@@ -86,11 +86,11 @@ export default function LimitsTable() {
               <tr
                 key={row}
                 data-testid={`limits-row-${row}`}
-                className="border-t border-white/5"
+                className="border-t border-[rgba(10,10,10,0.06)]"
               >
                 <th
                   scope="row"
-                  className="py-3 pr-3 text-left font-normal text-white/70"
+                  className="py-3 pr-3 text-left font-normal text-[rgba(10,10,10,0.72)]"
                 >
                   {t(`limitsTable.rowLabels.${row}`)}
                 </th>
@@ -101,8 +101,8 @@ export default function LimitsTable() {
                     className={[
                       "py-3 px-3 text-center tabular-nums",
                       p === "basic"
-                        ? "text-white bg-[rgba(255,182,39,0.03)]"
-                        : "text-white/80",
+                        ? "text-[#0A0A0A] bg-[rgba(255,182,39,0.06)]"
+                        : "text-[rgba(10,10,10,0.78)]",
                     ].join(" ")}
                     style={{ fontVariantNumeric: "tabular-nums" }}
                   >
@@ -115,7 +115,7 @@ export default function LimitsTable() {
         </table>
       </div>
 
-      <p className="text-[11px] text-white/35 mt-4">
+      <p className="text-[11px] text-[rgba(10,10,10,0.40)] mt-4">
         {t("limitsTable.footnote")}
       </p>
     </section>

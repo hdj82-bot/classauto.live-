@@ -77,11 +77,11 @@ export default function LimitsModal({ open, plan, onClose }: Props) {
         data-testid="pricing-limits-modal-backdrop"
       />
 
-      <div className="relative w-full max-w-2xl rounded-2xl border border-white/10 bg-[#141414] p-6 sm:p-8 shadow-xl">
+      <div className="relative w-full max-w-2xl rounded-2xl border border-[rgba(10,10,10,0.10)] bg-white p-6 sm:p-8 shadow-[0_24px_60px_rgba(10,10,10,0.18)]">
         <header className="flex items-start justify-between gap-4 mb-5">
           <h2
             id="pricing-limits-modal-title"
-            className="text-lg font-semibold text-white"
+            className="text-lg font-semibold text-[#0A0A0A]"
           >
             {t("limitsModal.title", { plan: planName })}
           </h2>
@@ -91,7 +91,7 @@ export default function LimitsModal({ open, plan, onClose }: Props) {
             onClick={onClose}
             aria-label={t("limitsModal.close")}
             data-testid="pricing-limits-modal-close"
-            className="text-white/50 hover:text-white transition w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/5"
+            className="text-[rgba(10,10,10,0.50)] hover:text-[#0A0A0A] transition motion-reduce:transition-none w-8 h-8 rounded-lg flex items-center justify-center hover:bg-black/5"
           >
             <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path
@@ -106,7 +106,7 @@ export default function LimitsModal({ open, plan, onClose }: Props) {
         <div className="overflow-x-auto -mx-2 px-2">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-white/45 text-xs uppercase tracking-wider">
+              <tr className="text-left text-[rgba(10,10,10,0.45)] text-xs uppercase tracking-wider">
                 <th scope="col" className="pb-3 pr-3 font-medium">
                   {t("limitsTable.headerCategory")}
                 </th>
@@ -116,7 +116,7 @@ export default function LimitsModal({ open, plan, onClose }: Props) {
                     scope="col"
                     className={[
                       "pb-3 px-3 font-medium text-center",
-                      p === plan ? "text-amber-300" : "text-white/60",
+                      p === plan ? "text-[#B88308]" : "text-[rgba(10,10,10,0.60)]",
                     ].join(" ")}
                   >
                     {t(`plans.${p}.name`)}
@@ -126,10 +126,10 @@ export default function LimitsModal({ open, plan, onClose }: Props) {
             </thead>
             <tbody>
               {ROW_KEYS.map((row) => (
-                <tr key={row} className="border-t border-white/5">
+                <tr key={row} className="border-t border-[rgba(10,10,10,0.06)]">
                   <th
                     scope="row"
-                    className="py-3 pr-3 text-left font-normal text-white/70"
+                    className="py-3 pr-3 text-left font-normal text-[rgba(10,10,10,0.72)]"
                   >
                     {t(`limitsTable.rowLabels.${row}`)}
                   </th>
@@ -139,8 +139,8 @@ export default function LimitsModal({ open, plan, onClose }: Props) {
                       className={[
                         "py-3 px-3 text-center tabular-nums",
                         p === plan
-                          ? "text-amber-300 bg-amber-400/10"
-                          : "text-white/70",
+                          ? "text-[#B88308] bg-[rgba(255,182,39,0.10)] font-semibold"
+                          : "text-[rgba(10,10,10,0.72)]",
                       ].join(" ")}
                       style={{ fontVariantNumeric: "tabular-nums" }}
                     >
@@ -153,7 +153,7 @@ export default function LimitsModal({ open, plan, onClose }: Props) {
           </table>
         </div>
 
-        <p className="text-xs text-white/40 mt-5 leading-relaxed">
+        <p className="text-xs text-[rgba(10,10,10,0.40)] mt-5 leading-relaxed">
           {t("limitsModal.footer")}
         </p>
       </div>

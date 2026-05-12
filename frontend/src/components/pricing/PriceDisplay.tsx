@@ -41,7 +41,7 @@ export default function PriceDisplay({
       <div className={`flex items-baseline gap-2 ${className}`}>
         <span
           data-testid="price-display-free"
-          className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-white"
+          className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-[#0A0A0A]"
           style={{ fontVariantNumeric: "tabular-nums" }}
         >
           {freeLabel ?? t("plans.free.priceFree")}
@@ -52,16 +52,16 @@ export default function PriceDisplay({
 
   return (
     <div className={`flex items-baseline gap-1.5 ${className}`}>
-      <span className="text-xl text-white/60">₩</span>
+      <span className="text-xl text-[rgba(10,10,10,0.55)]">₩</span>
       <span
         data-testid="price-display-amount"
         data-cycle={cycle}
-        className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-white transition-opacity duration-300 ease-out motion-reduce:transition-none"
+        className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-[#0A0A0A] transition-opacity duration-300 ease-out motion-reduce:transition-none"
         style={{ fontVariantNumeric: "tabular-nums" }}
       >
         {formatKrw(value)}
       </span>
-      <span className="text-sm text-white/50">{t("priceUnit")}</span>
+      <span className="text-sm text-[rgba(10,10,10,0.50)]">{t("priceUnit")}</span>
     </div>
   );
 }

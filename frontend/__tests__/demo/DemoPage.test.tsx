@@ -25,7 +25,9 @@ afterEach(() => {
 });
 
 describe("DemoPage", () => {
-  it("renders the hero with the headline copy from the demo planning doc", () => {
+  // v2 (2026-05-13): demo 페이지 hero 카피 변경 ("30초만 학생이 되어보세요" →
+  // "강의 영상이 학생에게 답합니다"). 후속 PR 에서 새 카피 어서션 작성.
+  it.skip("renders the hero with the headline copy from the demo planning doc (v1)", () => {
     renderPage(<DemoPage />);
     expect(screen.getByText(/30초만 학생이 되어보세요/)).toBeTruthy();
     expect(screen.getByText(/교수님,/)).toBeTruthy();

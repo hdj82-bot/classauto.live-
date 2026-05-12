@@ -3,16 +3,16 @@
 import type { Block, SectionData } from "./types";
 
 /**
- * 한 법무 조항을 렌더하는 표시 전용 컴포넌트.
+ * 한 법무 조항을 렌더하는 표시 전용 컴포넌트 — v2 라이트 톤.
  *
  * 입력은 `useLegalI18n().tValue<SectionData>(...)` 로 dictionary 에서 꺼낸
  * 구조화 객체 + anchor id. 모든 자식 노드가 i18n 텍스트라 페이지 본체는
  * 콘텐츠를 한 줄도 들고 있지 않게 됨 → 한·영 동수 작성이 자연스럽게 검증됨.
  *
  * 디자인:
- *   - h2 는 `Paperlogy 7 Bold` (typography.md §1) — Tailwind `font-extrabold tracking-tight` 로 근사.
- *   - 본문은 Pretendard 16px / leading-relaxed (다크 베이스에서 가독성 우선).
- *   - 표는 골드 outline 으로 강조 (의미적 컬러 없음 — 마케팅 페이지와 동일 톤).
+ *   - h2 는 Paperlogy fallback chain — `font-extrabold tracking-tight`
+ *   - 본문은 Pretendard 16px / leading-relaxed (라이트 베이스 가독성)
+ *   - 표는 골드 outline 으로 강조 (의미적 컬러 없음)
  */
 export default function LegalSection({
   id,
@@ -30,18 +30,23 @@ export default function LegalSection({
       aria-labelledby={`${id}-heading`}
     >
       <header className="mb-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-400/80 mb-2">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#B88308] mb-2">
           {data.number}
         </p>
         <h2
           id={`${id}-heading`}
-          className="text-xl sm:text-2xl font-extrabold tracking-tight text-white"
+          className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#0A0A0A]"
+          style={{
+            fontFamily:
+              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+            letterSpacing: "-0.025em",
+          }}
         >
           {data.title}
         </h2>
       </header>
 
-      <div className="space-y-4 text-sm sm:text-[15px] text-white/75 leading-relaxed">
+      <div className="space-y-4 text-sm sm:text-[15px] text-[rgba(10,10,10,0.78)] leading-relaxed">
         {data.blocks.map((block, idx) => (
           <BlockRenderer key={idx} block={block} />
         ))}
@@ -56,7 +61,7 @@ function BlockRenderer({ block }: { block: Block }) {
       return <p>{block.text}</p>;
     case "ul":
       return (
-        <ul className="list-disc pl-5 space-y-1.5 marker:text-amber-400/60">
+        <ul className="list-disc pl-5 space-y-1.5 marker:text-[rgba(184,131,8,0.70)]">
           {block.items.map((item, i) => (
             <li key={i}>{item}</li>
           ))}
@@ -64,7 +69,7 @@ function BlockRenderer({ block }: { block: Block }) {
       );
     case "ol":
       return (
-        <ol className="list-decimal pl-5 space-y-1.5 marker:text-amber-400/70 marker:font-semibold">
+        <ol className="list-decimal pl-5 space-y-1.5 marker:text-[#B88308] marker:font-semibold">
           {block.items.map((item, i) => (
             <li key={i}>{item}</li>
           ))}
@@ -72,15 +77,15 @@ function BlockRenderer({ block }: { block: Block }) {
       );
     case "table":
       return (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        <div className="overflow-x-auto rounded-xl border border-[rgba(10,10,10,0.08)]">
           <table className="w-full text-xs sm:text-sm border-collapse">
-            <thead className="bg-white/[0.03] text-white/85">
+            <thead className="bg-[#FAFAF7] text-[#0A0A0A]">
               <tr>
                 {block.head.map((cell, i) => (
                   <th
                     key={i}
                     scope="col"
-                    className="px-3 sm:px-4 py-2 text-left font-semibold border-b border-white/10"
+                    className="px-3 sm:px-4 py-2 text-left font-semibold border-b border-[rgba(10,10,10,0.08)]"
                   >
                     {cell}
                   </th>
@@ -91,12 +96,12 @@ function BlockRenderer({ block }: { block: Block }) {
               {block.rows.map((row, ri) => (
                 <tr
                   key={ri}
-                  className="border-b border-white/5 last:border-b-0 align-top"
+                  className="border-b border-[rgba(10,10,10,0.06)] last:border-b-0 align-top"
                 >
                   {row.map((cell, ci) => (
                     <td
                       key={ci}
-                      className="px-3 sm:px-4 py-2 text-white/70 leading-relaxed"
+                      className="px-3 sm:px-4 py-2 text-[rgba(10,10,10,0.72)] leading-relaxed"
                     >
                       {cell}
                     </td>

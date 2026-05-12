@@ -27,10 +27,10 @@ export default function BillingToggle({ cycle, onChange }: Props) {
       aria-label={t("billingToggle.ariaLabel")}
       className="inline-flex items-center gap-3"
     >
-      <span className="text-xs uppercase tracking-wider text-white/45">
+      <span className="text-xs uppercase tracking-wider text-[rgba(10,10,10,0.45)]">
         {t("billingToggle.label")}
       </span>
-      <div className="inline-flex rounded-full bg-white/[0.04] border border-white/10 p-1">
+      <div className="inline-flex rounded-full bg-white border border-[rgba(10,10,10,0.08)] p-1 shadow-[0_1px_2px_rgba(10,10,10,0.04)]">
         <button
           type="button"
           aria-pressed={!isAnnual}
@@ -39,8 +39,8 @@ export default function BillingToggle({ cycle, onChange }: Props) {
           className={[
             "px-4 py-1.5 text-xs font-semibold rounded-full transition motion-reduce:transition-none",
             !isAnnual
-              ? "bg-white text-black shadow-sm"
-              : "text-white/60 hover:text-white",
+              ? "bg-[#1A1A1A] text-white shadow-sm"
+              : "text-[rgba(10,10,10,0.60)] hover:text-[#0A0A0A]",
           ].join(" ")}
         >
           {t("billingToggle.monthly")}
@@ -53,15 +53,20 @@ export default function BillingToggle({ cycle, onChange }: Props) {
           className={[
             "px-4 py-1.5 text-xs font-semibold rounded-full transition flex items-center gap-1.5 motion-reduce:transition-none",
             isAnnual
-              ? "bg-amber-400 text-black shadow-sm"
-              : "text-white/60 hover:text-white",
+              ? "text-[#1A1A1A] shadow-sm"
+              : "text-[rgba(10,10,10,0.60)] hover:text-[#0A0A0A]",
           ].join(" ")}
+          style={
+            isAnnual
+              ? { backgroundColor: "#FFB627" }
+              : undefined
+          }
         >
           {t("billingToggle.annual")}
           <span
             className={[
               "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-              isAnnual ? "bg-black/15 text-black" : "bg-amber-400/15 text-amber-300",
+              isAnnual ? "bg-black/15 text-[#1A1A1A]" : "bg-[rgba(255,182,39,0.18)] text-[#B88308]",
             ].join(" ")}
           >
             {t("billingToggle.annualNote")}

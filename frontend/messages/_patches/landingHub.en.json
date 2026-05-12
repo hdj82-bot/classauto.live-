@@ -1,5 +1,82 @@
 {
   "landingHub": {
+    "meta": {
+      "title": "ClassAuto · AI flipped-learning platform",
+      "description": "Turn one PPT into a two-way lecture video. The video answers student questions and keeps attention with interstitial quizzes. A flipped-learning tool built by scholars, for scholars."
+    },
+    "heroV2": {
+      "eyebrow": "INTERACTIVE FLIPPED LEARNING",
+      "titleLead": "The lecture video",
+      "titleHan": "答",
+      "titleHanReading": "answers",
+      "titleTail": "back",
+      "titleSub": "to your students",
+      "subtitle": "Start from a single PPT. AI shapes the script, an avatar delivers the lecture, and the video answers student questions on the spot. Five-minute interstitial quizzes keep attention. One video, twelve minutes.",
+      "metaChip1": "PPT → 12 min",
+      "metaChip2": "RAG-bounded Q&A",
+      "metaChip3": "No ads · auto-deleted on graduation",
+      "primaryCta": "Apply for the beta",
+      "secondaryCta": "See the demo first",
+      "primaryCtaSub": "Phase-2 beta · free for academia",
+      "identityNote": "A tool built by scholars, for scholars"
+    },
+    "differentiators": {
+      "eyebrow": "Four differences",
+      "title": "Why ClassAuto isn't just another EdTech app",
+      "subtitle": "Guardrails are baked in so students stay on-task.",
+      "items": {
+        "rag": {
+          "title": "RAG-bounded Q&A",
+          "description": "Off-topic questions are rejected by the AI (similarity threshold 0.7). The chatbot can't be used as a general search engine."
+        },
+        "limit": {
+          "title": "Limit transparency",
+          "description": "ClassAuto runs on a flat subscription — never on usage-based pricing. Every screen surfaces your videos-per-month and active-learner count against the plan limit."
+        },
+        "antiCheat": {
+          "title": "Anti-cheat by default",
+          "description": "Interstitial quizzes, concurrent-playback limits, and macro detection are on by default. Video learning isn't decoupled from assessment."
+        },
+        "studentData": {
+          "title": "Student data protection",
+          "description": "Never used for ads. Auto-deleted on graduation, and students can request immediate deletion at any time."
+        }
+      }
+    },
+    "stepsV2": {
+      "eyebrow": "How a video is made",
+      "title": "Start from a single PPT",
+      "subtitle": "All you do is upload the PPT and review the script. The AI pipeline handles the rest.",
+      "step1": {
+        "label": "1",
+        "title": "Upload PPT",
+        "description": "Drop in your existing slides. Eight slides finish embedding in about a minute."
+      },
+      "step2": {
+        "label": "2",
+        "title": "Refine the AI script",
+        "description": "The AI drafts per-slide narration. You tweak a sentence or two via inline diff."
+      },
+      "step3": {
+        "label": "3",
+        "title": "Render and share",
+        "description": "TTS and avatar synthesis run automatically. Once done, you get a lecture link and QR code to share with students."
+      }
+    },
+    "trustStrip": {
+      "eyebrow": "Where it started",
+      "anchor": "Kyonggi University · Prof. Ha Du-jin (anchor case)",
+      "more": "See other departments →",
+      "betaBadge": "Phase-2 beta · free for academic use"
+    },
+    "ctaV2": {
+      "title": "Cut a semester's prep down to a week",
+      "subtitle": "During the Phase-2 beta, faculty at universities use the full Pro feature set for free.",
+      "primaryButton": "Apply for the beta",
+      "secondaryButton": "See pricing",
+      "tertiaryButton": "Talk to sales (institutions)",
+      "note": "We respond within 1–2 business days via your school email."
+    },
     "heroAccent": "AI",
     "heroAccentSuffix": "-era classroom",
     "stats": {

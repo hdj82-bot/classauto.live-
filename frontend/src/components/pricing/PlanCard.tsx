@@ -15,11 +15,11 @@ interface Props {
 }
 
 /**
- * 플랜 카드 — 다크 톤 + 골드 강조 (highlighted=true 만).
+ * 플랜 카드 v2 — 라이트 베이지 + 골드 강조 (highlighted=true 만).
  *
  * - Pretendard tabular-nums 가격 (typography.md §1)
  * - CTA 1개만 — Basic 은 골드 채움, 나머지는 outline (colors.md §3)
- * - 카드 hover 시 글로우 (colors.md §7 학습자 영역 글로우 톤을 다크 카드에 적용)
+ * - 카드 hover 시 골드 글로우 (colors.md §7)
  * - 마스코트 등장 X (마스코트는 학습자 화면 한정)
  */
 export default function PlanCard({
@@ -35,7 +35,7 @@ export default function PlanCard({
   const ctaLabel = t(`plans.${plan.id}.ctaLabel`);
   const ctaHref = t(`plans.${plan.id}.ctaHref`);
   const ctaNote = t(`plans.${plan.id}.ctaNote`);
-  const showCtaNote = ctaNote !== `plans.${plan.id}.ctaNote`; // i18n miss 시 키 그대로 반환됨
+  const showCtaNote = ctaNote !== `plans.${plan.id}.ctaNote`;
 
   const annualHint =
     cycle === "annual" && plan.pricing.annualSavingsKrw > 0
@@ -49,22 +49,35 @@ export default function PlanCard({
       className={[
         "relative rounded-2xl p-6 sm:p-7 flex flex-col gap-5 transition-shadow duration-300 motion-reduce:transition-none",
         highlighted
-          ? "bg-gradient-to-b from-amber-400/10 to-transparent border border-amber-400/40 shadow-[0_0_24px_rgba(255,182,39,0.15)]"
-          : "bg-white/[0.02] border border-white/10 hover:border-white/20",
+          ? "bg-gradient-to-b from-[rgba(255,182,39,0.10)] to-[rgba(255,182,39,0.02)] border border-[rgba(184,131,8,0.45)] shadow-[0_8px_32px_rgba(255,182,39,0.18)]"
+          : "bg-white border border-[rgba(10,10,10,0.08)] hover:border-[rgba(10,10,10,0.20)] hover:shadow-[0_4px_16px_rgba(10,10,10,0.05)]",
       ].join(" ")}
     >
       {highlighted && (
         <span
           data-testid={`plan-card-${plan.id}-popular`}
-          className="absolute -top-3 left-6 inline-flex items-center rounded-full bg-amber-400 text-black px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase"
+          className="absolute -top-3 left-6 inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase"
+          style={{
+            backgroundColor: "#FFB627",
+            color: "#1A1A1A",
+            boxShadow: "0 4px 12px rgba(255,182,39,0.40)",
+          }}
         >
           {t("popularBadge")}
         </span>
       )}
 
       <header>
-        <h3 className="text-lg font-semibold text-white">{name}</h3>
-        <p className="mt-1 text-xs text-white/50">{tagline}</p>
+        <h3
+          className="text-lg font-semibold text-[#0A0A0A] tracking-tight"
+          style={{
+            fontFamily:
+              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+          }}
+        >
+          {name}
+        </h3>
+        <p className="mt-1 text-xs text-[rgba(10,10,10,0.50)]">{tagline}</p>
       </header>
 
       <PriceDisplay
@@ -74,23 +87,25 @@ export default function PlanCard({
       />
 
       {plan.pricing.monthlyKrw === 0 ? (
-        <p className="text-xs text-white/40 -mt-3">{t("plans.free.perMonthLabel")}</p>
+        <p className="text-xs text-[rgba(10,10,10,0.40)] -mt-3">
+          {t("plans.free.perMonthLabel")}
+        </p>
       ) : (
         annualHint && (
           <p
             data-testid={`plan-card-${plan.id}-savings`}
-            className="text-xs text-amber-300 -mt-3"
+            className="text-xs text-[#B88308] -mt-3 font-medium"
           >
             {annualHint}
           </p>
         )
       )}
 
-      <ul className="space-y-2 text-sm text-white/75 leading-relaxed">
+      <ul className="space-y-2 text-sm text-[rgba(10,10,10,0.78)] leading-relaxed">
         {features.map((f, i) => (
           <li key={i} className="flex items-start gap-2">
             <svg
-              className={`w-4 h-4 shrink-0 mt-0.5 ${highlighted ? "text-amber-400" : "text-white/40"}`}
+              className={`w-4 h-4 shrink-0 mt-0.5 ${highlighted ? "text-[#B88308]" : "text-[rgba(10,10,10,0.40)]"}`}
               viewBox="0 0 20 20"
               fill="currentColor"
               aria-hidden="true"
@@ -111,16 +126,33 @@ export default function PlanCard({
           href={ctaHref}
           data-testid={`plan-card-${plan.id}-cta`}
           className={[
-            "inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold transition",
+            "inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold transition motion-reduce:transition-none",
             highlighted
-              ? "bg-amber-400 text-black hover:bg-amber-300 shadow-[0_8px_24px_rgba(255,182,39,0.25)]"
-              : "border border-white/20 text-white hover:border-white/40 hover:bg-white/[0.04]",
+              ? "shadow-[0_8px_24px_rgba(255,182,39,0.30)]"
+              : "border border-[rgba(10,10,10,0.18)] text-[#0A0A0A] hover:border-[rgba(10,10,10,0.36)] hover:bg-black/5",
           ].join(" ")}
+          style={
+            highlighted
+              ? { backgroundColor: "#FFB627", color: "#1A1A1A" }
+              : undefined
+          }
+          onMouseEnter={
+            highlighted
+              ? (e) => (e.currentTarget.style.backgroundColor = "#FFC74D")
+              : undefined
+          }
+          onMouseLeave={
+            highlighted
+              ? (e) => (e.currentTarget.style.backgroundColor = "#FFB627")
+              : undefined
+          }
         >
           {ctaLabel}
         </Link>
         {showCtaNote && (
-          <p className="text-[11px] text-white/40 text-center">{ctaNote}</p>
+          <p className="text-[11px] text-[rgba(10,10,10,0.40)] text-center">
+            {ctaNote}
+          </p>
         )}
 
         <button
@@ -128,7 +160,7 @@ export default function PlanCard({
           onClick={() => onOpenLimits(plan.id)}
           data-testid={`plan-card-${plan.id}-view-limits`}
           aria-label={t("viewLimitsAria", { plan: name })}
-          className="inline-flex items-center justify-center gap-1 text-xs font-medium text-white/60 hover:text-white transition mt-1"
+          className="inline-flex items-center justify-center gap-1 text-xs font-medium text-[rgba(10,10,10,0.60)] hover:text-[#0A0A0A] transition motion-reduce:transition-none mt-1"
         >
           {t("viewLimits")}
           <svg

@@ -56,18 +56,19 @@ export default function CategoryGrid({
               type="button"
               onClick={() => onSelect(id)}
               aria-pressed={isActive}
-              className={`group relative flex h-full w-full flex-col rounded-2xl border bg-white/[0.02] p-6 text-left transition motion-reduce:transition-none hover:bg-white/[0.05] ${
+              className={`group relative flex h-full w-full flex-col rounded-2xl border bg-white p-6 text-left transition motion-reduce:transition-none hover:shadow-[0_8px_28px_rgba(255,182,39,0.10)] hover:-translate-y-0.5 ${
                 isActive
-                  ? "border-amber-400/60"
-                  : "border-white/10 hover:border-white/20"
+                  ? "border-[#B88308] shadow-[0_4px_16px_rgba(255,182,39,0.18)]"
+                  : "border-[rgba(10,10,10,0.08)] hover:border-[rgba(184,131,8,0.30)]"
               }`}
             >
               <span
                 aria-hidden="true"
                 className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-xl"
                 style={{
-                  background: "rgba(255, 255, 255, 0.04)",
+                  background: "#FAFAF7",
                   color: TINTS[id],
+                  boxShadow: "inset 0 0 0 1px rgba(10,10,10,0.04)",
                 }}
               >
                 <svg
@@ -84,13 +85,13 @@ export default function CategoryGrid({
                   />
                 </svg>
               </span>
-              <h3 className="text-base font-semibold text-white">
+              <h3 className="text-base font-semibold text-[#0A0A0A] tracking-tight">
                 {t(`categories.${id}.title`)}
               </h3>
-              <p className="mt-1 text-sm leading-relaxed text-white/55">
+              <p className="mt-1 text-sm leading-relaxed text-[rgba(10,10,10,0.55)]">
                 {t(`categories.${id}.description`)}
               </p>
-              <span className="mt-4 inline-flex items-center gap-2 text-[11px] font-medium text-white/40">
+              <span className="mt-4 inline-flex items-center gap-2 text-[11px] font-medium text-[rgba(10,10,10,0.50)]">
                 <span
                   aria-hidden="true"
                   className="inline-block h-1.5 w-1.5 rounded-full"

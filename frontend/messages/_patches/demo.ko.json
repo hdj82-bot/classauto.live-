@@ -14,6 +14,38 @@
       "metaMobile": "모바일 가능",
       "scrollHint": "아래에서 분야를 선택하세요"
     },
+    "heroV2": {
+      "eyebrow": "DEMO · 학생 시점 화면",
+      "headlineLead": "강의 영상이",
+      "headlineAccent": "학생에게 답합니다.",
+      "subtitle": "PPT 한 장으로 만든 AI 강의 영상이, 학생의 질문에 실시간으로 답하고 중간 퀴즈로 집중을 유지합니다. 교수님은 학습 데이터로 대면 수업을 개선하실 수 있습니다. 지금 학생들이 만나는 화면을 직접 확인해보세요.",
+      "observerBadge": "AI 교수자와의 양방향 학습",
+      "metaTime": "약 3분 소요",
+      "metaQuestions": "질문 3건 무료",
+      "metaMobile": "모바일 가능",
+      "primaryCta": "▶ 학생 화면 확인하기",
+      "secondaryCta": "기능 자세히 보기"
+    },
+    "fieldSelectV2": {
+      "title": "두 영상 중 하나를 골라보세요",
+      "subtitle": "분야는 무관합니다. 각 영상은 5분 클립 안에 추천 질문, 출처 인용, 인터스티셜 퀴즈, 강의 외 질문 거부까지 시연됩니다.",
+      "social": {
+        "tagline": "A · LIBERAL ARTS",
+        "label": "인문계열 · 5분 클립",
+        "title": "중국어문법의 이해 (把자문)",
+        "subtitle": "把자문(把字句)의 어순 규칙을 중심으로 — 추천 질문, 출처 인용, 그리고 강의 외 질문 거부까지 차례로 시연됩니다.",
+        "elements": "8 슬라이드 · 2 추천 질문 · 1 퀴즈",
+        "start": "시작하기"
+      },
+      "natural": {
+        "tagline": "B · NATURAL SCIENCE",
+        "label": "자연계열 · 5분 클립",
+        "title": "광합성의 원리",
+        "subtitle": "빛 에너지가 화학 에너지로 전환되는 과정을 중심으로 — 추천 질문, 출처 인용, 그리고 강의 외 질문 거부까지 차례로 시연됩니다.",
+        "elements": "8 슬라이드 · 2 추천 질문 · 1 퀴즈",
+        "start": "시작하기"
+      }
+    },
     "fieldSelect": {
       "title": "어느 분야를 체험하시겠어요?",
       "subtitle": "선택한 분야에 맞춘 5분 강의 클립과 AI 튜터를 즉시 보여드립니다.",

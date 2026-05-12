@@ -34,7 +34,7 @@ export default function MorphIcon() {
       {/* 가운데 화살표 */}
       <svg
         viewBox="0 0 32 32"
-        className="fhub-morph-arrow w-8 h-8 text-amber-300/80"
+        className="fhub-morph-arrow w-8 h-8 text-[#B88308]"
         aria-hidden="true"
         focusable="false"
       >
@@ -79,13 +79,13 @@ function Stage({
   return (
     <div className="relative flex flex-col items-center gap-2">
       <div
-        className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center justify-center overflow-hidden"
+        className="relative w-28 h-28 sm:w-32 sm:h-32 rounded-2xl border border-[rgba(10,10,10,0.08)] bg-[#FAFAF7] flex items-center justify-center overflow-hidden shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
         role="img"
         aria-label={ariaLabel}
       >
         <span className={className}>{children}</span>
       </div>
-      <span className="text-[11px] uppercase tracking-[0.18em] text-white/50 font-semibold">
+      <span className="text-[11px] uppercase tracking-[0.18em] text-[rgba(10,10,10,0.50)] font-semibold">
         {label}
       </span>
     </div>

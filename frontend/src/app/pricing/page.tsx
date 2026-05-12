@@ -4,9 +4,11 @@ import PricingContent from "@/components/pricing/PricingContent";
 /**
  * /pricing 페이지.
  *
- * 콘텐츠는 dark/gold 마케팅 셸 (`MarketingShell`) 위에 렌더되는 client
+ * 콘텐츠는 light/gold 마케팅 셸 (`LightMarketingShell`) 위에 렌더되는 client
  * component (`PricingContent`) 가 모두 처리한다.  본 라우트는 메타데이터만
  * 들고 있다 — `/trust`, `/use-cases` 등 다른 마케팅 라우트와 동일한 패턴.
+ *
+ * v2 (2026-05) 부터 라이트 베이지(#FAFAF7) + 골드(#FFB627) 톤으로 전환.
  *
  * 정책 출처:
  *   - docs/planning/01-pricing-policy.md (Free/Basic/Pro 가격·편수·MAU)

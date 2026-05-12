@@ -116,20 +116,20 @@ export default function ProgressShimmer() {
   return (
     <div
       ref={ref}
-      className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6"
+      className="rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-5 sm:p-6 shadow-[0_1px_2px_rgba(10,10,10,0.04)]"
       data-testid="features-progress-card"
       data-progress={rounded}
       data-complete={isComplete}
     >
       <div className="flex items-center justify-between gap-3 mb-3">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-white/45 font-semibold">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-[rgba(10,10,10,0.45)] font-semibold">
           {t("progress.demoTitle")}
         </p>
         <button
           type="button"
           onClick={handleReplay}
           data-testid="features-progress-replay"
-          className="text-[11px] font-medium rounded-lg bg-white/5 hover:bg-white/10 text-white/70 hover:text-white px-2.5 py-1 transition motion-reduce:transition-none"
+          className="text-[11px] font-medium rounded-lg bg-black/5 hover:bg-black/10 text-[rgba(10,10,10,0.72)] hover:text-[#0A0A0A] px-2.5 py-1 transition motion-reduce:transition-none"
         >
           {t("progress.controlPlay")}
         </button>
@@ -141,7 +141,7 @@ export default function ProgressShimmer() {
         aria-valuemax={100}
         aria-valuenow={rounded}
         aria-valuetext={t("progress.ariaProgress", { value: rounded })}
-        className="relative h-2.5 w-full rounded-full bg-white/10 overflow-hidden"
+        className="relative h-2.5 w-full rounded-full bg-[rgba(10,10,10,0.08)] overflow-hidden"
       >
         <div
           className="fhub-shimmer h-full rounded-full transition-[width] duration-150 ease-out motion-reduce:transition-none"
@@ -163,13 +163,13 @@ export default function ProgressShimmer() {
               aria-current={active ? "step" : undefined}
               className={[
                 "flex flex-col items-center gap-1.5",
-                passed ? "text-amber-300" : "text-white/30",
+                passed ? "text-[#B88308]" : "text-[rgba(10,10,10,0.30)]",
               ].join(" ")}
             >
               <span
                 className={[
                   "w-2 h-2 rounded-full",
-                  passed ? "bg-amber-400" : "bg-white/15",
+                  passed ? "bg-[#FFB627]" : "bg-[rgba(10,10,10,0.12)]",
                 ].join(" ")}
                 aria-hidden="true"
               />
@@ -214,12 +214,12 @@ export default function ProgressShimmer() {
                 strokeLinejoin="round"
               />
             </svg>
-            <span className="text-sm font-semibold text-emerald-300">
+            <span className="text-sm font-semibold text-[#059669]">
               {t("progress.completeBadge")}
             </span>
           </>
         ) : (
-          <span className="text-xs text-white/55 tabular-nums">
+          <span className="text-xs text-[rgba(10,10,10,0.55)] tabular-nums">
             {rounded}% / 100%
           </span>
         )}

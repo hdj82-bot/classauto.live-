@@ -65,27 +65,27 @@ export default function ModuleQuad() {
         role="group"
         tabIndex={0}
         aria-label={t("modules.altModuleQuad")}
-        className="grid grid-cols-2 gap-3 outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60 rounded-2xl"
+        className="grid grid-cols-2 gap-3 outline-none focus-visible:ring-2 focus-visible:ring-[#FFB627]/60 rounded-2xl"
       >
         {quad.map((part) => (
           <div
             key={part.key}
             data-testid={`features-module-part-${part.key}`}
             data-pos={part.pos}
-            className={`fhub-module-part fhub-module-part--${part.pos} rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5`}
+            className={`fhub-module-part fhub-module-part--${part.pos} rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-4 sm:p-5 shadow-[0_1px_2px_rgba(10,10,10,0.04)]`}
           >
             <ModuleIcon gradient={part.gradient} variant={part.pos} />
-            <h3 className="mt-3 text-sm font-semibold text-white">
+            <h3 className="mt-3 text-sm font-semibold text-[#0A0A0A] tracking-tight">
               {part.label}
             </h3>
-            <p className="mt-1 text-xs leading-relaxed text-white/55">
+            <p className="mt-1 text-xs leading-relaxed text-[rgba(10,10,10,0.55)]">
               {part.desc}
             </p>
           </div>
         ))}
       </div>
       <figcaption
-        className="mt-3 text-center text-[11px] uppercase tracking-[0.18em] text-white/40"
+        className="mt-3 text-center text-[11px] uppercase tracking-[0.18em] text-[rgba(10,10,10,0.40)]"
         aria-hidden="true"
       >
         {t("modules.hint")}
