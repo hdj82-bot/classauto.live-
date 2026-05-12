@@ -1,0 +1,2688 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClassAuto · 하두진 교수님 · 把자문 입문</title>
+
+<style>/*
+Copyright (c) 2021 Kil Hyung-jin, with Reserved Font Name Pretendard.
+https://github.com/orioncactus/pretendard
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+This license is copied below, and is also available with a FAQ at:
+http://scripts.sil.org/OFL
+*/
+
+@font-face {
+	font-family: 'Pretendard Variable';
+	font-weight: 45 920;
+	font-style: normal;
+	font-display: swap;
+	src: url("7f811ad1-c86e-47d7-a56d-b9783f139df7") format('woff2-variations');
+}
+</style>
+
+
+
+<style>
+  @font-face {
+    font-family: 'Paperlogy';
+    src: url("c356561b-b53b-4af1-89ad-69dd1aac887a") format('truetype');
+    font-weight: 700; font-display: swap;
+  }
+  @font-face {
+    font-family: 'Paperlogy';
+    src: url("7364dc6f-e5bc-4b33-9957-2b66b8bb5ad3") format('truetype');
+    font-weight: 800; font-display: swap;
+  }
+
+  /* ─────────── Tokens ─────────── */
+  :root {
+    /* Light tokens (screens 1-3a) */
+    --bg-light: #FAFAF7;
+    --bg-card-light: #FFFFFF;
+    --text-light: #0A0A0A;
+    --text-light-muted: rgba(10, 10, 10, 0.62);
+    --text-light-subtle: rgba(10, 10, 10, 0.40);
+    --text-light-faint: rgba(10, 10, 10, 0.22);
+    --line-light: rgba(10, 10, 10, 0.08);
+    --line-light-strong: rgba(10, 10, 10, 0.14);
+
+    /* Dark tokens (screens 3b-4) */
+    --bg-dark: #0A0A0A;
+    --bg-dark-soft: #141414;
+    --bg-card-dark: #1A1A1A;
+    --text-dark: #FFFFFF;
+    --text-dark-muted: rgba(255, 255, 255, 0.62);
+    --text-dark-subtle: rgba(255, 255, 255, 0.40);
+    --line-dark: rgba(255, 255, 255, 0.08);
+    --line-dark-strong: rgba(255, 255, 255, 0.14);
+
+    --gold: #FFB627;
+    --gold-bright: #FFC74D;
+    --gold-deep: #E89E0E;
+    --gold-on-light: #B88308;
+    --gold-soft: rgba(255, 182, 39, 0.10);
+    --gold-medium: rgba(255, 182, 39, 0.20);
+
+    --font-display: 'Paperlogy', 'Pretendard Variable', 'Pretendard', system-ui, sans-serif;
+    --font-body: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+    --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: var(--bg-light);
+    color: var(--text-light);
+    font-family: var(--font-body);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body { min-height: 100vh; }
+  .numeric { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+
+  /* ─────────── Subtle aurora on light ─────────── */
+  .aurora-light {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 60% 50% at 18% 20%, rgba(167, 139, 250, 0.07), transparent 60%),
+      radial-gradient(ellipse 70% 60% at 82% 80%, rgba(255, 182, 39, 0.08), transparent 60%);
+    animation: aurora-shift 80s ease-in-out infinite;
+  }
+  @keyframes aurora-shift {
+    0%, 100% { transform: translate(0, 0); }
+    33% { transform: translate(2%, -1%); }
+    66% { transform: translate(-1%, 2%); }
+  }
+
+  /* ─────────── Screen system ─────────── */
+  .screens { position: relative; z-index: 1; min-height: 100vh; }
+  .screen {
+    position: absolute; inset: 0; min-height: 100vh;
+    opacity: 0; visibility: hidden; transform: translateY(8px);
+    transition: opacity 360ms var(--ease-out), transform 360ms var(--ease-out), visibility 0s linear 360ms;
+  }
+  .screen.active {
+    opacity: 1; visibility: visible; transform: translateY(0);
+    transition: opacity 360ms var(--ease-out), transform 360ms var(--ease-out), visibility 0s linear 0s;
+    position: relative;
+  }
+
+  /* ─────────── Brand bar (light) ─────────── */
+  .brandbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 28px;
+    max-width: 1200px; margin: 0 auto;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--font-display);
+    font-weight: 800; font-size: 18px; letter-spacing: -0.02em;
+    color: var(--text-light);
+  }
+  .brand-mark {
+    width: 26px; height: 26px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
+    display: grid; place-items: center;
+    box-shadow: 0 4px 14px rgba(255, 182, 39, 0.30);
+  }
+  .brand-mark::after {
+    content: '';
+    width: 9px; height: 9px;
+    background: #fff;
+    clip-path: polygon(0 0, 100% 50%, 0 100%);
+    margin-left: 2px;
+  }
+  .lang-toggle {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-light-muted);
+    border: 1px solid var(--line-light);
+    cursor: pointer;
+    font: inherit; font-size: 12px; letter-spacing: 0.02em;
+    transition: color 200ms, border-color 200ms;
+  }
+  .lang-toggle:hover { color: var(--text-light); border-color: var(--line-light-strong); }
+
+  /* ─────────── Screen 1 — light entry ─────────── */
+  .s1-wrap {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 28px 28px 60px;
+    display: flex; flex-direction: column; gap: 24px;
+  }
+
+  .sender {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px;
+    background: var(--bg-card-light);
+    border: 1px solid var(--line-light);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(10, 10, 10, 0.03);
+    animation: fade-in 500ms var(--ease-out) 80ms both;
+  }
+  .sender-avatar {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #A78BFA 0%, #6366F1 100%);
+    display: grid; place-items: center;
+    font-family: var(--font-display);
+    font-weight: 700; font-size: 16px; color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.10);
+  }
+  .sender-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .sender-text .who { font-size: 15px; color: var(--text-light); font-weight: 600; }
+  .sender-text .who strong { font-weight: 700; }
+  .sender-text .sub { font-size: 12.5px; color: var(--text-light-subtle); letter-spacing: 0.01em; }
+  .sender-verified {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px 3px 6px;
+    border-radius: 999px;
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    color: #059669;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  }
+
+  .course {
+    background: var(--bg-card-light);
+    border: 1px solid var(--line-light);
+    border-radius: 24px;
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 18px;
+    box-shadow: 0 4px 20px rgba(10, 10, 10, 0.04);
+    animation: fade-in 500ms var(--ease-out) 160ms both;
+    position: relative; overflow: hidden;
+  }
+  .course-head { display: flex; align-items: flex-start; gap: 14px; }
+  .course-icon {
+    width: 48px; height: 48px; flex-shrink: 0;
+    border-radius: 12px;
+    background: var(--bg-light);
+    display: grid; place-items: center;
+    border: 1px solid var(--line-light);
+  }
+  .course-meta { flex: 1; min-width: 0; }
+  .course-tag {
+    display: inline-block;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--gold-on-light);
+    margin-bottom: 8px;
+  }
+  .course-title {
+    font-family: var(--font-display);
+    font-weight: 700; font-size: 30px; line-height: 1.18; letter-spacing: -0.025em;
+    color: var(--text-light);
+  }
+  .course-title .han { color: var(--gold-on-light); }
+  .course-title .pcl {
+    font-family: var(--font-body); font-weight: 600; font-size: 0.65em;
+    color: var(--text-light-muted); letter-spacing: -0.005em;
+  }
+  .course-sub {
+    margin-top: 10px;
+    font-size: 14px; color: var(--text-light-muted);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  }
+  .course-sub .dot { color: var(--text-light-faint); }
+
+  .course-stats {
+    display: flex; gap: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line-light);
+  }
+  .stat {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13.5px; color: var(--text-light-muted);
+  }
+  .stat svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .stat .v { color: var(--text-light); font-weight: 600; }
+
+  .reqs {
+    background: var(--bg-card-light);
+    border: 1px solid var(--line-light);
+    border-radius: 14px;
+    padding: 18px 20px;
+    animation: fade-in 500ms var(--ease-out) 240ms both;
+  }
+  .reqs-title {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+    color: var(--text-light-subtle); text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .reqs-list { display: flex; flex-direction: column; gap: 10px; list-style: none; }
+  .reqs-list li {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14.5px; color: var(--text-light);
+  }
+  .reqs-list li .ok { width: 18px; height: 18px; flex-shrink: 0; }
+  .reqs-list li .or {
+    color: var(--text-light-subtle); font-size: 12px; font-weight: 600;
+    letter-spacing: 0.08em; width: 18px; text-align: center;
+  }
+  .reqs-list li code {
+    font-family: var(--font-body);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600; letter-spacing: 0.04em;
+    color: var(--gold-on-light);
+    background: var(--gold-soft);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--gold-medium);
+    font-size: 13.5px;
+  }
+
+  .actions {
+    display: flex; flex-direction: column; gap: 10px;
+    animation: fade-in 500ms var(--ease-out) 320ms both;
+  }
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; height: 56px;
+    padding: 0 22px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+    font: inherit; font-size: 16px; font-weight: 600;
+    cursor: pointer;
+    transition: transform 180ms var(--ease-out), background 180ms, border-color 180ms, box-shadow 220ms, color 180ms;
+    letter-spacing: -0.005em;
+  }
+  .btn-gold {
+    background: var(--gold); color: #0A0A0A;
+  }
+  .btn-gold:hover {
+    background: var(--gold-bright);
+    box-shadow: 0 10px 28px rgba(255, 182, 39, 0.30), 0 0 0 4px rgba(255, 182, 39, 0.10);
+    transform: translateY(-1px);
+  }
+  .btn-outline-light {
+    background: var(--bg-card-light);
+    color: var(--text-light);
+    border-color: var(--line-light-strong);
+  }
+  .btn-outline-light:hover {
+    border-color: rgba(10, 10, 10, 0.28);
+    background: #FFFFFF;
+    box-shadow: 0 4px 16px rgba(10, 10, 10, 0.05);
+  }
+  .btn .arrow { margin-left: auto; opacity: 0.55; transition: transform 200ms, opacity 200ms; }
+  .btn:hover .arrow { transform: translateX(3px); opacity: 1; }
+
+  .tut {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    font-size: 14px; color: var(--text-light-muted);
+    animation: fade-in 500ms var(--ease-out) 400ms both;
+  }
+  .tut a {
+    color: var(--gold-on-light); font-weight: 600; text-decoration: none;
+    border-bottom: 1px dashed rgba(184, 131, 8, 0.35);
+    padding-bottom: 1px;
+    transition: color 180ms, border-color 180ms;
+  }
+  .tut a:hover { color: var(--gold-deep); border-color: var(--gold-on-light); }
+
+  .s1-foot {
+    margin-top: 8px; padding-top: 22px;
+    border-top: 1px solid var(--line-light);
+    display: flex; flex-direction: column; gap: 6px;
+    font-size: 12.5px; color: var(--text-light-subtle);
+    text-align: center; line-height: 1.6;
+    animation: fade-in 500ms var(--ease-out) 480ms both;
+  }
+  .s1-foot a {
+    color: var(--text-light-muted); text-decoration: none;
+    border-bottom: 1px solid var(--line-light);
+    padding-bottom: 1px;
+    transition: color 180ms, border-color 180ms;
+  }
+  .s1-foot a:hover { color: var(--text-light); border-color: var(--line-light-strong); }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ─────────── Demo Navigation ─────────── */
+  .demo-nav {
+    position: fixed;
+    right: 20px; bottom: 20px;
+    z-index: 1000;
+    display: flex; flex-direction: column; align-items: stretch;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--line-light-strong);
+    border-radius: 14px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 10px 40px rgba(10, 10, 10, 0.10);
+    overflow: hidden;
+  }
+  .demo-nav-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line-light);
+    user-select: none;
+  }
+  .demo-nav-head .label {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--text-light-subtle); font-weight: 600;
+  }
+  .demo-nav-head .pill {
+    font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--gold-on-light); background: var(--gold-soft);
+    border: 1px solid var(--gold-medium);
+    padding: 2px 6px; border-radius: 999px;
+  }
+  .demo-nav-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; }
+  .demo-nav-btn {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    padding: 10px 12px;
+    border: none;
+    border-right: 1px solid var(--line-light);
+    border-bottom: 1px solid var(--line-light);
+    background: transparent;
+    color: var(--text-light-muted);
+    text-align: left; cursor: pointer;
+    font: inherit; font-size: 12.5px;
+    transition: background 180ms, color 180ms;
+  }
+  .demo-nav-btn:nth-child(2n) { border-right: none; }
+  .demo-nav-btn:nth-last-child(-n+2) { border-bottom: none; }
+  .demo-nav-btn:hover { background: rgba(10, 10, 10, 0.03); color: var(--text-light); }
+  .demo-nav-btn .num {
+    font-size: 9.5px; letter-spacing: 0.14em;
+    color: var(--text-light-faint); text-transform: uppercase; font-weight: 600;
+  }
+  .demo-nav-btn.active { background: var(--gold-soft); color: var(--gold-on-light); }
+  .demo-nav-btn.active .num { color: var(--gold-deep); }
+
+  /* ─────────── Screen 3 — onboarding (light → dark) ─────────── */
+  .ob {
+    position: relative;
+    min-height: 100vh;
+    background: var(--bg-light);
+    transition: background 800ms var(--ease-out), color 800ms var(--ease-out);
+  }
+  .ob.dark {
+    background: var(--bg-dark);
+    color: var(--text-dark);
+  }
+  .ob-top {
+    position: absolute; top: 0; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 22px 28px;
+    z-index: 4;
+  }
+  .ob-dots {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .ob-dot {
+    width: 24px; height: 4px;
+    border-radius: 999px;
+    background: rgba(10, 10, 10, 0.10);
+    transition: background 360ms, width 360ms;
+  }
+  .ob.dark .ob-dot { background: rgba(255, 255, 255, 0.14); }
+  .ob-dot.done { background: var(--gold-on-light); }
+  .ob.dark .ob-dot.done { background: var(--gold); }
+  .ob-dot.current { background: var(--gold-on-light); width: 44px; }
+  .ob.dark .ob-dot.current { background: var(--gold); }
+  .ob-skip {
+    background: transparent; border: none; cursor: pointer; font: inherit;
+    font-size: 12.5px; letter-spacing: 0.04em;
+    color: var(--text-light-subtle);
+    transition: color 200ms;
+  }
+  .ob.dark .ob-skip { color: var(--text-dark-subtle); }
+  .ob-skip:hover { color: var(--text-light-muted); }
+  .ob.dark .ob-skip:hover { color: var(--text-dark-muted); }
+
+  .ob-stage {
+    position: relative;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 80px 28px;
+  }
+  .ob-slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 80px 28px;
+    text-align: center;
+    opacity: 0; pointer-events: none;
+    transform: translateX(40px) scale(0.98);
+    transition: opacity 500ms var(--ease-out), transform 500ms var(--ease-out);
+  }
+  .ob-slide.active {
+    opacity: 1; pointer-events: auto;
+    transform: translateX(0) scale(1);
+  }
+  .ob-illust {
+    width: 220px; height: 220px;
+    margin-bottom: 36px;
+    display: grid; place-items: center;
+    position: relative;
+  }
+  .ob-illust svg { width: 100%; height: 100%; }
+  .ob-illust .ring {
+    position: absolute; inset: 10px;
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255, 199, 77, 0.22), transparent 60%),
+      radial-gradient(circle at 70% 70%, rgba(167, 139, 250, 0.18), transparent 60%);
+    filter: blur(6px);
+    z-index: 0;
+  }
+  .ob-illust > svg { position: relative; z-index: 1; }
+  .ob.dark .ob-illust .ring {
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255, 199, 77, 0.30), transparent 60%),
+      radial-gradient(circle at 70% 70%, rgba(16, 185, 129, 0.25), transparent 60%);
+  }
+
+  .ob-head {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: 36px; line-height: 1.2; letter-spacing: -0.025em;
+    color: var(--text-light);
+    margin-bottom: 14px;
+    transition: color 600ms;
+    text-wrap: balance;
+  }
+  .ob.dark .ob-head { color: var(--text-dark); }
+  .ob-sub {
+    font-size: 16px; line-height: 1.6;
+    color: var(--text-light-muted);
+    max-width: 420px;
+    transition: color 600ms;
+    text-wrap: pretty;
+  }
+  .ob.dark .ob-sub { color: var(--text-dark-muted); }
+
+  .ob-cta {
+    margin-top: 36px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 16px 32px;
+    background: var(--gold); color: #0A0A0A;
+    border: none; border-radius: 14px;
+    font: inherit; font-size: 16px; font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 14px 36px rgba(255, 182, 39, 0.30);
+    transition: transform 180ms, box-shadow 180ms, background 180ms;
+  }
+  .ob-cta:hover { background: var(--gold-bright); transform: translateY(-1px); }
+  .ob-cta svg { width: 18px; height: 18px; }
+
+  .ob-bottom {
+    position: absolute; bottom: 24px; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 18px;
+    z-index: 4;
+  }
+  .ob-arrow {
+    background: transparent; border: 1px solid var(--line-light-strong);
+    width: 40px; height: 40px; border-radius: 999px;
+    display: grid; place-items: center;
+    color: var(--text-light-muted);
+    cursor: pointer;
+    transition: border-color 180ms, color 180ms, background 180ms;
+  }
+  .ob.dark .ob-arrow { border-color: var(--line-dark-strong); color: var(--text-dark-muted); }
+  .ob-arrow:hover { border-color: var(--gold-on-light); color: var(--gold-on-light); }
+  .ob.dark .ob-arrow:hover { border-color: var(--gold); color: var(--gold); }
+  .ob-arrow:disabled { opacity: 0.35; cursor: not-allowed; }
+  .ob-arrow svg { width: 16px; height: 16px; }
+  .ob-count {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+    color: var(--text-light-faint); text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .ob.dark .ob-count { color: rgba(255, 255, 255, 0.32); }
+
+  /* ─────────── Screen 4 — video viewer (dark) ─────────── */
+  .v4 {
+    background: var(--bg-dark);
+    color: var(--text-dark);
+    min-height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  .v4-bar {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--line-dark);
+    background: rgba(10, 10, 10, 0.6);
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+  }
+  .v4-course { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .v4-course .crumb {
+    font-size: 11px; letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--gold); font-weight: 600;
+  }
+  .v4-course .title {
+    font-size: 15px; font-weight: 700;
+    color: var(--text-dark);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .v4-course .title .han { color: var(--gold); font-family: serif; }
+  .v4-user {
+    display: flex; align-items: center; gap: 12px;
+    flex-shrink: 0;
+  }
+  .v4-user .avatar {
+    width: 30px; height: 30px; border-radius: 999px;
+    background: linear-gradient(135deg, #FFB627, #E89E0E);
+    color: #0A0A0A; font-weight: 800; font-size: 12px;
+    display: grid; place-items: center;
+  }
+  .v4-user .info { display: flex; flex-direction: column; gap: 0; text-align: right; line-height: 1.3; }
+  .v4-user .info .name { font-size: 13px; font-weight: 600; color: var(--text-dark); }
+  .v4-user .info .school { font-size: 11px; color: var(--text-dark-subtle); }
+  .v4-user button {
+    background: transparent; border: 1px solid var(--line-dark-strong);
+    width: 34px; height: 34px; border-radius: 10px;
+    display: grid; place-items: center;
+    color: var(--text-dark-muted); cursor: pointer;
+  }
+  .v4-user button svg { width: 16px; height: 16px; }
+
+  .v4-body { flex: 1; display: flex; min-height: 0; }
+  .v4-stage {
+    flex: 0 0 60%;
+    position: relative;
+    display: flex; flex-direction: column;
+    min-width: 0;
+  }
+  .v4-video {
+    flex: 1;
+    position: relative;
+    background: #FFFFFF;
+    overflow: hidden;
+    display: grid; place-items: center;
+  }
+  .v4-video::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(to right, rgba(10,10,10,0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(10,10,10,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+  }
+  .v4-video-placeholder {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+    color: rgba(10, 10, 10, 0.55);
+  }
+  .v4-video-placeholder .label { color: rgba(10, 10, 10, 0.55) !important; }
+  .v4-video-placeholder .play-orb {
+    background: linear-gradient(135deg, rgba(255, 182, 39, 0.55), rgba(232, 158, 14, 0.35)) !important;
+    border-color: rgba(184, 131, 8, 0.50) !important;
+    color: #0A0A0A !important;
+    box-shadow: 0 0 60px rgba(255, 182, 39, 0.40) !important;
+  }
+  /* gradient fade so dark controls below blend into white video */
+  .v4-controls {
+    background: linear-gradient(180deg, rgba(10,10,10,0) 0%, rgba(10,10,10,0.78) 38%, rgba(10,10,10,0.92) 100%) !important;
+  }
+
+  /* Q&A panel — white surface */
+  .v4-qa-white {
+    background: #FFFFFF !important;
+    border-left: 1px solid #E5E5E0 !important;
+    color: #0A0A0A !important;
+  }
+  .v4-qa-white .v4-qa-head { border-bottom-color: #E5E5E0 !important; }
+  .v4-qa-white .v4-qa-head h3 { color: #0A0A0A !important; }
+  /* 질문하기 indicator pill in panel header */
+  .v4-qa-head .ask-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px; border-radius: 999px;
+    background: linear-gradient(135deg, #FFB627, #E89E0E);
+    color: #0A0A0A;
+    font-size: 12px; font-weight: 700;
+    box-shadow: 0 6px 16px rgba(255, 182, 39, 0.30);
+  }
+  .v4-qa-head .ask-pill svg { width: 13px; height: 13px; }
+  .v4-qa-white .v4-qa-close { color: rgba(10,10,10,0.55) !important; }
+  .v4-qa-white .v4-qa-close:hover { background: rgba(10,10,10,0.05) !important; color: #0A0A0A !important; }
+  .v4-qa-white .v4-qa-quota { border-bottom-color: #E5E5E0 !important; color: rgba(10,10,10,0.55) !important; }
+  .v4-qa-white .v4-qa-quota .pill { color: #B88308 !important; background: rgba(255,182,39,0.10) !important; border-color: rgba(255,182,39,0.30) !important; }
+  .v4-qa-white .v4-msg.bot .av { background: linear-gradient(135deg,#A78BFA,#6366F1) !important; color:#fff !important; }
+  .v4-qa-white .v4-bubble {
+    background: #FAFAF7 !important;
+    border-color: #E5E5E0 !important;
+    color: rgba(10,10,10,0.78) !important;
+  }
+  .v4-qa-white .v4-msg.me .v4-bubble {
+    background: rgba(255,182,39,0.14) !important;
+    border-color: rgba(184,131,8,0.30) !important;
+    color: #0A0A0A !important;
+  }
+  .v4-qa-white .v4-source { color: #B88308 !important; background: rgba(255,182,39,0.10) !important; border-color: rgba(255,182,39,0.24) !important; }
+  .v4-qa-white .v4-suggest { border-top-color: #E5E5E0 !important; }
+  .v4-qa-white .v4-suggest .lbl { color: rgba(10,10,10,0.50) !important; }
+  .v4-qa-white .v4-chip {
+    background: #FAFAF7 !important;
+    border-color: #E5E5E0 !important;
+    color: rgba(10,10,10,0.72) !important;
+  }
+  .v4-qa-white .v4-chip:hover {
+    border-color: #B88308 !important;
+    color: #0A0A0A !important;
+    background: rgba(255,182,39,0.08) !important;
+  }
+  .v4-qa-white .v4-input { border-top-color: #E5E5E0 !important; background: #FFFFFF !important; }
+  .v4-qa-white .v4-input .ip-wrap {
+    background: #FAFAF7 !important;
+    border-color: #E5E5E0 !important;
+  }
+  .v4-qa-white .v4-input .ip-wrap:focus-within {
+    border-color: #B88308 !important;
+    box-shadow: 0 0 0 4px rgba(255, 182, 39, 0.12) !important;
+  }
+  .v4-qa-white .v4-input input { color: #0A0A0A !important; }
+  .v4-qa-white .v4-input input::placeholder { color: rgba(10,10,10,0.40) !important; }
+  .v4-video-placeholder .play-orb {
+    width: 88px; height: 88px; border-radius: 999px;
+    background: linear-gradient(135deg, rgba(255, 182, 39, 0.20), rgba(232, 158, 14, 0.10));
+    border: 1px solid rgba(255, 182, 39, 0.30);
+    display: grid; place-items: center;
+    color: var(--gold);
+    box-shadow: 0 0 60px rgba(255, 182, 39, 0.15);
+  }
+  .v4-video-placeholder .play-orb svg { width: 32px; height: 32px; margin-left: 4px; }
+  .v4-video-placeholder .label {
+    font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-dark-subtle); font-weight: 600;
+  }
+
+  /* Floating Q&A trigger — moved to chat input area as inline label */
+  .v4-fab { display: none; }
+
+  /* Video controls */
+  .v4-controls {
+    flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 14px 22px 18px;
+    background: linear-gradient(180deg, transparent, rgba(10, 10, 10, 0.85) 40%);
+    margin-top: -64px;
+    position: relative; z-index: 2;
+  }
+  .v4-progress {
+    position: relative;
+    height: 4px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.10);
+    overflow: hidden;
+    cursor: pointer;
+  }
+  .v4-progress-fill {
+    position: absolute; top: 0; left: 0; height: 100%;
+    width: 23%;
+    background: linear-gradient(90deg, #FFB627, #FFC74D);
+    border-radius: 999px;
+  }
+  .v4-progress-buffer {
+    position: absolute; top: 0; left: 0; height: 100%;
+    width: 36%; background: rgba(255, 255, 255, 0.12);
+  }
+  .v4-controls-row {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .v4-controls-row .left,
+  .v4-controls-row .right,
+  .v4-controls-row .reacts {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .v4-controls-row .left { flex: 0 0 auto; }
+  .v4-controls-row .reacts { flex: 1; justify-content: center; }
+  .v4-controls-row .right { flex: 0 0 auto; margin-left: auto; }
+  .v4-ctrl {
+    background: transparent; border: none; color: var(--text-dark);
+    width: 36px; height: 36px; border-radius: 10px;
+    display: grid; place-items: center; cursor: pointer;
+    transition: background 160ms;
+  }
+  .v4-ctrl:hover { background: rgba(255, 255, 255, 0.06); }
+  .v4-ctrl.play {
+    background: var(--gold); color: #0A0A0A;
+    width: 42px; height: 42px;
+  }
+  .v4-ctrl.play:hover { background: var(--gold-bright); }
+  .v4-ctrl svg { width: 18px; height: 18px; }
+  .v4-ctrl.play svg { width: 16px; height: 16px; }
+  .v4-time {
+    font-size: 12px; font-variant-numeric: tabular-nums;
+    color: var(--text-dark-muted); font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .v4-react {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--line-dark);
+    width: 36px; height: 36px; border-radius: 999px;
+    display: grid; place-items: center; cursor: pointer;
+    transition: transform 160ms, border-color 160ms, background 160ms;
+    position: relative;
+  }
+  .v4-react:hover { transform: scale(1.08); border-color: var(--gold); }
+  .v4-react svg { width: 18px; height: 18px; }
+  .v4-react .count {
+    position: absolute; top: -6px; right: -6px;
+    background: var(--gold); color: #0A0A0A;
+    font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+  }
+  .v4-quiz-trigger {
+    background: rgba(167, 139, 250, 0.12);
+    border: 1px dashed rgba(167, 139, 250, 0.40);
+    color: #C4B5FD;
+    font: inherit; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 6px 12px; border-radius: 999px;
+    cursor: pointer;
+  }
+  .v4-quiz-trigger:hover { color: #fff; border-color: #A78BFA; background: rgba(167, 139, 250, 0.18); }
+
+  /* light chrome overrides for screen 4 */
+  .v4 { background: #FFFFFF; color: #0A0A0A; }
+  .v4-bar {
+    background: #FFFFFF !important;
+    border-bottom: 1px solid #ECECE6 !important;
+    backdrop-filter: none !important;
+  }
+  .v4-bar .v4-course .crumb { color: #B88308 !important; }
+  .v4-bar .v4-course .title { color: #0A0A0A !important; }
+  .v4-bar .v4-course .title .han { color: #B88308 !important; }
+  .v4-bar .v4-user .info .name { color: #0A0A0A !important; }
+  .v4-bar .v4-user .info .school { color: rgba(10,10,10,0.55) !important; }
+  .v4-bar .v4-user button {
+    background: #FAFAF7 !important;
+    border-color: #ECECE6 !important;
+    color: rgba(10,10,10,0.55) !important;
+  }
+  .v4-bar .v4-user button:hover {
+    background: #F4F0E2 !important;
+    color: #0A0A0A !important;
+  }
+
+  .v4-controls {
+    background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(250,250,247,0.92) 38%, #FAFAF7 100%) !important;
+    margin-top: -56px !important;
+  }
+  .v4-progress { background: rgba(10,10,10,0.08) !important; }
+  .v4-progress-buffer { background: rgba(10,10,10,0.10) !important; }
+  .v4-ctrl { color: #0A0A0A !important; }
+  .v4-ctrl:hover { background: rgba(10,10,10,0.05) !important; }
+  .v4-time { color: rgba(10,10,10,0.62) !important; }
+  .v4-react {
+    background: #FFFFFF !important;
+    border-color: #ECECE6 !important;
+  }
+  .v4-react:hover { border-color: #B88308 !important; }
+
+  /* mic button */
+  .mic-btn {
+    flex-shrink: 0;
+    width: 42px; height: 42px; border-radius: 10px;
+    background: #FAFAF7;
+    border: 1px solid #E5E5E0;
+    color: rgba(10,10,10,0.62);
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: background 160ms, color 160ms, border-color 160ms, box-shadow 160ms;
+  }
+  .mic-btn svg { width: 18px; height: 18px; }
+  .mic-btn:hover { color: #0A0A0A; border-color: #B88308; }
+  .mic-btn.on {
+    background: linear-gradient(135deg, #FFB627, #E89E0E);
+    border-color: transparent;
+    color: #0A0A0A;
+    animation: mic-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes mic-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 182, 39, 0.45); }
+    50%      { box-shadow: 0 0 0 10px rgba(255, 182, 39, 0); }
+  }
+
+  /* Q&A panel — always-visible white sidebar */
+  .v4-qa {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--bg-card-dark);
+    border-left: 1px solid var(--line-dark);
+    display: flex; flex-direction: column;
+  }
+  .v4-qa-close { display: none; }
+  .v4-qa-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--line-dark);
+  }
+  .v4-qa-head h3 {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: 18px;
+  }
+  .v4-qa-close {
+    background: transparent; border: none; color: var(--text-dark-muted);
+    width: 32px; height: 32px; border-radius: 8px;
+    display: grid; place-items: center; cursor: pointer;
+  }
+  .v4-qa-close:hover { background: rgba(255,255,255,0.06); color: var(--text-dark); }
+  .v4-qa-close svg { width: 16px; height: 16px; }
+
+  .v4-qa-quota {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--line-dark);
+    font-size: 12px; color: var(--text-dark-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  .v4-qa-quota .pill {
+    padding: 3px 8px; border-radius: 999px;
+    background: rgba(255, 182, 39, 0.10);
+    border: 1px solid rgba(255, 182, 39, 0.20);
+    color: var(--gold); font-weight: 600;
+  }
+
+  .v4-qa-body {
+    flex: 1; overflow-y: auto;
+    padding: 20px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .v4-msg { display: flex; gap: 10px; align-items: flex-start; }
+  .v4-msg .av {
+    flex-shrink: 0;
+    width: 28px; height: 28px; border-radius: 999px;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 800;
+  }
+  .v4-msg.bot .av { background: linear-gradient(135deg, #A78BFA, #6366F1); color: #fff; }
+  .v4-msg.me  { flex-direction: row-reverse; }
+  .v4-msg.me .av { background: var(--gold); color: #0A0A0A; }
+  .v4-bubble {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--line-dark);
+    padding: 10px 12px; border-radius: 12px;
+    font-size: 13.5px; line-height: 1.55;
+    color: var(--text-dark-muted);
+    max-width: 280px;
+  }
+  .v4-msg.me .v4-bubble {
+    background: rgba(255, 182, 39, 0.10);
+    border-color: rgba(255, 182, 39, 0.24);
+    color: var(--text-dark);
+  }
+  .v4-source {
+    display: inline-flex; align-items: center; gap: 5px;
+    margin-top: 6px;
+    padding: 3px 8px; border-radius: 999px;
+    background: rgba(255, 182, 39, 0.10);
+    border: 1px solid rgba(255, 182, 39, 0.18);
+    font-size: 10.5px; color: var(--gold); font-weight: 600;
+  }
+  .v4-source svg { width: 9px; height: 9px; }
+
+  .v4-suggest {
+    padding: 12px 20px;
+    border-top: 1px solid var(--line-dark);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .v4-suggest .lbl {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-dark-subtle);
+  }
+  .v4-chip {
+    text-align: left;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line-dark);
+    color: var(--text-dark-muted);
+    padding: 10px 12px; border-radius: 10px;
+    font: inherit; font-size: 13px; cursor: pointer;
+    transition: border-color 160ms, color 160ms, background 160ms;
+  }
+  .v4-chip:hover { border-color: var(--gold); color: var(--text-dark); background: rgba(255, 182, 39, 0.06); }
+
+  .v4-input {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 20px 18px;
+    border-top: 1px solid var(--line-dark);
+  }
+  .v4-input .ip-wrap {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--line-dark-strong);
+    border-radius: 10px;
+    padding: 0 12px; height: 42px;
+    display: flex; align-items: center;
+  }
+  .v4-input input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: var(--text-dark); font: inherit; font-size: 13.5px;
+  }
+  .v4-input input::placeholder { color: var(--text-dark-subtle); }
+  .v4-input .send {
+    width: 42px; height: 42px; border-radius: 10px;
+    background: var(--gold); color: #0A0A0A;
+    border: none; cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .v4-input .send svg { width: 16px; height: 16px; }
+
+  /* Interstitial quiz */
+  .v4-quiz {
+    position: fixed; inset: 0;
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(20px);
+    display: none; align-items: center; justify-content: center;
+    z-index: 200;
+    padding: 28px;
+  }
+  .v4-quiz.show { display: flex; animation: quiz-in 280ms var(--ease-out); }
+  @keyframes quiz-in { from { opacity: 0; } to { opacity: 1; } }
+  .v4-quiz-card {
+    width: 100%; max-width: 520px;
+    background: var(--bg-card-dark);
+    border: 1px solid var(--line-dark-strong);
+    border-radius: 20px;
+    padding: 28px;
+    display: flex; flex-direction: column; gap: 18px;
+    color: var(--text-dark);
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+    animation: quiz-pop 380ms var(--ease-out);
+  }
+  @keyframes quiz-pop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .v4-quiz-top { display: flex; align-items: center; justify-content: space-between; }
+  .v4-quiz-top .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    background: rgba(167, 139, 250, 0.14);
+    border: 1px solid rgba(167, 139, 250, 0.30);
+    color: #C4B5FD;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  .v4-quiz-top .timer {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 700; color: var(--gold);
+    font-variant-numeric: tabular-nums;
+  }
+  .v4-quiz-top .timer svg { width: 12px; height: 12px; }
+  .v4-quiz-q {
+    font-family: var(--font-display); font-weight: 700;
+    font-size: 20px; line-height: 1.35; text-wrap: balance;
+  }
+  .v4-quiz-opts { display: flex; flex-direction: column; gap: 8px; }
+  .v4-quiz-opt {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--line-dark-strong);
+    border-radius: 12px;
+    color: var(--text-dark-muted); font: inherit; font-size: 14px;
+    text-align: left; cursor: pointer;
+    transition: border-color 160ms, background 160ms, color 160ms;
+  }
+  .v4-quiz-opt:hover { border-color: var(--gold); color: var(--text-dark); background: rgba(255, 182, 39, 0.05); }
+  .v4-quiz-opt .letter {
+    flex-shrink: 0;
+    width: 26px; height: 26px; border-radius: 999px;
+    display: grid; place-items: center;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 12px; font-weight: 800;
+  }
+  .v4-quiz-opt.correct { border-color: #10B981; background: rgba(16, 185, 129, 0.08); color: var(--text-dark); }
+  .v4-quiz-opt.correct .letter { background: #10B981; color: #0A0A0A; }
+  .v4-quiz-opt.wrong { border-color: #EF4444; background: rgba(239, 68, 68, 0.08); color: var(--text-dark); }
+  .v4-quiz-foot { display: flex; align-items: center; justify-content: space-between; }
+  .v4-quiz-mascot { display: flex; align-items: center; gap: 10px; }
+  .v4-quiz-mascot .av {
+    width: 38px; height: 38px; border-radius: 12px;
+    background: rgba(255, 255, 255, 0.06);
+    display: grid; place-items: center;
+  }
+  .v4-quiz-mascot svg { width: 22px; height: 22px; color: #BFB39A; }
+  .v4-quiz-mascot .says { font-size: 12px; color: var(--text-dark-subtle); line-height: 1.4; }
+
+  /* placeholder for screens 3-4 */
+  .placeholder {
+    max-width: 540px; margin: 80px auto;
+    padding: 60px 28px; text-align: center;
+    color: var(--text-light-subtle);
+  }
+  .placeholder h2 {
+    font-family: var(--font-display); font-weight: 800;
+    font-size: 28px; color: var(--text-light-muted);
+    margin-bottom: 12px;
+  }
+
+  /* ─────────── Screen 2 — signup (light) ─────────── */
+  .s2-wrap {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 16px 28px 60px;
+    display: flex; flex-direction: column; gap: 24px;
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+  }
+  .step-card { min-width: 0; }
+  .step { min-width: 0; }
+  .form-grid { min-width: 0; }
+  .input-wrap { min-width: 0; }
+
+  .s2-back {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; border: none; cursor: pointer;
+    color: var(--text-light-muted); font: inherit; font-size: 13.5px;
+    padding: 6px 4px; align-self: flex-start;
+    border-radius: 6px;
+    transition: color 180ms;
+  }
+  .s2-back:hover { color: var(--text-light); }
+  .s2-back svg { width: 14px; height: 14px; }
+  .s2-back.hidden { visibility: hidden; }
+
+  .progress {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 4px;
+  }
+  .progress-dots {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .progress-dot {
+    width: 28px; height: 6px;
+    border-radius: 999px;
+    background: rgba(10, 10, 10, 0.08);
+    transition: background 360ms var(--ease-out), width 360ms var(--ease-out);
+  }
+  .progress-dot.done { background: var(--gold-on-light); }
+  .progress-dot.current {
+    background: var(--gold);
+    width: 44px;
+    box-shadow: 0 0 0 4px rgba(255, 182, 39, 0.12);
+  }
+  .progress-label {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-light-subtle);
+  }
+  .progress-label .now { color: var(--gold-on-light); }
+
+  .step-card {
+    background: var(--bg-card-light);
+    border: 1px solid var(--line-light);
+    border-radius: 18px;
+    padding: 32px;
+    box-shadow: 0 4px 20px rgba(10, 10, 10, 0.04);
+    display: flex; flex-direction: column; gap: 22px;
+  }
+
+  .step-head { display: flex; flex-direction: column; gap: 6px; }
+  .step-head h2 {
+    font-family: var(--font-display);
+    font-weight: 700; font-size: 28px; line-height: 1.2;
+    letter-spacing: -0.025em;
+    color: var(--text-light);
+  }
+  .step-head p {
+    font-size: 14.5px; line-height: 1.55;
+    color: var(--text-light-muted);
+  }
+
+  /* form field */
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  .field-label {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+    color: var(--text-light-muted);
+    text-transform: uppercase;
+  }
+  .input-wrap {
+    position: relative;
+    display: flex; align-items: center;
+    background: var(--bg-light);
+    border: 1px solid var(--line-light-strong);
+    border-radius: 12px;
+    padding: 0 14px;
+    height: 54px;
+    transition: border-color 180ms, background 180ms, box-shadow 180ms;
+  }
+  .input-wrap:focus-within {
+    border-color: var(--gold);
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(255, 182, 39, 0.10);
+  }
+  .input-wrap.valid { border-color: rgba(16, 185, 129, 0.5); }
+  .input-wrap.invalid { border-color: rgba(239, 68, 68, 0.5); }
+  .input-wrap .lead {
+    margin-right: 10px; flex-shrink: 0;
+    color: var(--text-light-subtle);
+  }
+  .input-wrap input {
+    flex: 1; min-width: 0;
+    border: none; outline: none; background: transparent;
+    font: inherit; font-size: 15.5px;
+    color: var(--text-light);
+  }
+  .input-wrap input::placeholder { color: var(--text-light-subtle); }
+  .input-wrap .trail {
+    margin-left: 10px; flex-shrink: 0;
+    opacity: 0; transform: scale(0.85);
+    transition: opacity 200ms, transform 200ms;
+  }
+  .input-wrap.valid .trail,
+  .input-wrap.invalid .trail { opacity: 1; transform: scale(1); }
+
+  .field-hint {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 13px; min-height: 20px;
+    transition: color 200ms;
+  }
+  .field-hint .hint-default { color: var(--text-light-subtle); }
+  .field-hint .hint-valid {
+    color: #059669;
+    display: none; align-items: center; gap: 6px;
+  }
+  .field-hint .hint-invalid {
+    color: #DC2626;
+    display: none; align-items: center; gap: 6px;
+  }
+  .field-hint.valid .hint-default { display: none; }
+  .field-hint.valid .hint-valid { display: inline-flex; }
+  .field-hint.invalid .hint-default { display: none; }
+  .field-hint.invalid .hint-invalid { display: inline-flex; }
+  .field-hint svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+  .step-actions { display: flex; flex-direction: column; gap: 12px; }
+
+  .alt-link {
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--text-light-subtle);
+  }
+  .alt-link a {
+    color: var(--gold-on-light); font-weight: 600;
+    text-decoration: none;
+    border-bottom: 1px dashed rgba(184, 131, 8, 0.35);
+    padding-bottom: 1px;
+    transition: color 180ms, border-color 180ms;
+  }
+  .alt-link a:hover { color: var(--gold-deep); border-color: var(--gold-on-light); }
+
+  /* Step 2 — mail-sent illustration */
+  .illust {
+    align-self: center;
+    width: 96px; height: 96px;
+    border-radius: 28px;
+    display: grid; place-items: center;
+    background:
+      radial-gradient(ellipse at 30% 30%, rgba(255, 199, 77, 0.25), transparent 60%),
+      radial-gradient(ellipse at 70% 70%, rgba(255, 182, 39, 0.18), transparent 60%),
+      linear-gradient(140deg, #FFF8E7 0%, #FFFCF3 100%);
+    border: 1px solid rgba(255, 182, 39, 0.30);
+    box-shadow:
+      0 8px 28px rgba(255, 182, 39, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+  .illust { position: relative; }
+  .illust svg { width: 48px; height: 48px; position: relative; z-index: 1; }
+  .illust .floater {
+    position: absolute;
+    width: 6px; height: 6px; border-radius: 999px;
+    background: var(--gold);
+    box-shadow: 0 0 8px rgba(255, 182, 39, 0.7);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .illust .floater.a { left: 30%; bottom: 38%; animation: float-up 2.4s ease-out infinite; }
+  .illust .floater.b { left: 52%; bottom: 38%; animation: float-up 2.4s 0.8s ease-out infinite; }
+  .illust .floater.c { left: 70%; bottom: 38%; animation: float-up 2.4s 1.6s ease-out infinite; }
+  @keyframes float-up {
+    0%   { transform: translateY(0)    scale(0.6); opacity: 0; }
+    20%  { opacity: 1; }
+    60%  { opacity: 1; }
+    100% { transform: translateY(-46px) scale(0.8); opacity: 0; }
+  }
+
+  /* DEV mini buttons (verification only) */
+  .dev-bar {
+    display: inline-flex; align-items: center; gap: 6px;
+    align-self: flex-end;
+    padding: 4px 6px;
+    background: rgba(10, 10, 10, 0.04);
+    border: 1px dashed var(--line-light-strong);
+    border-radius: 999px;
+  }
+  .dev-bar .dev-label {
+    font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--text-light-faint); font-weight: 700;
+    padding: 0 6px;
+  }
+  .dev-bar button {
+    background: #fff; border: 1px solid var(--line-light-strong);
+    color: var(--text-light-muted);
+    font: inherit; font-size: 11px; font-weight: 600;
+    padding: 4px 10px; border-radius: 999px;
+    cursor: pointer; font-variant-numeric: tabular-nums;
+    transition: background 160ms, color 160ms, border-color 160ms;
+  }
+  .dev-bar button:hover { color: var(--text-light); border-color: var(--text-light-subtle); }
+  .dev-bar button.is-active {
+    background: var(--gold-on-light); color: #fff;
+    border-color: var(--gold-on-light);
+  }
+
+  .email-pill {
+    align-self: center;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--bg-light);
+    border: 1px solid var(--line-light-strong);
+    border-radius: 999px;
+    padding: 8px 14px 8px 12px;
+    font-size: 13.5px; font-weight: 600;
+    color: var(--text-light);
+    font-variant-numeric: tabular-nums;
+  }
+  .email-pill .dot {
+    width: 6px; height: 6px; border-radius: 999px;
+    background: #10B981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+  }
+
+  .helper-card {
+    display: flex; align-items: flex-start; gap: 12px;
+    background: var(--bg-light);
+    border: 1px solid var(--line-light);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .helper-card .helper-icon {
+    width: 32px; height: 32px; flex-shrink: 0;
+    border-radius: 10px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.16), rgba(14, 165, 233, 0.10));
+    border: 1px solid rgba(14, 165, 233, 0.20);
+  }
+  .helper-card .helper-icon svg { width: 16px; height: 16px; }
+  .helper-card .helper-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .helper-card .helper-title { font-size: 13.5px; font-weight: 600; color: var(--text-light); }
+  .helper-card .helper-sub   { font-size: 12.5px; color: var(--text-light-subtle); line-height: 1.5; }
+
+  .resend {
+    text-align: center;
+    font-size: 13.5px;
+    color: var(--text-light-subtle);
+  }
+  .resend button {
+    background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+    color: var(--gold-on-light); font-weight: 600;
+    border-bottom: 1px dashed rgba(184, 131, 8, 0.35);
+    padding-bottom: 1px;
+    transition: color 180ms, border-color 180ms;
+  }
+  .resend button:hover:not(:disabled) { color: var(--gold-deep); border-color: var(--gold-on-light); }
+  .resend button:disabled {
+    color: var(--text-light-faint);
+    border-color: transparent;
+    cursor: not-allowed;
+  }
+  .resend .timer {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-light-faint);
+  }
+
+  .demo-advance {
+    display: flex; align-items: center; gap: 8px;
+    align-self: center;
+    margin-top: 4px;
+    font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--text-light-faint);
+    background: transparent; border: 1px dashed var(--line-light-strong);
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer; font: inherit; font-weight: 600;
+    transition: color 180ms, border-color 180ms, background 180ms;
+  }
+  .demo-advance:hover {
+    color: var(--text-light-muted);
+    border-color: var(--text-light-subtle);
+    background: rgba(10, 10, 10, 0.02);
+  }
+  .demo-advance svg { width: 12px; height: 12px; }
+
+  /* Step 3 — form layout */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .field.full { grid-column: 1 / -1; }
+
+  .input-wrap.compact { height: 48px; }
+  .input-wrap.compact input,
+  .input-wrap.compact select { font-size: 14.5px; }
+  .input-wrap select {
+    flex: 1; min-width: 0;
+    border: none; outline: none; background: transparent;
+    font: inherit; font-size: 15.5px;
+    color: var(--text-light);
+    appearance: none; -webkit-appearance: none;
+    cursor: pointer;
+    padding-right: 4px;
+  }
+  .input-wrap.has-chevron::after {
+    content: ""; flex-shrink: 0; margin-left: 8px;
+    width: 10px; height: 10px;
+    border-right: 2px solid var(--text-light-subtle);
+    border-bottom: 2px solid var(--text-light-subtle);
+    transform: translateY(-2px) rotate(45deg);
+    pointer-events: none;
+  }
+  .input-wrap.locked {
+    background: rgba(184, 131, 8, 0.05);
+    border-color: var(--gold-medium);
+  }
+  .input-wrap.locked input,
+  .input-wrap.locked select { cursor: default; }
+  .input-wrap .auto-tag {
+    flex-shrink: 0; margin-left: 8px;
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold-on-light);
+    background: var(--gold-soft);
+    border: 1px solid var(--gold-medium);
+    padding: 3px 8px; border-radius: 999px;
+  }
+
+  .radio-group {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .radio-chip {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    height: 42px;
+    min-width: 0;
+    padding: 0 4px;
+    border: 1px solid var(--line-light-strong);
+    border-radius: 10px;
+    background: var(--bg-light);
+    font-size: 12.5px; font-weight: 600;
+    color: var(--text-light-muted);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 160ms, background 160ms, color 160ms, box-shadow 160ms;
+  }
+  .radio-chip input { position: absolute; opacity: 0; pointer-events: none; }
+  .radio-chip:hover {
+    border-color: var(--text-light-subtle);
+    color: var(--text-light);
+  }
+  .radio-chip:has(input:checked) {
+    border-color: var(--gold);
+    background: var(--gold-soft);
+    color: var(--gold-on-light);
+    box-shadow: 0 0 0 3px rgba(255, 182, 39, 0.10);
+  }
+
+  /* Data policy cards */
+  .policy-block {
+    display: flex; flex-direction: column; gap: 12px;
+    padding: 18px;
+    background: var(--bg-light);
+    border: 1px solid var(--line-light);
+    border-radius: 14px;
+  }
+  .policy-head {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-light-subtle);
+  }
+  .policy-head .line {
+    flex: 1; height: 1px; background: var(--line-light);
+  }
+  .policy-cards {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .policy-card {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 12px 10px;
+    min-width: 0;
+    background: var(--bg-card-light);
+    border: 1px solid var(--line-light);
+    border-radius: 10px;
+    text-align: left;
+  }
+  .policy-card .policy-icon {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: grid; place-items: center;
+    border: 1px solid;
+  }
+  .policy-card .policy-icon svg { width: 14px; height: 14px; }
+  .policy-card.violet .policy-icon {
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.18), rgba(99, 102, 241, 0.10));
+    border-color: rgba(99, 102, 241, 0.22);
+  }
+  .policy-card.cyan .policy-icon {
+    background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(14, 165, 233, 0.10));
+    border-color: rgba(14, 165, 233, 0.22);
+  }
+  .policy-card.amber .policy-icon {
+    background: linear-gradient(135deg, rgba(255, 182, 39, 0.20), rgba(245, 158, 11, 0.12));
+    border-color: rgba(245, 158, 11, 0.28);
+  }
+  .policy-label {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-light-faint);
+  }
+  .policy-value {
+    font-size: 12.5px; font-weight: 600; color: var(--text-light);
+    line-height: 1.4;
+    word-break: keep-all;
+  }
+  .policy-value .em { color: var(--gold-on-light); }
+
+  /* Checkbox */
+  .check-row {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 14px 16px;
+    background: var(--bg-light);
+    border: 1px solid var(--line-light-strong);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 160ms, background 160ms;
+  }
+  .check-row:has(input:checked) {
+    border-color: var(--gold);
+    background: var(--gold-soft);
+  }
+  .check-box {
+    flex-shrink: 0;
+    width: 22px; height: 22px;
+    border: 1.5px solid var(--line-light-strong);
+    border-radius: 6px;
+    background: #fff;
+    display: grid; place-items: center;
+    transition: background 160ms, border-color 160ms;
+  }
+  .check-row input { position: absolute; opacity: 0; pointer-events: none; }
+  .check-box svg { width: 14px; height: 14px; opacity: 0; transition: opacity 160ms; color: #fff; }
+  .check-row:has(input:checked) .check-box {
+    background: var(--gold-on-light);
+    border-color: var(--gold-on-light);
+  }
+  .check-row:has(input:checked) .check-box svg { opacity: 1; }
+  .check-text { display: flex; flex-direction: column; gap: 2px; }
+  .check-title {
+    font-size: 14px; font-weight: 600; color: var(--text-light);
+  }
+  .check-title .req {
+    color: var(--gold-on-light); font-weight: 700; margin-left: 4px;
+  }
+  .check-sub {
+    font-size: 12.5px; color: var(--text-light-subtle);
+  }
+
+  /* Step 3 success overlay (after 가입 완료) */
+  .toast {
+    position: fixed;
+    left: 50%; bottom: 32px;
+    transform: translateX(-50%) translateY(20px);
+    display: flex; align-items: center; gap: 10px;
+    background: #0A0A0A;
+    color: #FAFAF7;
+    padding: 12px 18px 12px 14px;
+    border-radius: 999px;
+    font-size: 14px; font-weight: 600;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.30);
+    opacity: 0; pointer-events: none;
+    transition: opacity 240ms, transform 240ms var(--ease-out);
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast .toast-icon {
+    width: 22px; height: 22px; border-radius: 999px;
+    background: var(--gold);
+    color: #0A0A0A;
+    display: grid; place-items: center;
+  }
+  .toast .toast-icon svg { width: 13px; height: 13px; }
+
+  @media (max-width: 560px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .radio-group { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .policy-cards { grid-template-columns: 1fr; }
+  }
+
+  /* step transition */
+  .step {
+    display: none;
+    animation: step-in 360ms var(--ease-out) both;
+  }
+  .step.active { display: flex; flex-direction: column; gap: 20px; }
+  @keyframes step-in {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .step.leaving {
+    animation: step-out 280ms var(--ease-out) both;
+  }
+  @keyframes step-out {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(-20px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    .aurora-light { animation: none; }
+  }
+
+  @media (max-width: 560px) {
+    .brandbar { padding: 18px 20px; }
+    .s1-wrap { padding: 20px 20px 80px; gap: 22px; }
+    .s2-wrap { padding: 16px 20px 60px; }
+    .step-card { padding: 24px 20px; }
+    .course { padding: 22px; }
+    .course-title { font-size: 26px; }
+    .demo-nav { right: 12px; bottom: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="grad-violet" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A78BFA"></stop><stop offset="100%" stop-color="#6366F1"></stop>
+    </linearGradient>
+    <linearGradient id="grad-electric" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFB627"></stop><stop offset="100%" stop-color="#F59E0B"></stop>
+    </linearGradient>
+    <linearGradient id="grad-cyan" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22D3EE"></stop><stop offset="100%" stop-color="#0EA5E9"></stop>
+    </linearGradient>
+    <linearGradient id="grad-success" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34D399"></stop><stop offset="100%" stop-color="#10B981"></stop>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="aurora-light" aria-hidden="true"></div>
+
+<div class="screens">
+
+  <!-- SCREEN 1 · /v/[강의ID] · LIGHT -->
+  <section class="screen active" data-screen="1" data-screen-label="01 진입 (Light)">
+    <header class="brandbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>ClassAuto</span>
+      </div>
+      <button class="lang-toggle" type="button" aria-label="언어 선택">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path>
+        </svg>
+        <span>KO</span>
+      </button>
+    </header>
+
+    <div class="s1-wrap">
+
+      <div class="sender">
+        <div class="sender-avatar" aria-hidden="true">하</div>
+        <div class="sender-text">
+          <div class="who"><strong>하두진 교수님</strong>이 보낸 강의입니다</div>
+          <div class="sub">경기대학교 · 중국어문법의 이해</div>
+        </div>
+        <span class="sender-verified" title="기관 인증 교수자">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+          인증
+        </span>
+      </div>
+
+      <div class="course">
+        <div class="course-head">
+          <div class="course-icon" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="url(#grad-violet)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14z"></path>
+              <path d="M6.5 17H20v4H6.5A2.5 2.5 0 0 1 4 18.5v0A2.5 2.5 0 0 1 6.5 17z"></path>
+              <path d="M9 7h7"></path>
+            </svg>
+          </div>
+          <div class="course-meta">
+            <div class="course-tag">3주차 · Lesson 07</div>
+            <h1 class="course-title"><span class="han">把</span>자문<span class="pcl"> (把字句) </span>입문</h1>
+            <div class="course-sub">
+              <span>경기대학교</span>
+              <span class="dot">·</span>
+              <span>중국어문법의 이해</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="course-stats">
+          <div class="stat" title="영상 길이">
+            <svg viewBox="0 0 24 24" fill="none" stroke="url(#grad-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <polyline points="12 7 12 12 15 14"></polyline>
+            </svg>
+            <span class="numeric"><span class="v">5분 12초</span></span>
+          </div>
+          <div class="stat" title="누적 시청">
+            <svg viewBox="0 0 24 24" fill="none" stroke="url(#grad-violet)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+            <span class="numeric"><span class="v">23</span>명 학습 중</span>
+          </div>
+          <div class="stat" title="평균 정답률">
+            <svg viewBox="0 0 24 24" fill="none" stroke="url(#grad-success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="3 17 9 11 13 15 21 7"></polyline>
+              <polyline points="14 7 21 7 21 14"></polyline>
+            </svg>
+            <span class="numeric"><span class="v">82%</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="reqs">
+        <div class="reqs-title">시청 조건</div>
+        <ul class="reqs-list">
+          <li>
+            <svg class="ok" viewBox="0 0 24 24" fill="none" stroke="url(#grad-success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+            학교 이메일 인증 <span style="color:var(--text-light-subtle);">(.ac.kr)</span>
+          </li>
+          <li>
+            <span class="or">또는</span>
+            학습 코드 입력 <code class="numeric">ABCD-1234</code>
+          </li>
+        </ul>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-gold" type="button" onclick="goto(2)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+            <path d="m3 7 9 6 9-6"></path>
+          </svg>
+          학교 이메일로 시작
+          <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="13 6 19 12 13 18"></polyline>
+          </svg>
+        </button>
+        <button class="btn btn-outline-light" type="button">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          학습 코드로 시작
+          <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="13 6 19 12 13 18"></polyline>
+          </svg>
+        </button>
+      </div>
+
+      <div class="tut">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="url(#grad-electric)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M9 18h6M10 22h4M12 2a7 7 0 0 1 4 12.7c-.5.4-.8.9-.9 1.5l-.1.8H9.1l-.1-.8c-.1-.6-.4-1.1-.9-1.5A7 7 0 0 1 12 2z"></path>
+        </svg>
+        처음 사용하시나요? <a href="#" onclick="goto(3); return false;">1분 안내 보기 →</a>
+      </div>
+
+      <div class="s1-foot">
+        <div>ClassAuto는 학생 학습 도구입니다. 광고를 사용하지 않으며, 시청 데이터는 해당 강의 교수자만 볼 수 있습니다.</div>
+        <div><a href="#">학생 데이터 보호 정책 보기 →</a></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- SCREEN 2 · signup · LIGHT -->
+  <section class="screen" data-screen="2" data-screen-label="02 가입 (Light)">
+    <header class="brandbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>ClassAuto</span>
+      </div>
+      <button class="lang-toggle" type="button" aria-label="언어 선택">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"></path>
+        </svg>
+        <span>KO</span>
+      </button>
+    </header>
+
+    <div class="s2-wrap">
+
+      <button class="s2-back hidden" type="button" id="s2-back" onclick="prevStep()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="11 18 5 12 11 6"></polyline>
+        </svg>
+        이전 단계로
+      </button>
+
+      <div class="progress">
+        <div class="progress-dots" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1" id="s2-dots">
+          <span class="progress-dot current" data-dot="1"></span>
+          <span class="progress-dot" data-dot="2"></span>
+          <span class="progress-dot" data-dot="3"></span>
+        </div>
+        <span class="progress-label"><span class="now" id="s2-step-num">1</span> / 3</span>
+      </div>
+
+      <div class="step-card">
+
+        <div class="dev-bar" role="group" aria-label="데모 단계 이동">
+          <span class="dev-label">DEV</span>
+          <button type="button" data-dev-step="1" class="is-active" onclick="setStep(1)">1</button>
+          <button type="button" data-dev-step="2" onclick="setStep(2)">2</button>
+          <button type="button" data-dev-step="3" onclick="setStep(3)">3</button>
+        </div>
+
+        <!-- Step 1 · email -->
+        <div class="step active" data-step="1">
+          <div class="step-head">
+            <h2>학교 이메일을<br>입력해주세요</h2>
+            <p>ClassAuto는 학교 이메일로만 가입할 수 있어요.<br>경기대학교(.ac.kr) 이메일을 사용해주세요.</p>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="s2-email">학교 이메일</label>
+            <div class="input-wrap" id="s2-email-wrap">
+              <span class="lead" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                  <path d="m3 7 9 6 9-6"></path>
+                </svg>
+              </span>
+              <input id="s2-email" type="email" inputmode="email" autocomplete="email" placeholder="name@kgu.ac.kr" oninput="validateEmail(event)">
+              <span class="trail" aria-hidden="true">
+                <svg id="s2-trail-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </span>
+            </div>
+            <div class="field-hint" id="s2-email-hint">
+              <span class="hint-default">학교에서 발급한 .ac.kr 이메일을 입력해주세요</span>
+              <span class="hint-valid">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+                <span id="s2-valid-text">학교 이메일이 확인됐어요</span>
+              </span>
+              <span class="hint-invalid">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="8" x2="12" y2="13"></line>
+                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                학교 이메일(.ac.kr)을 입력해주세요
+              </span>
+            </div>
+          </div>
+
+          <div class="step-actions">
+            <button class="btn btn-gold" type="button" id="s2-next-1" disabled="" style="opacity:0.5;cursor:not-allowed;" onclick="nextStep()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M22 2 11 13"></path>
+                <path d="M22 2 15 22 11 13 2 9 22 2z"></path>
+              </svg>
+              인증 메일 보내기
+              <svg class="arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="13 6 19 12 13 18"></polyline>
+              </svg>
+            </button>
+            <div class="alt-link">
+              또는 <a href="#" onclick="goto(1); return false;">학습 코드로 시작 →</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2 · mail sent -->
+        <div class="step" data-step="2">
+          <div class="illust" aria-hidden="true">
+            <span class="floater a"></span>
+            <span class="floater b"></span>
+            <span class="floater c"></span>
+            <svg viewBox="0 0 48 48" fill="none">
+              <defs>
+                <linearGradient id="grad-envelope" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#FFB627"></stop>
+                  <stop offset="100%" stop-color="#E89E0E"></stop>
+                </linearGradient>
+                <linearGradient id="grad-envelope-flap" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#FFC74D"></stop>
+                  <stop offset="100%" stop-color="#FFB627"></stop>
+                </linearGradient>
+              </defs>
+              <rect x="6" y="12" width="36" height="26" rx="4" fill="url(#grad-envelope)"></rect>
+              <path d="M6 16l18 12 18-12" stroke="#FFFCF3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+              <path d="M6 16l18 12 18-12V14a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v2z" fill="url(#grad-envelope-flap)"></path>
+              <circle cx="38" cy="12" r="5" fill="#10B981" stroke="#FFFCF3" stroke-width="1.5"></circle>
+              <path d="M35.5 12l1.8 1.8 3.2-3.2" stroke="#FFFCF3" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+            </svg>
+          </div>
+
+          <div class="step-head" style="text-align:center;align-items:center;">
+            <h2>메일을 보내드렸어요</h2>
+            <p>링크를 클릭하면 자동으로<br>다음 단계로 이동합니다.</p>
+          </div>
+
+          <div class="email-pill">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="s2-email-display">name@kgu.ac.kr</span>
+          </div>
+
+          <div class="helper-card">
+            <div class="helper-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#0EA5E9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <div class="helper-body">
+              <span class="helper-title">메일이 안 보이세요?</span>
+              <span class="helper-sub">스팸 메일함도 한 번 확인해주세요. 대부분 1분 이내에 도착해요.</span>
+            </div>
+          </div>
+
+          <div class="resend">
+            <button type="button" id="s2-resend" disabled="" onclick="resendMail()">인증 메일 다시 보내기</button>
+            <span class="timer" id="s2-timer"> · <span id="s2-timer-num">60</span>초 뒤 가능</span>
+          </div>
+
+          <button class="demo-advance" type="button" onclick="nextStep()" aria-label="데모: 인증 링크 클릭 시뮬레이션">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            데모: 링크 클릭 시뮬레이션
+          </button>
+        </div>
+
+        <!-- Step 3 · additional info -->
+        <div class="step" data-step="3">
+          <div class="step-head">
+            <h2>거의 다 됐어요</h2>
+            <p>마지막으로 몇 가지만 알려주세요.</p>
+          </div>
+
+          <div class="form-grid">
+            <div class="field">
+              <label class="field-label" for="s3-name">이름</label>
+              <div class="input-wrap compact">
+                <input id="s3-name" type="text" autocomplete="name" placeholder="홍길동">
+              </div>
+            </div>
+            <div class="field">
+              <label class="field-label" for="s3-sid">학번</label>
+              <div class="input-wrap compact">
+                <input id="s3-sid" type="text" inputmode="numeric" autocomplete="off" placeholder="202012345">
+              </div>
+            </div>
+
+            <div class="field full">
+              <label class="field-label" for="s3-school">학교</label>
+              <div class="input-wrap compact locked">
+                <span class="lead" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 21V8l9-5 9 5v13"></path>
+                    <path d="M9 21V12h6v9"></path>
+                  </svg>
+                </span>
+                <input id="s3-school" type="text" value="경기대학교" readonly="">
+                <span class="auto-tag">자동 매칭</span>
+              </div>
+            </div>
+
+            <div class="field full">
+              <label class="field-label" for="s3-major">학과 / 전공</label>
+              <div class="input-wrap compact has-chevron">
+                <span class="lead" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                  </svg>
+                </span>
+                <select id="s3-major">
+                  <option value="">학과를 선택해주세요</option>
+                  <option>중어중문학과</option>
+                  <option>국어국문학과</option>
+                  <option>영어영문학과</option>
+                  <option>일어일문학과</option>
+                  <option>사업경영학과</option>
+                  <option>광고홍보학과</option>
+                  <option>전자공학과</option>
+                  <option>컴퓨터과학과</option>
+                  <option>기타</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field full">
+              <span class="field-label">학년</span>
+              <div class="radio-group" role="radiogroup" aria-label="학년 선택">
+                <label class="radio-chip"><input type="radio" name="year" value="1">1학년</label>
+                <label class="radio-chip"><input type="radio" name="year" value="2">2학년</label>
+                <label class="radio-chip"><input type="radio" name="year" value="3" checked="">3학년</label>
+                <label class="radio-chip"><input type="radio" name="year" value="4">4학년</label>
+                <label class="radio-chip"><input type="radio" name="year" value="g">대학원</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="policy-block">
+            <div class="policy-head">
+              <span>데이터 처리 사전 고지</span>
+              <span class="line"></span>
+            </div>
+            <div class="policy-cards">
+              <div class="policy-card violet">
+                <div class="policy-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#6366F1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                  </svg>
+                </div>
+                <span class="policy-label">수집 데이터</span>
+                <span class="policy-value">영상 시청 · Q&amp;A · 출석</span>
+              </div>
+              <div class="policy-card cyan">
+                <div class="policy-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#0EA5E9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </div>
+                <span class="policy-label">열람 권한</span>
+                <span class="policy-value">해당 강의 <span class="em">교수자만</span></span>
+              </div>
+              <div class="policy-card amber">
+                <div class="policy-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#E89E0E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                    <path d="M10 11v6M14 11v6"></path>
+                  </svg>
+                </div>
+                <span class="policy-label">삭제 정책</span>
+                <span class="policy-value"><span class="em">졸업 후</span> 자동 삭제</span>
+              </div>
+            </div>
+          </div>
+
+          <label class="check-row">
+            <input type="checkbox" id="s3-agree" onchange="toggleAgree(event)">
+            <span class="check-box" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </span>
+            <span class="check-text">
+              <span class="check-title">데이터 처리 방침에 동의합니다<span class="req"> · 필수</span></span>
+              <span class="check-sub">위 3가지 조건을 확인하고 동의합니다.</span>
+            </span>
+          </label>
+
+          <div class="step-actions">
+            <button class="btn btn-gold" type="button" id="s3-submit" disabled="" style="opacity:0.5;cursor:not-allowed;" onclick="completeSignup()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+              가입 완료
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <div class="toast" id="s3-toast" role="status" aria-live="polite">
+      <span class="toast-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </span>
+      가입이 완료됐어요. 공부하러 가볼까요?
+    </div>
+  </section>
+
+  <!-- SCREEN 3 · onboarding · LIGHT → DARK -->
+  <section class="screen" data-screen="3" data-screen-label="03 온보딩 (Light→Dark)">
+    <div class="ob" id="ob-root">
+
+      <div class="ob-top">
+        <div class="ob-dots" id="ob-dots">
+          <span class="ob-dot current" data-i="1"></span>
+          <span class="ob-dot" data-i="2"></span>
+          <span class="ob-dot" data-i="3"></span>
+          <span class="ob-dot" data-i="4"></span>
+        </div>
+        <button class="ob-skip" type="button" onclick="goto(4)">건너뛰기 →</button>
+      </div>
+
+      <div class="ob-stage">
+
+        <!-- Slide 1 -->
+        <div class="ob-slide active" data-ob="1">
+          <div class="ob-illust">
+            <span class="ring"></span>
+            <svg viewBox="0 0 220 220" fill="none">
+              <circle cx="110" cy="110" r="82" fill="url(#grad-electric)" opacity="0.15"></circle>
+              <circle cx="110" cy="110" r="66" fill="none" stroke="url(#grad-electric)" stroke-width="2.5" stroke-dasharray="4 6"></circle>
+              <circle cx="110" cy="110" r="52" fill="url(#grad-electric)"></circle>
+              <path d="M96 86l38 24-38 24V86z" fill="#0A0A0A"></path>
+            </svg>
+          </div>
+          <h2 class="ob-head">영상을 보면서 배워요</h2>
+          <p class="ob-sub">원하는 시점에 멈추고, 되돌리고, 다시 보세요.<br>교수자는 단 한 번만 설명하면 됩니다.</p>
+        </div>
+
+        <!-- Slide 2 -->
+        <div class="ob-slide" data-ob="2">
+          <div class="ob-illust">
+            <span class="ring"></span>
+            <svg viewBox="0 0 220 220" fill="none">
+              <path d="M44 70a16 16 0 0 1 16-16h82a16 16 0 0 1 16 16v52a16 16 0 0 1-16 16H92l-24 20v-20H60a16 16 0 0 1-16-16V70z" fill="url(#grad-violet)" opacity="0.85"></path>
+              <path d="M112 86a16 16 0 0 1 16-16h32a16 16 0 0 1 16 16v40a16 16 0 0 1-16 16h-8l16 18-26-18h-14a16 16 0 0 1-16-16V86z" fill="url(#grad-cyan)" opacity="0.85"></path>
+              <circle cx="82" cy="96" r="4" fill="#FFFFFF"></circle>
+              <circle cx="100" cy="96" r="4" fill="#FFFFFF"></circle>
+              <circle cx="118" cy="96" r="4" fill="#FFFFFF"></circle>
+            </svg>
+          </div>
+          <h2 class="ob-head">궁금한 건 물어보세요</h2>
+          <p class="ob-sub">AI 도우미가 강의 자료 범위 안에서<br>정확한 소스를 함께 답해줘요.</p>
+        </div>
+
+        <!-- Slide 3 -->
+        <div class="ob-slide" data-ob="3">
+          <div class="ob-illust">
+            <span class="ring"></span>
+            <svg viewBox="0 0 220 220" fill="none">
+              <ellipse cx="110" cy="126" rx="58" ry="68" fill="#BFB39A"></ellipse>
+              <ellipse cx="110" cy="94" rx="56" ry="52" fill="#A99B7E"></ellipse>
+              <path d="M62 60c2-12 12-20 22-20s14 8 14 20l-4 12-32-12z" fill="#8C7E63"></path>
+              <path d="M158 60c-2-12-12-20-22-20s-14 8-14 20l4 12 32-12z" fill="#8C7E63"></path>
+              <circle cx="88" cy="96" r="14" fill="#FFFFFF"></circle>
+              <circle cx="132" cy="96" r="14" fill="#FFFFFF"></circle>
+              <circle cx="88" cy="102" r="6" fill="#0A0A0A"></circle>
+              <circle cx="132" cy="102" r="6" fill="#0A0A0A"></circle>
+              <path d="M104 124l6 6 6-6" stroke="#5C5141" stroke-width="3" stroke-linecap="round" fill="none"></path>
+              <path d="M96 144q14 -8 28 0" stroke="#5C5141" stroke-width="2.6" stroke-linecap="round" fill="none"></path>
+              <text x="170" y="58" font-family="sans-serif" font-size="32" font-weight="800" fill="#FFB627">?</text>
+            </svg>
+          </div>
+          <h2 class="ob-head">가끔 퀴즈가 나와요</h2>
+          <p class="ob-sub">잠깐 이해도를 확인하는 시간이에요.<br>틀려도 괜찮아요 — 다시 볼 수 있어요.</p>
+        </div>
+
+        <!-- Slide 4 -->
+        <div class="ob-slide" data-ob="4">
+          <div class="ob-illust">
+            <span class="ring"></span>
+            <svg viewBox="0 0 220 220" fill="none">
+              <circle cx="110" cy="110" r="82" fill="url(#grad-success)" opacity="0.18"></circle>
+              <circle cx="110" cy="110" r="62" fill="url(#grad-success)"></circle>
+              <path d="M82 110l22 22 38-44" stroke="#0A0A0A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+            </svg>
+          </div>
+          <h2 class="ob-head">이해했나요?</h2>
+          <p class="ob-sub">이제 함께 공부해볼 시간이에요.</p>
+          <button class="ob-cta" type="button" onclick="goto(4)">
+            영상 시작하기
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+              <polyline points="13 6 19 12 13 18"></polyline>
+            </svg>
+          </button>
+        </div>
+
+      </div>
+
+      <div class="ob-bottom">
+        <button class="ob-arrow" type="button" id="ob-prev" onclick="obPrev()" aria-label="이전" disabled="">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <span class="ob-count"><span id="ob-i">1</span> / 4</span>
+        <button class="ob-arrow" type="button" id="ob-next" onclick="obNext()" aria-label="다음">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="screen" data-screen="4" data-screen-label="04 영상 (Dark)">
+    <div class="v4">
+
+      <header class="v4-bar">
+        <div class="v4-course">
+          <span class="crumb">3주차 · 수업 중</span>
+          <span class="title"><span class="han">把자문</span>(把字句) 입문 · 이해와 있용 · 3주차</span>
+        </div>
+        <div class="v4-user">
+          <button type="button" aria-label="설정">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path>
+            </svg>
+          </button>
+          <div class="info">
+            <span class="name">홍길동</span>
+            <span class="school">경기대학교 · 중어중문 3학년</span>
+          </div>
+          <div class="avatar" aria-hidden="true">홍</div>
+        </div>
+      </header>
+
+      <div class="v4-body" id="v4-body">
+        <div class="v4-stage">
+          <div class="v4-video">
+            <div class="v4-video-placeholder">
+              <div class="play-orb">
+                <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z"></path>
+                </svg>
+              </div>
+              <span class="label">강의 영상 · 12:34</span>
+            </div>
+
+            <button class="v4-fab" type="button" onclick="qaToggle(true)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              질문하기
+            </button>
+          </div>
+
+          <div class="v4-controls">
+            <div class="v4-progress">
+              <div class="v4-progress-buffer"></div>
+              <div class="v4-progress-fill"></div>
+            </div>
+            <div class="v4-controls-row">
+              <div class="left">
+                <button class="v4-ctrl play" type="button" aria-label="재생/일시정지">
+                  <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>
+                </button>
+                <button class="v4-ctrl" type="button" aria-label="10초 뒤로">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 17l-5-5 5-5"></path>
+                    <path d="M6 12h8a6 6 0 1 1 0 12h-2"></path>
+                  </svg>
+                </button>
+                <button class="v4-ctrl" type="button" aria-label="10초 앞으로">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M13 17l5-5-5-5"></path>
+                    <path d="M18 12h-8a6 6 0 1 0 0 12h2"></path>
+                  </svg>
+                </button>
+                <span class="v4-time">2:54 / 12:34</span>
+              </div>
+              <div class="reacts" role="group" aria-label="익명 반응">
+                <button class="v4-react" type="button" aria-label="좋아요" onclick="bumpReact(event, this)">
+                  <svg viewBox="0 0 24 24" fill="url(#grad-electric)" stroke="none"><path d="M7 22V11l5-8a2 2 0 0 1 3 2l-1 6h4a3 3 0 0 1 3 3l-2 7a3 3 0 0 1-3 2h-9z"></path></svg>
+                  <span class="count">12</span>
+                </button>
+                <button class="v4-react" type="button" aria-label="궁금해요" onclick="bumpReact(event, this)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="url(#grad-violet)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.6c-1 .8-1.5 1.2-1.5 2.4"></path>
+                    <circle cx="12" cy="17" r="0.6" fill="currentColor"></circle>
+                  </svg>
+                  <span class="count">4</span>
+                </button>
+                <button class="v4-react" type="button" aria-label="재미있어요" onclick="bumpReact(event, this)">
+                  <svg viewBox="0 0 24 24" fill="url(#grad-success)" stroke="none">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M8 14q4 4 8 0" stroke="#0A0A0A" stroke-width="1.8" fill="none" stroke-linecap="round"></path>
+                    <circle cx="9" cy="10" r="1.2" fill="#0A0A0A"></circle>
+                    <circle cx="15" cy="10" r="1.2" fill="#0A0A0A"></circle>
+                  </svg>
+                  <span class="count">7</span>
+                </button>
+                <button class="v4-react" type="button" aria-label="아하—그렇구나" onclick="bumpReact(event, this)">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path d="M12 3l1.5 4 4 .4-3 2.8.9 4-3.4-2-3.4 2 .9-4-3-2.8 4-.4z" fill="url(#grad-electric)"></path>
+                    <path d="M12 14v6" stroke="url(#grad-electric)" stroke-width="2.2" stroke-linecap="round"></path>
+                  </svg>
+                  <span class="count">3</span>
+                </button>
+              </div>
+              <div class="right">
+                <button class="v4-quiz-trigger" type="button" onclick="quizOpen()">DEMO · 퀴즈 트리거</button>
+                <button class="v4-ctrl" type="button" aria-label="자막">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="5" width="18" height="14" rx="2"></rect>
+                    <line x1="7" y1="11" x2="11" y2="11"></line>
+                    <line x1="7" y1="15" x2="15" y2="15"></line>
+                  </svg>
+                </button>
+                <button class="v4-ctrl" type="button" aria-label="전체화면">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <aside class="v4-qa v4-qa-white" aria-label="Q&amp;A 패널">
+          <div class="v4-qa-head">
+            <h3>강의 Q&amp;A</h3>
+            <span class="ask-pill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              질문하기
+            </span>
+          </div>
+
+          <div class="v4-qa-quota">
+            <span class="pill">편당 23 / 100</span>
+            <span>· 오늘 12 / 30</span>
+          </div>
+
+          <div class="v4-qa-body">
+            <div class="v4-msg bot">
+              <span class="av">AI</span>
+              <div>
+                <div class="v4-bubble">안녕하세요! 이번 주차는 《把字句의 기본 구조》입니다. 궁금한 부분을 자유롭게 물어보세요.</div>
+                <span class="v4-source">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12z"></path></svg>
+                  3주차 강의안
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="v4-suggest">
+            <span class="lbl">추천 질문</span>
+            <button class="v4-chip" type="button" onclick="askChip(this)">把자문은 언제 사용하나요?</button>
+            <button class="v4-chip" type="button" onclick="askChip(this)">일반 어순과 어떻게 다른가요?</button>
+          </div>
+
+          <form class="v4-input" onsubmit="event.preventDefault();">
+            <button type="button" class="mic-btn" id="v4-mic" onclick="toggleMic(this)" aria-label="음성으로 질문하기" aria-pressed="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="3" width="6" height="12" rx="3"></rect>
+                <path d="M5 11a7 7 0 0 0 14 0"></path>
+                <line x1="12" y1="18" x2="12" y2="22"></line>
+                <line x1="8" y1="22" x2="16" y2="22"></line>
+              </svg>
+            </button>
+            <div class="ip-wrap">
+              <input type="text" placeholder="강의 내용을 물어보세요…">
+            </div>
+            <button class="send" type="submit" aria-label="보내기">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"></path>
+              </svg>
+            </button>
+          </form>
+        </aside>
+      </div>
+
+      <!-- Interstitial quiz -->
+      <div class="v4-quiz" id="v4-quiz" role="dialog" aria-modal="true">
+        <div class="v4-quiz-card">
+          <div class="v4-quiz-top">
+            <span class="badge">잠깐 퀴즈</span>
+            <span class="timer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"></circle>
+                <polyline points="12 7 12 12 15 14"></polyline>
+              </svg>
+              <span id="quiz-timer">10</span>초
+            </span>
+          </div>
+          <h3 class="v4-quiz-q">把자문에서 把 뒤에 오는 명사는 어떤 의미를 가질까요?</h3>
+          <div class="v4-quiz-opts">
+            <button class="v4-quiz-opt" type="button" data-q="a" onclick="quizAnswer(this)">
+              <span class="letter">A</span><span>동작의 주체</span>
+            </button>
+            <button class="v4-quiz-opt" type="button" data-q="b" data-correct="" onclick="quizAnswer(this)">
+              <span class="letter">B</span><span>동작의 대상</span>
+            </button>
+            <button class="v4-quiz-opt" type="button" data-q="c" onclick="quizAnswer(this)">
+              <span class="letter">C</span><span>동작의 장소</span>
+            </button>
+            <button class="v4-quiz-opt" type="button" data-q="d" onclick="quizAnswer(this)">
+              <span class="letter">D</span><span>동작의 시간</span>
+            </button>
+          </div>
+          <div class="v4-quiz-foot">
+            <div class="v4-quiz-mascot">
+              <span class="av">
+                <svg viewBox="0 0 32 32" fill="currentColor">
+                  <ellipse cx="16" cy="19" rx="9" ry="10"></ellipse>
+                  <ellipse cx="16" cy="13" rx="8" ry="7" fill="#A99B7E"></ellipse>
+                  <circle cx="12" cy="13" r="2" fill="#FFFFFF"></circle>
+                  <circle cx="20" cy="13" r="2" fill="#FFFFFF"></circle>
+                  <circle cx="12" cy="14" r="0.9" fill="#0A0A0A"></circle>
+                  <circle cx="20" cy="14" r="0.9" fill="#0A0A0A"></circle>
+                </svg>
+              </span>
+              <span class="says">잠깐 생각해볼까요?<br>틀려도 괜찮아요.</span>
+            </div>
+            <button class="ob-skip" type="button" onclick="quizClose()" style="color:rgba(255,255,255,0.45);">닫기</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+
+<nav class="demo-nav" aria-label="화면 데모 네비게이션">
+  <div class="demo-nav-head">
+    <span class="label">Demo Navigation</span>
+    <span class="pill">Dev</span>
+  </div>
+  <div class="demo-nav-list">
+    <button class="demo-nav-btn active" data-go="1" type="button"><span class="num">01 LIGHT</span><span>진입</span></button>
+    <button class="demo-nav-btn" data-go="2" type="button"><span class="num">02 LIGHT</span><span>가입</span></button>
+    <button class="demo-nav-btn" data-go="3" type="button"><span class="num">03 L→D</span><span>온보딩</span></button>
+    <button class="demo-nav-btn" data-go="4" type="button"><span class="num">04 DARK</span><span>시청</span></button>
+  </div>
+</nav>
+
+<script>
+  function goto(n) {
+    const screens = document.querySelectorAll('.screen');
+    const btns    = document.querySelectorAll('.demo-nav-btn');
+    screens.forEach(s => s.classList.toggle('active', String(s.dataset.screen) === String(n)));
+    btns.forEach(b => b.classList.toggle('active', String(b.dataset.go) === String(n)));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  document.querySelectorAll('.demo-nav-btn').forEach(b => {
+    b.addEventListener('click', () => goto(b.dataset.go));
+  });
+
+  // ─── Screen 2 form logic ───
+  // Whitelist: known Korean university .ac.kr domains (sample subset)
+  const SCHOOL_DOMAINS = {
+    'kgu.ac.kr':   '경기대학교',
+    'snu.ac.kr':   '서울대학교',
+    'korea.ac.kr': '고려대학교',
+    'yonsei.ac.kr':'연세대학교',
+    'kaist.ac.kr': '카이스트',
+    'postech.ac.kr':'포항공대',
+    'hanyang.ac.kr':'한양대학교',
+    'skku.edu':    '성균관대학교',
+  };
+
+  function validateEmail(e) {
+    const v = e.target.value.trim().toLowerCase();
+    const wrap = document.getElementById('s2-email-wrap');
+    const hint = document.getElementById('s2-email-hint');
+    const next = document.getElementById('s2-next-1');
+    const trailIcon = document.getElementById('s2-trail-icon');
+    const validText = document.getElementById('s2-valid-text');
+
+    wrap.classList.remove('valid', 'invalid');
+    hint.classList.remove('valid', 'invalid');
+
+    if (!v) {
+      next.disabled = true;
+      next.style.opacity = '0.5';
+      next.style.cursor = 'not-allowed';
+      return;
+    }
+
+    const m = v.match(/^[^@\s]+@([^@\s]+)$/);
+    if (!m) {
+      wrap.classList.add('invalid');
+      hint.classList.add('invalid');
+      trailIcon.setAttribute('stroke', '#EF4444');
+      trailIcon.innerHTML = '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>';
+      next.disabled = true;
+      next.style.opacity = '0.5';
+      next.style.cursor = 'not-allowed';
+      return;
+    }
+
+    const domain = m[1];
+    const isAcKr = /\.ac\.kr$|\.edu$/.test(domain);
+
+    if (isAcKr) {
+      const schoolName = SCHOOL_DOMAINS[domain] || domain.split('.')[0].toUpperCase() + ' 도메인';
+      wrap.classList.add('valid');
+      hint.classList.add('valid');
+      trailIcon.setAttribute('stroke', '#10B981');
+      trailIcon.innerHTML = '<polyline points="20 6 9 17 4 12"/>';
+      validText.textContent = schoolName + ' 이메일이 확인됐어요';
+      next.disabled = false;
+      next.style.opacity = '1';
+      next.style.cursor = 'pointer';
+    } else {
+      wrap.classList.add('invalid');
+      hint.classList.add('invalid');
+      trailIcon.setAttribute('stroke', '#EF4444');
+      trailIcon.innerHTML = '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>';
+      next.disabled = true;
+      next.style.opacity = '0.5';
+      next.style.cursor = 'not-allowed';
+    }
+  }
+
+  let currentStep = 1;
+  let resendTimer = null;
+  function setStep(n, dir = 'forward') {
+    const cur  = document.querySelector('.step.active');
+    const tgt  = document.querySelector(`.step[data-step="${n}"]`);
+    if (!tgt || cur === tgt) return;
+    cur.classList.add('leaving');
+    setTimeout(() => {
+      cur.classList.remove('active', 'leaving');
+      tgt.classList.add('active');
+    }, 240);
+    currentStep = n;
+    document.querySelectorAll('#s2-dots .progress-dot').forEach(d => {
+      const i = +d.dataset.dot;
+      d.classList.remove('current', 'done');
+      if (i < n) d.classList.add('done');
+      else if (i === n) d.classList.add('current');
+    });
+    document.getElementById('s2-step-num').textContent = n;
+    document.getElementById('s2-back').classList.toggle('hidden', n === 1);
+    document.querySelectorAll('.dev-bar button').forEach(b => {
+      b.classList.toggle('is-active', +b.dataset.devStep === n);
+    });
+
+    if (n === 2) {
+      const ev = (document.getElementById('s2-email').value || '').trim();
+      if (ev) document.getElementById('s2-email-display').textContent = ev;
+      startResendTimer();
+    } else {
+      stopResendTimer();
+    }
+  }
+  function nextStep() { if (currentStep < 3) setStep(currentStep + 1); }
+  function prevStep() { if (currentStep > 1) setStep(currentStep - 1, 'back'); }
+
+  function startResendTimer() {
+    stopResendTimer();
+    let t = 60;
+    const num  = document.getElementById('s2-timer-num');
+    const wrap = document.getElementById('s2-timer');
+    const btn  = document.getElementById('s2-resend');
+    btn.disabled = true;
+    wrap.style.display = '';
+    num.textContent = t;
+    resendTimer = setInterval(() => {
+      t -= 1;
+      num.textContent = t;
+      if (t <= 0) {
+        stopResendTimer();
+        btn.disabled = false;
+        wrap.style.display = 'none';
+      }
+    }, 1000);
+  }
+  function stopResendTimer() {
+    if (resendTimer) { clearInterval(resendTimer); resendTimer = null; }
+  }
+  function resendMail() {
+    const btn = document.getElementById('s2-resend');
+    const original = btn.textContent;
+    btn.textContent = '✓ 메일을 다시 보냈어요';
+    btn.disabled = true;
+    setTimeout(() => {
+      btn.textContent = original;
+      startResendTimer();
+    }, 1800);
+  }
+
+  function toggleAgree(e) {
+    const submit = document.getElementById('s3-submit');
+    if (e.target.checked) {
+      submit.disabled = false;
+      submit.style.opacity = '1';
+      submit.style.cursor = 'pointer';
+    } else {
+      submit.disabled = true;
+      submit.style.opacity = '0.5';
+      submit.style.cursor = 'not-allowed';
+    }
+  }
+  // ─── Screen 3 onboarding ───
+  let obIdx = 1;
+  let obTimer = null;
+  const OB_TIMINGS = { 1: 8000, 2: 8000, 3: 8000, 4: 6000 };
+  function obShow(n) {
+    if (n < 1 || n > 4) return;
+    obIdx = n;
+    document.querySelectorAll('.ob-slide').forEach(s => s.classList.toggle('active', +s.dataset.ob === n));
+    document.querySelectorAll('#ob-dots .ob-dot').forEach(d => {
+      const i = +d.dataset.i;
+      d.classList.remove('current', 'done');
+      if (i < n) d.classList.add('done');
+      else if (i === n) d.classList.add('current');
+    });
+    document.getElementById('ob-i').textContent = n;
+    document.getElementById('ob-prev').disabled = (n === 1);
+    document.getElementById('ob-next').disabled = (n === 4);
+    document.getElementById('ob-root').classList.toggle('dark', n === 4);
+    obScheduleAuto();
+  }
+  function obNext() { if (obIdx < 4) obShow(obIdx + 1); }
+  function obPrev() { if (obIdx > 1) obShow(obIdx - 1); }
+  function obScheduleAuto() {
+    if (obTimer) clearTimeout(obTimer);
+    if (obIdx === 4) return;
+    obTimer = setTimeout(() => obNext(), OB_TIMINGS[obIdx] || 8000);
+  }
+  function obStop() { if (obTimer) { clearTimeout(obTimer); obTimer = null; } }
+
+  // Auto-start onboarding timer when nav target hits 3, stop otherwise
+  const _gotoOrig = goto;
+  goto = function(n) {
+    _gotoOrig(n);
+    if (+n === 3) obShow(1);
+    else obStop();
+    if (+n !== 4) qaToggle(false);
+  };
+
+  // ─── Screen 4 Q&A ───
+  function qaToggle(open) {
+    const body = document.getElementById('v4-body');
+    if (!body) return;
+    body.classList.toggle('qa-open', !!open);
+  }
+  function askChip(btn) {
+    const text = btn.textContent;
+    const body = document.querySelector('.v4-qa-body');
+    const ANSWERS = {
+      '팊자문은 언제 사용하나요?': '《팊字句》는 주어가 대상(목적어)에 어떤 처치·영향을 가했는지 강조할 때 씀니다. 예: “他把书看完了” — “그가 책을 (다) 읽어버렸다”처럼 “다 읽으면서 수정이 완결되는” 대상의 상태 변화를 강조합니다.',
+      '일반 어순과 어떻게 다른가요?': '일반 SVO(주어–동사–목적어)와 달리, 《팊字句》는 “팊 + 목적어 + 동사” 순서로 목적어를 동사 앞으로 끌어당김니다. 이는 동작의 “처치·결과”를 담는 어조를 만들며, 목적어는 대개 특정적·한정적입니다.',
+    };
+    const me = document.createElement('div');
+    me.className = 'v4-msg me';
+    me.innerHTML = '<span class="av">나</span><div class="v4-bubble">' + text + '</div>';
+    body.appendChild(me);
+    body.scrollTop = body.scrollHeight;
+    setTimeout(() => {
+      const bot = document.createElement('div');
+      bot.className = 'v4-msg bot';
+      const answer = ANSWERS[text] || '강의 자료에서 관련 내용을 찾아 답변드릴게요.';
+      bot.innerHTML = '<span class="av">AI</span><div><div class="v4-bubble">' + answer + '</div><span class="v4-source"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12z"/></svg>3주차 강의안 · p.12</span></div>';
+      body.appendChild(bot);
+      body.scrollTop = body.scrollHeight;
+    }, 280);
+  }
+  function toggleMic(btn) {
+    btn.classList.toggle('on');
+    btn.setAttribute('aria-pressed', btn.classList.contains('on') ? 'true' : 'false');
+  }
+  function bumpReact(e, el) {
+    const count = el.querySelector('.count');
+    count.textContent = (+count.textContent) + 1;
+    el.animate([{transform:'scale(1)'},{transform:'scale(1.25)'},{transform:'scale(1)'}], {duration:280});
+  }
+
+  // ─── Quiz ───
+  let quizTimer = null;
+  function quizOpen() {
+    document.getElementById('v4-quiz').classList.add('show');
+    let t = 10;
+    const el = document.getElementById('quiz-timer');
+    el.textContent = t;
+    if (quizTimer) clearInterval(quizTimer);
+    quizTimer = setInterval(() => {
+      t -= 1;
+      el.textContent = Math.max(0, t);
+      if (t <= 0) quizClose();
+    }, 1000);
+    document.querySelectorAll('.v4-quiz-opt').forEach(o => o.classList.remove('correct','wrong'));
+  }
+  function quizClose() {
+    document.getElementById('v4-quiz').classList.remove('show');
+    if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
+  }
+  function quizAnswer(btn) {
+    if (quizTimer) { clearInterval(quizTimer); quizTimer = null; }
+    const correct = btn.dataset.correct !== undefined;
+    btn.classList.add(correct ? 'correct' : 'wrong');
+    if (!correct) document.querySelector('.v4-quiz-opt[data-correct]').classList.add('correct');
+    setTimeout(quizClose, 1600);
+  }
+</script>
+
+
+
+</body></html>

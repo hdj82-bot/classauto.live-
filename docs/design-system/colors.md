@@ -1,237 +1,241 @@
 # Colors (색상 시스템)
 
-> **상태**: 확정 · 2026-05-05 · **갱신 2026-05-06** (학생 영역 톤 매트릭스 수정)
-> **결정**: 다크/골드 무채색 + 그라데이션 메쉬 (ElevenLabs 톤)
+> **상태**: v2 확정 · 2026-05-12
+> **결정**: 라이트 베이지 + 골드 액센트 (Studio·Student prototype 통합)
+> **이전 정책 (v1)**: 다크 + 골드 + 그라데이션 메쉬 — §11 [Legacy](#11-legacy-v1-아카이브) 에 보존
 
 ---
 
-## 1. 영역별 컬러 분리 (2026-05-06 갱신)
+## 0. 전체 사이트 컬러 정책 한 줄 요약
 
-이전 정책: "학생 영역 = 다크 모드 강제" → **잘못된 일괄 적용**
+**모든 페이지(메인 사이트·교수자·학생) 의 기본 표면은 라이트 베이지(`#FAFAF7`).** 
+학생 영상 시청 화면과 메인 사이트 hero 같은 일부 영역만 다크 표면 토큰으로 전환한다.
 
-수정 정책: **영상 유무 기준으로 분리**
+골드는 라이트 위에서는 `--gold-on-light: #B88308`, 다크 위에서는 `--gold: #FFB627` 을 쓴다 — 표면 톤에 따라 한 단계 어둡게 보정.
 
-| 영역 | 베이스 | 포인트 | 비고 |
+---
+
+## 1. 영역별 표면
+
+| 영역 | 기본 표면 | 액센트 | 비고 |
 |---|---|---|---|
-| 메인 사이트 (랜딩·features·pricing) | `#FAFAF7` 라이트 | 골드 `#FFB627` | 무채색 + 그라데이션 메쉬 |
-| 데모 페이지 (`/demo`) | `#0A0A0A` 다크 | 골드 + 그라데이션 | 학생 시점 시연이라 다크 |
-| 교수자 화면 (대시보드 등) | `#FFFFFF` 메인 + `#FAFAF7` 사이드바 | 골드 | 의미적 컬러(빨강·녹색) 허용 |
-| **학생 진입** (`/v/[강의ID]`) | **`#FAFAF7` 라이트** | 골드 | 첫인상 친근감·신뢰 |
-| **학생 회원가입** | **`#FAFAF7` 라이트** | 골드 | 폼 가독성 |
-| **학생 첫 사용 온보딩** | 라이트 → 다크 전환 | 골드 | 마지막 슬라이드만 다크 (영상 시청 적응) |
-| **학생 영상 시청 화면** | **`#0A0A0A` 다크** | 골드 + 그라데이션 | 영상 몰입 |
-| Q&A 사이드 패널 | 다크 (영상 화면 일부) | 골드 | 영상 화면 연속성 |
-| 집중 경고 · 인터스티셜 퀴즈 | 다크 (오버레이) | 골드 + 마스코트 회갈색 | 영상 화면 위 |
-| **학생 마이페이지 (`/profile`)** | **`#FAFAF7` 라이트** | 골드 | 정보 정리·가독성 |
-| 인증서 PDF | 라이트 (인쇄용) | 골드 | 출력 가독성 |
-
-### 핵심 원칙
-
-> **영상이 화면에 있으면 다크, 영상이 없으면 라이트.**
-
-학생 영역도 예외 아님. 회원가입·진입·마이페이지는 라이트가 자연스럽고, 영상 시청·Q&A·집중경고만 다크.
+| 메인 사이트 (랜딩·features·pricing·use-cases·trust·security 등) | 라이트 `#FAFAF7` | 골드-라이트 `#B88308` | hero 영역은 다크 토큰으로 부분 전환 가능 |
+| 데모 페이지 (`/demo`) | 라이트 | 골드-라이트 | 인터스티셜 시청 미니 화면만 다크 전환 |
+| 교수자 화면 (대시보드·studio·inbox·analytics 등) | 라이트 | 골드-라이트 | 의미적 컬러 (빨강·녹색) 차트에 허용 |
+| 학생 진입·강의 상세 (`/v/[slug]`, `/lecture/[slug]`) | 라이트 | 골드-라이트 | 06 prototype 기준 |
+| 학생 영상 시청 (player 화면) | 다크 `#0A0A0A` | 골드-다크 `#FFB627` | 영상 보호용 다크. 토글 가능 |
+| 인터스티셜 퀴즈 | 다크 | 골드-다크 | 영상 위 오버레이 일관성 |
 
 ---
 
-## 2. 베이스 팔레트
+## 2. 토큰 (CSS 변수 정의)
 
-### 2.1 다크 톤 (영상 화면 전용)
+### 2.1 Light surface — 기본
+
 ```css
---bg-dark: #0A0A0A;
---bg-dark-soft: #141414;
---bg-card-dark: #1A1A1A;
---text-on-dark: #FFFFFF;
---text-on-dark-muted: rgba(255, 255, 255, 0.55);
---text-on-dark-subtle: rgba(255, 255, 255, 0.35);
+--bg:           #FAFAF7;                  /* 페이지 배경 */
+--bg-card:      #FFFFFF;                  /* 카드·패널 */
+--bg-hover:     #F4F0E2;                  /* hover 베이지 */
+--bg-subtle:    #F5F4EF;                  /* 보조 영역 (saved chip 등) */
+
+--text:         #0A0A0A;                  /* 본문·헤드라인 */
+--text-muted:   rgba(10, 10, 10, 0.62);   /* 보조 정보 */
+--text-subtle:  rgba(10, 10, 10, 0.40);   /* 더 약한 메타 */
+--text-faint:   rgba(10, 10, 10, 0.22);   /* 가장 옅은 (placeholder 등) */
+
+--line:         rgba(10, 10, 10, 0.08);
+--line-strong:  rgba(10, 10, 10, 0.14);
 ```
 
-### 2.2 라이트 톤 (비영상 화면 전용)
+### 2.2 Dark surface — 학생 player·hero 등
+
 ```css
---bg-light: #FAFAF7;
---bg-card-light: #FFFFFF;
---bg-sidebar-light: #FAFAF7;
---text-on-light: #0A0A0A;
---text-on-light-muted: rgba(10, 10, 10, 0.62);
---text-on-light-subtle: rgba(10, 10, 10, 0.40);
+--bg-dark:          #0A0A0A;
+--bg-dark-soft:     #141414;
+--bg-card-dark:     #1A1A1A;
+
+--text-dark:        #FFFFFF;
+--text-dark-muted:  rgba(255, 255, 255, 0.62);
+--text-dark-subtle: rgba(255, 255, 255, 0.40);
+
+--line-dark:        rgba(255, 255, 255, 0.08);
+--line-dark-strong: rgba(255, 255, 255, 0.14);
 ```
 
-### 2.3 라인·디바이더
+### 2.3 Gold — 브랜드 액센트
+
 ```css
---line-on-dark: rgba(255, 255, 255, 0.08);
---line-on-light: rgba(10, 10, 10, 0.08);
---line-subtle: rgba(255, 255, 255, 0.04);
+--gold:          #FFB627;                  /* 다크 표면 위 base */
+--gold-bright:   #FFC74D;                  /* hover */
+--gold-deep:     #E89E0E;                  /* press / gradient end */
+--gold-on-light: #B88308;                  /* 라이트 표면 위 base — 대비 5.1:1 */
+
+--gold-soft:     rgba(255, 182, 39, 0.10); /* 매우 옅은 배경 (선택 상태) */
+--gold-medium:   rgba(255, 182, 39, 0.20); /* 보더·강조 */
+--gold-glow:     rgba(255, 182, 39, 0.40); /* shadow·펄스 */
 ```
+
+**사용 규칙**:
+- 라이트 표면 위 텍스트·아이콘 → `--gold-on-light`
+- 다크 표면 위 텍스트·아이콘 → `--gold`
+- 채움 버튼 배경 → `--gold` (라이트 표면에서도 대비 충분 — 텍스트는 `#0A0A0A`)
+- 그라데이션 → `linear-gradient(135deg, var(--gold), var(--gold-deep))`
+
+### 2.4 Semantic — 시스템 피드백
+
+```css
+--success: #10B981;                        /* 저장됨 dot, 정답률 상승 */
+--warning: #EF4444;                        /* 한도 초과, 미응답 알림 */
+--info:    #3B82F6;                        /* 안내 메시지 */
+```
+
+학생 학습 화면에서도 가벼운 UI 인디케이터(저장됨, 진행률 상승)에 허용. 차트·데이터 시각화는 교수자 영역 한정.
+
+### 2.5 Shadow — 검정 베이스 4단계
+
+```css
+--shadow-sm: 0 1px 2px   rgba(10, 10, 10, 0.04);
+--shadow-md: 0 4px 14px  rgba(10, 10, 10, 0.06);
+--shadow-lg: 0 16px 48px rgba(10, 10, 10, 0.10);
+--shadow-xl: 0 24px 64px rgba(10, 10, 10, 0.16);
+
+--shadow-gold-glow: 0 2px 6px var(--gold-glow);
+```
+
+다크 표면에서는 그림자 대신 골드 글로우 또는 라인 강조로 대체.
 
 ---
 
-## 3. 골드 (시그니처 컬러)
+## 3. 골드 사용 원칙
 
-```css
---gold: #FFB627;          /* 메인 골드 */
---gold-bright: #FFC74D;   /* 호버·활성 */
---gold-deep: #E89E0E;     /* 깊은 톤 (텍스트) */
-
---gold-glow-soft: rgba(255, 182, 39, 0.03);    /* 비교표 Basic 컬럼 배경 */
---gold-glow-medium: rgba(255, 182, 39, 0.15);  /* 호버 글로우 */
---gold-glow-strong: rgba(255, 182, 39, 0.40);  /* 펄스 애니메이션 */
-
---gold-text-on-dark: #FFB627;
---gold-text-on-light: #B88308;  /* 라이트 배경에서는 더 진하게 */
-```
-
-골드 사용 원칙:
-- **CTA 버튼 1개당 골드 채움 1번만** (다른 버튼은 outline)
-- 작은 강조 (배지, 카운트, 활성 메뉴)에 골드
-- 너무 많이 쓰면 카지노 느낌 → 페이지당 골드 영역 5곳 이내
+1. **CTA 채움 버튼은 페이지당 1~2개로 제한**. 다른 강조는 outline 또는 텍스트 컬러로.
+2. 작은 강조(배지, 카운트, 활성 메뉴, 진행 dot)에 골드.
+3. **표면 톤에 맞춰 base 선택**: 라이트 위는 `--gold-on-light` (`#B88308`), 다크 위는 `--gold` (`#FFB627`).
+4. 한자 강조는 `color: var(--gold-on-light); font-family: var(--font-han)` — typography.md §3 참조.
+5. 페이지당 골드 영역 5곳 이내 권장.
 
 ---
 
-## 4. 그라데이션 (ElevenLabs 톤)
+## 4. 한자 강조 (NEW in v2)
 
-### 4.1 카드 아이콘용 (4종)
-```css
---grad-violet:    linear-gradient(135deg, #A78BFA 0%, #6366F1 100%);
---grad-electric:  linear-gradient(135deg, #FFB627 0%, #F59E0B 100%);
---grad-cyan:      linear-gradient(135deg, #22D3EE 0%, #0EA5E9 100%);
---grad-pink:      linear-gradient(135deg, #F472B6 0%, #EC4899 100%);
-```
-
-### 4.2 배경 메쉬용 (오로라)
-ElevenLabs 페이지의 큰 그라데이션 오브 효과 차용. 다중 radial-gradient:
+ClassAuto는 학술 도구 정체성을 시각적으로 드러내기 위해 **본문 중간의 한자 단어를 골드 + serif 로 강조**한다. Studio·Student prototype 양쪽에서 일관 사용.
 
 ```css
-.aurora-bg {
-  background:
-    radial-gradient(ellipse at 20% 30%, rgba(167, 139, 250, 0.15), transparent 50%),
-    radial-gradient(ellipse at 80% 70%, rgba(255, 182, 39, 0.12), transparent 50%),
-    radial-gradient(ellipse at 50% 50%, rgba(34, 211, 238, 0.10), transparent 60%);
-  animation: aurora-shift 60s ease-in-out infinite;
-}
-
-@keyframes aurora-shift {
-  0%, 100% { transform: translate(0, 0); }
-  33% { transform: translate(2%, -1%); }
-  66% { transform: translate(-1%, 2%); }
-}
-```
-
-### 4.3 텍스트 그라데이션
-```css
-.gradient-text {
-  background: linear-gradient(135deg, #60A5FA 0%, #A78BFA 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+.han {
+  color: var(--gold-on-light);
+  font-family: var(--font-han);
+  /* 부모 폰트 크기 대비 약간 작게 — 시각 균형 */
 }
 ```
 
-히어로 헤드라인의 일부 단어만 그라데이션 — 전체 그라데이션은 가독성 떨어짐.
+다크 표면 위에서는 `--gold` 사용.
+
+**사용 예**:
+- 강의명: `中国语文法의 이해` → "中国语文法" 만 `.han`
+- 카드 헤드라인의 학술 키워드 강조
 
 ---
 
-## 5. 의미적 컬러 (교수자 영역만)
+## 5. 의미적 컬러 사용 매트릭스
 
-학습자 화면·메인 사이트에는 사용 금지. **교수자 데이터 시각화**에만 허용.
-
-```css
---semantic-warning: #EF4444;   /* 미응답 Q&A, 한도 초과 */
---semantic-success: #10B981;   /* 정답률 상승, 시청 완료 */
---semantic-info: #3B82F6;      /* 안내 메시지 */
---semantic-neutral: #6B7280;   /* 비활성·보조 */
-```
+| 컬러 | 영역 | 용도 |
+|---|---|---|
+| `--success` | 전체 | 저장됨 dot, 시청 완료, 정답률 상승 인디케이터 |
+| `--warning` | 교수자 데이터·학생 한도 경고 | 미응답 Q&A, 한도 초과, 만료 임박 |
+| `--info` | 교수자 안내·툴팁 | 도움말, 변경 안내 |
 
 규칙:
-- 빨강은 **액션 유도**에만 (단순 강조 X)
-- 녹색은 **긍정 변화**에만 (정적 표시 X)
-- 청색은 사용하지 않거나 매우 드물게 (메인 골드와 충돌)
+- 빨강은 액션 유도에만. 정적 강조 금지.
+- 녹색은 긍정 변화에만. 정적 표시 금지.
+- 청색은 골드 충돌 방지 위해 매우 드물게.
 
 ---
 
-## 6. 마스코트 컬러 (학습자 영상 영역)
+## 6. 그라데이션
 
-올빼미 마스코트는 **회갈색 단색**으로 통일:
+### 6.1 골드 그라데이션 (브랜드 점, hero CTA, 아바타 pill)
 
 ```css
---mascot-base: #6B5B47;        /* 몸통 */
---mascot-light: #A89678;       /* 가슴·복부 */
---mascot-eye: #1A1A1A;         /* 눈동자 */
---mascot-beak: #D4923A;        /* 부리 (살짝 따뜻한 톤) */
+--grad-gold: linear-gradient(135deg, #FFB627 0%, #E89E0E 100%);
 ```
 
-이유:
-- ElevenLabs 무채색 톤과 충돌 안 함
-- Duolingo 부엉이의 채도 높은 그린과 차별화
-- 다크 배경(영상 시청 화면)에 잘 어울림
+### 6.2 텍스트 그라데이션 (hero 헤드라인 일부 단어)
 
-자세한 사항은 [mascot.md](./mascot.md).
+```css
+.gradient-text {
+  background: var(--grad-gold);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+```
+
+전체 헤드라인 그라데이션은 가독성 떨어짐 → 핵심 단어만.
+
+### 6.3 v1 의 다중 오로라 메쉬는 폐기
+ElevenLabs 톤의 violet·cyan·pink 메쉬는 새 베이지+골드 단일 톤 정책과 충돌. **사용 금지** (§11 참조).
 
 ---
 
-## 7. 그림자
+## 7. 그림자·글로우
+
+### 7.1 라이트 표면
 
 ```css
---shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
---shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
---shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
---shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.16);
-
---shadow-gold-glow: 0 0 24px rgba(255, 182, 39, 0.30);
---shadow-card-hover: 0 8px 32px rgba(255, 182, 39, 0.15);
+--shadow-sm: 0 1px 2px   rgba(10, 10, 10, 0.04);
+--shadow-md: 0 4px 14px  rgba(10, 10, 10, 0.06);
+--shadow-lg: 0 16px 48px rgba(10, 10, 10, 0.10);
+--shadow-xl: 0 24px 64px rgba(10, 10, 10, 0.16);
 ```
 
-학습자 영역(다크 모드)에서는 그림자 대신 **글로우** 사용:
+카드 hover 시 `--shadow-md` → `--shadow-lg` 전환.
+
+### 7.2 다크 표면 (학생 player·hero)
+
+그림자 대신 골드 글로우 또는 라인 강조:
 
 ```css
-.card-on-dark:hover {
-  box-shadow: 0 0 24px rgba(255, 255, 255, 0.04);
+.on-dark .card:hover {
   border-color: var(--gold);
+  box-shadow: 0 0 24px rgba(255, 182, 39, 0.18);
 }
 ```
 
 ---
 
-## 8. 컬러 사용 우선순위 매트릭스 (2026-05-06 갱신)
+## 8. 접근성 (WCAG 2.1 AA)
 
-| 페이지 | 골드 사용 | 그라데이션 메쉬 | 의미적 컬러 |
-|---|:---:|:---:|:---:|
-| 랜딩 (`/`) | ✓ 다수 | ✓ 배경 | ❌ |
-| Demo (`/demo`) | ✓ CTA·배지 | ✓ 미니 히어로 + CTA 모달 | ❌ |
-| Pricing (`/pricing`) | ✓ Basic 카드 | ❌ (단순함 우선) | ❌ |
-| 교수자 대시보드 | ✓ 활성 메뉴·CTA | ❌ | ✓ 차트 |
-| 영상 제작 마법사 | ✓ 비용 미터 | ❌ | ✓ 한도 경고 |
-| **학생 진입** (`/v/[ID]`) ⭐ | ✓ CTA 버튼 | △ 미세하게 | ❌ |
-| **학생 가입 폼** ⭐ | ✓ CTA 버튼 | ❌ (폼 집중) | ❌ |
-| **학생 온보딩** ⭐ | ✓ CTA·강조 | ✓ 슬라이드 배경 | ❌ |
-| 학생 영상 시청 | ✓ 익명 반응 | ❌ | ❌ |
-| 집중 경고·퀴즈 | ✓ 마스코트 글로우 | ❌ | ❌ |
-| **학생 마이페이지** ⭐ | ✓ 통계 강조 | △ 미세하게 | △ 스트릭 (녹색) |
+| 텍스트 | 배경 | 대비 | 통과 |
+|---|---|---|---|
+| `#0A0A0A` | `#FAFAF7` | 18.7:1 | ✓ AAA |
+| `rgba(10,10,10,0.62)` | `#FAFAF7` | 7.4:1 | ✓ AAA |
+| `rgba(10,10,10,0.40)` | `#FAFAF7` | 3.7:1 | ✓ AA (큰 글자) |
+| `#B88308` | `#FAFAF7` | 5.1:1 | ✓ AA |
+| `#FFFFFF` | `#0A0A0A` | 19.6:1 | ✓ AAA |
+| `#FFB627` | `#0A0A0A` | 11.2:1 | ✓ AAA |
 
-⭐ = 2026-05-06 갱신으로 라이트 톤이 된 화면.
+**`--text-subtle` 이하 (0.40, 0.22) 는 12px 본문에 사용 금지** — 메타 정보·라벨 한정. 큰 글자(18px+) 또는 14px+ bold 에서만 사용.
+
+색맹 친화:
+- 빨강 단독 → ❗ 아이콘 병용
+- 녹색 단독 → ✓ 아이콘 병용
+- Pro 표시 등 차별화는 채도 대신 굵기·아웃라인으로
 
 ---
 
-## 9. 접근성 (대비)
+## 9. 페이지별 적용 매트릭스
 
-### 9.1 WCAG 2.1 AA 기준
-- 일반 텍스트: 대비 4.5:1 이상
-- 큰 텍스트 (18px+ 또는 14px+ bold): 3:1 이상
-- UI 요소 (버튼·아이콘): 3:1 이상
-
-### 9.2 검증된 페어
-| 텍스트 | 배경 | 대비 | 통과 |
-|---|---|---|---|
-| `#FFFFFF` | `#0A0A0A` | 19.6:1 | ✓ AAA |
-| `rgba(255,255,255,0.55)` | `#0A0A0A` | 9.4:1 | ✓ AAA |
-| `#FFB627` | `#0A0A0A` | 11.2:1 | ✓ AAA |
-| `#0A0A0A` | `#FAFAF7` | 18.7:1 | ✓ AAA |
-| `#B88308` | `#FAFAF7` | 5.1:1 | ✓ AA |
-
-라이트 배경에서 골드(`#FFB627`)는 **`#B88308`로 어둡게** 사용.
-
-### 9.3 색맹 친화
-- 빨강 단독 사용 금지 → 빨강 + 아이콘 (! 마크) 병용
-- 녹색 단독 사용 금지 → 녹색 + ✓ 병용
-- 청록 보조 컬러로 색맹 친화 강화 (Pro 차별 표시 등)
+| 페이지 | 표면 | 골드 base | 한자 강조 | 의미적 컬러 |
+|---|:---:|:---:|:---:|:---:|
+| 랜딩 (`/`) | 라이트 | `--gold-on-light` | ✓ | ❌ |
+| Features | 라이트 | `--gold-on-light` | ✓ | ❌ |
+| Pricing | 라이트 | `--gold-on-light` | ✓ | ❌ |
+| Demo (`/demo`) | 라이트 + 미니 시청 영역만 다크 | 표면별 | ✓ | ❌ |
+| 교수자 대시보드 | 라이트 | `--gold-on-light` | ✓ | ✓ (차트·경고) |
+| 교수자 studio | 라이트 | `--gold-on-light` | ✓ | ✓ (비용 미터) |
+| 학생 진입 (`/v/...`) | 라이트 | `--gold-on-light` | ✓ | △ (저장 dot 등 가벼움) |
+| 학생 player | 다크 | `--gold` | ✓ | △ |
+| 인터스티셜 퀴즈 | 다크 오버레이 | `--gold` | ✓ | ❌ |
 
 ---
 
@@ -239,10 +243,53 @@ ElevenLabs 페이지의 큰 그라데이션 오브 효과 차용. 다중 radial-
 
 | 날짜 | 변경 |
 |---|---|
-| 2026-05-05 | 다크/골드 + 그라데이션 메쉬 정책 확정 |
-| 2026-05-05 | 영역별 베이스 모드 분리 (학습자=다크 강제) |
-| 2026-05-05 | 의미적 컬러는 교수자 영역에만 허용 |
-| 2026-05-05 | 마스코트 회갈색 단색 결정 |
-| **2026-05-06** | **학생 영역 톤 정책 수정**: 다크 일괄 적용 → 영상 유무 기준 분리 |
-| **2026-05-06** | 학생 진입·가입·온보딩·마이페이지 = 라이트 톤 |
-| **2026-05-06** | 학생 영상 시청·Q&A·집중경고만 다크 톤 유지 |
+| 2026-05-05 | v1: 다크/골드 + 그라데이션 메쉬 정책 확정 (legacy 보존) |
+| 2026-05-12 | **v2 전면 전환** — Studio(05)·Student(06) prototype 추출 토큰 통합. 라이트 베이지 베이스로 일원화. 학습자 다크 강제 정책 폐기 (player 한정). 마스코트 정책 폐기. 한자 강조 토큰 신설. 오로라 메쉬·violet/cyan/pink 그라데이션 폐기. |
+
+---
+
+## 11. Legacy v1 (아카이브)
+
+> 아래는 2026-05-05 ~ 2026-05-12 사이 운영된 v1 정책. **현재 사용하지 않음**. 코드에서 발견되면 v2 토큰으로 교체 대상.
+
+### v1 영역별 컬러
+
+| 영역 | 베이스 | 포인트 |
+|---|---|---|
+| 메인 사이트 | `#0A0A0A` 다크 | 골드 + 오로라 메쉬 |
+| 교수자 화면 | 라이트 | 골드 |
+| 학습자 화면 | **다크 강제** | 무채색 |
+
+### v1 폐기 토큰
+```css
+/* 아래는 모두 v2 에서 폐기 */
+--grad-violet:   linear-gradient(135deg, #A78BFA 0%, #6366F1 100%);
+--grad-electric: linear-gradient(135deg, #FFB627 0%, #F59E0B 100%);
+--grad-cyan:     linear-gradient(135deg, #22D3EE 0%, #0EA5E9 100%);
+--grad-pink:     linear-gradient(135deg, #F472B6 0%, #EC4899 100%);
+
+.aurora-bg { /* radial-gradient 다중 오브 + aurora-shift keyframes */ }
+
+/* 마스코트 컬러 — mascot.md 폐기와 함께 */
+--mascot-base:  #6B5B47;
+--mascot-light: #A89678;
+--mascot-eye:   #1A1A1A;
+--mascot-beak:  #D4923A;
+```
+
+### v1 → v2 마이그레이션 표
+
+| v1 토큰 | v2 토큰 |
+|---|---|
+| `--bg-dark`, `--bg-dark-soft`, `--bg-card-dark` | 동일 (다크 표면 한정 유지) |
+| `--bg-light`, `--bg-card-light`, `--bg-sidebar-light` | `--bg`, `--bg-card` (light prefix 제거 — 기본이 됨) |
+| `--text-on-light`, `--text-on-light-muted`, `--text-on-light-subtle` | `--text`, `--text-muted`, `--text-subtle` |
+| `--text-on-dark`, `--text-on-dark-muted`, `--text-on-dark-subtle` | `--text-dark`, `--text-dark-muted`, `--text-dark-subtle` |
+| `--line-on-light` | `--line` |
+| `--line-on-dark` | `--line-dark` |
+| `--gold-text-on-light` | `--gold-on-light` |
+| `--gold-text-on-dark` | `--gold` |
+| `--gold-glow-soft/medium/strong` | `--gold-soft`/`--gold-medium`/`--gold-glow` (이름 단순화) |
+| `--shadow-card-hover` (골드 글로우) | `--shadow-md` + `border-color: var(--gold-on-light)` 조합 |
+| `.aurora-bg`, `--grad-violet/cyan/pink` | **삭제** |
+| 마스코트 토큰 전체 | **삭제** (mascot.md 폐기) |

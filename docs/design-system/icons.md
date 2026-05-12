@@ -1,7 +1,20 @@
 # Icons (그라데이션 SVG 정책)
 
-> **상태**: 확정 · 2026-05-05
-> **결정**: 모든 이모지를 그라데이션 SVG로 통일 (옵션 C)
+> **상태**: v2 갱신 · 2026-05-12 — 그라데이션 컬러 매핑 변경
+> **결정**: 모든 이모지를 그라데이션 SVG로 통일 (옵션 C). v2에서 그라데이션은 **골드 단일 톤(electric)** 기본, 필요 시 monochrome line + accent gold 로 단순화. v1 의 violet · cyan · pink 그라데이션은 폐기 (colors.md §6.3 참조).
+
+---
+
+## ⚠️ v2 변경 요약
+
+| 항목 | v1 | v2 |
+|---|---|---|
+| 그라데이션 컬러 매핑 | violet (스크립트·books), cyan (chart·data), pink (감정), electric (미디어), success (긍정) | **electric (골드) 단일** + monochrome line. 의미 구분은 아이콘 형태로. |
+| 다크 표면 위 stroke | 흰색 | `var(--text-dark)` 또는 `var(--gold)` |
+| 라이트 표면 위 stroke | `#0A0A0A` | `var(--text)` 또는 `var(--gold-on-light)` |
+| hover 시 그라데이션 전환 | 단색 → 그라데이션 stroke | 색·굵기 변화로 단순화 (acceleration 회피) |
+
+아래 §2 의 매핑 표에서 violet · cyan · pink 라고 적힌 항목은 모두 **electric 또는 monochrome 로 대체**.
 
 ---
 
