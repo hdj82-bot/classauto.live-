@@ -49,7 +49,7 @@ ClassAuto는 일반 EdTech가 아닙니다. **학자가 학자를 위해 만든 
 - `colors.md` — 색상 시스템 (다크/골드)
 - `animations.md` — 동적 요소 가이드 (16가지 개선)
 - `icons.md` — 그라데이션 SVG 아이콘 정책
-- `mascot.md` — 올빼미 마스코트 가이드
+- `mascot.md` — ⚠️ v2에서 폐기 (Legacy 보존만)
 
 ### 기존 명세서
 - `IFL_서비스기획서_v7.docx` — 전체 서비스 기획서 (참조용 원본)
@@ -57,38 +57,43 @@ ClassAuto는 일반 EdTech가 아닙니다. **학자가 학자를 위해 만든 
 
 ---
 
-## 핵심 디자인 원칙 (요약)
+## 핵심 디자인 원칙 (요약) — v2 (2026-05-12)
 
-세부 사항은 `docs/design-system/`을 참조하되, 어떤 작업이든 다음 원칙을 위반하면 안 됩니다.
+세부 사항은 `docs/design-system/`(v2 갱신됨) 을 참조하되, 어떤 작업이든 다음 원칙을 위반하면 안 됩니다.
 
 ### 폰트
-- **Pretendard** (본문, UI, 숫자) + **Paperlogy** (디스플레이 헤드라인)
+- **Pretendard** (본문·UI·숫자) + **Paperlogy** (디스플레이 헤드라인) + **serif** (한자 강조 한정)
+- CSS 변수 `--font-body` / `--font-display` / `--font-han` 으로만 참조 (직접 폰트명 박지 말 것)
 - Geist · Geist Mono 등 다른 폰트 사용 금지
-- 가격·통계 숫자는 Pretendard tabular-nums 적용 (Geist Mono 대체)
+- 가격·통계 숫자는 Pretendard `tabular-nums` 적용
 
-### 컬러
-- 메인 사이트: 다크 베이스 + 골드 포인트 + 무채색 그라데이션 (오로라 스타일)
-- **학습자 화면은 다크 모드 강제** (`#0A0A0A`)
-- 교수자 화면은 라이트 베이스 + 골드 포인트
-- 의미적 컬러(빨강·녹색)는 교수자 대시보드의 데이터 시각화에서만 허용
+### 컬러 (v2 — 라이트 베이지 + 골드)
+- **사이트 전체 기본 표면은 라이트 베이지** (`#FAFAF7`). 메인 마케팅·교수자·학생 진입까지 동일
+- **다크 표면은 학생 영상 시청 player·인터스티셜 퀴즈·일부 hero 한정** (`#0A0A0A`)
+- 골드는 표면 톤에 맞춰 보정: 라이트 위는 `--gold-on-light` (`#B88308`), 다크 위는 `--gold` (`#FFB627`)
+- 의미적 컬러(빨강·녹색)는 교수자 차트 + 가벼운 UI 인디케이터(저장 dot 등) 한정
+- **v1의 다크+오로라 메쉬, violet/cyan/pink 그라데이션은 폐기**
+
+### 한자 강조 (NEW in v2)
+- 본문 안의 한자 단어를 `.han` 클래스로 강조: `font-family: var(--font-han); color: var(--gold-on-light);`
+- 학술 도구 정체성을 시각적으로 드러내는 핵심 패턴
 
 ### 아이콘
 - 모든 이모지는 **그라데이션 SVG로 통일** (옵션 C 정책)
-- 페이지 전체에서 같은 의미는 같은 SVG 사용 (📹→video-svg, 👥→users-svg 등)
-- 단색 stroke 아이콘은 호버 시 그라데이션 stroke로 전환
+- 페이지 전체에서 같은 의미는 같은 SVG 사용
+- v2 에서 그라데이션은 골드 단일 톤 (electric) 또는 monochrome line + accent gold 로 단순화
 
-### 마스코트
-- 올빼미 캐릭터 (이름 미정 — "오우" 또는 "후" 후보)
-- 회갈색 단색, 도형 기반 미니멀 스타일
-- 학습자 화면에서만 등장 (집중 경고, 인터스티셜 퀴즈, demo CTA)
-- 교수자 화면·메인 사이트에는 등장하지 않음
+### 마스코트 — ⚠️ v2 폐기
+- 05·06 prototype 어디에도 등장하지 않아 정책 자체 제거
+- 학습자 정서적 연결은 골드 그라데이션·타이포·추상 일러스트로 대체
+- 기존 `mascot.md` 는 Legacy 섹션으로만 보존
 
 ### 동적 요소
-- 페이지 진입 시 카운트업 애니메이션 (통계, 가격)
-- 그라데이션 stroke 애니메이션
-- IntersectionObserver 기반 fade-in
+- Easing 토큰만 사용: `--ease-out` (cubic-bezier(0.32, 0.72, 0, 1)) / `--ease-spring` (cubic-bezier(0.34, 1.56, 0.64, 1))
+- 페이지 진입 시 fade-in stagger (80ms 단위)
 - `prefers-reduced-motion` 반드시 지원
-- localStorage 사용 금지 (artifact 환경 호환)
+- localStorage 사용 금지 (artifact·SSR 호환)
+- 그라데이션 메쉬·오로라 효과 폐기
 
 ---
 
@@ -193,5 +198,7 @@ Monitor:  Sentry (에러) + Prometheus (메트릭) + 구조화 JSON 로깅
 
 ## 변경 이력
 
+- 2026-05-12: **디자인 시스템 v2 전환** — Studio(05)·Student(06) prototype 통합. 라이트 베이지 + 골드 dual-surface 토큰. v1 다크+오로라·violet/cyan/pink 그라데이션·마스코트 정책 폐기. 한자 강조 (`--font-han` + `--gold-on-light`) 신설. 병렬 4-worktree 작업 흐름 도입.
+- 2026-05-12: OAuth `invalid_state` 버그 수정 (frontend state CSRF 레이어 제거, 백엔드 Redis state 단일 검증으로 일원화)
 - 2026-05-05: 초기 기획 문서 패키지 추가 (12개 마크다운 + CLAUDE.md 재구성)
 - 그 이전: 기존 명세서(`IFL_서비스기획서_v7.docx` 등) 기준으로 백엔드·인프라 구축

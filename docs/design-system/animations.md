@@ -1,7 +1,18 @@
 # Animations (동적 요소)
 
-> **상태**: 확정 · 2026-05-05
-> **결정**: 페이지별 16가지 동적 요소 개선 (index 6 + features 4 + dashboard 6)
+> **상태**: v2 갱신 · 2026-05-12 (easing 토큰 통합)
+> **결정**: 페이지별 동적 요소는 유지하되, aurora 메쉬·violet/cyan/pink 그라데이션은 [colors.md v2 정책](./colors.md) 에 따라 폐기. 새 easing 변수는 `--ease-out` / `--ease-spring` 두 개로 정리.
+
+---
+
+## 0. Easing 토큰 (v2 신설)
+
+```css
+--ease-out:    cubic-bezier(0.32, 0.72, 0, 1);   /* 기본 ease-out — 진입·hover */
+--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* 살짝 튀는 spring — pop-in, success */
+```
+
+직접 cubic-bezier 를 박지 말고 변수로만 참조. duration은 컴포넌트별 자율이지만 §1.2 가이드 따름.
 
 ---
 
@@ -11,21 +22,30 @@
 1. **방향 안내** — 어디에서 어디로 (페이지 전환)
 2. **상태 변화** — 클릭·호버 피드백
 3. **주목 유도** — CTA 펄스, 신규 콘텐츠
-4. **분위기** — 그라데이션 메쉬, 부드러운 흐름
+4. **분위기** — 부드러운 흐름 (그라데이션 메쉬 v1 정책은 폐기)
 
-### 1.2 페르소나별 모션 톤
+### 1.2 페르소나별 모션 톤 (v2)
 
-| 영역 | 모션 톤 | 기본 속도 |
-|---|---|---|
-| 메인 사이트 | 부드러움 + 임팩트 | 200-300ms ease-out |
-| 교수자 화면 | 빠르고 기능적 | 100-150ms ease-out |
-| 학습자 영상 시청 | 매우 부드러움 | 300-500ms ease-out |
-| 집중 경고·퀴즈 | 점진적 강도 증가 | 1단계 200ms → 3단계 500ms |
+| 영역 | 모션 톤 | 기본 속도 | easing |
+|---|---|---|---|
+| 메인 사이트 (랜딩 등) | 부드러움 + 임팩트 | 200-360ms | `--ease-out` |
+| 교수자 화면 (라이트) | 빠르고 기능적 | 140-220ms | `--ease-out` |
+| 교수자 success 피드백 (저장됨 dot 등) | 살짝 통통 | 280ms | `--ease-spring` |
+| 학생 진입·상세 (라이트) | 부드러움 | 360-500ms fade-in stagger | `--ease-out` |
+| 학생 player (다크) | 매우 부드러움 | 300-500ms | `--ease-out` |
+| 인터스티셜 퀴즈 | 점진적 강도 증가 | 1단계 200ms → 3단계 500ms | `--ease-out` |
 
 ### 1.3 절대 원칙
-- `prefers-reduced-motion: reduce` 반드시 지원 (모든 동적 요소 비활성화)
+- `prefers-reduced-motion: reduce` 반드시 지원 (모든 동적 요소 비활성화 또는 즉시 최종 상태)
 - 60fps 유지 (transform·opacity만 애니메이션, layout 변경 X)
 - 자동 재생 무한 루프는 모바일 배터리 고려 (60초 이상은 일시정지 옵션)
+- localStorage 사용 금지 (artifact·SSR 호환). state·서버 세션·URL 쿼리만.
+
+### 1.4 v2 폐기 항목
+- ❌ `aurora-bg` radial-gradient 다중 오브 (오로라 메쉬)
+- ❌ `--grad-violet` / `--grad-cyan` / `--grad-pink` 사용
+- ❌ `aurora-shift` keyframes
+- ❌ 학습자 영역의 다크 강제와 결합된 글로우 펄스 — 학생 player 에서만 유지
 
 ---
 

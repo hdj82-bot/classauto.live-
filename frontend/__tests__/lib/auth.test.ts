@@ -40,7 +40,12 @@ describe("startGoogleLogin", () => {
     return () => assigned;
   }
 
-  it("builds /api/auth/google URL on the API origin with role + state", async () => {
+  it("builds /api/auth/google URL on the API origin with role only (no client state)", async () => {
+    // v2 (2026-05-12): 패치 1 (commit 14153c3) 로 frontend-side OAuth state
+    // 발급이 제거됐다. CSRF 방어는 백엔드 Redis state (UUID + getdel + 10분
+    // TTL) 단일 검증으로 일원화. 본 케이스는 다음을 회귀 보호한다:
+    //   - URL 에 role 만 추가되고 state 쿼리는 없음
+    //   - sessionStorage 의 ifl_oauth_state 키는 건드리지 않음
     const get = captureRedirect();
     const { startGoogleLogin } = await loadAuth();
     startGoogleLogin("student");
@@ -49,10 +54,10 @@ describe("startGoogleLogin", () => {
     expect(url.origin).toBe("https://api.example.com");
     expect(url.pathname).toBe("/api/auth/google");
     expect(url.searchParams.get("role")).toBe("student");
-    const state = url.searchParams.get("state");
-    expect(state).toBeTruthy();
-    // OAuth state must also be persisted for the callback consume() step
-    expect(window.sessionStorage.getItem("ifl_oauth_state")).toBe(state);
+    expect(url.searchParams.get("state")).toBeNull();
+    // 빌드 후에도 sessionStorage 잔재 없음 — 옛 잔재가 있어도 새 호출이
+    // 거기에 쓰지 않음을 검증.
+    expect(window.sessionStorage.getItem("ifl_oauth_state")).toBeNull();
   });
 
   it("redirects to professor URL when called with professor role", async () => {

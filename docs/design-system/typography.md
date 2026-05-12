@@ -1,21 +1,34 @@
 # Typography (폰트 정책)
 
-> **상태**: 확정 · 2026-05-05
-> **결정**: Pretendard + Paperlogy 두 가지만 사용. Geist · Geist Mono 등 폐기.
+> **상태**: v2 확정 · 2026-05-12 (한자 강조 신설)
+> **결정**: Pretendard + Paperlogy + serif (한자 한정) 세 가지만 사용. Geist · Geist Mono 등 폐기.
 
 ---
 
-## 1. 두 폰트의 역할 분리
+## 0. CSS 변수 (토큰)
 
-같은 자리에 두 폰트를 섞으면 산만해집니다. **명확한 위계**로 구분합니다.
+```css
+--font-display: 'Paperlogy', 'Pretendard Variable', 'Pretendard', system-ui, sans-serif;
+--font-body:    'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+--font-han:     'Noto Serif KR', 'Source Han Serif KR', serif;
+```
 
-| 용도 | 폰트 | 굵기 | 사용 예 |
+본문은 `var(--font-body)`, 헤드라인은 `var(--font-display)`, 한자 강조는 `var(--font-han)` 으로 사용. 직접 폰트명을 박지 말 것.
+
+---
+
+## 1. 세 폰트의 역할 분리
+
+같은 자리에 여러 폰트를 섞으면 산만해집니다. **명확한 위계**로 구분합니다.
+
+| 용도 | 폰트 (CSS 변수) | 굵기 | 사용 예 |
 |---|---|---|---|
-| **Display 헤드라인** | **Paperlogy** | 8 ExtraBold / 9 Black | 히어로 큰 제목, 섹션 헤딩 |
-| 서브 헤딩 | Paperlogy | 7 Bold | 카드 타이틀, 표 헤더 |
-| 본문 | **Pretendard** | 400 / 500 | 일반 텍스트, 설명문 |
-| UI 라벨 · 버튼 | Pretendard | 500 / 600 | 네비, CTA, 폼 라벨 |
-| 숫자 (가격·통계) | **Pretendard tabular-nums** | 600 | ₩15,200, 80%, 20편 |
+| **Display 헤드라인** | `--font-display` (Paperlogy) | 8 ExtraBold / 9 Black | 히어로 큰 제목, 섹션 헤딩 |
+| 서브 헤딩 | `--font-display` (Paperlogy) | 7 Bold | 카드 타이틀, 표 헤더 |
+| 본문 | `--font-body` (Pretendard) | 400 / 500 | 일반 텍스트, 설명문 |
+| UI 라벨 · 버튼 | `--font-body` (Pretendard) | 500 / 600 | 네비, CTA, 폼 라벨 |
+| 숫자 (가격·통계) | `--font-body` + `tabular-nums` | 600 | ₩15,200, 80%, 20편 |
+| **한자 강조** | `--font-han` (serif) | 400 | 中国语文法, 把자문 |
 | 코드 · 모노 | (제거됨) | — | 더 이상 사용 안 함 |
 
 ### 핵심 결정
@@ -34,6 +47,31 @@ Geist Mono로 표시하던 가격·통계는 **Pretendard + `font-variant-numeri
 - Pretendard는 한국어 폰트이지만 숫자 글리프 품질 우수
 - tabular-nums 적용 시 칼럼 정렬 완벽
 - 한 폰트로 일관성 + 다국어 지원
+
+---
+
+## 1.1 한자 강조 (NEW in v2)
+
+ClassAuto는 학술 도구 정체성을 시각적으로 드러내기 위해 **본문 중간의 한자 단어를 serif + 골드**로 강조합니다. 05·06 prototype 양쪽에서 일관 사용.
+
+```css
+.han {
+  font-family: var(--font-han);
+  color: var(--gold-on-light);   /* 다크 표면에서는 var(--gold) */
+}
+```
+
+**사용 규칙**:
+- ✅ 강의명·본문 안의 한자 단어 (中国语文法, 把자문, 漢字 등)
+- ✅ 카드 헤드라인 안의 학술 키워드
+- ❌ UI 라벨·버튼에 한자 강조 금지 — 가독성·인지 부하
+- ❌ 한자가 아닌 단어에 `.han` 사용 금지
+
+크기는 부모 폰트 크기를 그대로 따르되, serif 자체 비율이 약간 커보이므로 필요 시 `font-size: 0.95em` 으로 미세 조정.
+
+폰트 임베드:
+- 자체 호스팅 부담을 피하기 위해 **시스템 serif → Noto Serif KR fallback** 사용
+- 별도 woff2 임베드는 §3 참조
 
 ---
 
@@ -204,3 +242,4 @@ font-family:
 | 2026-05-05 | Geist·Geist Mono 폐기 |
 | 2026-05-05 | 숫자 처리를 Pretendard tabular-nums로 통일 |
 | 2026-05-05 | Paperlogy 사용 규칙 (히어로·헤딩만) 명시 |
+| 2026-05-12 | v2 — CSS 변수 토큰 (`--font-display`/`--font-body`/`--font-han`) 도입. 한자 강조 (serif + gold) 신설. 05·06 prototype 기준 정합. |
