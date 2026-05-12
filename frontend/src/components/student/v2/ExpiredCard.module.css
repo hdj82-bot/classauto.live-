@@ -1,0 +1,63 @@
+/* ExpiredCard — 시청 만료 페이지. 단일 카드 중앙 정렬. */
+.wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 40px 28px 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  text-align: center;
+}
+.kicker {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: var(--gold-on-light);
+  border: 1px solid var(--gold-medium);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.illust {
+  width: 96px;
+  height: 96px;
+  border-radius: 28px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse at 30% 30%, rgba(255, 199, 77, 0.25), transparent 60%),
+    radial-gradient(ellipse at 70% 70%, rgba(255, 182, 39, 0.18), transparent 60%),
+    linear-gradient(140deg, #fff8e7 0%, #fffcf3 100%);
+  border: 1px solid rgba(255, 182, 39, 0.30);
+  box-shadow: 0 8px 28px rgba(255, 182, 39, 0.18);
+}
+.illust svg {
+  width: 48px;
+  height: 48px;
+}
+.title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: var(--text-light);
+  text-wrap: balance;
+}
+.desc {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-light-muted);
+  max-width: 380px;
+  text-wrap: pretty;
+}
+.actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+}

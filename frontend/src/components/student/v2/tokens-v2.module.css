@@ -1,0 +1,276 @@
+/* ──────────────────────────────────────────────────────────────────────────────
+ * tokens-v2.module.css — Window 4 (student) 전용 디자인 토큰 + 베이스 유틸리티.
+ *
+ * 출처: docs/prototypes/06-student-flow.html (extracted) — 토큰 1:1 동기.
+ * 글로벌 :root 를 침범하지 않도록 모든 토큰은 두 래퍼 클래스
+ * (.surfaceLight / .surfaceDark) 에 묶어두고, 후손 컴포넌트는 var(--...) 로
+ * 참조한다. CSS Modules 가 클래스명을 해시하지만 var(--token) 은 정적이므로
+ * 후손이 직접 변수명을 적어도 동작한다.
+ *
+ * Window 1 (globals.css) 와 충돌 없음 — 변수명이 .surface* 클래스 내부에만
+ * 존재한다. Tailwind 4 와 함께 사용해도 안전.
+ * ────────────────────────────────────────────────────────────────────────────── */
+
+/* ─── Paperlogy (선택적 — 파일 없으면 자동 fallback) ─────────────────────────── */
+@font-face {
+  font-family: "Paperlogy";
+  src: url("/fonts/Paperlogy-7Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Paperlogy";
+  src: url("/fonts/Paperlogy-8ExtraBold.ttf") format("truetype");
+  font-weight: 800;
+  font-display: swap;
+}
+
+/* ─── 공통 토큰 (light/dark 모두 상속) ──────────────────────────────────────── */
+.surfaceLight,
+.surfaceDark {
+  --gold: #ffb627;
+  --gold-bright: #ffc74d;
+  --gold-deep: #e89e0e;
+  --gold-on-light: #b88308;
+  --gold-soft: rgba(255, 182, 39, 0.10);
+  --gold-medium: rgba(255, 182, 39, 0.20);
+
+  --font-display: "Paperlogy", "Pretendard Variable", "Pretendard", system-ui, sans-serif;
+  --font-body: "Pretendard Variable", "Pretendard", -apple-system, BlinkMacSystemFont, system-ui,
+    sans-serif;
+
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Light surface (/v/[slug], signup, complete-profile, expired, assess) ──── */
+.surfaceLight {
+  --bg-light: #fafaf7;
+  --bg-card-light: #ffffff;
+  --text-light: #0a0a0a;
+  --text-light-muted: rgba(10, 10, 10, 0.62);
+  --text-light-subtle: rgba(10, 10, 10, 0.40);
+  --text-light-faint: rgba(10, 10, 10, 0.22);
+  --line-light: rgba(10, 10, 10, 0.08);
+  --line-light-strong: rgba(10, 10, 10, 0.14);
+
+  background: var(--bg-light);
+  color: var(--text-light);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ─── Dark surface (/lecture/[slug] 영상 시청) ──────────────────────────────── */
+.surfaceDark {
+  --bg-dark: #0a0a0a;
+  --bg-dark-soft: #141414;
+  --bg-card-dark: #1a1a1a;
+  --text-dark: #ffffff;
+  --text-dark-muted: rgba(255, 255, 255, 0.62);
+  --text-dark-subtle: rgba(255, 255, 255, 0.40);
+  --text-dark-faint: rgba(255, 255, 255, 0.22);
+  --line-dark: rgba(255, 255, 255, 0.08);
+  --line-dark-strong: rgba(255, 255, 255, 0.14);
+
+  background: var(--bg-dark);
+  color: var(--text-dark);
+  min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ─── Aurora light (라이트 화면 미세 배경) ──────────────────────────────────── */
+.auroraLight {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 50% at 18% 20%, rgba(167, 139, 250, 0.07), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 82% 80%, rgba(255, 182, 39, 0.08), transparent 60%);
+  animation: aurora-shift 80s ease-in-out infinite;
+}
+@keyframes aurora-shift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  33% {
+    transform: translate(2%, -1%);
+  }
+  66% {
+    transform: translate(-1%, 2%);
+  }
+}
+
+/* ─── 공통 stagger fade-in (60fps — transform/opacity 만 변경) ──────────────── */
+.fadeIn {
+  animation: fade-in 500ms var(--ease-out) both;
+}
+.fadeIn80 {
+  animation: fade-in 500ms var(--ease-out) 80ms both;
+}
+.fadeIn160 {
+  animation: fade-in 500ms var(--ease-out) 160ms both;
+}
+.fadeIn240 {
+  animation: fade-in 500ms var(--ease-out) 240ms both;
+}
+.fadeIn320 {
+  animation: fade-in 500ms var(--ease-out) 320ms both;
+}
+.fadeIn400 {
+  animation: fade-in 500ms var(--ease-out) 400ms both;
+}
+.fadeIn480 {
+  animation: fade-in 500ms var(--ease-out) 480ms both;
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* ─── Brand bar (light 톤 페이지 공통 상단) ─────────────────────────────────── */
+.brandbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 28px;
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--text-light);
+}
+.brandMark {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--gold) 0%, var(--gold-deep) 100%);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 14px rgba(255, 182, 39, 0.30);
+}
+.brandMark::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background: #fff;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  margin-left: 2px;
+}
+.langToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-light-muted);
+  border: 1px solid var(--line-light);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  transition: color 200ms, border-color 200ms;
+}
+.langToggle:hover {
+  color: var(--text-light);
+  border-color: var(--line-light-strong);
+}
+
+/* ─── 공통 버튼 (light 톤) ──────────────────────────────────────────────────── */
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 56px;
+  padding: 0 22px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 180ms var(--ease-out), background 180ms, border-color 180ms,
+    box-shadow 220ms, color 180ms;
+  letter-spacing: -0.005em;
+  text-decoration: none;
+  color: inherit;
+}
+.btnGold {
+  background: var(--gold);
+  color: #0a0a0a;
+}
+.btnGold:hover:not(:disabled) {
+  background: var(--gold-bright);
+  box-shadow: 0 10px 28px rgba(255, 182, 39, 0.30), 0 0 0 4px rgba(255, 182, 39, 0.10);
+  transform: translateY(-1px);
+}
+.btnGold:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btnOutlineLight {
+  background: var(--bg-card-light);
+  color: var(--text-light);
+  border-color: var(--line-light-strong);
+}
+.btnOutlineLight:hover:not(:disabled) {
+  border-color: rgba(10, 10, 10, 0.28);
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(10, 10, 10, 0.05);
+}
+.btnArrow {
+  margin-left: auto;
+  opacity: 0.55;
+  transition: transform 200ms, opacity 200ms;
+}
+.btn:hover .btnArrow {
+  transform: translateX(3px);
+  opacity: 1;
+}
+
+/* ─── prefers-reduced-motion (animations.md §7) ─────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .surfaceLight *,
+  .surfaceLight *::before,
+  .surfaceLight *::after,
+  .surfaceDark *,
+  .surfaceDark *::before,
+  .surfaceDark *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  .auroraLight {
+    animation: none;
+  }
+}

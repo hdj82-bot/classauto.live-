@@ -1,14 +1,22 @@
 "use client";
 
-import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useI18n } from "@/contexts/I18nContext";
 import { useToast } from "@/components/ui/Toast";
-import Header from "@/components/Header";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import StudentSurfaceLight from "@/components/student/v2/StudentSurfaceLight";
+import tokensCss from "@/components/student/v2/tokens-v2.module.css";
+import styles from "@/components/student/v2/Assess.module.css";
 
+/**
+ * /lecture/[slug]/assess — 형성평가 (v2 라이트 톤).
+ *
+ * 영상이 없는 인터페이스이므로 라이트 (colors.md §1). 진행도 바 · 객관식 칩 ·
+ * 단답형 textarea 가 06 prototype 의 카드/칩 스타일을 따른다. 라우팅·API
+ * 호출은 v1 의 흐름을 그대로 유지 — POST /api/responses + 학습 세션 complete.
+ */
 interface Question {
   id: string;
   content: string;
@@ -28,9 +36,9 @@ interface ScoreResult {
 }
 
 export default function AssessmentPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams<{ slug: string }>();
+  const slug = params.slug;
   const searchParams = useSearchParams();
-  // URL의 session_id = 학습 세션 ID (complete 호출용)
   const learningSessionId = searchParams.get("session_id") ?? "";
   const router = useRouter();
   const { t } = useI18n();
@@ -44,21 +52,19 @@ export default function AssessmentPage() {
   const [completed, setCompleted] = useState(false);
   const [scoreResult, setScoreResult] = useState<ScoreResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 문제 API 응답의 session_id = 평가 세션 ID (응답 제출용)
-  const [assessmentSessionId, setAssessmentSessionId] = useState<string>("");
+  const [assessmentSessionId, setAssessmentSessionId] = useState("");
 
   useEffect(() => {
     (async () => {
       try {
         const { data: lecture } = await api.get(`/api/lectures/${slug}/public`);
-        // 백엔드 실제 경로: GET /api/questions/{lecture_id}?assessment_type=formative
         const { data } = await api.get(`/api/questions/${lecture.id}`, {
           params: { assessment_type: "formative" },
         });
         setQuestions(data.questions ?? []);
         setAssessmentSessionId(data.session_id ?? "");
       } catch {
-        setError(t("assess.loadError"));
+        setError(t("student.assessV2.loadError"));
       }
       setLoading(false);
     })();
@@ -67,15 +73,15 @@ export default function AssessmentPage() {
   const currentQuestion = questions[currentIndex];
   const isFirst = currentIndex === 0;
   const isLast = currentIndex === questions.length - 1;
+  const progressPct =
+    questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      // 1. 답안 제출: POST /api/responses
       const responses = Object.entries(answers).map(([question_id, user_answer]) => ({
         question_id,
         user_answer,
-        // 평가 페이지에는 영상 플레이어가 없으므로 0으로 전송
         video_timestamp_seconds: 0,
       }));
 
@@ -91,163 +97,125 @@ export default function AssessmentPage() {
         setScoreResult({ total, correct, pending });
       }
 
-      // 2. 학습 세션 완료 처리
       if (learningSessionId) {
         await api.post(`/api/v1/sessions/${learningSessionId}/complete`);
       }
 
       setCompleted(true);
     } catch {
-      toast(t("assess.submitError"), "error");
+      toast(t("student.assessV2.submitError"), "error");
     }
     setSubmitting(false);
   };
 
-  if (loading) return <LoadingSpinner fullScreen label={t("assess.loadingQuestions")} />;
+  if (loading) {
+    return (
+      <StudentSurfaceLight bare>
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "grid",
+            placeItems: "center",
+            color: "rgba(10,10,10,0.55)",
+            fontSize: 14,
+          }}
+        >
+          <p role="status">{t("student.assessV2.loadingQuestions")}</p>
+        </div>
+      </StudentSurfaceLight>
+    );
+  }
 
   return (
     <ProtectedRoute>
-      <div className="min-h-screen bg-gray-50">
-        <Header />
-        <main className="max-w-2xl mx-auto px-4 py-8">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-xl font-bold text-gray-900">{t("assess.title")}</h1>
-            <button
-              onClick={() => router.back()}
-              className="text-sm text-gray-500 hover:text-gray-700 transition"
-            >
-              {t("common.back")}
-            </button>
+      <StudentSurfaceLight>
+        <div className={`${styles.wrap} ${tokensCss.fadeIn}`}>
+          <span className={styles.kicker}>{t("student.assessV2.kicker")}</span>
+          <div className={styles.header}>
+            <h1 className={styles.title}>{t("student.assessV2.title")}</h1>
+            <p className={styles.subtitle}>{t("student.assessV2.subtitle")}</p>
           </div>
 
-          {/* Error state */}
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-6 text-center">
-              <p className="font-medium">{error}</p>
-              <button
-                onClick={() => router.back()}
-                className="mt-4 text-sm underline hover:no-underline"
-              >
-                {t("common.back")}
-              </button>
+            <div
+              role="alert"
+              style={{
+                background: "rgba(239,68,68,0.06)",
+                border: "1px solid rgba(239,68,68,0.30)",
+                color: "#b91c1c",
+                borderRadius: 12,
+                padding: "12px 16px",
+                fontSize: 13.5,
+              }}
+            >
+              {error}
             </div>
           )}
 
-          {/* Completion screen */}
           {!error && completed && (
-            <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-8 text-center">
-              <div
-                className="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-100 flex items-center justify-center"
-                aria-hidden="true"
-              >
-                <svg
-                  className="w-8 h-8 text-indigo-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-bold text-indigo-700 mb-2">
-                {t("assess.complete")}
-              </h2>
-              {scoreResult && scoreResult.total > 0 && (
-                <p className="text-indigo-600 font-semibold text-lg mb-1">
-                  {t("assess.accuracy", {
-                    pct: String(Math.round((scoreResult.correct / scoreResult.total) * 100)),
-                  })}
-                </p>
-              )}
-              <p className="text-indigo-600 text-sm">{t("assess.completeDesc")}</p>
-              <button
-                onClick={() => router.back()}
-                className="mt-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6 py-2.5 text-sm font-medium transition"
-              >
-                {t("assess.backToLecture")}
-              </button>
-            </div>
+            <CompletionCard
+              score={scoreResult}
+              onBack={() => router.push(`/lecture/${slug}`)}
+            />
           )}
 
-          {/* No questions */}
           {!error && !completed && questions.length === 0 && (
-            <div className="text-center py-20">
-              <div
-                className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 flex items-center justify-center"
+            <div className={styles.emptyCard}>
+              <svg
+                width="56"
+                height="56"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="url(#ca-grad-violet)"
+                strokeWidth={1.6}
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 aria-hidden="true"
               >
-                <svg
-                  className="w-8 h-8 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                  />
-                </svg>
-              </div>
-              <p className="text-gray-700 font-medium mb-1">{t("assess.noQuestions")}</p>
-              <p className="text-sm text-gray-400">{t("assess.noQuestionsDesc")}</p>
+                <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+                <rect x="9" y="3" width="6" height="4" rx="1" />
+              </svg>
+              <h2>{t("student.assessV2.noQuestionsTitle")}</h2>
+              <p>{t("student.assessV2.noQuestionsDesc")}</p>
             </div>
           )}
 
-          {/* Question view */}
-          {!error && !completed && questions.length > 0 && currentQuestion && (
-            <div>
-              {/* Progress bar */}
-              <div className="flex items-center gap-3 mb-6">
-                <span className="text-sm text-gray-500 whitespace-nowrap">
-                  {t("assess.questionCount", {
+          {!error && !completed && currentQuestion && (
+            <>
+              <div className={styles.progress}>
+                <div
+                  className={styles.progressBar}
+                  role="progressbar"
+                  aria-valuemin={1}
+                  aria-valuemax={questions.length}
+                  aria-valuenow={currentIndex + 1}
+                >
+                  <div className={styles.progressFill} style={{ width: `${progressPct}%` }} />
+                </div>
+                <span className={styles.progressLabel}>
+                  {t("student.assessV2.progress", {
                     current: String(currentIndex + 1),
                     total: String(questions.length),
                   })}
                 </span>
-                <div
-                  className="flex-1 bg-gray-200 rounded-full h-1.5"
-                  role="progressbar"
-                  aria-valuenow={currentIndex + 1}
-                  aria-valuemin={1}
-                  aria-valuemax={questions.length}
-                >
-                  <div
-                    className="bg-indigo-500 h-1.5 rounded-full transition-all"
-                    style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }}
-                  />
-                </div>
               </div>
 
-              {/* Question card */}
-              <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-6 shadow-sm">
-                <p className="text-gray-900 font-medium text-base mb-6 leading-relaxed">
-                  {currentQuestion.content}
-                </p>
+              <div className={styles.card}>
+                <div className={styles.qNumber}>
+                  {t("student.assessV2.questionLabel", { n: String(currentIndex + 1) })}
+                </div>
+                <div className={styles.qText}>{currentQuestion.content}</div>
 
                 {currentQuestion.options && currentQuestion.options.length > 0 ? (
                   <div
-                    className="space-y-3"
+                    className={styles.options}
                     role="radiogroup"
                     aria-label={currentQuestion.content}
                   >
                     {currentQuestion.options.map((opt, idx) => {
                       const selected = answers[currentQuestion.id] === String(idx);
                       return (
-                        <label
-                          key={idx}
-                          className={`flex items-center gap-3 border rounded-xl px-4 py-3 cursor-pointer transition ${
-                            selected
-                              ? "border-indigo-500 bg-indigo-50"
-                              : "border-gray-200 hover:border-indigo-300 hover:bg-gray-50"
-                          }`}
-                        >
+                        <label key={idx} className={styles.option}>
                           <input
                             type="radio"
                             name={`q-${currentQuestion.id}`}
@@ -259,20 +227,19 @@ export default function AssessmentPage() {
                                 [currentQuestion.id]: String(idx),
                               }))
                             }
-                            className="accent-indigo-600 shrink-0"
                           />
-                          <span className="font-semibold text-gray-400 text-sm w-5 shrink-0">
-                            {String.fromCharCode(65 + idx)}.
+                          <span className={styles.optionLetter}>
+                            {String.fromCharCode(65 + idx)}
                           </span>
-                          <span className="text-sm text-gray-800">{opt}</span>
+                          <span>{opt}</span>
                         </label>
                       );
                     })}
                   </div>
                 ) : (
-                  <div>
-                    <label htmlFor={`short-${currentQuestion.id}`} className="sr-only">
-                      {t("assess.answerPlaceholder")}
+                  <div className={styles.shortAnswer}>
+                    <label htmlFor={`short-${currentQuestion.id}`} style={{ display: "none" }}>
+                      {t("student.assessV2.answerPlaceholder")}
                     </label>
                     <textarea
                       id={`short-${currentQuestion.id}`}
@@ -283,51 +250,128 @@ export default function AssessmentPage() {
                           [currentQuestion.id]: e.target.value,
                         }))
                       }
-                      placeholder={t("assess.answerPlaceholder")}
+                      placeholder={t("student.assessV2.answerPlaceholder")}
                       rows={4}
-                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none"
                     />
                   </div>
                 )}
               </div>
 
-              {/* Navigation */}
-              <div className="flex items-center justify-between">
+              <div className={styles.nav}>
                 <button
-                  onClick={() => setCurrentIndex((i) => i - 1)}
+                  type="button"
+                  className={styles.navPrev}
                   disabled={isFirst}
-                  className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                  onClick={() => setCurrentIndex((i) => i - 1)}
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M15 19l-7-7 7-7" />
                   </svg>
-                  {t("common.previous")}
+                  {t("student.assessV2.previous")}
                 </button>
 
                 {isLast ? (
                   <button
-                    onClick={handleSubmit}
+                    type="button"
+                    className={`${tokensCss.btn} ${tokensCss.btnGold}`}
+                    style={{ width: "auto", padding: "0 28px", height: 48 }}
                     disabled={submitting}
-                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl px-6 py-2.5 text-sm font-semibold transition"
+                    onClick={handleSubmit}
                   >
-                    {submitting ? t("common.submitting") : t("common.submit")}
+                    {submitting
+                      ? t("student.assessV2.submitting")
+                      : t("student.assessV2.submit")}
                   </button>
                 ) : (
                   <button
+                    type="button"
+                    className={`${tokensCss.btn} ${tokensCss.btnOutlineLight}`}
+                    style={{ width: "auto", padding: "0 22px", height: 48 }}
                     onClick={() => setCurrentIndex((i) => i + 1)}
-                    className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition"
                   >
-                    {t("common.next")}
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    {t("student.assessV2.next")}
+                    <svg
+                      className={tokensCss.btnArrow}
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="13 6 19 12 13 18" />
                     </svg>
                   </button>
                 )}
               </div>
+            </>
+          )}
+        </div>
+      </StudentSurfaceLight>
+    </ProtectedRoute>
+  );
+}
+
+function CompletionCard({
+  score,
+  onBack,
+}: {
+  score: ScoreResult | null;
+  onBack: () => void;
+}) {
+  const { t } = useI18n();
+  const pct =
+    score && score.total > 0 ? Math.round((score.correct / score.total) * 100) : null;
+  return (
+    <div className={styles.completeCard}>
+      <div className={styles.completeIllust} aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="9" fill="url(#ca-grad-success)" opacity="0.18" />
+          <circle cx="12" cy="12" r="6.5" fill="url(#ca-grad-success)" />
+          <path
+            d="M9 12l2.4 2.4L15.5 10"
+            stroke="#0A0A0A"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </svg>
+      </div>
+      <h2 className={styles.completeTitle}>{t("student.assessV2.complete")}</h2>
+      {pct !== null && (
+        <>
+          <div className={styles.completeScore}>{`${pct}%`}</div>
+          {score && (
+            <div className={styles.completeDetail}>
+              {t("student.assessV2.scoreDetail", {
+                correct: String(score.correct),
+                total: String(score.total),
+              })}
             </div>
           )}
-        </main>
-      </div>
-    </ProtectedRoute>
+        </>
+      )}
+      <p className={styles.completeDesc}>{t("student.assessV2.completeDesc")}</p>
+      <button
+        type="button"
+        className={`${tokensCss.btn} ${tokensCss.btnGold}`}
+        style={{ width: "auto", padding: "0 28px", height: 50, marginTop: 12 }}
+        onClick={onBack}
+      >
+        {t("student.assessV2.backToPlayer")}
+      </button>
+    </div>
   );
 }
