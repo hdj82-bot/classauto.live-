@@ -5,6 +5,7 @@ import { useStudioI18n } from "./useStudioI18n";
 import { validateStep1, validatePptFile, MAX_PPT_BYTES } from "./guardrails";
 import GuardrailBanner from "./GuardrailBanner";
 import type { Course } from "./studioTypes";
+import { tabularStyle, PrimaryButton, Card } from "@/components/professor/shell";
 
 interface Step1Props {
   courses: readonly Course[];
@@ -20,6 +21,10 @@ interface Step1Props {
 
 /**
  * Step 1 — 강좌 선택/생성 + 강의 제목 + .pptx 업로드.
+ *
+ * v2 디자인 — docs/prototypes/05-studio-flow.extracted.html SCREEN 1 의
+ * upload-modal 패턴 (dropzone 골드 그라데이션 아이콘, gold-soft hover, 골드
+ * pick-link) 을 폼 안에 통합.
  *
  * 백엔드 호출 순서:
  *  1. (새 강좌면) POST /api/courses
@@ -115,185 +120,148 @@ export default function Step1PptUpload({
     }
   };
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      aria-label={t("step1.title")}
-      className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 space-y-6"
-    >
-      <header>
-        <h2 className="text-lg font-bold text-gray-900">{t("step1.title")}</h2>
-        <p className="mt-1 text-sm text-gray-500">{t("step1.subtitle")}</p>
-      </header>
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "10px 14px",
+    border: "1px solid var(--line-strong)",
+    borderRadius: 10,
+    fontSize: 13.5,
+    background: "var(--bg-card)",
+    color: "var(--text)",
+    outline: "none",
+    transition: "border-color 140ms var(--ease-out)",
+  };
 
-      {/* 강좌 선택 */}
-      <fieldset className="space-y-3">
-        <legend className="text-sm font-medium text-gray-700">
-          {t("step1.courseLabel")}
-        </legend>
-        <p className="text-xs text-gray-400">{t("step1.courseHelp")}</p>
-        <div className="flex gap-2">
-          <label className="flex-1 cursor-pointer">
-            <input
-              type="radio"
-              name="courseMode"
-              value="existing"
-              checked={courseMode === "existing"}
-              onChange={() => setCourseMode("existing")}
-              className="sr-only peer"
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--text-muted)",
+    marginBottom: 6,
+  };
+
+  return (
+    <Card padding={28} radius={16}>
+      <form onSubmit={handleSubmit} aria-label={t("step1.title")} className="space-y-6">
+        <header>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 18,
+              fontWeight: 700,
+              color: "var(--text)",
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {t("step1.title")}
+          </h2>
+          <p
+            style={{
+              margin: "6px 0 0",
+              fontSize: 13,
+              color: "var(--text-muted)",
+            }}
+          >
+            {t("step1.subtitle")}
+          </p>
+        </header>
+
+        {/* 강좌 선택 */}
+        <fieldset style={{ display: "flex", flexDirection: "column", gap: 12, border: "none", padding: 0, margin: 0 }}>
+          <legend style={labelStyle}>{t("step1.courseLabel")}</legend>
+          <div style={{ display: "flex", gap: 8 }}>
+            <CourseModePill
+              label={t("step1.courseExisting")}
+              active={courseMode === "existing"}
               disabled={courses.length === 0}
+              onClick={() => setCourseMode("existing")}
             />
-            <div
-              className={`text-center text-xs font-medium px-3 py-2 rounded-xl border transition ${
-                courses.length === 0
-                  ? "border-gray-200 text-gray-300 cursor-not-allowed"
-                  : courseMode === "existing"
-                    ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                    : "border-gray-200 text-gray-600 hover:border-gray-300"
-              }`}
+            <CourseModePill
+              label={t("step1.courseNew")}
+              active={courseMode === "new"}
+              onClick={() => setCourseMode("new")}
+            />
+          </div>
+          {courseMode === "existing" ? (
+            <select
+              value={selectedCourseId}
+              onChange={(e) => setSelectedCourseId(e.target.value)}
+              style={inputStyle}
+              aria-label={t("step1.courseExisting")}
             >
-              {t("step1.courseExisting")}
-            </div>
-          </label>
-          <label className="flex-1 cursor-pointer">
+              {courses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                </option>
+              ))}
+            </select>
+          ) : (
             <input
-              type="radio"
-              name="courseMode"
-              value="new"
-              checked={courseMode === "new"}
-              onChange={() => setCourseMode("new")}
-              className="sr-only peer"
+              type="text"
+              value={newCourseTitle}
+              onChange={(e) => setNewCourseTitle(e.target.value)}
+              placeholder={t("step1.courseNewTitlePlaceholder")}
+              aria-label={t("step1.courseNewTitleLabel")}
+              style={inputStyle}
             />
-            <div
-              className={`text-center text-xs font-medium px-3 py-2 rounded-xl border transition ${
-                courseMode === "new"
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                  : "border-gray-200 text-gray-600 hover:border-gray-300"
-              }`}
-            >
-              {t("step1.courseNew")}
-            </div>
+          )}
+          <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)" }}>
+            {t("step1.courseHelp")}
+          </p>
+        </fieldset>
+
+        {/* 강의 제목 */}
+        <div>
+          <label htmlFor="studio-lecture-title" style={labelStyle}>
+            {t("step1.lectureTitleLabel")}
           </label>
+          <input
+            id="studio-lecture-title"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            required
+            placeholder={t("step1.lectureTitlePlaceholder")}
+            style={inputStyle}
+          />
         </div>
 
-        {courseMode === "existing" ? (
-          <select
-            value={selectedCourseId}
-            onChange={(e) => setSelectedCourseId(e.target.value)}
-            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            aria-label={t("step1.courseExisting")}
-          >
-            {courses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type="text"
-            value={newCourseTitle}
-            onChange={(e) => setNewCourseTitle(e.target.value)}
-            placeholder={t("step1.courseNewTitlePlaceholder")}
-            aria-label={t("step1.courseNewTitleLabel")}
-            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+        {/* 설명 */}
+        <div>
+          <label htmlFor="studio-description" style={labelStyle}>
+            {t("step1.descriptionLabel")}
+          </label>
+          <textarea
+            id="studio-description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={2}
+            placeholder={t("step1.descriptionPlaceholder")}
+            style={{ ...inputStyle, resize: "none" }}
           />
-        )}
-      </fieldset>
+        </div>
 
-      {/* 강의 제목 */}
-      <div>
-        <label
-          htmlFor="studio-lecture-title"
-          className="block text-sm font-medium text-gray-700 mb-1.5"
-        >
-          {t("step1.lectureTitleLabel")}
-        </label>
-        <input
-          id="studio-lecture-title"
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          placeholder={t("step1.lectureTitlePlaceholder")}
-          className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-        />
-      </div>
-
-      <div>
-        <label
-          htmlFor="studio-description"
-          className="block text-sm font-medium text-gray-700 mb-1.5"
-        >
-          {t("step1.descriptionLabel")}
-        </label>
-        <textarea
-          id="studio-description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          placeholder={t("step1.descriptionPlaceholder")}
-          className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none"
-        />
-      </div>
-
-      {/* PPT 업로드 */}
-      <div>
-        <label
-          htmlFor="studio-ppt-upload"
-          className="block text-sm font-medium text-gray-700 mb-1.5"
-        >
-          {t("step1.pptLabel")}
-        </label>
-        <div
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
+        {/* PPT 업로드 — prototype dropzone 패턴 */}
+        <div>
+          <label htmlFor="studio-ppt-upload" style={labelStyle}>
+            {t("step1.pptLabel")}
+          </label>
+          <Dropzone
+            file={file}
+            dragOver={dragOver}
+            onDragOver={(e) => {
               e.preventDefault();
-              fileInputRef.current?.click();
-            }
-          }}
-          aria-label={t("step1.pptDragDrop")}
-          className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition ${
-            dragOver
-              ? "border-indigo-500 bg-indigo-50"
-              : "border-gray-300 hover:border-gray-400"
-          }`}
-        >
-          {file ? (
-            <div>
-              <p className="text-sm font-medium text-gray-900">{file.name}</p>
-              <p className="text-xs text-gray-400 mt-1 tabular-nums">
-                {(file.size / 1024 / 1024).toFixed(1)} MB
-              </p>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setFile(null);
-                  if (fileInputRef.current) fileInputRef.current.value = "";
-                }}
-                className="mt-2 text-xs text-gray-500 hover:text-gray-700 underline underline-offset-2"
-              >
-                {t("step1.pptRemove")}
-              </button>
-            </div>
-          ) : (
-            <div>
-              <p className="text-sm text-gray-500">{t("step1.pptDragDrop")}</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {t("step1.pptFormat")}
-              </p>
-            </div>
-          )}
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            onClear={() => {
+              setFile(null);
+              if (fileInputRef.current) fileInputRef.current.value = "";
+            }}
+            t={t}
+          />
           <input
             ref={fileInputRef}
             id="studio-ppt-upload"
@@ -303,40 +271,292 @@ export default function Step1PptUpload({
             onChange={(e) => setFileWithValidation(e.target.files?.[0] ?? null)}
           />
         </div>
-      </div>
 
-      <p className="text-xs text-gray-400">{t("step1.uploadHint")}</p>
+        <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)" }}>
+          {t("step1.uploadHint")}
+        </p>
 
-      {/* 에러 배너 */}
-      {errorKey === "step1.errors.pptSize" && oversizeMB != null && (
-        <GuardrailBanner variant="uploadOversize" fileSizeMB={oversizeMB} />
-      )}
-      {errorKey === "step1.errors.pptType" && (
-        <GuardrailBanner variant="uploadInvalidType" />
-      )}
-      {errorKey &&
-        errorKey !== "step1.errors.pptSize" &&
-        errorKey !== "step1.errors.pptType" && (
-          <div
-            role="alert"
-            className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700"
-          >
-            {t(errorKey)}
-          </div>
+        {/* 에러 배너 */}
+        {errorKey === "step1.errors.pptSize" && oversizeMB != null && (
+          <GuardrailBanner variant="uploadOversize" fileSizeMB={oversizeMB} />
         )}
+        {errorKey === "step1.errors.pptType" && (
+          <GuardrailBanner variant="uploadInvalidType" />
+        )}
+        {errorKey &&
+          errorKey !== "step1.errors.pptSize" &&
+          errorKey !== "step1.errors.pptType" && (
+            <div
+              role="alert"
+              style={{
+                background: "rgba(239, 68, 68, 0.06)",
+                border: "1px solid rgba(239, 68, 68, 0.24)",
+                borderRadius: 10,
+                padding: "10px 14px",
+                fontSize: 13,
+                color: "#B91C1C",
+              }}
+            >
+              {t(errorKey)}
+            </div>
+          )}
 
-      <button
-        type="submit"
-        disabled={submitting || !file}
-        className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl py-3 text-sm font-semibold transition"
-      >
-        {submitting ? t("step1.submitting") : t("step1.submit")}
-      </button>
+        <div className="flex items-center justify-between gap-3">
+          <PrimaryButton
+            type="submit"
+            variant="primary"
+            size="lg"
+            disabled={submitting || !file}
+            trailingIcon={
+              <svg
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 12h14" />
+                <path d="M12 5l7 7-7 7" />
+              </svg>
+            }
+          >
+            {submitting ? t("step1.submitting") : t("step1.submit")}
+          </PrimaryButton>
+          <span
+            style={{
+              ...tabularStyle,
+              fontSize: 11,
+              color: "var(--text-faint)",
+            }}
+          >
+            max {MAX_PPT_BYTES / (1024 * 1024)}MB
+          </span>
+        </div>
+      </form>
+    </Card>
+  );
+}
 
-      {/* 100MB 한도 표시 — 백엔드 미러 */}
-      <p className="text-[11px] text-gray-300 tabular-nums text-right">
-        max {MAX_PPT_BYTES / (1024 * 1024)}MB
-      </p>
-    </form>
+/* ───────────────────────── Internal subcomponents ───────────────────────── */
+
+function CourseModePill({
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={{
+        flex: 1,
+        padding: "10px 12px",
+        borderRadius: 10,
+        fontSize: 12.5,
+        fontWeight: 600,
+        cursor: disabled ? "not-allowed" : "pointer",
+        background: active ? "var(--gold-soft)" : "var(--bg-card)",
+        color: disabled
+          ? "var(--text-faint)"
+          : active
+            ? "var(--gold)"
+            : "var(--text-muted)",
+        border: `1px solid ${active ? "var(--gold-bright)" : "var(--line)"}`,
+        transition: "all 140ms var(--ease-out)",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function Dropzone({
+  file,
+  dragOver,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onClick,
+  onClear,
+  t,
+}: {
+  file: File | null;
+  dragOver: boolean;
+  onDragOver: (e: React.DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent) => void;
+  onClick: () => void;
+  onClear: () => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onClick={onClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      aria-label={t("step1.pptDragDrop")}
+      style={{
+        border: `1.5px dashed ${dragOver ? "var(--gold-bright)" : "var(--line-strong)"}`,
+        borderRadius: 14,
+        background: dragOver ? "rgba(255, 182, 39, 0.04)" : "var(--bg)",
+        padding: "32px 24px",
+        textAlign: "center",
+        cursor: "pointer",
+        transition: "border-color 180ms var(--ease-out), background 180ms var(--ease-out)",
+      }}
+    >
+      {file ? (
+        <div>
+          <div
+            className="inline-grid place-items-center"
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 14,
+              background: "linear-gradient(135deg, rgba(255,182,39,0.18), rgba(232,158,14,0.10))",
+              margin: "0 auto 14px",
+            }}
+            aria-hidden="true"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="26"
+              height="26"
+              fill="none"
+              stroke="url(#nav-grad-electric)"
+              strokeWidth={2.2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 14,
+              fontWeight: 600,
+              color: "var(--text)",
+            }}
+          >
+            {file.name}
+          </p>
+          <p
+            style={{
+              ...tabularStyle,
+              margin: "4px 0 0",
+              fontSize: 12,
+              color: "var(--text-subtle)",
+            }}
+          >
+            {(file.size / 1024 / 1024).toFixed(1)} MB
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear();
+            }}
+            style={{
+              marginTop: 10,
+              fontSize: 11.5,
+              color: "var(--text-muted)",
+              background: "transparent",
+              border: "none",
+              textDecoration: "underline",
+              textUnderlineOffset: 2,
+              cursor: "pointer",
+            }}
+          >
+            {t("step1.pptRemove")}
+          </button>
+        </div>
+      ) : (
+        <div>
+          <div
+            className="inline-grid place-items-center"
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 14,
+              background: "linear-gradient(135deg, rgba(255,182,39,0.18), rgba(232,158,14,0.10))",
+              margin: "0 auto 14px",
+            }}
+            aria-hidden="true"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="26"
+              height="26"
+              fill="none"
+              stroke="url(#nav-grad-electric)"
+              strokeWidth={2.2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 16V4M12 4l-4 4M12 4l4 4" />
+              <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+            </svg>
+          </div>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 14.5,
+              fontWeight: 600,
+              color: "var(--text)",
+            }}
+          >
+            {t("step1.pptDragDrop")}
+          </p>
+          <p
+            style={{
+              margin: "6px 0 0",
+              fontSize: 12,
+              color: "var(--text-muted)",
+            }}
+          >
+            {t("step1.pptFormat")}
+          </p>
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 8 }}>
+            {[".pptx", ".pdf", "최대 50MB"].map((c) => (
+              <span
+                key={c}
+                style={{
+                  padding: "2px 8px",
+                  borderRadius: 999,
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--line)",
+                  fontSize: 10.5,
+                  fontWeight: 500,
+                  color: "var(--text-subtle)",
+                }}
+              >
+                {c}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
