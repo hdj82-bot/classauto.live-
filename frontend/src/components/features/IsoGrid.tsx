@@ -67,19 +67,19 @@ export default function IsoGrid() {
     <div
       ref={wrapRef}
       data-testid="features-iso"
-      className="relative rounded-3xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent overflow-hidden"
+      className="relative rounded-3xl border border-[rgba(10,10,10,0.08)] bg-gradient-to-br from-white to-[#F6F4EE] overflow-hidden shadow-[0_1px_2px_rgba(10,10,10,0.04)]"
       role="img"
       aria-label={t("iso.altGrid")}
     >
       {/* Title block — sits above the grid */}
       <div className="relative z-10 px-6 sm:px-10 pt-8 pb-32">
-        <p className="text-[11px] uppercase tracking-[0.18em] text-amber-400/80 mb-3 font-semibold">
+        <p className="text-[11px] uppercase tracking-[0.18em] text-[#B88308] mb-3 font-semibold">
           {t("iso.eyebrow")}
         </p>
-        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight max-w-xl">
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight max-w-xl text-[#0A0A0A]">
           {t("iso.title")}
         </h2>
-        <p className="mt-3 text-sm sm:text-base text-white/60 max-w-xl leading-relaxed">
+        <p className="mt-3 text-sm sm:text-base text-[rgba(10,10,10,0.62)] max-w-xl leading-relaxed">
           {t("iso.subtitle")}
         </p>
       </div>
@@ -96,8 +96,8 @@ export default function IsoGrid() {
           className="w-full h-[280px] sm:h-[360px] block"
           preserveAspectRatio="xMidYMax slice"
         >
-          {/* Iso grid lines */}
-          <g stroke="rgba(255,255,255,0.08)" strokeWidth="1">
+          {/* Iso grid lines — 라이트 베이스에서는 어두운 톤 라인이 보임 */}
+          <g stroke="rgba(10,10,10,0.06)" strokeWidth="1">
             {[...Array(14)].map((_, i) => (
               <line
                 key={`gx-${i}`}
@@ -143,8 +143,10 @@ export default function IsoGrid() {
           <g>
             <circle cx="680" cy="160" r="20" fill="url(#fhub-grad-pink)" opacity="0.85" />
             <circle cx="680" cy="160" r="34" fill="rgba(244,114,182,0.16)" />
+            {/* 01-pricing-policy.md §1.3: 비용($) 미노출 → 편수 단위로 교체.
+                "23편" = 이번 달 만든 영상 편수 (Pro 한도 20편 초과 시 위반 시그널). */}
             <text x="680" y="164" textAnchor="middle" fill="#0A0A0A" fontSize="10" fontWeight="700">
-              $46
+              23편
             </text>
           </g>
         </svg>
