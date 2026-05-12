@@ -22,26 +22,26 @@ export default function EnterpriseSection() {
     <section
       data-testid="pricing-enterprise"
       aria-labelledby="pricing-enterprise-heading"
-      className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent p-6 sm:p-8"
+      className="rounded-2xl border border-[rgba(10,10,10,0.08)] bg-gradient-to-br from-white to-[#F6F4EE] p-6 sm:p-8 shadow-[0_1px_2px_rgba(10,10,10,0.04)]"
     >
-      <p className="text-[11px] font-semibold tracking-[0.18em] uppercase text-amber-300 mb-3">
+      <p className="text-[11px] font-semibold tracking-[0.18em] uppercase text-[#B88308] mb-3">
         {t("enterprise.eyebrow")}
       </p>
       <h2
         id="pricing-enterprise-heading"
-        className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white"
+        className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#0A0A0A]"
       >
         {t("enterprise.title")}
       </h2>
-      <p className="mt-3 text-sm sm:text-base text-white/60 max-w-2xl leading-relaxed">
+      <p className="mt-3 text-sm sm:text-base text-[rgba(10,10,10,0.62)] max-w-2xl leading-relaxed">
         {t("enterprise.subtitle")}
       </p>
 
-      <ul className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-white/75">
+      <ul className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-[rgba(10,10,10,0.78)]">
         {items.map((it, i) => (
           <li key={i} className="flex items-start gap-2">
             <svg
-              className="w-4 h-4 shrink-0 mt-0.5 text-amber-300"
+              className="w-4 h-4 shrink-0 mt-0.5 text-[#B88308]"
               viewBox="0 0 20 20"
               fill="currentColor"
               aria-hidden="true"
@@ -60,7 +60,7 @@ export default function EnterpriseSection() {
       <Link
         href={t("enterprise.ctaHref")}
         data-testid="pricing-enterprise-cta"
-        className="inline-flex items-center gap-1.5 mt-6 rounded-xl border border-amber-400/40 text-amber-300 hover:bg-amber-400/10 hover:border-amber-400/70 px-4 py-2.5 text-sm font-semibold transition"
+        className="inline-flex items-center gap-1.5 mt-6 rounded-xl border border-[#B88308] text-[#B88308] hover:bg-[#B88308] hover:text-white px-4 py-2.5 text-sm font-semibold transition motion-reduce:transition-none"
       >
         {t("enterprise.ctaLabel")}
         <svg className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">

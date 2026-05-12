@@ -28,15 +28,15 @@ export default function FaqAccordion() {
     <section
       data-testid="pricing-faq"
       aria-labelledby="pricing-faq-heading"
-      className="rounded-2xl border border-white/10 bg-white/[0.02] p-5 sm:p-7"
+      className="rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-5 sm:p-7 shadow-[0_1px_2px_rgba(10,10,10,0.04)]"
     >
       <h2
         id="pricing-faq-heading"
-        className="text-xl font-semibold tracking-tight text-white mb-5"
+        className="text-xl font-semibold tracking-tight text-[#0A0A0A] mb-5"
       >
         {t("faq.title")}
       </h2>
-      <ul className="divide-y divide-white/5">
+      <ul className="divide-y divide-[rgba(10,10,10,0.06)]">
         {items.map((it, i) => {
           const open = openIndex.has(i);
           return (
@@ -53,12 +53,12 @@ export default function FaqAccordion() {
                     return next;
                   })
                 }
-                className="w-full flex items-start justify-between gap-4 py-4 text-left text-white/90 hover:text-white transition"
+                className="w-full flex items-start justify-between gap-4 py-4 text-left text-[rgba(10,10,10,0.88)] hover:text-[#0A0A0A] transition motion-reduce:transition-none"
                 data-testid={`pricing-faq-toggle-${i}`}
               >
                 <span className="text-sm font-medium leading-relaxed">{it.q}</span>
                 <svg
-                  className={`w-4 h-4 mt-1 shrink-0 text-white/40 transition-transform duration-300 motion-reduce:transition-none ${
+                  className={`w-4 h-4 mt-1 shrink-0 text-[rgba(10,10,10,0.40)] transition-transform duration-300 motion-reduce:transition-none ${
                     open ? "rotate-180" : ""
                   }`}
                   viewBox="0 0 20 20"
@@ -76,7 +76,7 @@ export default function FaqAccordion() {
                 <div
                   id={`pricing-faq-panel-${i}`}
                   data-testid={`pricing-faq-panel-${i}`}
-                  className="pb-5 text-sm text-white/65 leading-relaxed"
+                  className="pb-5 text-sm text-[rgba(10,10,10,0.65)] leading-relaxed"
                 >
                   {it.a}
                 </div>
