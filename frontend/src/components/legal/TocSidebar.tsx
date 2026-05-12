@@ -87,7 +87,7 @@ export default function TocSidebar({ items, trailingItem }: Props) {
       aria-label={t("common.tocTitle")}
       className="lg:sticky lg:top-24"
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45 mb-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[rgba(10,10,10,0.45)] mb-3">
         {t("common.tocTitle")}
       </p>
       <ol className="space-y-1 text-sm">
@@ -100,7 +100,7 @@ export default function TocSidebar({ items, trailingItem }: Props) {
           />
         ))}
         {trailingItem && (
-          <li className="pt-2 mt-2 border-t border-white/5">
+          <li className="pt-2 mt-2 border-t border-[rgba(10,10,10,0.06)]">
             <TocLink
               item={trailingItem}
               active={activeId === trailingItem.id}
@@ -131,8 +131,8 @@ function TocLink({
   const baseCls =
     "block rounded-lg px-3 py-1.5 leading-snug transition motion-reduce:transition-none";
   const stateCls = active
-    ? "bg-amber-400/10 text-amber-200 ring-1 ring-amber-300/30"
-    : "text-white/55 hover:text-white/85 hover:bg-white/5";
+    ? "bg-[rgba(255,182,39,0.10)] text-[#B88308] ring-1 ring-[rgba(184,131,8,0.30)] font-semibold"
+    : "text-[rgba(10,10,10,0.55)] hover:text-[#0A0A0A] hover:bg-black/5";
 
   return standalone ? (
     <a

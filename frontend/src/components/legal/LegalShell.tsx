@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import MarketingShell from "@/components/marketing/MarketingShell";
+import LightMarketingShell from "@/components/marketing/LightMarketingShell";
 import LegalSection from "./LegalSection";
 import TocSidebar from "./TocSidebar";
 import ChangeLog from "./ChangeLog";
@@ -15,24 +15,22 @@ import type {
 import { useLegalI18n } from "./useLegalI18n";
 
 /**
- * /terms · /privacy 의 공통 chrome.
+ * /terms · /privacy 의 공통 chrome — v2 라이트 베이지 + 골드.
  *
  * 두 페이지가 거의 동일한 레이아웃 (Hero + 본문 8/12, TOC 4/12 + 마지막 변경
  * 이력) 을 공유하므로 한 컴포넌트로 통합. `spec` 만 받아서 i18n key 와
  * sections.<slug> 순서를 결정.
  *
- * 디자인:
- *   - MarketingShell 그대로 사용 — 다크 베이스 + 골드 + 헤더 / 푸터.
- *   - 큰 본문 폭은 가독성을 위해 약 700px (Tailwind `max-w-[68ch]`).
- *   - 변경 이력은 본문 마지막에 같은 폭으로 통합.
- *   - prefers-reduced-motion 은 MarketingShell 의 글로벌 정책에 따라 자연스럽게
- *     적용됨 (transition-none 가 호버 모션에만 작동).
+ * 디자인 (v2):
+ *   - LightMarketingShell 위 라이트 베이스 + 골드 포인트
+ *   - 본문 폭은 가독성을 위해 약 700px (Tailwind `max-w-[68ch]`)
+ *   - 변경 이력은 본문 마지막에 같은 폭으로 통합
+ *   - prefers-reduced-motion 안전
  */
 export default function LegalShell({ spec }: { spec: DocumentSpec }) {
   const { t, tValue } = useLegalI18n();
   const i18nKey = spec.i18nKey;
 
-  // 섹션 데이터 lookup — JSON 키 trie 와 1:1.
   const sections = spec.sectionSlugs
     .map((slug) => {
       const data = tValue<SectionData>(`${i18nKey}.sections.${slug}`);
@@ -64,26 +62,32 @@ export default function LegalShell({ spec }: { spec: DocumentSpec }) {
   const lastUpdated = t(`${i18nKey}.hero.lastUpdated`);
   const effectiveDate = t(`${i18nKey}.hero.effectiveDate`);
 
-  // 페이지 cross-link — terms 에선 privacy 로, 그 반대로.
   const otherKind = spec.kind === "terms" ? "privacy" : "terms";
   const otherHref = otherKind === "terms" ? "/terms" : "/privacy";
   const otherLabel =
     otherKind === "terms" ? t("common.viewTerms") : t("common.viewPrivacy");
 
   return (
-    <MarketingShell>
+    <LightMarketingShell>
       {/* Hero */}
       <section
         data-testid={`legal-${spec.kind}-hero`}
-        className="max-w-6xl mx-auto px-4 sm:px-6 pt-16 sm:pt-20 pb-10"
+        className="max-w-6xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-10"
       >
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-amber-400 uppercase mb-3">
+        <p className="text-[11px] font-semibold tracking-[0.18em] text-[#B88308] uppercase mb-3">
           {heroEyebrow}
         </p>
-        <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight">
+        <h1
+          className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight text-[#0A0A0A]"
+          style={{
+            fontFamily:
+              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+            letterSpacing: "-0.035em",
+          }}
+        >
           {heroTitle}
         </h1>
-        <p className="mt-4 text-base sm:text-lg text-white/65 leading-relaxed max-w-3xl">
+        <p className="mt-4 text-base sm:text-lg text-[rgba(10,10,10,0.62)] leading-relaxed max-w-3xl">
           {heroSubtitle}
         </p>
 
@@ -92,22 +96,22 @@ export default function LegalShell({ spec }: { spec: DocumentSpec }) {
           data-testid={`legal-${spec.kind}-meta`}
         >
           <div>
-            <dt className="text-white/40 uppercase tracking-[0.14em] mr-2 inline">
+            <dt className="text-[rgba(10,10,10,0.40)] uppercase tracking-[0.14em] mr-2 inline">
               {t("common.lastUpdatedLabel")}
             </dt>
             <dd
-              className="inline tabular-nums text-white/85 font-semibold"
+              className="inline tabular-nums text-[#0A0A0A] font-semibold"
               data-testid={`legal-${spec.kind}-last-updated`}
             >
               {lastUpdated}
             </dd>
           </div>
           <div>
-            <dt className="text-white/40 uppercase tracking-[0.14em] mr-2 inline">
+            <dt className="text-[rgba(10,10,10,0.40)] uppercase tracking-[0.14em] mr-2 inline">
               {t("common.effectiveDateLabel")}
             </dt>
             <dd
-              className="inline tabular-nums text-white/85 font-semibold"
+              className="inline tabular-nums text-[#0A0A0A] font-semibold"
               data-testid={`legal-${spec.kind}-effective-date`}
             >
               {effectiveDate}
@@ -117,7 +121,7 @@ export default function LegalShell({ spec }: { spec: DocumentSpec }) {
 
         {/* 베타 / 시행 전 안내 */}
         <div
-          className="mt-6 rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-xs text-amber-100/80 max-w-3xl leading-relaxed"
+          className="mt-6 rounded-xl border border-[rgba(184,131,8,0.30)] bg-[rgba(255,182,39,0.06)] px-4 py-3 text-xs text-[#7A5500] max-w-3xl leading-relaxed"
           data-testid={`legal-${spec.kind}-notice`}
         >
           {t("common.noticeBanner")} · {t("common.placeholderNotice")}
@@ -137,38 +141,38 @@ export default function LegalShell({ spec }: { spec: DocumentSpec }) {
           <ChangeLog id={changeLogId} entries={changeEntries} />
 
           {/* 페이지 cross-link + back to home */}
-          <div className="pt-6 border-t border-white/5 flex flex-wrap gap-3 items-center">
+          <div className="pt-6 border-t border-[rgba(10,10,10,0.08)] flex flex-wrap gap-3 items-center">
             <Link
               href={otherHref}
               data-testid={`legal-${spec.kind}-cross-link`}
-              className="text-sm text-amber-300 hover:text-amber-200 transition motion-reduce:transition-none"
+              className="text-sm text-[#B88308] hover:text-[#E89E0B] font-semibold transition motion-reduce:transition-none"
             >
               {otherLabel}
             </Link>
-            <span className="text-white/20" aria-hidden="true">
+            <span className="text-[rgba(10,10,10,0.25)]" aria-hidden="true">
               ·
             </span>
             <Link
               href="/trust"
-              className="text-sm text-white/50 hover:text-white/80 transition motion-reduce:transition-none"
+              className="text-sm text-[rgba(10,10,10,0.55)] hover:text-[#0A0A0A] transition motion-reduce:transition-none"
             >
               /trust
             </Link>
-            <span className="text-white/20" aria-hidden="true">
+            <span className="text-[rgba(10,10,10,0.25)]" aria-hidden="true">
               ·
             </span>
             <Link
               href="/security"
-              className="text-sm text-white/50 hover:text-white/80 transition motion-reduce:transition-none"
+              className="text-sm text-[rgba(10,10,10,0.55)] hover:text-[#0A0A0A] transition motion-reduce:transition-none"
             >
               /security
             </Link>
-            <span className="text-white/20 ml-auto" aria-hidden="true">
+            <span className="text-[rgba(10,10,10,0.25)] ml-auto" aria-hidden="true">
               ·
             </span>
             <Link
               href="/"
-              className="text-sm text-white/50 hover:text-white/80 transition motion-reduce:transition-none"
+              className="text-sm text-[rgba(10,10,10,0.55)] hover:text-[#0A0A0A] transition motion-reduce:transition-none"
             >
               {t("common.backToHome")}
             </Link>
@@ -177,7 +181,7 @@ export default function LegalShell({ spec }: { spec: DocumentSpec }) {
           {/* 회사 정보 footer (placeholder) */}
           <div
             data-testid={`legal-${spec.kind}-company`}
-            className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-white/40 leading-relaxed"
+            className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-1 text-[11px] text-[rgba(10,10,10,0.45)] leading-relaxed"
           >
             <p>{t("common.company.name")}</p>
             <p>{t("common.company.ceo")}</p>
@@ -198,6 +202,6 @@ export default function LegalShell({ spec }: { spec: DocumentSpec }) {
           <TocSidebar items={tocItems} trailingItem={trailingTocItem} />
         </aside>
       </div>
-    </MarketingShell>
+    </LightMarketingShell>
   );
 }
