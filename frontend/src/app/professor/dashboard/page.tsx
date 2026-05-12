@@ -20,11 +20,20 @@ import {
   Donut,
   AttentionWidget,
   ActivityFeed,
-  CostMeterBar,
   useDashboardHubI18n,
   aggregateDashboardHub,
   type DashboardHubData,
 } from "@/components/professor/dashboardHome";
+import {
+  PageContainer,
+  PageHeader,
+  PrimaryButton,
+  Card,
+  MonthlyQuotaMeter,
+  displayStyle,
+  hanStyle,
+  tabularStyle,
+} from "@/components/professor/shell";
 
 interface Course {
   id: string;
@@ -42,15 +51,19 @@ interface Lecture {
 }
 
 /**
- * 교수자 대시보드.
+ * 교수자 대시보드 — v2 디자인 (라이트 베이지 + 골드).
  *
- * 강의가 0개일 때는 R2W3 의 첫 사용 온보딩(`EmptyDashboard`) 으로 분기,
- * 1개 이상일 때는 기존의 강의 그리드를 그대로 보여줍니다.
+ * 데이터 wiring 은 그대로 보존하고 시각만 v2 prototype 톤으로 교체.
+ * docs/prototypes/05-studio-flow.extracted.html 의 topbar 는 layout.tsx 의
+ * AppShell 이 제공하고, 본 페이지는 PageContainer + PageHeader + StatGrid
+ * + MainChart + AttentionWidget + MonthlyQuotaMeter + Donut + ActivityFeed
+ * + 최근 강의 그리드 순으로 구성한다.
  *
- * 첫 진입 + (학과 정보 미입력 추정) 시점에 `InstructorProfileModal` 을 자동 노출.
- * 학과 정보 보존: AuthContext / `/api/users/me` 가 부재한 현재 (R2W2 미머지),
- * 모달 제출 결과를 React state 로만 보존합니다. 다음 세션에서 강의가 0개라면
- * 다시 자연스럽게 모달이 노출되며, 강의가 1개 이상이면 자동 노출되지 않습니다.
+ * 비용 표시 정책 (planning/05 §1.1):
+ * - StatGrid 의 cost 카드는 `hideCostCard` 옵션으로 숨김.
+ * - 우측 위젯: CostMeterBar 대신 MonthlyQuotaMeter (편수 기반).
+ *
+ * 빈 대시보드(`lectures.length === 0`) 분기는 EmptyDashboard 가 처리.
  */
 export default function ProfessorDashboardPage() {
   const router = useRouter();
@@ -60,8 +73,7 @@ export default function ProfessorDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 학과·소속 정보 — 모달 제출 시 채워짐. R2W2 의 /api/users/me 도착 후
-  // mount 시 fetch 로 초기화하면 영속성 자동 활성화.
+  // 학과·소속 정보 — 모달 제출 시 채워짐.
   const [profileDraft, setProfileDraft] =
     useState<InstructorProfileDraft | null>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -96,7 +108,6 @@ export default function ProfessorDashboardPage() {
     };
   }, [t]);
 
-  // 빈 대시보드일 때 + 아직 프로필 채움이 없으면 첫 진입에서 모달 자동 오픈.
   useEffect(() => {
     if (loading) return;
     if (autoOpenChecked) return;
@@ -125,7 +136,7 @@ export default function ProfessorDashboardPage() {
   );
 
   const handleCreateLecture = useCallback(() => {
-    router.push("/professor/lecture/new");
+    router.push("/professor/studio");
   }, [router]);
 
   const handleOpenSampleDemo = useCallback(() => {
@@ -137,27 +148,21 @@ export default function ProfessorDashboardPage() {
     setProfileDraft(profile);
   }, []);
 
-  // ── 대시보드 홈 통계 fan-out (강의 1개 이상일 때만 활성) ──────────────────
-  // dashboard.py 6 endpoint 가 lecture_id 단위라 클라이언트에서 합산.
-  // 합산 로직은 `aggregate.ts` 에 있고, 본 페이지는 fetch 와 wiring 만 담당.
   const [hub, setHub] = useState<DashboardHubData | null>(null);
   const [hubLoading, setHubLoading] = useState(false);
 
   useEffect(() => {
-    if (lectures.length === 0) return; // 빈 대시보드 분기는 EmptyDashboard 가 처리
+    if (lectures.length === 0) return;
     let cancelled = false;
     setHubLoading(true);
 
     (async () => {
       const ids = lectures.map((l) => l.id);
 
-      // 5 endpoint × N lectures 를 Promise.allSettled 로 병렬 호출
       const [attendanceR, scoresR, engagementR, qaR, costR] = await Promise.all(
         [
           Promise.allSettled(
-            ids.map((id) =>
-              api.get(`/api/v1/dashboard/${id}/attendance`),
-            ),
+            ids.map((id) => api.get(`/api/v1/dashboard/${id}/attendance`)),
           ),
           Promise.allSettled(
             ids.map((id) => api.get(`/api/v1/dashboard/${id}/scores`)),
@@ -166,9 +171,7 @@ export default function ProfessorDashboardPage() {
             ids.map((id) => api.get(`/api/v1/dashboard/${id}/engagement`)),
           ),
           Promise.allSettled(
-            ids.map((id) =>
-              api.get(`/api/v1/dashboard/${id}/qa?limit=50`),
-            ),
+            ids.map((id) => api.get(`/api/v1/dashboard/${id}/qa?limit=50`)),
           ),
           Promise.allSettled(
             ids.map((id) => api.get(`/api/v1/dashboard/${id}/cost`)),
@@ -210,8 +213,6 @@ export default function ProfessorDashboardPage() {
           qa: allFailed(qaR),
           cost: allFailed(costR),
         },
-        // 월 한도는 백엔드 미도착 — null 로 두면 UI 가 placeholder 표시.
-        // BACKEND_ASKS.DASHBOARDHUB.md §7 도착 후 사용자 플랜에서 가져옴.
         monthlyVideoLimit: null,
         monthlyCostLimitUsd: null,
       });
@@ -225,50 +226,37 @@ export default function ProfessorDashboardPage() {
   }, [lectures]);
 
   if (loading) {
-    return (
-      <LoadingSpinner fullScreen label={t("lecture.lectureLoadingList")} />
-    );
+    return <LoadingSpinner fullScreen label={t("lecture.lectureLoadingList")} />;
   }
 
   if (error) {
     return (
-      <div>
-        <div className="text-center py-20" role="alert">
-          <div
-            className="w-12 h-12 mx-auto mb-4 rounded-xl bg-red-100 flex items-center justify-center"
-            aria-hidden="true"
-          >
-            <svg
-              className="w-6 h-6 text-red-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
+      <PageContainer width="narrow">
+        <Card padding={32} radius={18}>
+          <div className="text-center" role="alert">
+            <h2 style={{ ...displayStyle, fontSize: 22, marginBottom: 12 }}>
+              불러올 수 없습니다
+            </h2>
+            <p style={{ color: "var(--text-muted)", marginBottom: 18 }}>
+              {error}
+            </p>
+            <PrimaryButton
+              variant="primary"
+              size="md"
+              onClick={() => window.location.reload()}
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-              />
-            </svg>
+              {t("common.retry")}
+            </PrimaryButton>
           </div>
-          <p className="text-gray-500 mb-4">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-xl px-5 py-2.5 transition"
-          >
-            {t("common.retry")}
-          </button>
-        </div>
-      </div>
+        </Card>
+      </PageContainer>
     );
   }
 
-  // ── 빈 대시보드: 첫 사용 온보딩 ─────────────────────────────────────────────
+  // 빈 대시보드: 첫 사용 온보딩
   if (lectures.length === 0) {
     return (
-      <>
+      <PageContainer>
         <EmptyDashboard
           progress={progress}
           onCreateLecture={handleCreateLecture}
@@ -281,11 +269,10 @@ export default function ProfessorDashboardPage() {
           onSaved={handleProfileSaved}
           initial={profileDraft ?? undefined}
         />
-      </>
+      </PageContainer>
     );
   }
 
-  // ── 정상 대시보드 ──────────────────────────────────────────────────────────
   return (
     <DashboardHomeView
       lectures={lectures}
@@ -294,13 +281,7 @@ export default function ProfessorDashboardPage() {
       onCreateLecture={handleCreateLecture}
       onOpenProfile={() => setProfileModalOpen(true)}
       onJumpToInbox={() => router.push("/professor/inbox")}
-      onOpenLectureAnalytics={(id) =>
-        // R5 라우팅 매트릭스: 단일 진입점 정책 — /professor/analytics/[id] 로
-        // 통일. 기존 /professor/lecture/[id]/dashboard 는 redirect 페이지로
-        // 단순화되어 있어 어느 쪽으로 가도 같은 화면에 도달하지만 단일
-        // 진입점이 사용자 혼동 적음.
-        router.push(`/professor/analytics/${id}`)
-      }
+      onOpenLectureAnalytics={(id) => router.push(`/professor/analytics/${id}`)}
       onEditLecture={(id) => router.push(`/professor/lecture/${id}`)}
       profileModalOpen={profileModalOpen}
       onCloseProfileModal={() => setProfileModalOpen(false)}
@@ -311,9 +292,10 @@ export default function ProfessorDashboardPage() {
 }
 
 /**
- * 대시보드 홈 뷰 (강의 1개 이상). EmptyDashboard 분기와 분리해서 R2W3 의 빈
- * 상태 회귀를 막는다. props 만 받는 순수 함수처럼 구성 — useEffect 등 외부
- * 사이드 이펙트는 모두 부모(`ProfessorDashboardPage`)가 책임진다.
+ * 대시보드 홈 뷰 (강의 1개 이상).
+ *
+ * v2 디자인 — PageContainer + PageHeader + Card 패턴으로 재구성.
+ * 비용 카드는 hideCostCard 로 숨기고 우측에 MonthlyQuotaMeter 노출.
  */
 function DashboardHomeView({
   lectures,
@@ -346,137 +328,216 @@ function DashboardHomeView({
   const { t: tp } = useProfessorI18n();
   const { t: th } = useDashboardHubI18n();
 
+  const eyebrow = profileDraft?.school
+    ? `${profileDraft.school}${profileDraft.department ? " · " + profileDraft.department : ""}`
+    : "ClassAuto";
+
+  const titleNode = profileDraft?.school
+    ? th("greetingNamed", { name: profileDraft.school })
+    : th("greetingDefault");
+
   return (
-    <div>
-      {/* 컨텍스트 바 + 인사 카드 (§4.1) */}
-      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {profileDraft?.school
-              ? th("greetingNamed", {
-                  name: profileDraft.school,
-                })
-              : th("greetingDefault")}
-          </h1>
-          {hub && (
-            <p className="mt-1 text-sm text-gray-500">
-              {th("summaryWeek", {
+    <PageContainer>
+      <PageHeader
+        eyebrow={eyebrow}
+        title={titleNode}
+        subtitle={
+          hub
+            ? th("summaryWeek", {
                 qa: hub.activity.filter((a) => a.kind === "qa-asked").length,
                 lagging: hub.attention.laggingLearners.length,
-              })}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={onOpenProfile}
-            className="hidden sm:inline-flex items-center text-xs font-medium text-gray-600 hover:text-gray-900 border border-gray-200 hover:border-gray-300 rounded-lg px-3 py-2 motion-safe:transition"
-          >
-            {tp("openProfile")}
-          </button>
-          <button
-            onClick={onCreateLecture}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-5 py-2.5 text-sm font-medium motion-safe:transition w-full sm:w-auto"
-          >
-            {t("professor.createLecture")}
-          </button>
-        </div>
-      </header>
+              })
+            : undefined
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              className="hidden sm:inline-flex items-center rounded-lg motion-safe:transition"
+              style={{
+                padding: "8px 14px",
+                fontSize: 12.5,
+                fontWeight: 500,
+                color: "var(--text-muted)",
+                background: "transparent",
+                border: "1px solid var(--line)",
+                cursor: "pointer",
+              }}
+            >
+              {tp("openProfile")}
+            </button>
+            <PrimaryButton
+              variant="primary"
+              size="md"
+              onClick={onCreateLecture}
+              trailingIcon={
+                <svg
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.4}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M5 12h14" />
+                  <path d="M12 5l7 7-7 7" />
+                </svg>
+              }
+            >
+              {t("professor.createLecture")}
+            </PrimaryButton>
+          </>
+        }
+      />
 
-      {/* §4.2 — 통계 카드 6 종 */}
+      {/* §4.2 — 통계 카드 5종 (비용 카드 숨김) */}
       {hub && (
-        <section aria-labelledby="dashboard-stats-title" className="mb-8">
-          <h2
-            id="dashboard-stats-title"
-            className="sr-only"
-          >
+        <section
+          aria-labelledby="dashboard-stats-title"
+          style={{ marginBottom: 28 }}
+        >
+          <h2 id="dashboard-stats-title" className="sr-only">
             {th("stats.title")}
           </h2>
-          <StatGrid stats={hub.stats} onJumpToInbox={onJumpToInbox} />
+          <StatGrid
+            stats={hub.stats}
+            onJumpToInbox={onJumpToInbox}
+            hideCostCard
+          />
         </section>
       )}
 
-      {/* §4.3 메인 차트 (좌 2/3) + §4.4 우측 위젯 (1/3) */}
-      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {/* §4.3 메인 차트 (2/3) + §4.4 우측 위젯 (1/3) */}
+      <div
+        className="grid grid-cols-1 gap-4 lg:grid-cols-3"
+        style={{ marginBottom: 28 }}
+      >
         <div className="lg:col-span-2">
           {hub ? (
             <MainChart series={hub.mainChart} />
           ) : (
-            <div className="rounded-2xl border border-gray-200 bg-white px-6 py-12 text-center text-sm text-gray-500">
-              {hubLoading ? "..." : th("loadError")}
-            </div>
+            <Card padding={32}>
+              <p
+                className="text-center"
+                style={{ color: "var(--text-muted)" }}
+              >
+                {hubLoading ? "..." : th("loadError")}
+              </p>
+            </Card>
           )}
         </div>
         <div className="space-y-4">
           {hub && <AttentionWidget data={hub.attention} />}
           {hub && (
-            <CostMeterBar
-              usedUsd={hub.stats.totalCostUsd}
-              limitUsd={hub.stats.monthlyCostLimitUsd}
+            <MonthlyQuotaMeter
+              used={hub.stats.monthlyVideoCount}
+              limit={hub.stats.monthlyVideoLimit ?? null}
+              planName={hub.stats.monthlyVideoLimit === 20 ? "Pro" : undefined}
             />
           )}
         </div>
       </div>
 
       {/* 도넛 + 활동 피드 */}
-      <div className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <section
-          aria-label={th("donut.title")}
-          className="rounded-2xl border border-gray-200 bg-white p-6"
-        >
-          <h2 className="mb-4 text-base font-semibold text-gray-900">
+      <div
+        className="grid grid-cols-1 gap-4 lg:grid-cols-3"
+        style={{ marginBottom: 28 }}
+      >
+        <Card padding={22}>
+          <h2
+            style={{
+              ...displayStyle,
+              margin: 0,
+              marginBottom: 14,
+              fontSize: 16,
+              fontWeight: 700,
+            }}
+          >
             {th("donut.title")}
           </h2>
           {hub && <Donut data={hub.donut} />}
-        </section>
-        <section
-          aria-label={th("activity.title")}
-          className="lg:col-span-2"
-        >
-          <h2 className="mb-3 text-base font-semibold text-gray-900">
+        </Card>
+        <section className="lg:col-span-2">
+          <h2
+            style={{
+              ...displayStyle,
+              margin: 0,
+              marginBottom: 12,
+              fontSize: 16,
+              fontWeight: 700,
+            }}
+          >
             {th("activity.title")}
           </h2>
           {hub && <ActivityFeed activity={hub.activity} />}
         </section>
       </div>
 
-      {/* §4.5 최근 강의 영상 그리드 — 상단 4개 미리보기. */}
+      {/* §4.5 최근 강의 영상 그리드 */}
       <section aria-labelledby="recent-lectures-title">
-        <header className="mb-3 flex items-center justify-between">
+        <header
+          className="flex items-center justify-between"
+          style={{ marginBottom: 14 }}
+        >
           <h2
             id="recent-lectures-title"
-            className="text-base font-semibold text-gray-900"
+            style={{
+              ...displayStyle,
+              margin: 0,
+              fontSize: 18,
+              fontWeight: 700,
+            }}
           >
             {th("lectureGrid.title")}
           </h2>
           {lectures.length > 4 && (
-            <span className="text-xs text-gray-400">
+            <span
+              style={{
+                ...tabularStyle,
+                fontSize: 11.5,
+                color: "var(--text-subtle)",
+              }}
+            >
               {th("lectureGrid.more", { count: lectures.length - 4 })}
             </span>
           )}
         </header>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {lectures.slice(0, 4).map((lec) => (
-            <article
+            <Card
               key={lec.id}
-              className="rounded-2xl border border-gray-200 bg-white p-5 motion-safe:transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
+              padding={20}
+              radius={14}
+              interactive
+              role="article"
             >
-              <h3 className="mb-2 truncate font-semibold text-gray-900">
-                {lec.title}
-              </h3>
+              <LectureTitle title={lec.title} />
               <span
-                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${
-                  lec.is_published
-                    ? "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-500"
-                }`}
+                className="inline-flex items-center gap-1.5 rounded-full"
+                style={{
+                  marginTop: 8,
+                  padding: "3px 9px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: lec.is_published ? "var(--success)" : "var(--text-subtle)",
+                  background: lec.is_published
+                    ? "rgba(16, 185, 129, 0.10)"
+                    : "var(--bg-subtle)",
+                }}
               >
                 <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    lec.is_published ? "bg-green-500" : "bg-gray-400"
-                  }`}
                   aria-hidden="true"
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 999,
+                    background: lec.is_published
+                      ? "var(--success)"
+                      : "var(--text-faint)",
+                  }}
                 />
                 {lec.is_published
                   ? t("common.published")
@@ -486,19 +547,37 @@ function DashboardHomeView({
                 <button
                   type="button"
                   onClick={() => onEditLecture(lec.id)}
-                  className="flex-1 rounded-lg bg-gray-100 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-200 motion-safe:transition"
+                  className="flex-1 rounded-lg motion-safe:transition"
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: "var(--text-muted)",
+                    background: "var(--bg-subtle)",
+                    border: "1px solid var(--line)",
+                    cursor: "pointer",
+                  }}
                 >
                   {th("lectureGrid.edit")}
                 </button>
                 <button
                   type="button"
                   onClick={() => onOpenLectureAnalytics(lec.id)}
-                  className="flex-1 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100 motion-safe:transition"
+                  className="flex-1 rounded-lg motion-safe:transition"
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--gold)",
+                    background: "var(--gold-soft)",
+                    border: "1px solid var(--gold-medium)",
+                    cursor: "pointer",
+                  }}
                 >
                   {th("lectureGrid.openAnalytics")}
                 </button>
               </div>
-            </article>
+            </Card>
           ))}
         </div>
       </section>
@@ -509,6 +588,52 @@ function DashboardHomeView({
         onSaved={onProfileSaved}
         initial={profileDraft ?? undefined}
       />
-    </div>
+    </PageContainer>
+  );
+}
+
+/**
+ * 강의 제목 표시 — 한자가 있으면 `.han` 스타일(serif + gold) 로 강조.
+ *
+ * docs/design-system/typography.md §1.1 / colors.md §4.
+ * 한자 매칭: U+3400–U+4DBF, U+4E00–U+9FFF (CJK 통합/확장 A).
+ */
+function LectureTitle({ title }: { title: string }) {
+  const han = /[㐀-䶿一-鿿]/;
+  const parts: { text: string; han: boolean }[] = [];
+  let buf = "";
+  let isHan = false;
+  for (const ch of title) {
+    const ch_is_han = han.test(ch);
+    if (ch_is_han !== isHan && buf) {
+      parts.push({ text: buf, han: isHan });
+      buf = "";
+    }
+    isHan = ch_is_han;
+    buf += ch;
+  }
+  if (buf) parts.push({ text: buf, han: isHan });
+
+  return (
+    <h3
+      className="truncate"
+      style={{
+        margin: 0,
+        fontSize: 15,
+        fontWeight: 700,
+        color: "var(--text)",
+        letterSpacing: "-0.01em",
+      }}
+    >
+      {parts.map((p, i) =>
+        p.han ? (
+          <span key={i} style={hanStyle}>
+            {p.text}
+          </span>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </h3>
   );
 }

@@ -13,6 +13,11 @@ import BulkActions from "@/components/professor/learners/BulkActions";
 import PrivacyNotice from "@/components/professor/learners/PrivacyNotice";
 import { useLearnersI18n } from "@/components/professor/learners/useLearnersI18n";
 import { mergeLearnerRows } from "@/components/professor/learners/risk";
+import {
+  PageContainer,
+  PageHeader,
+  Card,
+} from "@/components/professor/shell";
 import type {
   AttendanceStudent,
   EngagementStudent,
@@ -226,34 +231,56 @@ export default function LearnersBoardPage() {
   if (loading) return <LoadingSpinner fullScreen label={t("loading")} />;
 
   return (
-    <div className="space-y-6" data-testid="learners-board">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => router.push("/professor/learners")}
-          className="text-xs font-medium text-gray-500 hover:text-gray-900"
-        >
-          ← {t("backToList")}
-        </button>
-        <button
-          type="button"
-          onClick={onExportCsv}
-          disabled={exporting}
-          className="text-xs font-medium rounded-lg px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 disabled:opacity-50 transition"
-        >
-          {exporting ? t("exporting") : t("exportCsv")}
-        </button>
-      </div>
-
-      <header>
-        <h1 className="text-xl font-bold text-gray-900">{t("tableTitle")}</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          {t("tableSubtitle", {
-            lecture: lectureMeta?.title ?? "",
-            total: rows.length,
-          })}
-        </p>
-      </header>
+    <PageContainer>
+      <div className="space-y-6" data-testid="learners-board">
+      <PageHeader
+        eyebrow={
+          <button
+            type="button"
+            onClick={() => router.push("/professor/learners")}
+            style={{
+              color: "var(--gold)",
+              background: "transparent",
+              border: "none",
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.10em",
+              textTransform: "uppercase",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              padding: 0,
+            }}
+          >
+            ← {t("backToList")}
+          </button>
+        }
+        title={t("tableTitle")}
+        subtitle={t("tableSubtitle", {
+          lecture: lectureMeta?.title ?? "",
+          total: rows.length,
+        })}
+        actions={
+          <button
+            type="button"
+            onClick={onExportCsv}
+            disabled={exporting}
+            style={{
+              padding: "8px 14px",
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: "var(--text)",
+              background: "var(--bg-card)",
+              border: "1px solid var(--line-strong)",
+              borderRadius: 10,
+              cursor: exporting ? "not-allowed" : "pointer",
+              opacity: exporting ? 0.5 : 1,
+              fontFamily: "inherit",
+            }}
+          >
+            {exporting ? t("exporting") : t("exportCsv")}
+          </button>
+        }
+      />
 
       {error ? (
         <div
@@ -298,7 +325,7 @@ export default function LearnersBoardPage() {
             />
           </div>
 
-          <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5">
+          <Card padding={20} radius={14}>
             <LearnerTable
               rows={rows}
               filter={filter}
@@ -311,7 +338,7 @@ export default function LearnersBoardPage() {
               onSort={onSort}
               onOpenDetail={onOpenDetail}
             />
-          </div>
+          </Card>
 
           <BulkActions
             selectedCount={selected.size}
@@ -323,6 +350,7 @@ export default function LearnersBoardPage() {
           <PrivacyNotice />
         </>
       )}
-    </div>
+      </div>
+    </PageContainer>
   );
 }

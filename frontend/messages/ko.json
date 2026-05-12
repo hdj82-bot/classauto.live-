@@ -110,7 +110,9 @@
     "studio": "스튜디오",
     "inbox": "Q&A 인박스",
     "analytics": "분석",
-    "learners": "학습자"
+    "learners": "학습자",
+    "dashboard": "대시보드",
+    "lectureList": "강의 목록"
   },
   "professor": {
     "lectureManage": "강의 관리",

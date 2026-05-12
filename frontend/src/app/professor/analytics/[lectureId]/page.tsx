@@ -10,12 +10,18 @@ import {
   AttendanceChart,
   ScoreHeatmap,
   EngagementCurve,
-  CostMeter,
   CsvExportButton,
   WatchHeatmap,
   QaTrend,
   useAnalyticsI18n,
 } from "@/components/professor/analytics";
+import {
+  PageContainer,
+  PageHeader,
+  PrimaryButton,
+  Card,
+  displayStyle,
+} from "@/components/professor/shell";
 import type {
   AttendanceData,
   ScoresData,
@@ -65,7 +71,8 @@ export default function LectureAnalyticsPage() {
   const [scores, setScores] = useState<ScoresData | null>(null);
   const [engagement, setEngagement] = useState<EngagementData | null>(null);
   const [qa, setQa] = useState<QAData | null>(null);
-  const [cost, setCost] = useState<CostData | null>(null);
+  // cost 데이터는 fetch 만 하고 UI 에는 노출하지 않는다 (planning/05 §1.1 비용
+  // 표시 금지). 후속 PR 에서 endpoint fetch 자체를 제거 — 그때 import 도 정리.
   const [watch, setWatch] = useState<WatchHeatmapData | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -125,7 +132,8 @@ export default function LectureAnalyticsPage() {
         }
       }
       if (qaRes.status === "fulfilled") setQa(qaRes.value.data);
-      if (costRes.status === "fulfilled") setCost(costRes.value.data);
+      // costRes 응답은 의도적으로 UI 에 노출하지 않음 (planning/05 §1.1).
+      void costRes;
 
       // 모든 dashboard endpoint (attendance/scores/engagement/qa/cost) 가
       // 실패한 경우만 페이지 단위 에러로 띄운다 — 부분 실패는 해당 섹션이
@@ -157,38 +165,42 @@ export default function LectureAnalyticsPage() {
 
   if (error) {
     return (
-      <div role="alert" className="mx-auto max-w-xl py-12 text-center">
-        <p className="text-sm text-gray-700">{error}</p>
-        <button
-          type="button"
-          onClick={() => setRetry((n) => n + 1)}
-          className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          {t("lectureRetry")}
-        </button>
-      </div>
+      <PageContainer width="narrow">
+        <Card padding={40} radius={18}>
+          <div role="alert" className="text-center">
+            <p style={{ fontSize: 14, color: "var(--text)", marginBottom: 18 }}>
+              {error}
+            </p>
+            <PrimaryButton
+              variant="primary"
+              size="md"
+              onClick={() => setRetry((n) => n + 1)}
+            >
+              {t("lectureRetry")}
+            </PrimaryButton>
+          </div>
+        </Card>
+      </PageContainer>
     );
   }
 
   return (
-    <div lang={locale} className="space-y-8">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+    <PageContainer>
+      <div lang={locale} />
+      <PageHeader
+        eyebrow={
           <Link
             href="/professor/analytics"
-            className="text-xs text-gray-500 hover:text-gray-700"
+            style={{ color: "var(--gold)", textDecoration: "none", fontSize: 11 }}
           >
-            {t("lectureBack")}
+            ← {t("lectureBack")}
           </Link>
-          <h1 className="mt-1 text-2xl font-bold text-gray-900">
-            {t("lectureTitle", {
-              title: lecture?.title ?? lectureId,
-            })}
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">{t("lectureSubtitle")}</p>
-        </div>
-        <CsvExportButton lectureId={lectureId} />
-      </header>
+        }
+        title={t("lectureTitle", { title: lecture?.title ?? lectureId })}
+        subtitle={t("lectureSubtitle")}
+        actions={<CsvExportButton lectureId={lectureId} />}
+      />
+      <div className="space-y-6">
 
       <Section
         id="attendance"
@@ -226,14 +238,16 @@ export default function LectureAnalyticsPage() {
         {qa ? <QaTrend data={qa} /> : <FallbackPanel sectionKey="qa" />}
       </Section>
 
-      <Section id="cost" title={t("section.cost")}>
-        {cost ? (
-          <CostMeter data={cost} />
-        ) : (
-          <FallbackPanel sectionKey="cost" />
-        )}
-      </Section>
-    </div>
+      {/*
+        cost 섹션은 docs/planning/05-instructor-pages.md §1.1 (2026-05-06)
+        비용 표시 절대 금지 정책에 따라 v2 에서 제외. 대신 우측 위젯·
+        구독 페이지에서 편수·한도 단위로 표시한다. cost 데이터는 여전히
+        fetch 되지만 (TODO 후속 정리 — `cost` state + import 도 정리)
+        UI 상에는 렌더하지 않는다.
+        — 또한 백엔드 admin 페이지에서만 원가 모니터링 (별도 화면).
+      */}
+      </div>
+    </PageContainer>
   );
 }
 
@@ -249,23 +263,27 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section
+    <Card
+      padding={24}
+      radius={16}
+      role="region"
       aria-labelledby={`analytics-section-${id}`}
-      className="rounded-2xl border border-gray-200 bg-white p-6 motion-safe:animate-fade-in"
     >
       <header className="mb-5 flex items-center justify-between">
         <h2
           id={`analytics-section-${id}`}
-          className="text-lg font-semibold text-gray-900"
+          style={{ ...displayStyle, margin: 0, fontSize: 16, fontWeight: 700 }}
         >
           {title}
         </h2>
         {description && (
-          <p className="text-xs text-gray-500">{description}</p>
+          <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)" }}>
+            {description}
+          </p>
         )}
       </header>
       {children}
-    </section>
+    </Card>
   );
 }
 

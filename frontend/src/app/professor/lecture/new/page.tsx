@@ -5,7 +5,24 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { useI18n } from "@/contexts/I18nContext";
+import {
+  PageContainer,
+  PageHeader,
+  PrimaryButton,
+  Card,
+  tabularStyle,
+} from "@/components/professor/shell";
 
+/**
+ * /professor/lecture/new — 단순 강의 생성 폼 (v1).
+ *
+ * `/professor/studio` 마법사가 신규 작성 흐름의 entry 지만, 본 페이지는
+ * 단순한 직접 입력 폼으로 병행 유지된다 (Header.tsx 의 nav.newLecture
+ * 진입로).
+ *
+ * v2 재디자인: PageContainer(narrow) + PageHeader + Card 안의 폼. 인디고 →
+ * 골드 톤. dropzone 은 prototype 1.5px dashed + gold-bright hover.
+ */
 export default function NewLecturePage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -43,15 +60,19 @@ export default function NewLecturePage() {
       }
 
       const { data: lecture } = await api.post("/api/lectures", {
-        course_id: cId, title, description: description || undefined,
+        course_id: cId,
+        title,
+        description: description || undefined,
       });
 
       if (file) {
         const formData = new FormData();
         formData.append("file", file);
-        await api.post(`/api/v1/render/upload?lecture_id=${lecture.id}`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
+        await api.post(
+          `/api/v1/render/upload?lecture_id=${lecture.id}`,
+          formData,
+          { headers: { "Content-Type": "multipart/form-data" } },
+        );
       }
 
       toast(t("professor.createSuccess"), "success");
@@ -63,71 +84,184 @@ export default function NewLecturePage() {
     setSubmitting(false);
   };
 
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "10px 14px",
+    border: "1px solid var(--line-strong)",
+    borderRadius: 10,
+    fontSize: 13.5,
+    background: "var(--bg-card)",
+    color: "var(--text)",
+    outline: "none",
+    transition: "border-color 140ms var(--ease-out)",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--text-muted)",
+    marginBottom: 6,
+  };
+
   return (
-    <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">{t("professor.newTitle")}</h1>
+    <PageContainer width="narrow">
+      <PageHeader
+        eyebrow="새 강의"
+        title={t("professor.newTitle")}
+        subtitle="제목·설명·PPT 만 입력하면 즉시 강의를 만들고 마법사로 이동합니다."
+      />
 
-      <form onSubmit={handleSubmit} className="bg-white border border-gray-200 rounded-2xl p-8 space-y-6" aria-label={t("professor.newTitle")}>
-        {error && <div role="alert" className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">{error}</div>}
+      <Card padding={28} radius={16}>
+        <form
+          onSubmit={handleSubmit}
+          aria-label={t("professor.newTitle")}
+          className="space-y-6"
+        >
+          {error && (
+            <div
+              role="alert"
+              style={{
+                background: "rgba(239, 68, 68, 0.06)",
+                border: "1px solid rgba(239, 68, 68, 0.24)",
+                borderRadius: 10,
+                padding: "10px 14px",
+                fontSize: 13,
+                color: "#B91C1C",
+              }}
+            >
+              {error}
+            </div>
+          )}
 
-        <div>
-          <label htmlFor="lecture-title" className="block text-sm font-medium text-gray-700 mb-1.5">{t("professor.lectureTitle")}</label>
-          <input id="lecture-title" value={title} onChange={(e) => setTitle(e.target.value)} required
-            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            placeholder={t("professor.lectureTitlePlaceholder")} />
-        </div>
-
-        <div>
-          <label htmlFor="lecture-desc" className="block text-sm font-medium text-gray-700 mb-1.5">{t("professor.description")}</label>
-          <textarea id="lecture-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
-            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none"
-            placeholder={t("professor.descriptionPlaceholder")} />
-        </div>
-
-        <div>
-          <label htmlFor="ppt-upload" className="block text-sm font-medium text-gray-700 mb-1.5">{t("professor.pptFile")}</label>
-          {/* N4 (round 4): 드래그/드롭 영역은 div 가 필요하지만 Space 가 페이지 스크롤을
-              일으키지 않도록 preventDefault, focus-visible ring 추가. label htmlFor 가
-              내부 input 을 가리키고 있어 키보드 사용자는 label 클릭으로도 진입 가능. */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                fileInputRef.current?.click();
-              }
-            }}
-            aria-label={t("professor.pptDragDrop")}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition ${
-              dragOver ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-950/40" : "border-gray-300 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500"
-            }`}
-          >
-            {file ? (
-              <div>
-                <p className="text-sm font-medium text-gray-900">{file.name}</p>
-                <p className="text-xs text-gray-400 mt-1">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
-              </div>
-            ) : (
-              <div>
-                <p className="text-sm text-gray-500">{t("professor.pptDragDrop")}</p>
-                <p className="text-xs text-gray-400 mt-1">{t("professor.pptFormat")}</p>
-              </div>
-            )}
-            <input ref={fileInputRef} id="ppt-upload" type="file" accept=".pptx,.ppt" className="hidden"
-              onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])} />
+          <div>
+            <label htmlFor="lecture-title" style={labelStyle}>
+              {t("professor.lectureTitle")}
+            </label>
+            <input
+              id="lecture-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              placeholder={t("professor.lectureTitlePlaceholder")}
+              style={inputStyle}
+            />
           </div>
-        </div>
 
-        <button type="submit" disabled={submitting || !title.trim()}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl py-3 text-sm font-semibold transition">
-          {submitting ? t("professor.creating") : t("professor.createLectureBtn")}
-        </button>
-      </form>
-    </div>
+          <div>
+            <label htmlFor="lecture-desc" style={labelStyle}>
+              {t("professor.description")}
+            </label>
+            <textarea
+              id="lecture-desc"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder={t("professor.descriptionPlaceholder")}
+              style={{ ...inputStyle, resize: "none" }}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="ppt-upload" style={labelStyle}>
+              {t("professor.pptFile")}
+            </label>
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              aria-label={t("professor.pptDragDrop")}
+              style={{
+                border: `1.5px dashed ${dragOver ? "var(--gold-bright)" : "var(--line-strong)"}`,
+                borderRadius: 14,
+                background: dragOver ? "rgba(255, 182, 39, 0.04)" : "var(--bg)",
+                padding: "32px 24px",
+                textAlign: "center",
+                cursor: "pointer",
+                outline: "none",
+                transition: "border-color 180ms var(--ease-out), background 180ms var(--ease-out)",
+              }}
+            >
+              {file ? (
+                <div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "var(--text)",
+                    }}
+                  >
+                    {file.name}
+                  </p>
+                  <p
+                    style={{
+                      ...tabularStyle,
+                      margin: "4px 0 0",
+                      fontSize: 12,
+                      color: "var(--text-subtle)",
+                    }}
+                  >
+                    {(file.size / 1024 / 1024).toFixed(1)} MB
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 14.5,
+                      fontWeight: 600,
+                      color: "var(--text)",
+                    }}
+                  >
+                    {t("professor.pptDragDrop")}
+                  </p>
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: 12,
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    {t("professor.pptFormat")}
+                  </p>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                id="ppt-upload"
+                type="file"
+                accept=".pptx,.ppt"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])}
+              />
+            </div>
+          </div>
+
+          <PrimaryButton
+            type="submit"
+            variant="primary"
+            size="lg"
+            disabled={submitting || !title.trim()}
+            style={{ width: "100%", justifyContent: "center" }}
+          >
+            {submitting ? t("professor.creating") : t("professor.createLectureBtn")}
+          </PrimaryButton>
+        </form>
+      </Card>
+    </PageContainer>
   );
 }

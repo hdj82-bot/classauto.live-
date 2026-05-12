@@ -19,9 +19,18 @@ interface StatGridProps {
   stats: DashboardStats;
   /** 미응답 Q&A 카드 클릭 시 인박스로 점프. */
   onJumpToInbox?: () => void;
+  /**
+   * 6번째 "누적 사용 비용" 카드를 숨긴다.
+   *
+   * docs/planning/05-instructor-pages.md §1.1 (2026-05-06) — 비용 표시 절대
+   * 금지 정책. v2 디자인 적용 시 본 옵션을 `true` 로 두고 우측 위젯의
+   * `MonthlyQuotaMeter` (편수 기반) 로 대체한다. 기본값은 backward-compat 을
+   * 위해 false.
+   */
+  hideCostCard?: boolean;
 }
 
-export default function StatGrid({ stats, onJumpToInbox }: StatGridProps) {
+export default function StatGrid({ stats, onJumpToInbox, hideCostCard = false }: StatGridProps) {
   const { t } = useDashboardHubI18n();
   const pendingWarn = stats.pendingQaCount >= 5;
 
@@ -73,19 +82,21 @@ export default function StatGrid({ stats, onJumpToInbox }: StatGridProps) {
         kind="progress"
         progressLimit={stats.monthlyVideoLimit ?? null}
       />
-      <StatCard
-        label={t("stats.totalCost")}
-        value={stats.totalCostUsd}
-        unit={`${t("stats.totalCostUnit")}`}
-        decimals={2}
-        kind="cost"
-        progressLimit={stats.monthlyCostLimitUsd ?? null}
-        warn={
-          !!stats.monthlyCostLimitUsd &&
-          stats.totalCostUsd >= stats.monthlyCostLimitUsd * 0.8
-        }
-        trend={stats.costTrend ?? null}
-      />
+      {!hideCostCard && (
+        <StatCard
+          label={t("stats.totalCost")}
+          value={stats.totalCostUsd}
+          unit={`${t("stats.totalCostUnit")}`}
+          decimals={2}
+          kind="cost"
+          progressLimit={stats.monthlyCostLimitUsd ?? null}
+          warn={
+            !!stats.monthlyCostLimitUsd &&
+            stats.totalCostUsd >= stats.monthlyCostLimitUsd * 0.8
+          }
+          trend={stats.costTrend ?? null}
+        />
+      )}
     </div>
   );
 }

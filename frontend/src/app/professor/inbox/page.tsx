@@ -20,6 +20,12 @@ import type {
   InboxItem,
   InboxStatsSummary,
 } from "@/components/professor/inbox/inboxTypes";
+import {
+  PageContainer,
+  PageHeader,
+  PrimaryButton,
+  Card,
+} from "@/components/professor/shell";
 
 /**
  * /professor/inbox — Q&A 인박스.
@@ -215,47 +221,64 @@ export default function ProfessorInboxPage() {
 
   if (error) {
     return (
-      <div className="text-center py-20" role="alert">
-        <p className="text-sm text-gray-600 mb-3">{t("page.loadError")}</p>
-        <button
-          type="button"
-          onClick={() => {
-            void loadInbox();
-            toast(t("page.retry"), "info");
-          }}
-          className="text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-xl px-5 py-2.5 transition motion-reduce:transition-none"
-        >
-          {t("page.retry")}
-        </button>
-      </div>
+      <PageContainer width="narrow">
+        <Card padding={40} radius={18}>
+          <div className="text-center" role="alert">
+            <p style={{ fontSize: 14, color: "var(--text)", marginBottom: 18 }}>
+              {t("page.loadError")}
+            </p>
+            <PrimaryButton
+              variant="primary"
+              size="md"
+              onClick={() => {
+                void loadInbox();
+                toast(t("page.retry"), "info");
+              }}
+            >
+              {t("page.retry")}
+            </PrimaryButton>
+          </div>
+        </Card>
+      </PageContainer>
     );
   }
 
   // ── 본 화면 ───────────────────────────────────────────────────────────────
   return (
-    <div data-testid="inbox-page" className="space-y-5">
-      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">{t("page.title")}</h1>
-          <p className="mt-1 text-sm text-gray-500 max-w-2xl">
-            {t("page.subtitle")}
-          </p>
-        </div>
-        <p
-          className="text-xs text-gray-400 tabular-nums"
-          data-testid="inbox-summary"
-        >
-          {t("filter.filterSummary", {
-            total: liveStats.total,
-            unanswered: liveStats.unanswered,
-          })}
-        </p>
-      </header>
+    <PageContainer>
+      <div data-testid="inbox-page" className="space-y-5">
+      <PageHeader
+        eyebrow="Q&A 인박스"
+        title={t("page.title")}
+        subtitle={t("page.subtitle")}
+        actions={
+          <span
+            style={{
+              fontVariantNumeric: "tabular-nums",
+              fontSize: 11.5,
+              color: "var(--text-subtle)",
+            }}
+            data-testid="inbox-summary"
+          >
+            {t("filter.filterSummary", {
+              total: liveStats.total,
+              unanswered: liveStats.unanswered,
+            })}
+          </span>
+        }
+      />
 
       {deferred && (
         <div
           data-testid="inbox-deferred-banner"
-          className="rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-xs text-amber-900"
+          style={{
+            borderRadius: 14,
+            border: "1px solid var(--gold-medium)",
+            background: "var(--gold-soft)",
+            padding: "10px 14px",
+            fontSize: 12,
+            color: "var(--gold)",
+          }}
         >
           {t("page.deferredNotice")}
         </div>
@@ -295,6 +318,7 @@ export default function ProfessorInboxPage() {
         onMarkReviewed={handleBulkMarkReviewed}
         onClear={() => setSelectedIds(new Set())}
       />
-    </div>
+      </div>
+    </PageContainer>
   );
 }

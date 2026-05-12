@@ -110,7 +110,9 @@
     "studio": "Studio",
     "inbox": "Inbox",
     "analytics": "Analytics",
-    "learners": "Learners"
+    "learners": "Learners",
+    "dashboard": "Dashboard",
+    "lectureList": "Lectures"
   },
   "professor": {
     "lectureManage": "Lecture Management",

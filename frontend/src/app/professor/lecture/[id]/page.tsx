@@ -7,6 +7,14 @@ import { useToast } from "@/components/ui/Toast";
 import { useI18n } from "@/contexts/I18nContext";
 import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import {
+  PageContainer,
+  PageHeader,
+  Card,
+  PrimaryButton,
+  tabularStyle,
+  hanStyle,
+} from "@/components/professor/shell";
 
 interface Segment {
   slide_index: number;
@@ -25,6 +33,19 @@ interface ScriptData {
   approved_at: string | null;
 }
 
+/**
+ * /professor/lecture/[id] — 스크립트 편집기 (v2 디자인).
+ *
+ * 단일 슬라이드 편집 (text + tone + 시작/종료초 + Q&A pin). 본 페이지는
+ * studio 3단 wizard 와 별개로 빠른 편집 진입로 — dashboard 의 "강의 편집"
+ * CTA, 강의 카드의 편집 버튼이 진입한다.
+ *
+ * v2 재디자인:
+ * - PageContainer + PageHeader + Card 구조
+ * - 인디고/amber → 골드/warning 토큰
+ * - 슬라이드 타임라인은 칩 형태 (활성 = gold-soft + gold-bright border)
+ * - 비용·$ 표시 없음
+ */
 export default function ScriptEditorPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -47,13 +68,19 @@ export default function ScriptEditorPage() {
         const { data } = await api.get(`/api/videos/${videoData.id}/script`);
         setScript(data);
         setSegments(data.segments || []);
-      } catch { /* script not generated */ }
+      } catch {
+        /* script not generated */
+      }
       setLoading(false);
     })();
   }, [id]);
 
-  const handleSegmentChange = (idx: number, field: keyof Segment, value: string | number | null) => {
-    setSegments((prev) => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  const handleSegmentChange = (
+    idx: number,
+    field: keyof Segment,
+    value: string | number | null,
+  ) => {
+    setSegments((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: value } : s)));
     setDirty(true);
   };
 
@@ -104,157 +131,418 @@ export default function ScriptEditorPage() {
 
   if (!script || segments.length === 0) {
     return (
-      <div className="text-center py-20">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gray-100 flex items-center justify-center" aria-hidden="true">
-          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-          </svg>
-        </div>
-        <p className="text-gray-700 font-medium mb-1">{t("script.noScript")}</p>
-        <p className="text-sm text-gray-400">{t("script.noScriptDesc")}</p>
-      </div>
+      <PageContainer width="narrow">
+        <Card padding={40} radius={18}>
+          <div className="text-center">
+            <div
+              className="inline-grid place-items-center"
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 16,
+                background: "var(--bg-subtle)",
+                margin: "0 auto 18px",
+              }}
+              aria-hidden="true"
+            >
+              <svg
+                width="32"
+                height="32"
+                fill="none"
+                stroke="var(--text-faint)"
+                strokeWidth={1.5}
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
+              </svg>
+            </div>
+            <p style={{ margin: 0, color: "var(--text)", fontWeight: 600 }}>
+              {t("script.noScript")}
+            </p>
+            <p style={{ margin: "6px 0 0", fontSize: 13, color: "var(--text-subtle)" }}>
+              {t("script.noScriptDesc")}
+            </p>
+          </div>
+        </Card>
+      </PageContainer>
     );
   }
 
   const current = segments[activeSlide];
 
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    padding: "10px 14px",
+    border: "1px solid var(--line-strong)",
+    borderRadius: 10,
+    fontSize: 13.5,
+    background: "var(--bg-card)",
+    color: "var(--text)",
+    outline: "none",
+    transition: "border-color 140ms var(--ease-out)",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--text-muted)",
+    marginBottom: 6,
+  };
+
   return (
-    <div>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">{t("script.title")}</h1>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {t("script.slideCount", { count: segments.length })} {dirty && <span className="text-amber-500 font-medium">- {t("script.unsaved")}</span>}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={handleReset} className="text-sm border border-gray-300 rounded-xl px-4 py-2 hover:bg-gray-50 transition">
-            {t("script.resetAI")}
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="text-sm bg-gray-900 text-white rounded-xl px-4 py-2 hover:bg-gray-800 disabled:opacity-50 transition">
-            {saving ? t("common.saving") : t("common.save")}
-          </button>
-          <button onClick={() => setShowApproveModal(true)}
-            className="text-sm bg-indigo-600 text-white rounded-xl px-4 py-2 hover:bg-indigo-700 transition">
-            {t("script.approve")}
-          </button>
-        </div>
-      </div>
+    <PageContainer>
+      <PageHeader
+        eyebrow="강의 편집"
+        title={t("script.title")}
+        subtitle={
+          <>
+            {t("script.slideCount", { count: segments.length })}
+            {dirty && (
+              <>
+                {" · "}
+                <span style={{ color: "var(--warning)", fontWeight: 600 }}>
+                  {t("script.unsaved")}
+                </span>
+              </>
+            )}
+          </>
+        }
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={handleReset}
+              style={{
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text-muted)",
+                background: "var(--bg-card)",
+                border: "1px solid var(--line-strong)",
+                borderRadius: 10,
+                cursor: "pointer",
+              }}
+            >
+              {t("script.resetAI")}
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#FFFFFF",
+                background: "#0A0A0A",
+                border: "none",
+                borderRadius: 10,
+                cursor: saving ? "not-allowed" : "pointer",
+                opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saving ? t("common.saving") : t("common.save")}
+            </button>
+            <PrimaryButton
+              type="button"
+              variant="primary"
+              size="md"
+              onClick={() => setShowApproveModal(true)}
+            >
+              {t("script.approve")}
+            </PrimaryButton>
+          </>
+        }
+      />
 
       {/* Slide timeline */}
-      <div className="flex gap-1 mb-6 overflow-x-auto pb-2" role="tablist" aria-label={t("script.title")}>
-        {segments.map((seg, i) => (
-          <button key={i} onClick={() => setActiveSlide(i)}
-            role="tab"
-            aria-selected={i === activeSlide}
-            aria-label={t("script.slideLabel", { n: seg.slide_index + 1 })}
-            className={`flex-shrink-0 w-20 h-14 rounded-lg border text-xs font-medium transition ${
-              i === activeSlide ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-gray-200 hover:border-gray-300 text-gray-500"
-            }`}>
-            <div>{t("script.slideLabel", { n: seg.slide_index + 1 })}</div>
-            {seg.question_pin_seconds !== null && <div className="text-indigo-400 text-[10px]">{t("script.qaPin")}</div>}
-          </button>
-        ))}
+      <div
+        className="overflow-x-auto pb-2"
+        role="tablist"
+        aria-label={t("script.title")}
+        style={{ display: "flex", gap: 6, marginBottom: 24 }}
+      >
+        {segments.map((seg, i) => {
+          const isActive = i === activeSlide;
+          const hasPin = seg.question_pin_seconds !== null;
+          return (
+            <button
+              key={i}
+              onClick={() => setActiveSlide(i)}
+              role="tab"
+              aria-selected={isActive}
+              aria-label={t("script.slideLabel", { n: seg.slide_index + 1 })}
+              style={{
+                flexShrink: 0,
+                width: 80,
+                height: 56,
+                borderRadius: 10,
+                fontSize: 11,
+                fontWeight: 600,
+                color: isActive ? "var(--gold)" : "var(--text-subtle)",
+                background: isActive ? "var(--gold-soft)" : "var(--bg-card)",
+                border: `1px solid ${isActive ? "var(--gold-bright)" : "var(--line)"}`,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                transition: "all 140ms var(--ease-out)",
+                ...tabularStyle,
+              }}
+            >
+              <div>{t("script.slideLabel", { n: seg.slide_index + 1 })}</div>
+              {hasPin && (
+                <div style={{ fontSize: 10, color: "var(--gold)" }}>
+                  {t("script.qaPin")}
+                </div>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Current slide editor */}
       {current && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4" role="tabpanel">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">{t("script.slideLabel", { n: current.slide_index + 1 })}</h3>
+        <Card padding={24} radius={16}>
+          <div
+            className="flex items-center justify-between"
+            style={{ marginBottom: 18 }}
+          >
+            <h3
+              style={{
+                margin: 0,
+                fontSize: 15,
+                fontWeight: 700,
+                color: "var(--text)",
+              }}
+            >
+              {t("script.slideLabel", { n: current.slide_index + 1 })}
+            </h3>
             <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400">{current.start_seconds}s ~ {current.end_seconds}s</span>
+              <span
+                style={{
+                  ...tabularStyle,
+                  fontSize: 11.5,
+                  color: "var(--text-subtle)",
+                }}
+              >
+                {current.start_seconds}s ~ {current.end_seconds}s
+              </span>
               <div className="flex gap-1">
-                <button onClick={() => setActiveSlide(Math.max(0, activeSlide - 1))} disabled={activeSlide === 0}
+                <button
+                  type="button"
+                  onClick={() => setActiveSlide(Math.max(0, activeSlide - 1))}
+                  disabled={activeSlide === 0}
                   aria-label={t("common.previous")}
-                  className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30 transition">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                  style={navIconBtn(activeSlide === 0)}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
                 </button>
-                <button onClick={() => setActiveSlide(Math.min(segments.length - 1, activeSlide + 1))} disabled={activeSlide === segments.length - 1}
+                <button
+                  type="button"
+                  onClick={() => setActiveSlide(Math.min(segments.length - 1, activeSlide + 1))}
+                  disabled={activeSlide === segments.length - 1}
                   aria-label={t("common.next")}
-                  className="w-7 h-7 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30 transition">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                  style={navIconBtn(activeSlide === segments.length - 1)}
+                >
+                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </button>
               </div>
             </div>
           </div>
 
-          <div>
-            <label htmlFor="speech-text" className="block text-sm font-medium text-gray-700 mb-1">{t("script.speechText")}</label>
-            <textarea id="speech-text" value={current.text} onChange={(e) => handleSegmentChange(activeSlide, "text", e.target.value)}
-              rows={5} className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 resize-none" />
-            <p className="text-xs text-gray-400 mt-1 text-right" aria-live="polite">{t("script.charCount", { count: current.text.length })}</p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-4">
             <div>
-              <label htmlFor="tone-select" className="block text-sm font-medium text-gray-700 mb-1">{t("script.tone")}</label>
-              <select id="tone-select" value={current.tone} onChange={(e) => handleSegmentChange(activeSlide, "tone", e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500">
-                <option value="normal">{t("script.toneNormal")}</option>
-                <option value="emphasis">{t("script.toneEmphasis")}</option>
-                <option value="soft">{t("script.toneSoft")}</option>
-                <option value="fast">{t("script.toneFast")}</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="start-sec" className="block text-sm font-medium text-gray-700 mb-1">{t("script.startSec")}</label>
-              <input id="start-sec" type="number" value={current.start_seconds} min={0} step={1}
-                onChange={(e) => {
-                  const n = e.target.valueAsNumber;
-                  handleSegmentChange(activeSlide, "start_seconds", Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0);
+              <label htmlFor="speech-text" style={labelStyle}>
+                {t("script.speechText")}
+              </label>
+              <textarea
+                id="speech-text"
+                value={current.text}
+                onChange={(e) => handleSegmentChange(activeSlide, "text", e.target.value)}
+                rows={5}
+                style={{ ...inputStyle, resize: "vertical", minHeight: 120 }}
+              />
+              <p
+                aria-live="polite"
+                style={{
+                  ...tabularStyle,
+                  margin: "4px 0 0",
+                  fontSize: 11,
+                  color: "var(--text-subtle)",
+                  textAlign: "right",
                 }}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+              >
+                {t("script.charCount", { count: current.text.length })}
+              </p>
             </div>
-            <div>
-              <label htmlFor="end-sec" className="block text-sm font-medium text-gray-700 mb-1">{t("script.endSec")}</label>
-              <input id="end-sec" type="number" value={current.end_seconds} min={0} step={1}
-                onChange={(e) => {
-                  const n = e.target.valueAsNumber;
-                  handleSegmentChange(activeSlide, "end_seconds", Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0);
-                }}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500" />
-            </div>
-          </div>
 
-          <div>
-            <label htmlFor="qa-pin" className="block text-sm font-medium text-gray-700 mb-1">{t("script.qaPinTiming")}</label>
-            <input id="qa-pin" type="number" value={current.question_pin_seconds ?? ""} min={0} step={1}
-              onChange={(e) => {
-                const raw = e.target.value;
-                if (!raw) {
-                  handleSegmentChange(activeSlide, "question_pin_seconds", null);
-                  return;
-                }
-                const n = e.target.valueAsNumber;
-                handleSegmentChange(activeSlide, "question_pin_seconds", Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null);
-              }}
-              className="w-40 border border-gray-300 rounded-xl px-3 py-2 text-sm outline-none focus:border-indigo-500"
-              placeholder={t("script.qaPinPlaceholder")} />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="tone-select" style={labelStyle}>
+                  {t("script.tone")}
+                </label>
+                <select
+                  id="tone-select"
+                  value={current.tone}
+                  onChange={(e) => handleSegmentChange(activeSlide, "tone", e.target.value)}
+                  style={inputStyle}
+                >
+                  <option value="normal">{t("script.toneNormal")}</option>
+                  <option value="emphasis">{t("script.toneEmphasis")}</option>
+                  <option value="soft">{t("script.toneSoft")}</option>
+                  <option value="fast">{t("script.toneFast")}</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="start-sec" style={labelStyle}>
+                  {t("script.startSec")}
+                </label>
+                <input
+                  id="start-sec"
+                  type="number"
+                  value={current.start_seconds}
+                  min={0}
+                  step={1}
+                  onChange={(e) => {
+                    const n = e.target.valueAsNumber;
+                    handleSegmentChange(
+                      activeSlide,
+                      "start_seconds",
+                      Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0,
+                    );
+                  }}
+                  style={{ ...inputStyle, ...tabularStyle }}
+                />
+              </div>
+              <div>
+                <label htmlFor="end-sec" style={labelStyle}>
+                  {t("script.endSec")}
+                </label>
+                <input
+                  id="end-sec"
+                  type="number"
+                  value={current.end_seconds}
+                  min={0}
+                  step={1}
+                  onChange={(e) => {
+                    const n = e.target.valueAsNumber;
+                    handleSegmentChange(
+                      activeSlide,
+                      "end_seconds",
+                      Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0,
+                    );
+                  }}
+                  style={{ ...inputStyle, ...tabularStyle }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="qa-pin" style={labelStyle}>
+                {t("script.qaPinTiming")}
+              </label>
+              <input
+                id="qa-pin"
+                type="number"
+                value={current.question_pin_seconds ?? ""}
+                min={0}
+                step={1}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (!raw) {
+                    handleSegmentChange(activeSlide, "question_pin_seconds", null);
+                    return;
+                  }
+                  const n = e.target.valueAsNumber;
+                  handleSegmentChange(
+                    activeSlide,
+                    "question_pin_seconds",
+                    Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : null,
+                  );
+                }}
+                placeholder={t("script.qaPinPlaceholder")}
+                style={{ ...inputStyle, width: 160, ...tabularStyle }}
+              />
+            </div>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Approve modal */}
-      <Modal open={showApproveModal} onClose={() => setShowApproveModal(false)} title={t("script.approveTitle")}>
-        <div className="space-y-4 pt-2">
-          <p className="text-sm text-gray-600">{t("script.approveDesc")}</p>
-          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-            <p className="text-sm text-amber-700">{t("script.approveWarning")}</p>
+      <Modal
+        open={showApproveModal}
+        onClose={() => setShowApproveModal(false)}
+        title={t("script.approveTitle")}
+      >
+        <div className="space-y-4" style={{ paddingTop: 8 }}>
+          <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+            {t("script.approveDesc")}
+          </p>
+          <div
+            style={{
+              background: "rgba(255, 182, 39, 0.06)",
+              border: "1px solid rgba(255, 182, 39, 0.30)",
+              borderRadius: 10,
+              padding: "12px 14px",
+            }}
+          >
+            <p style={{ margin: 0, fontSize: 13, color: "var(--gold)" }}>
+              {t("script.approveWarning")}
+            </p>
           </div>
-          <div className="flex gap-3 justify-end pt-2">
-            <button onClick={() => setShowApproveModal(false)}
-              className="text-sm border border-gray-300 rounded-xl px-4 py-2 hover:bg-gray-50 transition">
+          <div className="flex gap-3 justify-end" style={{ paddingTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => setShowApproveModal(false)}
+              style={{
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text)",
+                background: "var(--bg-card)",
+                border: "1px solid var(--line-strong)",
+                borderRadius: 10,
+                cursor: "pointer",
+              }}
+            >
               {t("common.cancel")}
             </button>
-            <button onClick={handleApprove} disabled={approving}
-              className="text-sm bg-indigo-600 text-white rounded-xl px-4 py-2 hover:bg-indigo-700 disabled:opacity-50 transition">
+            <PrimaryButton
+              type="button"
+              variant="primary"
+              size="md"
+              onClick={handleApprove}
+              disabled={approving}
+            >
               {approving ? t("script.approving") : t("script.approveBtn")}
-            </button>
+            </PrimaryButton>
           </div>
         </div>
       </Modal>
-    </div>
+
+      {/* 한자 강조 SVG style 보장 — Han 단어가 페이지에 등장할 수 있다 */}
+      <span aria-hidden="true" style={{ ...hanStyle, display: "none" }}>把</span>
+    </PageContainer>
   );
+}
+
+function navIconBtn(disabled: boolean): React.CSSProperties {
+  return {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    border: "1px solid var(--line)",
+    background: "var(--bg-card)",
+    color: disabled ? "var(--text-faint)" : "var(--text-muted)",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.3 : 1,
+    transition: "color 140ms var(--ease-out)",
+  };
 }
