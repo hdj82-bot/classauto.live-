@@ -5,14 +5,65 @@ import { api, isStripeCheckoutUrl } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/ui/Modal";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import {
+  PageContainer,
+  PageHeader,
+  PrimaryButton,
+  Card,
+  tabularStyle,
+  displayStyle,
+} from "@/components/professor/shell";
 
-interface SubscriptionData { user_id: string; plan: string; monthly_limit: number; }
-interface UsageData { plan: string; monthly_limit: number; used: number; remaining: number; period: string; }
+interface SubscriptionData {
+  user_id: string;
+  plan: string;
+  monthly_limit: number;
+}
+interface UsageData {
+  plan: string;
+  monthly_limit: number;
+  used: number;
+  remaining: number;
+  period: string;
+}
 
+/**
+ * 구독 관리 페이지 — v2 라이트 + 골드.
+ *
+ * planning/05 §9 (/account/billing) 의 규정: ₩ 가격 표시는 허용 (구독료지
+ * 영상 생성 비용이 아님). 단 영상 1편 원가 표시는 여전히 금지.
+ *
+ * 플랜 카드 3개 (Free / Basic / Pro) — 현재 플랜은 gold-bright 테두리 + 사용
+ * 중 배지. 다른 플랜은 PrimaryButton 으로 업그레이드/다운그레이드.
+ */
 const PLANS = [
-  { name: "FREE", label: "무료", limit: 2, price: "무료", features: ["월 2편 렌더링", "기본 Q&A", "기본 대시보드"] },
-  { name: "BASIC", label: "베이직", limit: 10, price: "₩29,000/월", features: ["월 10편 렌더링", "고급 Q&A", "상세 대시보드", "번역 지원"] },
-  { name: "PRO", label: "프로", limit: 20, price: "₩59,000/월", features: ["월 20편 렌더링", "무제한 Q&A", "전체 분석", "우선 렌더링", "번역 지원"] },
+  {
+    name: "FREE",
+    label: "무료",
+    limit: 2,
+    price: "무료",
+    features: ["월 2편 렌더링", "기본 Q&A", "기본 대시보드"],
+  },
+  {
+    name: "BASIC",
+    label: "베이직",
+    limit: 10,
+    price: "₩29,000/월",
+    features: ["월 10편 렌더링", "고급 Q&A", "상세 대시보드", "번역 지원"],
+  },
+  {
+    name: "PRO",
+    label: "프로",
+    limit: 20,
+    price: "₩59,000/월",
+    features: [
+      "월 20편 렌더링",
+      "무제한 Q&A",
+      "전체 분석",
+      "우선 렌더링",
+      "번역 지원",
+    ],
+  },
 ];
 
 export default function SubscriptionPage() {
@@ -65,16 +116,14 @@ export default function SubscriptionPage() {
     setChanging(true);
     try {
       if (confirmPlan === "FREE") {
-        // FREE 다운그레이드: 직접 처리
         await api.post(`/api/v1/subscription?plan=FREE`);
         await fetchData();
         toast("무료 플랜으로 변경되었습니다.", "success");
         setConfirmPlan(null);
       } else {
-        // BASIC/PRO 업그레이드: Stripe Checkout으로 이동
-        const { data } = await api.post(`/api/v1/payment/checkout?plan=${confirmPlan}`);
-        // Open-redirect 방어: 백엔드가 변조되거나 응답 검증이 약할 가능성에
-        // 대비해 Stripe 공식 호스트만 허용. 다른 호스트로의 redirect 차단.
+        const { data } = await api.post(
+          `/api/v1/payment/checkout?plan=${confirmPlan}`,
+        );
         if (!isStripeCheckoutUrl(data?.checkout_url)) {
           toast("결제 페이지 주소가 올바르지 않습니다.", "error");
           setChanging(false);
@@ -82,7 +131,6 @@ export default function SubscriptionPage() {
           return;
         }
         window.location.href = data.checkout_url;
-        // 리다이렉트 후에는 아래 코드가 실행되지 않음
       }
     } catch {
       toast("플랜 변경에 실패했습니다.", "error");
@@ -95,25 +143,75 @@ export default function SubscriptionPage() {
   if (loading) return <LoadingSpinner fullScreen label="구독 정보 불러오는 중..." />;
 
   const confirmPlanInfo = PLANS.find((p) => p.name === confirmPlan);
+  const usePct = usage
+    ? Math.min((usage.used / Math.max(usage.monthly_limit, 1)) * 100, 100)
+    : 0;
+  const warn = usePct >= 80;
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">구독 관리</h1>
+    <PageContainer width="wide">
+      <PageHeader
+        eyebrow="결제 · 구독"
+        title="구독 관리"
+        subtitle="플랜 변경·결제 정보는 모두 Stripe 를 통해 안전하게 처리됩니다."
+      />
 
       {/* 사용량 */}
       {usage && (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 mb-8">
+        <Card padding={24} radius={16} style={{ marginBottom: 24 }}>
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-gray-700">이번 달 사용량 ({usage.period})</span>
-            <span className="text-sm text-gray-500">{usage.used} / {usage.monthly_limit}편</span>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                color: "var(--text)",
+              }}
+            >
+              이번 달 사용량 ({usage.period})
+            </span>
+            <span
+              style={{
+                ...tabularStyle,
+                fontSize: 13,
+                color: "var(--text-subtle)",
+              }}
+            >
+              {usage.used} / {usage.monthly_limit}편
+            </span>
           </div>
-          <div className="bg-gray-100 rounded-full h-3">
-            <div className={`h-3 rounded-full transition-all ${
-              usage.used / usage.monthly_limit > 0.8 ? "bg-amber-500" : "bg-indigo-500"
-            }`} style={{ width: `${Math.min((usage.used / usage.monthly_limit) * 100, 100)}%` }} />
+          <div
+            style={{
+              background: "var(--bg-subtle)",
+              borderRadius: 999,
+              height: 10,
+              border: "1px solid var(--line)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${usePct}%`,
+                borderRadius: 999,
+                background: warn
+                  ? "linear-gradient(90deg, #FFB627 0%, #EF4444 100%)"
+                  : "linear-gradient(90deg, #FFB627 0%, #E89E0E 100%)",
+                transition: "width 800ms var(--ease-out)",
+              }}
+              aria-hidden="true"
+            />
           </div>
-          <p className="text-xs text-gray-400 mt-2">남은 횟수: {usage.remaining}편</p>
-        </div>
+          <p
+            style={{
+              ...tabularStyle,
+              margin: "8px 0 0",
+              fontSize: 11.5,
+              color: "var(--text-subtle)",
+            }}
+          >
+            남은 횟수: {usage.remaining}편
+          </p>
+        </Card>
       )}
 
       {/* 플랜 카드 */}
@@ -121,35 +219,133 @@ export default function SubscriptionPage() {
         {PLANS.map((plan) => {
           const isCurrent = sub?.plan === plan.name;
           return (
-            <div key={plan.name}
-              className={`border rounded-2xl p-6 transition ${isCurrent ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500" : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"}`}>
-              <div className="mb-4">
+            <Card
+              key={plan.name}
+              padding={24}
+              radius={16}
+              style={{
+                borderColor: isCurrent ? "var(--gold-bright)" : "var(--line)",
+                background: isCurrent ? "var(--gold-soft)" : "var(--bg-card)",
+                boxShadow: isCurrent
+                  ? "0 0 0 3px rgba(255, 182, 39, 0.18)"
+                  : "var(--shadow-sm)",
+              }}
+            >
+              <div style={{ marginBottom: 18 }}>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-gray-900">{plan.label}</h3>
-                  {isCurrent && <span className="text-xs bg-indigo-600 text-white px-2 py-0.5 rounded-full">현재</span>}
+                  <h3
+                    style={{
+                      ...displayStyle,
+                      margin: 0,
+                      fontSize: 17,
+                      fontWeight: 700,
+                      color: "var(--text)",
+                    }}
+                  >
+                    {plan.label}
+                  </h3>
+                  {isCurrent && (
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        background: "linear-gradient(135deg, #FFB627, #E89E0E)",
+                        color: "#0A0A0A",
+                        padding: "2px 8px",
+                        borderRadius: 999,
+                        letterSpacing: "0.06em",
+                      }}
+                    >
+                      현재
+                    </span>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-indigo-600 mt-1">{plan.price}</p>
-                <p className="text-xs text-gray-400">월 {plan.limit}편 렌더링</p>
+                <p
+                  style={{
+                    ...tabularStyle,
+                    margin: "8px 0 2px",
+                    fontSize: 24,
+                    fontWeight: 800,
+                    color: "var(--gold)",
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  {plan.price}
+                </p>
+                <p
+                  style={{
+                    ...tabularStyle,
+                    margin: 0,
+                    fontSize: 11.5,
+                    color: "var(--text-subtle)",
+                  }}
+                >
+                  월 {plan.limit}편 렌더링
+                </p>
               </div>
-              <ul className="space-y-2 mb-6">
+              <ul
+                style={{
+                  margin: "0 0 18px",
+                  padding: 0,
+                  listStyle: "none",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
                 {plan.features.map((f) => (
-                  <li key={f} className="text-sm text-gray-600 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <li
+                    key={f}
+                    style={{
+                      fontSize: 12.5,
+                      color: "var(--text-muted)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
+                  >
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="var(--success)"
+                      strokeWidth={2.6}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ flexShrink: 0 }}
+                      aria-hidden="true"
+                    >
+                      <path d="M5 13l4 4L19 7" />
                     </svg>
                     {f}
                   </li>
                 ))}
               </ul>
               {isCurrent ? (
-                <span className="block text-center text-sm font-medium text-indigo-600 py-2.5">사용 중</span>
+                <span
+                  className="block text-center"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "var(--gold)",
+                    padding: "10px 0",
+                  }}
+                >
+                  사용 중
+                </span>
               ) : (
-                <button onClick={() => setConfirmPlan(plan.name)} disabled={changing}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl py-2.5 text-sm font-medium transition">
+                <PrimaryButton
+                  variant="primary"
+                  size="md"
+                  onClick={() => setConfirmPlan(plan.name)}
+                  disabled={changing}
+                  style={{ width: "100%", justifyContent: "center" }}
+                >
                   {plan.name === "FREE" ? "다운그레이드" : "업그레이드"}
-                </button>
+                </PrimaryButton>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>
@@ -157,36 +353,82 @@ export default function SubscriptionPage() {
       {/* 플랜 변경 확인 모달 */}
       <Modal open={!!confirmPlan} onClose={() => setConfirmPlan(null)} title="플랜 변경">
         {confirmPlanInfo && (
-          <div className="space-y-4 pt-2">
-            <p className="text-sm text-gray-600">
-              <span className="font-medium text-gray-900">{confirmPlanInfo.label}</span> 플랜({confirmPlanInfo.price})으로 변경하시겠습니까?
+          <div className="space-y-4" style={{ paddingTop: 8 }}>
+            <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              <span
+                style={{
+                  fontWeight: 600,
+                  color: "var(--text)",
+                }}
+              >
+                {confirmPlanInfo.label}
+              </span>{" "}
+              플랜({confirmPlanInfo.price})으로 변경하시겠습니까?
             </p>
             {confirmPlanInfo.name === "FREE" ? (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                <p className="text-sm text-amber-700">
+              <div
+                style={{
+                  background: "var(--gold-soft)",
+                  border: "1px solid var(--gold-medium)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                }}
+              >
+                <p style={{ margin: 0, fontSize: 13, color: "var(--gold)" }}>
                   무료 플랜으로 변경하면 월 렌더링 한도가 2편으로 줄어듭니다.
                 </p>
               </div>
             ) : (
-              <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
-                <p className="text-sm text-indigo-700">
+              <div
+                style={{
+                  background: "rgba(59, 130, 246, 0.08)",
+                  border: "1px solid rgba(59, 130, 246, 0.24)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                }}
+              >
+                <p style={{ margin: 0, fontSize: 13, color: "var(--info)" }}>
                   Stripe 결제 페이지로 이동합니다.
                 </p>
               </div>
             )}
-            <div className="flex gap-3 justify-end pt-2">
-              <button onClick={() => setConfirmPlan(null)}
-                className="text-sm border border-gray-300 rounded-xl px-4 py-2 hover:bg-gray-50 transition">
+            <div
+              className="flex gap-3 justify-end"
+              style={{ paddingTop: 8 }}
+            >
+              <button
+                type="button"
+                onClick={() => setConfirmPlan(null)}
+                style={{
+                  padding: "8px 14px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--text)",
+                  background: "var(--bg-card)",
+                  border: "1px solid var(--line-strong)",
+                  borderRadius: 10,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
                 취소
               </button>
-              <button onClick={handleChangePlan} disabled={changing}
-                className="text-sm bg-indigo-600 text-white rounded-xl px-4 py-2 hover:bg-indigo-700 disabled:opacity-50 transition">
-                {changing ? "처리 중..." : confirmPlanInfo.name === "FREE" ? "다운그레이드" : "결제하기"}
-              </button>
+              <PrimaryButton
+                variant="primary"
+                size="md"
+                onClick={handleChangePlan}
+                disabled={changing}
+              >
+                {changing
+                  ? "처리 중..."
+                  : confirmPlanInfo.name === "FREE"
+                    ? "다운그레이드"
+                    : "결제하기"}
+              </PrimaryButton>
             </div>
           </div>
         )}
       </Modal>
-    </div>
+    </PageContainer>
   );
 }
