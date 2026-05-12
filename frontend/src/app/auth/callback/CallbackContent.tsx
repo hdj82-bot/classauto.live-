@@ -3,7 +3,7 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { authApi, oauthState } from "@/lib/api";
+import { authApi } from "@/lib/api";
 
 function parseJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -38,17 +38,6 @@ export default function CallbackContent() {
     if (!code) {
       router.replace("/auth/login?error=invalid_state");
       return;
-    }
-
-    // OAuth state(CSRF) 검증 — 프론트가 발급한 state 가 있을 때만.
-    // sessionStorage 에 state 가 없으면 백엔드 자체 검증을 신뢰 (호환).
-    // 발급되어 있는데 불일치/누락이면 즉시 차단.
-    if (oauthState.hasIssued()) {
-      const result = oauthState.consume(state);
-      if (!result.ok) {
-        router.replace("/auth/login?error=invalid_state");
-        return;
-      }
     }
 
     exchangedRef.current = true;
