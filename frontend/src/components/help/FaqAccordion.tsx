@@ -32,11 +32,11 @@ export default function FaqAccordion({
 
   if (items.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-10 text-center">
-        <p className="text-sm font-medium text-white/80">
+      <div className="rounded-2xl border border-dashed border-[rgba(10,10,10,0.16)] bg-white px-6 py-10 text-center">
+        <p className="text-sm font-medium text-[#0A0A0A]">
           {t("categoryView.empty")}
         </p>
-        <p className="mt-1 text-xs text-white/45">
+        <p className="mt-1 text-xs text-[rgba(10,10,10,0.45)]">
           {t("categoryView.emptyDesc")}
         </p>
       </div>
@@ -44,7 +44,7 @@ export default function FaqAccordion({
   }
 
   return (
-    <ul className="divide-y divide-white/5 rounded-2xl border border-white/10 bg-white/[0.02]">
+    <ul className="divide-y divide-[rgba(10,10,10,0.06)] rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04)]">
       {items.map((item, i) => {
         const open = openIndex.has(i);
         return (
@@ -61,14 +61,14 @@ export default function FaqAccordion({
                   return next;
                 })
               }
-              className="flex w-full items-start justify-between gap-4 py-4 text-left text-white/90 transition hover:text-white motion-reduce:transition-none"
+              className="flex w-full items-start justify-between gap-4 py-4 text-left text-[rgba(10,10,10,0.88)] hover:text-[#0A0A0A] transition motion-reduce:transition-none"
               data-testid={`${testIdPrefix}-toggle-${i}`}
             >
               <span className="text-sm font-medium leading-relaxed">
                 {item.q}
               </span>
               <svg
-                className={`mt-1 h-4 w-4 shrink-0 text-white/40 transition-transform duration-300 motion-reduce:transition-none ${
+                className={`mt-1 h-4 w-4 shrink-0 text-[rgba(10,10,10,0.40)] transition-transform duration-300 motion-reduce:transition-none ${
                   open ? "rotate-180" : ""
                 }`}
                 viewBox="0 0 20 20"
@@ -86,7 +86,7 @@ export default function FaqAccordion({
               <div
                 id={`${testIdPrefix}-panel-${i}`}
                 data-testid={`${testIdPrefix}-panel-${i}`}
-                className="pb-5 text-sm leading-relaxed text-white/65"
+                className="pb-5 text-sm leading-relaxed text-[rgba(10,10,10,0.65)]"
               >
                 {item.a}
               </div>
