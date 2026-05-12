@@ -16,7 +16,7 @@ import { displayStyle } from "./tokens";
  * - 우측: 액션 버튼 슬롯
  */
 export interface PageHeaderProps {
-  eyebrow?: string;
+  eyebrow?: ReactNode;
   title: ReactNode;
   subtitle?: ReactNode;
   /** 우측 액션 영역 (버튼 등). */

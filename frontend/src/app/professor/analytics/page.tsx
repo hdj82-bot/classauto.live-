@@ -8,6 +8,13 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAnalyticsI18n } from "@/components/professor/analytics/useAnalyticsI18n";
 import EmptyState from "@/components/professor/analytics/EmptyState";
+import {
+  PageContainer,
+  PageHeader,
+  PrimaryButton,
+  Card,
+  tabularStyle,
+} from "@/components/professor/shell";
 
 interface Course {
   id: string;
@@ -97,16 +104,26 @@ export default function ProfessorAnalyticsIndexPage() {
   }
 
   return (
-    <div lang={locale}>
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{t("indexTitle")}</h1>
-        <p className="mt-1 text-sm text-gray-500">{t("indexSubtitle")}</p>
-        {lectures.length > 0 && (
-          <p className="mt-2 text-xs text-gray-400 tabular-nums">
-            {t("indexLectureCount", { count: lectures.length })}
-          </p>
-        )}
-      </header>
+    <PageContainer>
+      <div lang={locale} />
+      <PageHeader
+        eyebrow="분석 리포트"
+        title={t("indexTitle")}
+        subtitle={t("indexSubtitle")}
+        actions={
+          lectures.length > 0 ? (
+            <span
+              style={{
+                ...tabularStyle,
+                fontSize: 12,
+                color: "var(--text-subtle)",
+              }}
+            >
+              {t("indexLectureCount", { count: lectures.length })}
+            </span>
+          ) : undefined
+        }
+      />
 
       {error && (
         <div
@@ -129,13 +146,9 @@ export default function ProfessorAnalyticsIndexPage() {
           title={t("indexEmptyTitle")}
           description={t("indexEmptyDesc")}
           action={
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 motion-safe:transition"
-            >
+            <PrimaryButton variant="primary" size="md" onClick={handleCreate}>
               {t("indexEmptyCta")}
-            </button>
+            </PrimaryButton>
           }
         />
       ) : (
@@ -149,54 +162,84 @@ export default function ProfessorAnalyticsIndexPage() {
                     {course.title}
                   </h2>
                 )}
-                <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3" style={{ margin: 0, padding: 0, listStyle: "none" }}>
                   {lecs.map((lec) => (
                     <li key={lec.id}>
                       <Link
                         href={`/professor/analytics/${lec.id}`}
-                        className="group flex h-full flex-col rounded-2xl border border-gray-200 bg-white p-5 motion-safe:transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
+                        style={{ textDecoration: "none", display: "block", height: "100%" }}
                       >
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <h3 className="line-clamp-2 font-semibold text-gray-900">
-                            {lec.title}
-                          </h3>
-                          <span
-                            className={`inline-flex flex-none items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ${
-                              lec.is_published
-                                ? "bg-green-100 text-green-700"
-                                : "bg-gray-100 text-gray-500"
-                            }`}
-                          >
+                        <Card
+                          padding={20}
+                          radius={14}
+                          interactive
+                          style={{ display: "flex", flexDirection: "column", height: "100%" }}
+                        >
+                          <div className="flex items-start justify-between gap-2" style={{ marginBottom: 8 }}>
+                            <h3
+                              className="line-clamp-2"
+                              style={{
+                                margin: 0,
+                                fontSize: 15,
+                                fontWeight: 700,
+                                color: "var(--text)",
+                                letterSpacing: "-0.01em",
+                              }}
+                            >
+                              {lec.title}
+                            </h3>
                             <span
-                              aria-hidden="true"
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                lec.is_published
-                                  ? "bg-green-500"
-                                  : "bg-gray-400"
-                              }`}
-                            />
-                            {lec.is_published
-                              ? t("indexCardPublished")
-                              : t("indexCardDraft")}
-                          </span>
-                        </div>
-                        <span className="mt-auto inline-flex items-center text-sm font-medium text-indigo-600 group-hover:text-indigo-700">
-                          {t("indexCardOpen")}
-                          <svg
-                            className="ml-1 h-4 w-4 motion-safe:transition-transform group-hover:translate-x-0.5"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            aria-hidden="true"
+                              className="inline-flex flex-none items-center gap-1 rounded-full"
+                              style={{
+                                padding: "3px 8px",
+                                fontSize: 10.5,
+                                fontWeight: 600,
+                                color: lec.is_published ? "var(--success)" : "var(--text-subtle)",
+                                background: lec.is_published
+                                  ? "rgba(16, 185, 129, 0.10)"
+                                  : "var(--bg-subtle)",
+                              }}
+                            >
+                              <span
+                                aria-hidden="true"
+                                style={{
+                                  width: 6,
+                                  height: 6,
+                                  borderRadius: 999,
+                                  background: lec.is_published ? "var(--success)" : "var(--text-faint)",
+                                }}
+                              />
+                              {lec.is_published
+                                ? t("indexCardPublished")
+                                : t("indexCardDraft")}
+                            </span>
+                          </div>
+                          <span
+                            className="inline-flex items-center"
+                            style={{
+                              marginTop: "auto",
+                              fontSize: 13,
+                              fontWeight: 600,
+                              color: "var(--gold)",
+                            }}
                           >
-                            <path
+                            {t("indexCardOpen")}
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.8}
                               strokeLinecap="round"
                               strokeLinejoin="round"
-                              strokeWidth={1.5}
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                        </span>
+                              style={{ marginLeft: 4 }}
+                              aria-hidden="true"
+                            >
+                              <path d="M9 5l7 7-7 7" />
+                            </svg>
+                          </span>
+                        </Card>
                       </Link>
                     </li>
                   ))}
@@ -206,6 +249,6 @@ export default function ProfessorAnalyticsIndexPage() {
           })}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
