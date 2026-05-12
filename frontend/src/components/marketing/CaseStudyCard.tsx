@@ -19,10 +19,9 @@ export interface CaseStudyData {
 }
 
 /**
- * A single Before/After case-study card. Driven by the i18n patch dict so
- * adding a discipline only means adding an entry to marketing.{ko,en}.json.
+ * Before/After 케이스 스터디 카드 v2 — 라이트 베이지 + 골드.
  *
- * The patch keys read are:
+ * 콘텐츠는 marketing.{ko,en}.json 의 patch 딕셔너리에서 keyPrefix 로 lookup.
  *   - {prefix}.field, .professor, .school, .before, .after
  *   - {prefix}.features (array)
  */
@@ -41,36 +40,49 @@ export default function CaseStudyCard({
   return (
     <article
       id={detailId}
-      className={`group rounded-2xl border border-white/10 bg-white/[0.03] p-6 sm:p-8 transition hover:border-amber-400/40 hover:bg-white/[0.05] ${
-        isAnchor ? "lg:col-span-2" : ""
-      }`}
+      className={[
+        "group rounded-2xl border bg-white p-6 sm:p-8 transition motion-reduce:transition-none",
+        isAnchor
+          ? "border-[rgba(184,131,8,0.35)] shadow-[0_8px_32px_rgba(255,182,39,0.15)] lg:col-span-2"
+          : "border-[rgba(10,10,10,0.08)] shadow-[0_1px_2px_rgba(10,10,10,0.04)] hover:border-[rgba(184,131,8,0.30)] hover:shadow-[0_8px_28px_rgba(255,182,39,0.10)] hover:-translate-y-0.5",
+      ].join(" ")}
     >
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-wider text-amber-400 uppercase">
+          <p className="text-xs font-semibold tracking-wider text-[#B88308] uppercase">
             {t(`${keyPrefix}.field`)}
           </p>
           <h3
-            className={`mt-2 font-bold ${
-              isAnchor ? "text-xl sm:text-2xl" : "text-lg"
-            }`}
+            className={[
+              "mt-2 font-bold text-[#0A0A0A]",
+              isAnchor ? "text-xl sm:text-2xl" : "text-lg",
+            ].join(" ")}
+            style={
+              isAnchor
+                ? {
+                    fontFamily:
+                      "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+                    letterSpacing: "-0.02em",
+                  }
+                : undefined
+            }
           >
             {t(`${keyPrefix}.professor`)}
           </h3>
-          <p className="text-sm text-white/50 mt-0.5">
+          <p className="text-sm text-[rgba(10,10,10,0.55)] mt-0.5">
             {t(`${keyPrefix}.school`)}
           </p>
         </div>
 
         {metric && (
           <div className="shrink-0 text-right">
-            <p className="text-[10px] uppercase tracking-wider text-white/40">
+            <p className="text-[10px] uppercase tracking-wider text-[rgba(10,10,10,0.40)]">
               {metric.label}
             </p>
             <p className="text-xl font-bold tabular-nums">
-              <span className="text-white/40">{metric.from}</span>
-              <span className="mx-1.5 text-white/20">→</span>
-              <span className="text-amber-400">{metric.to}</span>
+              <span className="text-[rgba(10,10,10,0.40)]">{metric.from}</span>
+              <span className="mx-1.5 text-[rgba(10,10,10,0.25)]">→</span>
+              <span className="text-[#B88308]">{metric.to}</span>
             </p>
           </div>
         )}
@@ -78,35 +90,35 @@ export default function CaseStudyCard({
 
       <dl className="space-y-3 mt-5">
         <div>
-          <dt className="text-xs font-semibold tracking-wider text-white/40 uppercase">
+          <dt className="text-xs font-semibold tracking-wider text-[rgba(10,10,10,0.40)] uppercase">
             {t("useCases.labels.before")}
           </dt>
-          <dd className="mt-1 text-sm text-white/70 leading-relaxed">
+          <dd className="mt-1 text-sm text-[rgba(10,10,10,0.72)] leading-relaxed">
             {t(`${keyPrefix}.before`)}
           </dd>
         </div>
         <div>
-          <dt className="text-xs font-semibold tracking-wider text-amber-400 uppercase">
+          <dt className="text-xs font-semibold tracking-wider text-[#B88308] uppercase">
             {t("useCases.labels.after")}
           </dt>
-          <dd className="mt-1 text-sm text-white leading-relaxed">
+          <dd className="mt-1 text-sm text-[#0A0A0A] leading-relaxed">
             {t(`${keyPrefix}.after`)}
           </dd>
         </div>
       </dl>
 
       {features.length > 0 && (
-        <div className="mt-6 pt-5 border-t border-white/5">
-          <p className="text-xs font-semibold tracking-wider text-white/40 uppercase mb-2">
+        <div className="mt-6 pt-5 border-t border-[rgba(10,10,10,0.06)]">
+          <p className="text-xs font-semibold tracking-wider text-[rgba(10,10,10,0.40)] uppercase mb-2">
             {t("useCases.labels.keyFeatures")}
           </p>
           <ul className="flex flex-wrap gap-2">
             {features.map((f) => (
               <li
                 key={f}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/80"
+                className="inline-flex items-center gap-1.5 rounded-full border border-[rgba(10,10,10,0.08)] bg-[#FAFAF7] px-2.5 py-1 text-xs text-[rgba(10,10,10,0.78)]"
               >
-                <span aria-hidden="true" className="text-amber-400">
+                <span aria-hidden="true" className="text-[#B88308] font-bold">
                   ✓
                 </span>
                 {f}
@@ -120,7 +132,7 @@ export default function CaseStudyCard({
         <button
           type="button"
           onClick={onViewDetail}
-          className="mt-5 text-xs font-medium text-amber-400 hover:text-amber-300"
+          className="mt-5 text-xs font-medium text-[#B88308] hover:text-[#E89E0B] transition motion-reduce:transition-none"
         >
           {t("useCases.labels.viewDetail")} →
         </button>
