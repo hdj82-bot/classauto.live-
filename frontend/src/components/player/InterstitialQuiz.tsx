@@ -55,15 +55,24 @@ export default function InterstitialQuiz({
   }, [onAnswer]);
 
   useEffect(() => {
+    // react-hooks/set-state-in-effect: effect body 안에서 동기 setState 금지.
+    // rAF 로 비동기화 (open 토글 시 1프레임 지연되지만 시각 차이는 없음).
+    let rafHandle: number | null = null;
     if (!open) {
       if (tickRef.current) window.clearInterval(tickRef.current);
       tickRef.current = null;
+      rafHandle = requestAnimationFrame(() => {
+        setSeconds(countdownSeconds);
+        setPicked(null);
+      });
+      return () => {
+        if (rafHandle !== null) cancelAnimationFrame(rafHandle);
+      };
+    }
+    rafHandle = requestAnimationFrame(() => {
       setSeconds(countdownSeconds);
       setPicked(null);
-      return;
-    }
-    setSeconds(countdownSeconds);
-    setPicked(null);
+    });
     tickRef.current = window.setInterval(() => {
       setSeconds((s) => {
         if (s <= 1) {
@@ -79,6 +88,7 @@ export default function InterstitialQuiz({
     return () => {
       if (tickRef.current) window.clearInterval(tickRef.current);
       tickRef.current = null;
+      if (rafHandle !== null) cancelAnimationFrame(rafHandle);
     };
   }, [open, countdownSeconds]);
 

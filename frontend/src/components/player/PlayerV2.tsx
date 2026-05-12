@@ -156,18 +156,22 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
   }, [lecture, user, durationSec]);
 
   // 환영 메시지를 i18n locale 로드 후 한 번 세팅 (placeholder → 실제 텍스트).
+  // react-hooks/set-state-in-effect: rAF 로 비동기화.
   useEffect(() => {
-    setQaMessages((prev) =>
-      prev.length === 1 && prev[0]?.text === ""
-        ? [
-            {
-              role: "assistant",
-              text: t("student.playerV2.qaWelcome"),
-              source: t("student.playerV2.qaSourceFallback"),
-            },
-          ]
-        : prev,
-    );
+    const handle = requestAnimationFrame(() => {
+      setQaMessages((prev) =>
+        prev.length === 1 && prev[0]?.text === ""
+          ? [
+              {
+                role: "assistant",
+                text: t("student.playerV2.qaWelcome"),
+                source: t("student.playerV2.qaSourceFallback"),
+              },
+            ]
+          : prev,
+      );
+    });
+    return () => cancelAnimationFrame(handle);
   }, [t]);
 
   // ─── 언로드 시 세션 paused ───

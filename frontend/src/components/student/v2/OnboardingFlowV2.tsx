@@ -43,15 +43,18 @@ export default function OnboardingFlowV2({
   const timerRef = useRef<number | null>(null);
 
   // sessionStorage 확인 — 같은 탭 내 두 번째 마운트면 즉시 hide.
+  // react-hooks/set-state-in-effect: rAF 로 비동기화 (다음 프레임에 hide).
   useEffect(() => {
     if (!rememberInSession) return;
+    let stored = false;
     try {
-      if (window.sessionStorage.getItem(SESSION_KEY) === "1") {
-        setVisible(false);
-      }
+      stored = window.sessionStorage.getItem(SESSION_KEY) === "1";
     } catch {
       /* private mode → 무시 (다시 보여도 OK) */
     }
+    if (!stored) return;
+    const handle = requestAnimationFrame(() => setVisible(false));
+    return () => cancelAnimationFrame(handle);
   }, [rememberInSession]);
 
   // Auto-advance 1~3 → next.

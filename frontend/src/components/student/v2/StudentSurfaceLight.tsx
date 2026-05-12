@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { useI18n, type Locale } from "@/contexts/I18nContext";
 import tokens from "./tokens-v2.module.css";
@@ -45,14 +46,14 @@ function BrandBar() {
   const next: Locale = locale === "ko" ? "en" : "ko";
   return (
     <header className={tokens.brandbar}>
-      <a
+      <Link
         href="/"
         className={tokens.brand}
         style={{ textDecoration: "none", color: "inherit" }}
       >
         <span className={tokens.brandMark} aria-hidden="true" />
         <span>ClassAuto</span>
-      </a>
+      </Link>
       <button
         type="button"
         className={tokens.langToggle}

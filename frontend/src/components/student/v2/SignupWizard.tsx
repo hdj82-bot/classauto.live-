@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
 import { startGoogleLogin } from "@/lib/auth";
@@ -93,13 +94,22 @@ export default function SignupWizard({ next }: SignupWizardProps) {
   const detectedSchool = emailInfo.schoolName;
 
   // Resend timer for Step 2 (60s).
+  // react-hooks/set-state-in-effect: 초기 setResendSeconds(60) 동기 호출을
+  // rAF 로 비동기화. setInterval 안의 setResendSeconds 는 callback form 이라
+  // 룰 적용 대상 아님.
   useEffect(() => {
     if (step !== 2) return;
-    setResendSeconds(60);
-    const id = window.setInterval(() => {
-      setResendSeconds((s) => (s > 0 ? s - 1 : 0));
-    }, 1000);
-    return () => window.clearInterval(id);
+    let id: number | null = null;
+    const rafHandle = requestAnimationFrame(() => {
+      setResendSeconds(60);
+      id = window.setInterval(() => {
+        setResendSeconds((s) => (s > 0 ? s - 1 : 0));
+      }, 1000);
+    });
+    return () => {
+      cancelAnimationFrame(rafHandle);
+      if (id !== null) window.clearInterval(id);
+    };
   }, [step]);
 
   const goNext = () => setStep((s) => (s < 3 ? ((s + 1) as 1 | 2 | 3) : s));
@@ -447,7 +457,7 @@ function Step1({
           </svg>
         </button>
         <div className={styles.altLink}>
-          <a href="/v/access-code">{t("student.signupV2.step1.altUseCode")}</a>
+          <Link href="/v/access-code">{t("student.signupV2.step1.altUseCode")}</Link>
         </div>
       </div>
     </div>
