@@ -44,20 +44,20 @@ export default function FormField(props: Props) {
   const hintId = `${id}-hint`;
 
   const baseClasses =
-    "w-full rounded-xl border bg-white/[0.04] px-3.5 py-2.5 text-sm text-white placeholder-white/30 outline-none transition focus:ring-2 focus:ring-amber-400/30";
+    "w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm text-[#0A0A0A] placeholder-[rgba(10,10,10,0.35)] outline-none transition motion-reduce:transition-none focus:ring-2 focus:ring-[rgba(255,182,39,0.30)]";
   const borderClasses = props.error
-    ? "border-red-400/60 focus:border-red-400"
-    : "border-white/10 focus:border-amber-400/60";
+    ? "border-[#EF4444] focus:border-[#EF4444]"
+    : "border-[rgba(10,10,10,0.12)] focus:border-[#B88308]";
 
   return (
     <div>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-white/80 mb-1.5"
+        className="block text-sm font-medium text-[#0A0A0A] mb-1.5"
       >
         {props.label}
         {props.required && (
-          <span className="text-amber-400 ml-0.5" aria-hidden="true">
+          <span className="text-[#B88308] ml-0.5 font-bold" aria-hidden="true">
             *
           </span>
         )}
@@ -89,11 +89,11 @@ export default function FormField(props: Props) {
           }
           className={`${baseClasses} ${borderClasses}`}
         >
-          <option value="" disabled className="bg-gray-900">
+          <option value="" disabled>
             —
           </option>
           {props.options.map((o) => (
-            <option key={o.value} value={o.value} className="bg-gray-900">
+            <option key={o.value} value={o.value}>
               {o.label}
             </option>
           ))}
@@ -120,12 +120,12 @@ export default function FormField(props: Props) {
         <p
           id={errId}
           role="alert"
-          className="mt-1 text-xs text-red-300 leading-relaxed"
+          className="mt-1 text-xs text-[#DC2626] leading-relaxed"
         >
           {props.error}
         </p>
       ) : props.hint ? (
-        <p id={hintId} className="mt-1 text-xs text-white/40 leading-relaxed">
+        <p id={hintId} className="mt-1 text-xs text-[rgba(10,10,10,0.55)] leading-relaxed">
           {props.hint}
         </p>
       ) : null}
