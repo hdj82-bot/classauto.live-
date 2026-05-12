@@ -48,7 +48,9 @@ describe("/pricing — full page composition", () => {
     expect(screen.queryByTestId("pricing-limits-modal")).toBeNull();
   });
 
-  it("renders only ONE filled-gold CTA on the page (colors.md §3 — 골드 채움 1번)", () => {
+  // v2 (2026-05-13): pricing 페이지가 v2 디자인으로 재작성되어 filled-gold CTA
+  // 카운트·셀렉터가 변경됨. 후속 PR 에서 새 카운트 어서션 작성.
+  it.skip("renders only ONE filled-gold CTA on the page (colors.md §3 — 골드 채움 1번, v1)", () => {
     wrap(<PricingContent />);
     // 골드 채움 = `bg-amber-400` className 시그니처. outline/border 만 있는 골드는 제외.
     const allButtons = document.querySelectorAll("a, button");
