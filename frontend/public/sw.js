@@ -1,7 +1,8 @@
-// IFL Platform — Service Worker
+// ClassAuto — Service Worker
 // 캐시 전략: 정적 자산 → Cache First, API → Network First
+// 캐시 이름 bump: v2 디자인 전환과 함께 기존 IFL 시기 캐시를 한 번 무효화한다.
 
-const CACHE_NAME = "ifl-v1";
+const CACHE_NAME = "classauto-v2";
 const OFFLINE_URL = "/offline";
 
 const STATIC_ASSETS = [

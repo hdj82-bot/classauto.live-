@@ -1,98 +1,235 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * ClassAuto Global Styles — Design System v2 (2026-05-12)
+ *
+ *   - 라이트 베이지(#FAFAF7) + 골드 dual surface
+ *   - Pretendard (본문/UI) + Paperlogy (디스플레이) + Noto Serif KR (한자 강조)
+ *   - Tailwind v4 @theme inline 매핑으로 모든 토큰을 utility 화
+ *
+ * 정책 출처: docs/design-system/colors.md, typography.md, animations.md
+ * v1 (다크 + 오로라 메쉬 + 마스코트) 정책은 폐기 — colors.md §11 Legacy 참조.
+ * ───────────────────────────────────────────────────────────────────────── */
+
 @import "tailwindcss";
 
+/* ── Fonts (CDN — typography.md §3) ────────────────────────────────────── */
+
+/* Pretendard Variable — 본문·UI·숫자 (tabular-nums 지원) */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
+
+/* Paperlogy — 디스플레이 헤드라인. jsdelivr 가 GitHub raw 를 캐시 */
+@font-face {
+  font-family: 'Paperlogy';
+  src: url("https://cdn.jsdelivr.net/gh/innoplus-studio/Paperlogy/font/woff2/Paperlogy-7Bold.woff2") format('woff2'),
+       url("https://cdn.jsdelivr.net/gh/innoplus-studio/Paperlogy/font/woff2/Paperlogy-8ExtraBold.woff2") format('woff2');
+  font-weight: 700 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Noto Serif KR — 한자 강조 (.han) */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600&display=swap");
+
+/* ── Tokens (v2) — colors.md §2 / typography.md §0 / animations.md §0 ─── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Light surface (기본) */
+  --bg:           #FAFAF7;
+  --bg-card:      #FFFFFF;
+  --bg-hover:     #F4F0E2;
+  --bg-subtle:    #F5F4EF;
+  --text:         #0A0A0A;
+  --text-muted:   rgba(10, 10, 10, 0.62);
+  --text-subtle:  rgba(10, 10, 10, 0.40);
+  --text-faint:   rgba(10, 10, 10, 0.22);
+  --line:         rgba(10, 10, 10, 0.08);
+  --line-strong:  rgba(10, 10, 10, 0.14);
+
+  /* Dark surface (player·인터스티셜·일부 hero) */
+  --bg-dark:          #0A0A0A;
+  --bg-dark-soft:     #141414;
+  --bg-card-dark:     #1A1A1A;
+  --text-dark:        #FFFFFF;
+  --text-dark-muted:  rgba(255, 255, 255, 0.62);
+  --text-dark-subtle: rgba(255, 255, 255, 0.40);
+  --line-dark:        rgba(255, 255, 255, 0.08);
+  --line-dark-strong: rgba(255, 255, 255, 0.14);
+
+  /* Gold (표면별 보정) */
+  --gold:          #FFB627;
+  --gold-bright:   #FFC74D;
+  --gold-deep:     #E89E0E;
+  --gold-on-light: #B88308;
+  --gold-soft:     rgba(255, 182, 39, 0.10);
+  --gold-medium:   rgba(255, 182, 39, 0.20);
+  --gold-glow:     rgba(255, 182, 39, 0.40);
+
+  /* Semantic */
+  --success: #10B981;
+  --warning: #EF4444;
+  --info:    #3B82F6;
+
+  /* Shadow — 검정 베이스 4단계 */
+  --shadow-sm: 0 1px 2px   rgba(10, 10, 10, 0.04);
+  --shadow-md: 0 4px 14px  rgba(10, 10, 10, 0.06);
+  --shadow-lg: 0 16px 48px rgba(10, 10, 10, 0.10);
+  --shadow-xl: 0 24px 64px rgba(10, 10, 10, 0.16);
+
+  /* Typography */
+  --font-display: 'Paperlogy', 'Pretendard Variable', 'Pretendard', system-ui, sans-serif;
+  --font-body:    'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-han:     'Noto Serif KR', 'Source Han Serif KR', serif;
+
+  /* Motion */
+  --ease-out:    cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* ── Tailwind v4 @theme 매핑 — 토큰을 utility 로 노출 ──────────────────── */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Surface */
+  --color-bg:            var(--bg);
+  --color-bg-card:       var(--bg-card);
+  --color-bg-hover:      var(--bg-hover);
+  --color-bg-subtle:     var(--bg-subtle);
+  --color-bg-dark:       var(--bg-dark);
+  --color-bg-dark-soft:  var(--bg-dark-soft);
+  --color-bg-card-dark:  var(--bg-card-dark);
+
+  /* Text */
+  --color-text:             var(--text);
+  --color-text-muted:       var(--text-muted);
+  --color-text-subtle:      var(--text-subtle);
+  --color-text-faint:       var(--text-faint);
+  --color-text-dark:        var(--text-dark);
+  --color-text-dark-muted:  var(--text-dark-muted);
+  --color-text-dark-subtle: var(--text-dark-subtle);
+
+  /* Line */
+  --color-line:             var(--line);
+  --color-line-strong:      var(--line-strong);
+  --color-line-dark:        var(--line-dark);
+  --color-line-dark-strong: var(--line-dark-strong);
+
+  /* Gold */
+  --color-gold:          var(--gold);
+  --color-gold-bright:   var(--gold-bright);
+  --color-gold-deep:     var(--gold-deep);
+  --color-gold-on-light: var(--gold-on-light);
+
+  /* Semantic */
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info:    var(--info);
+
+  /* Font */
+  --font-display: var(--font-display);
+  --font-body:    var(--font-body);
+  --font-han:     var(--font-han);
+  --font-sans:    var(--font-body);  /* Tailwind 기본 font-sans 호환 */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ── Body 기본 ─────────────────────────────────────────────────────────── */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* 모바일 터치 스크롤 */
+/* Dark surface 컨테이너 (player, 인터스티셜 등) — `.surface-dark` wrapper 에
+ * 적용하면 그 안에서 text/bg/line 토큰이 다크 변형으로 전환된다. */
+.surface-dark {
+  background: var(--bg-dark);
+  color: var(--text-dark);
+}
+.surface-dark .text-muted  { color: var(--text-dark-muted); }
+.surface-dark .text-subtle { color: var(--text-dark-subtle); }
+
+/* ── 한자 강조 — typography.md §1.1 ───────────────────────────────────── */
+
+.han {
+  font-family: var(--font-han);
+  color: var(--gold-on-light);
+}
+.surface-dark .han {
+  color: var(--gold);
+}
+
+/* ── 숫자 tabular-nums — typography.md §1 ─────────────────────────────── */
+
+.numeric,
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ── 모바일 스크롤 / 줌 방지 ──────────────────────────────────────────── */
+
 .overflow-x-auto {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
-.overflow-x-auto::-webkit-scrollbar {
-  display: none;
-}
+.overflow-x-auto::-webkit-scrollbar { display: none; }
 
-/* 모바일에서 입력 필드 줌 방지 */
 @media (max-width: 640px) {
   input, select, textarea {
     font-size: 16px !important;
   }
 }
 
-@keyframes slide-in {
-  from { opacity: 0; transform: translateX(100%); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
-.animate-slide-in {
-  animation: slide-in 0.25s ease-out;
-}
+/* ── Animation keyframes (animations.md §2~4) ─────────────────────────── */
 
 @keyframes fade-in {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
+.animate-fade-in { animation: fade-in 500ms var(--ease-out) both; }
 
-.animate-fade-in {
-  animation: fade-in 0.15s ease-out;
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.animate-fade-in-up { animation: fade-in-up 500ms var(--ease-out) both; }
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(100%); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in { animation: slide-in 250ms var(--ease-out); }
+
+@keyframes slide-in-top {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-in-top { animation: slide-in-top 400ms var(--ease-out); }
 
 @keyframes scale-in {
   from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  to   { opacity: 1; transform: scale(1); }
 }
+.animate-scale-in { animation: scale-in 200ms var(--ease-spring); }
 
-.animate-scale-in {
-  animation: scale-in 0.15s ease-out;
-}
+/* 06 prototype 의 진입 stagger — 80ms 단위 5단계 */
+.stagger-1 { animation-delay:  80ms; }
+.stagger-2 { animation-delay: 160ms; }
+.stagger-3 { animation-delay: 240ms; }
+.stagger-4 { animation-delay: 320ms; }
+.stagger-5 { animation-delay: 400ms; }
 
-/* feat/dashboard-stats — animations.md §4.4 / §4.1 보조 키프레임.
- * 모든 클래스는 transform/opacity/box-shadow 만 변경 (60fps 보장,
- * animations.md §8.1). 호출자가 Tailwind `motion-safe:` modifier 를 붙여도
- * 본 클래스 자체가 Tailwind 가 인지하는 utility 가 아니라 prefix 가 무효화
- * 될 수 있어, animations.md §7 의 wildcard 규칙을 본 파일에 함께 둔다 —
- * `prefers-reduced-motion: reduce` 사용자에게는 그 어떤 animation /
- * transition 도 0.01ms 로 단축된다. */
-@keyframes slide-in-top {
-  from { transform: translateY(-100%); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-.animate-slide-in-top {
-  animation: slide-in-top 0.4s ease-out;
-}
-
-@keyframes pulse-subtle {
+/* 펄스 — 시스템 경고용 (semantic warning) */
+@keyframes pulse-warning {
   0%, 100% { box-shadow: 0 0 0 rgba(239, 68, 68, 0); }
-  50% { box-shadow: 0 0 12px rgba(239, 68, 68, 0.45); }
+  50%      { box-shadow: 0 0 12px rgba(239, 68, 68, 0.45); }
 }
-.animate-pulse-subtle {
-  animation: pulse-subtle 1.8s ease-in-out infinite;
-}
+.animate-pulse-warning { animation: pulse-warning 1.8s ease-in-out infinite; }
+
+/* ── prefers-reduced-motion (animations.md §1.3 절대 원칙) ────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

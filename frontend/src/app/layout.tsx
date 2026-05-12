@@ -1,28 +1,24 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ToastProvider } from "@/components/ui/Toast";
 import OfflineBanner from "@/components/OfflineBanner";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+/**
+ * v2 (2026-05-12): Geist · Geist_Mono 제거. Pretendard·Paperlogy·Noto Serif KR
+ * 는 globals.css 에서 CDN 으로 직접 로드한다 (typography.md §3). next/font 를
+ * 거치지 않아도 font-display: swap 으로 FOUT 통제 가능 — Pretendard variable
+ * 은 jsdelivr 가 빠르고, Paperlogy 는 GitHub repo 를 jsdelivr 가 캐시.
+ */
 
 export const metadata: Metadata = {
-  title: "IFL Platform",
-  description: "Interactive Flipped Learning Platform",
+  title: "ClassAuto",
+  description: "AI 기반 플립러닝 플랫폼 — 학자가 학자를 위해 만든 도구",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "IFL Platform",
+    title: "ClassAuto",
   },
 };
 
@@ -31,18 +27,16 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#4F46E5",
+  // v2 라이트 베이지 베이스. iOS 상태바를 사이트 background 와 일치시킴.
+  themeColor: "#FAFAF7",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="ko"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-gray-50">
+    <html lang="ko" className="h-full antialiased">
+      <body className="min-h-full flex flex-col bg-bg text-text">
         <I18nProvider>
           <ToastProvider>
             <AuthProvider>
