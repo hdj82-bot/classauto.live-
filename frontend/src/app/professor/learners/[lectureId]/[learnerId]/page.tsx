@@ -17,6 +17,7 @@ import type {
   AttendanceStudent,
   EngagementStudent,
 } from "@/components/professor/learners/types";
+import { PageContainer, Card } from "@/components/professor/shell";
 
 interface AttendanceResponse {
   students?: AttendanceStudent[];
@@ -115,22 +116,52 @@ export default function LearnerDetailPage() {
   const idle = daysSince(learner.startedAt);
 
   return (
+    <PageContainer>
     <div className="space-y-6" data-testid="learner-detail-page">
       <button
         type="button"
         onClick={() => router.push(`/professor/learners/${lectureId}`)}
-        className="text-xs font-medium text-gray-500 hover:text-gray-900"
+        style={{
+          color: "var(--gold)",
+          background: "transparent",
+          border: "none",
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.10em",
+          textTransform: "uppercase",
+          cursor: "pointer",
+          padding: 0,
+          marginBottom: 8,
+          fontFamily: "inherit",
+        }}
       >
         ← {t("detailBack")}
       </button>
 
-      <header className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
+      <Card padding={24} radius={16}>
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 truncate">
+            <h1
+              className="truncate"
+              style={{
+                margin: 0,
+                fontSize: 22,
+                fontWeight: 700,
+                color: "var(--text)",
+                fontFamily: "var(--font-display)",
+                letterSpacing: "-0.01em",
+              }}
+            >
               {learner.name}
             </h1>
-            <p className="text-sm text-gray-500 mt-1 tabular-nums">
+            <p
+              style={{
+                margin: "4px 0 0",
+                fontSize: 13,
+                color: "var(--text-subtle)",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
               {learner.studentNumber ?? "—"}
             </p>
           </div>
@@ -173,10 +204,17 @@ export default function LearnerDetailPage() {
             }
           />
         </dl>
-      </header>
+      </Card>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-4">
+      <Card padding={24} radius={16}>
+        <h2
+          style={{
+            margin: "0 0 14px",
+            fontSize: 14,
+            fontWeight: 700,
+            color: "var(--text)",
+          }}
+        >
           {t("detailWatchHistory")}
         </h2>
         <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
@@ -191,34 +229,39 @@ export default function LearnerDetailPage() {
           <Stat label={t("detailQaCount")} value={learner.qaCount} />
           <Stat label={t("detailRespondedCount")} value={learner.respondedCount} />
         </dl>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">
+      <Card padding={24} radius={16}>
+        <h2
+          style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: "var(--text)" }}
+        >
           {t("detailQaHistory")}
         </h2>
         <p
           data-testid="learner-detail-qa-pending"
-          className="text-xs text-gray-500 leading-relaxed"
+          style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.6 }}
         >
           {t("detailQaBackendPending")}
         </p>
-      </section>
+      </Card>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6">
-        <h2 className="text-sm font-semibold text-gray-900 mb-3">
+      <Card padding={24} radius={16}>
+        <h2
+          style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: "var(--text)" }}
+        >
           {t("detailAssessment")}
         </h2>
         <p
           data-testid="learner-detail-assessment-pending"
-          className="text-xs text-gray-500 leading-relaxed"
+          style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.6 }}
         >
           {t("detailAssessmentBackendPending")}
         </p>
-      </section>
+      </Card>
 
       <PrivacyNotice />
     </div>
+    </PageContainer>
   );
 }
 
