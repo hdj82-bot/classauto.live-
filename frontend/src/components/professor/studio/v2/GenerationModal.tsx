@@ -115,13 +115,19 @@ export default function GenerationModal({
   useEffect(() => {
     if (!done) return;
     const palette = ["#FFB627", "#E89E0E", "#10B981", "#A78BFA", "#22D3EE"];
-    setConfettiBits(
-      Array.from({ length: 40 }).map(() => ({
-        left: Math.random() * 100,
-        delay: Math.random() * 0.6,
-        bg: palette[Math.floor(Math.random() * palette.length)],
-      })),
-    );
+    // react-hooks/set-state-in-effect: effect body 안에서 동기 setState 호출
+    // 금지. rAF 한 번 거쳐 비동기화한다 (다음 프레임에 confetti 가 떨어지는
+    // 시각적 효과도 더 자연스러움).
+    const handle = requestAnimationFrame(() => {
+      setConfettiBits(
+        Array.from({ length: 40 }).map(() => ({
+          left: Math.random() * 100,
+          delay: Math.random() * 0.6,
+          bg: palette[Math.floor(Math.random() * palette.length)],
+        })),
+      );
+    });
+    return () => cancelAnimationFrame(handle);
   }, [done]);
 
   const stages = [
