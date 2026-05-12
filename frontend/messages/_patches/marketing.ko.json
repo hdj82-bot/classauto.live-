@@ -3,8 +3,26 @@
     "common": {
       "backToHome": "처음으로",
       "footerCopyright": "© 2026 ClassAuto · Interactive Flipped Learning",
+      "footerTagline": "학자가 학자를 위해 만든 플립러닝 도구",
       "ctaApplyBeta": "베타 신청하기",
-      "ctaContactSales": "기관 문의하기"
+      "ctaContactSales": "기관 문의하기",
+      "primaryNavLabel": "주 메뉴",
+      "footerNavLabel": "푸터 메뉴",
+      "languageSwitcherLabel": "언어 선택",
+      "navFeatures": "기능",
+      "navPricing": "요금제",
+      "navUseCases": "활용 사례",
+      "navDemo": "데모",
+      "navTrust": "학생 데이터",
+      "navSecurity": "보안",
+      "navBeta": "베타 신청",
+      "navContact": "기관 문의",
+      "navChangelog": "업데이트",
+      "navHelp": "도움말",
+      "navPrivacy": "개인정보 처리방침",
+      "navTerms": "이용약관",
+      "limitTransparencyTitle": "한도 투명성",
+      "limitTransparencyDesc": "구독제이므로 비용은 보여드리지 않습니다. 매 화면에서 이번 달 영상 편수와 활성 학습자 수가 한도 단위로 명확히 표시됩니다."
     },
     "useCases": {
       "meta": {

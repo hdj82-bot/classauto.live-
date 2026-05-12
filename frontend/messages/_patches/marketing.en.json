@@ -3,8 +3,26 @@
     "common": {
       "backToHome": "Back to home",
       "footerCopyright": "© 2026 ClassAuto · Interactive Flipped Learning",
+      "footerTagline": "A flipped-learning tool built by scholars, for scholars.",
       "ctaApplyBeta": "Apply for beta",
-      "ctaContactSales": "Contact sales"
+      "ctaContactSales": "Contact sales",
+      "primaryNavLabel": "Main navigation",
+      "footerNavLabel": "Footer navigation",
+      "languageSwitcherLabel": "Choose language",
+      "navFeatures": "Features",
+      "navPricing": "Pricing",
+      "navUseCases": "Use cases",
+      "navDemo": "Demo",
+      "navTrust": "Student data",
+      "navSecurity": "Security",
+      "navBeta": "Beta",
+      "navContact": "Contact",
+      "navChangelog": "Changelog",
+      "navHelp": "Help",
+      "navPrivacy": "Privacy",
+      "navTerms": "Terms",
+      "limitTransparencyTitle": "Limit transparency",
+      "limitTransparencyDesc": "ClassAuto runs on a flat subscription — we never show you dollar costs. Every screen surfaces this month's video count and active-learner count against your plan's limits."
     },
     "useCases": {
       "meta": {
