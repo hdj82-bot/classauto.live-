@@ -1,0 +1,824 @@
+/* SignupV2.module.css — /auth/signup 3단계 마법사 + /auth/complete-profile.
+ * 06 prototype 의 .s2-* / .step-* / .field / .input-wrap / .policy-* /
+ * .check-* / .toast 클래스를 1:1 옮겼다.
+ */
+
+.wrap {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 16px 28px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Back link (Step 2/3) */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-light-muted);
+  font: inherit;
+  font-size: 13.5px;
+  padding: 6px 4px;
+  align-self: flex-start;
+  border-radius: 6px;
+  transition: color 180ms;
+}
+.back:hover {
+  color: var(--text-light);
+}
+.back svg {
+  width: 14px;
+  height: 14px;
+}
+.backHidden {
+  visibility: hidden;
+}
+
+/* Progress dots */
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.progressDots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.progressDot {
+  width: 28px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(10, 10, 10, 0.08);
+  transition: background 360ms var(--ease-out), width 360ms var(--ease-out);
+}
+.progressDotDone {
+  background: var(--gold-on-light);
+}
+.progressDotCurrent {
+  background: var(--gold);
+  width: 44px;
+  box-shadow: 0 0 0 4px rgba(255, 182, 39, 0.12);
+}
+.progressLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-light-subtle);
+}
+.progressLabelNow {
+  color: var(--gold-on-light);
+}
+
+/* Step card */
+.stepCard {
+  background: var(--bg-card-light);
+  border: 1px solid var(--line-light);
+  border-radius: 18px;
+  padding: 32px;
+  box-shadow: 0 4px 20px rgba(10, 10, 10, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: step-in 360ms var(--ease-out) both;
+  min-width: 0;
+}
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.stepHead {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stepHead h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: var(--text-light);
+}
+.stepHead p {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text-light-muted);
+}
+.stepHeadCentered {
+  align-items: center;
+  text-align: center;
+}
+
+/* Form field */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-light-muted);
+  text-transform: uppercase;
+}
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bg-light);
+  border: 1px solid var(--line-light-strong);
+  border-radius: 12px;
+  padding: 0 14px;
+  height: 54px;
+  transition: border-color 180ms, background 180ms, box-shadow 180ms;
+  min-width: 0;
+}
+.inputWrap:focus-within {
+  border-color: var(--gold);
+  background: #fff;
+  box-shadow: 0 0 0 4px rgba(255, 182, 39, 0.10);
+}
+.inputWrapValid {
+  border-color: rgba(16, 185, 129, 0.5);
+}
+.inputWrapInvalid {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+.inputLead {
+  margin-right: 10px;
+  flex-shrink: 0;
+  color: var(--text-light-subtle);
+  display: grid;
+  place-items: center;
+}
+.inputLead svg {
+  width: 18px;
+  height: 18px;
+}
+.inputWrap input,
+.inputWrap select {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: 15.5px;
+  color: var(--text-light);
+}
+.inputWrap input::placeholder {
+  color: var(--text-light-subtle);
+}
+.inputWrap select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: 4px;
+}
+.inputTrail {
+  margin-left: 10px;
+  flex-shrink: 0;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 200ms, transform 200ms;
+  display: grid;
+  place-items: center;
+}
+.inputTrail svg {
+  width: 18px;
+  height: 18px;
+}
+.inputWrapValid .inputTrail,
+.inputWrapInvalid .inputTrail {
+  opacity: 1;
+  transform: scale(1);
+}
+.inputCompact {
+  height: 48px;
+}
+.inputCompact input,
+.inputCompact select {
+  font-size: 14.5px;
+}
+.inputLocked {
+  background: rgba(184, 131, 8, 0.05);
+  border-color: var(--gold-medium);
+}
+.inputLocked input,
+.inputLocked select {
+  cursor: default;
+}
+.autoTag {
+  flex-shrink: 0;
+  margin-left: 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold-on-light);
+  background: var(--gold-soft);
+  border: 1px solid var(--gold-medium);
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.hasChevron::after {
+  content: "";
+  flex-shrink: 0;
+  margin-left: 8px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--text-light-subtle);
+  border-bottom: 2px solid var(--text-light-subtle);
+  transform: translateY(-2px) rotate(45deg);
+  pointer-events: none;
+}
+
+.fieldHint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  min-height: 20px;
+  transition: color 200ms;
+  color: var(--text-light-subtle);
+}
+.fieldHintValid {
+  color: #059669;
+}
+.fieldHintInvalid {
+  color: #dc2626;
+}
+.fieldHint svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* Form layout */
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  min-width: 0;
+}
+.fieldFull {
+  grid-column: 1 / -1;
+}
+
+.stepActions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.altLink {
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-light-subtle);
+}
+.altLink a,
+.altLink button {
+  color: var(--gold-on-light);
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(184, 131, 8, 0.35);
+  padding-bottom: 1px;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+  font: inherit;
+  cursor: pointer;
+  transition: color 180ms, border-color 180ms;
+}
+.altLink a:hover,
+.altLink button:hover {
+  color: var(--gold-deep);
+  border-color: var(--gold-on-light);
+}
+
+/* Step 2 — mail-sent illustration */
+.illust {
+  align-self: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 28px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(ellipse at 30% 30%, rgba(255, 199, 77, 0.25), transparent 60%),
+    radial-gradient(ellipse at 70% 70%, rgba(255, 182, 39, 0.18), transparent 60%),
+    linear-gradient(140deg, #fff8e7 0%, #fffcf3 100%);
+  border: 1px solid rgba(255, 182, 39, 0.30);
+  box-shadow:
+    0 8px 28px rgba(255, 182, 39, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  position: relative;
+}
+.illust svg {
+  width: 48px;
+  height: 48px;
+  position: relative;
+  z-index: 1;
+}
+.floater {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(255, 182, 39, 0.7);
+  opacity: 0;
+  pointer-events: none;
+}
+.floaterA {
+  left: 30%;
+  bottom: 38%;
+  animation: float-up 2.4s ease-out infinite;
+}
+.floaterB {
+  left: 52%;
+  bottom: 38%;
+  animation: float-up 2.4s 0.8s ease-out infinite;
+}
+.floaterC {
+  left: 70%;
+  bottom: 38%;
+  animation: float-up 2.4s 1.6s ease-out infinite;
+}
+@keyframes float-up {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-46px) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.emailPill {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-light);
+  border: 1px solid var(--line-light-strong);
+  border-radius: 999px;
+  padding: 8px 14px 8px 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-light);
+  font-variant-numeric: tabular-nums;
+}
+.emailPill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+}
+
+.helperCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--bg-light);
+  border: 1px solid var(--line-light);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.helperIcon {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.16), rgba(14, 165, 233, 0.10));
+  border: 1px solid rgba(14, 165, 233, 0.20);
+}
+.helperIcon svg {
+  width: 16px;
+  height: 16px;
+}
+.helperBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.helperTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-light);
+}
+.helperSub {
+  font-size: 12.5px;
+  color: var(--text-light-subtle);
+  line-height: 1.5;
+}
+
+.resend {
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--text-light-subtle);
+}
+.resend button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--gold-on-light);
+  font-weight: 600;
+  border-bottom: 1px dashed rgba(184, 131, 8, 0.35);
+  padding-bottom: 1px;
+  transition: color 180ms, border-color 180ms;
+}
+.resend button:hover:not(:disabled) {
+  color: var(--gold-deep);
+  border-color: var(--gold-on-light);
+}
+.resend button:disabled {
+  color: var(--text-light-faint);
+  border-color: transparent;
+  cursor: not-allowed;
+}
+.resendTimer {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-light-faint);
+}
+
+.demoAdvance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: center;
+  margin-top: 4px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-light-faint);
+  background: transparent;
+  border: 1px dashed var(--line-light-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  transition: color 180ms, border-color 180ms, background 180ms;
+}
+.demoAdvance:hover {
+  color: var(--text-light-muted);
+  border-color: var(--text-light-subtle);
+  background: rgba(10, 10, 10, 0.02);
+}
+.demoAdvance svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Radio chip group (학년) */
+.radioGroup {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+.radioChip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  min-width: 0;
+  padding: 0 4px;
+  border: 1px solid var(--line-light-strong);
+  border-radius: 10px;
+  background: var(--bg-light);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-light-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 160ms, background 160ms, color 160ms, box-shadow 160ms;
+}
+.radioChip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.radioChip:hover {
+  border-color: var(--text-light-subtle);
+  color: var(--text-light);
+}
+.radioChip:has(input:checked) {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  color: var(--gold-on-light);
+  box-shadow: 0 0 0 3px rgba(255, 182, 39, 0.10);
+}
+
+/* Policy cards */
+.policyBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  background: var(--bg-light);
+  border: 1px solid var(--line-light);
+  border-radius: 14px;
+}
+.policyHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-light-subtle);
+}
+.policyHeadLine {
+  flex: 1;
+  height: 1px;
+  background: var(--line-light);
+}
+.policyCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.policyCard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 10px;
+  min-width: 0;
+  background: var(--bg-card-light);
+  border: 1px solid var(--line-light);
+  border-radius: 10px;
+  text-align: left;
+}
+.policyIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  border: 1px solid;
+}
+.policyIcon svg {
+  width: 14px;
+  height: 14px;
+}
+.policyViolet .policyIcon {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.18), rgba(99, 102, 241, 0.10));
+  border-color: rgba(99, 102, 241, 0.22);
+}
+.policyCyan .policyIcon {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(14, 165, 233, 0.10));
+  border-color: rgba(14, 165, 233, 0.22);
+}
+.policyAmber .policyIcon {
+  background: linear-gradient(135deg, rgba(255, 182, 39, 0.20), rgba(245, 158, 11, 0.12));
+  border-color: rgba(245, 158, 11, 0.28);
+}
+.policyLabel {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-light-faint);
+}
+.policyValue {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-light);
+  line-height: 1.4;
+  word-break: keep-all;
+}
+.policyValue .em {
+  color: var(--gold-on-light);
+}
+
+/* Checkbox row */
+.checkRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-light-strong);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 160ms, background 160ms;
+  background: transparent;
+  position: relative;
+}
+.checkRow:has(input:checked) {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+}
+.checkBox {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--line-light-strong);
+  border-radius: 6px;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  transition: background 160ms, border-color 160ms;
+}
+.checkRow input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.checkBox svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0;
+  transition: opacity 160ms;
+  color: #fff;
+}
+.checkRow:has(input:checked) .checkBox {
+  background: var(--gold-on-light);
+  border-color: var(--gold-on-light);
+}
+.checkRow:has(input:checked) .checkBox svg {
+  opacity: 1;
+}
+.checkText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.checkTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-light);
+}
+.checkTitle .req {
+  color: var(--gold-on-light);
+  font-weight: 700;
+  margin-left: 4px;
+}
+.checkSub {
+  font-size: 12.5px;
+  color: var(--text-light-subtle);
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%) translateY(20px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #0a0a0a;
+  color: #fafaf7;
+  padding: 12px 18px 12px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.30);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms, transform 240ms var(--ease-out);
+  z-index: 100;
+}
+.toastShow {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toastIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #0a0a0a;
+  display: grid;
+  place-items: center;
+}
+.toastIcon svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* Error banner */
+.errorBanner {
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.30);
+  color: #b91c1c;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 13.5px;
+}
+
+/* Google account chip (complete-profile) */
+.accountChip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-light);
+  border: 1px solid var(--line-light);
+  border-radius: 14px;
+}
+.accountAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a78bfa 0%, #6366f1 100%);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.accountBody {
+  flex: 1;
+  min-width: 0;
+}
+.accountName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.accountEmail {
+  font-size: 12.5px;
+  color: var(--text-light-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.accountBadge {
+  flex-shrink: 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: var(--gold-on-light);
+  border: 1px solid var(--gold-medium);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Mobile */
+@media (max-width: 560px) {
+  .wrap {
+    padding: 16px 20px 60px;
+  }
+  .stepCard {
+    padding: 24px 20px;
+  }
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+  .radioGroup {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .policyCards {
+    grid-template-columns: 1fr;
+  }
+}
