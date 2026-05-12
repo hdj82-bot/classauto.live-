@@ -5,138 +5,127 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import StepIndicator from "@/components/professor/studio/StepIndicator";
-import Step2ScriptReview from "@/components/professor/studio/Step2ScriptReview";
-import Step3AvatarVoice from "@/components/professor/studio/Step3AvatarVoice";
-import Step4RenderProgress from "@/components/professor/studio/Step4RenderProgress";
-import Step5Share from "@/components/professor/studio/Step5Share";
-import GuardrailBanner from "@/components/professor/studio/GuardrailBanner";
+import {
+  SlidePanel,
+  WorkArea,
+  SettingsPanel,
+  ActionBar,
+  GenerationModal,
+  type StudioSlide,
+} from "@/components/professor/studio/v2";
 import { useStudioI18n } from "@/components/professor/studio/useStudioI18n";
-import { useStudioWizard } from "@/components/professor/studio/useStudioWizard";
-import { estimateCost } from "@/components/professor/studio/costEstimator";
 import type {
-  HeyGenAvatar,
   Lecture,
-  PlanUsage,
   RenderStatus,
   ScriptResponse,
   ScriptSegment,
-  StudioStep,
+  SlideReviewStatus,
+  VoiceGender,
 } from "@/components/professor/studio/studioTypes";
 
 const SCRIPT_POLL_MS = 6000;
 const RENDER_POLL_MS = 5000;
 
 /**
- * /professor/studio/[lectureId] — Step 2~5 진행 페이지.
+ * /professor/studio/[lectureId] — v2 3단 wizard.
  *
- * URL ?step= query 가 1차 단계 source-of-truth — 사용자가 새로고침해도 단계가
- * 유지된다. Step5(완료) 도달 후 모든 단계 클릭 가능.
+ * docs/prototypes/05-studio-flow.extracted.html SCREEN 2 의 3단 구조를 그대로
+ * 옮긴 v2 페이지. 좌(slide-panel 240) 중(work 가변) 우(settings 340) +
+ * 하단 action-bar (60px).
  *
- * 백엔드 폴링:
- *  - GET /api/lectures/{id}/video — video.id 확보
- *  - GET /api/videos/{video_id}/script — pending_review 도달까지 폴링
- *  - GET /api/v1/render/lecture/{id} — 승인 후 슬라이드 렌더 진행 폴링
+ * v1 의 5단계 선형 wizard (Step1~5 컴포넌트) 와는 다른 접근 — 본 페이지는
+ * Step2~3 의 결정을 한 화면에서 동시에 받고, "전체 생성 시작" 시 GenerationModal
+ * (Step4 대체) 을 띄운다. Step5 (공유) 는 별도 페이지 /professor/lecture/[id]
+ * 로 이동.
  *
- * 가드레일:
- *  - 비용·플랜 한도는 Step3 의 CostMeter / GuardrailBanner 가 처리.
- *  - 본 페이지에선 PlanUsage 가 아직 미흡(BACKEND_ASKS.STUDIO §2). 임시로
- *    무제한(Pro 가정) 으로 표시 — 백엔드 endpoint 도착 후 fetch 하도록 변경.
+ * 백엔드 호출 (기존 페이지와 동일 패턴 보존):
+ * - GET /api/lectures/{id}/video — video.id 확보 (파이프라인 진행 폴링)
+ * - GET /api/videos/{video_id}/script — 스크립트 segments 폴링
+ * - PATCH /api/lectures/{id} — 음성/만료 설정 반영
+ * - POST /api/videos/{video_id}/approve — 승인
+ * - GET /api/v1/render/lecture/{id} — 렌더 진행 폴링
+ *
+ * 비용 표시 정책 (planning/05 §1.1): 본 페이지 전체에서 $·₩ 노출 없음.
+ * 진행 정보는 GenerationModal 의 "진행 정보" 박스(슬라이드 진행률·예상 영상
+ * 길이·월 한도 편수) 로만 제공.
  */
 export default function StudioWizardPage() {
-  const router = useRouter();
   const { lectureId } = useParams<{ lectureId: string }>();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { t } = useStudioI18n();
 
-  const stepFromUrl = (() => {
-    const raw = Number(searchParams.get("step") ?? "2");
-    if ([1, 2, 3, 4, 5].includes(raw)) return raw as StudioStep;
-    return 2 as StudioStep;
-  })();
-
-  const wizard = useStudioWizard(stepFromUrl);
-
-  // URL 동기화 — wizard.state.step 변경 시 URL 도 업데이트.
-  useEffect(() => {
-    const sp = new URLSearchParams(searchParams.toString());
-    sp.set("step", String(wizard.state.step));
-    router.replace(`/professor/studio/${lectureId}?${sp.toString()}`, {
-      scroll: false,
-    });
-    // searchParams 의존성을 빼는 건 의도적 — URL 외부 변화 무시.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wizard.state.step, lectureId, router]);
-
-  // ── 강의 + 영상 + 스크립트 폴링 ───────────────────────────────────────────
+  // ── 강의 + 비디오 ID ─────────────────────────────────────────────────────────
   const [lecture, setLecture] = useState<Lecture | null>(null);
   const [lectureLoading, setLectureLoading] = useState(true);
   const [videoId, setVideoId] = useState<string | null>(null);
+
+  // ── 스크립트 ─────────────────────────────────────────────────────────────────
   const [script, setScript] = useState<ScriptResponse | null>(null);
   const [scriptLoading, setScriptLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const scriptPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const pollHandle = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Wizard 결정 ──────────────────────────────────────────────────────────────
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [reviewByIndex, setReviewByIndex] = useState<
+    Record<number, SlideReviewStatus>
+  >({});
+  const [voiceGender, setVoiceGender] = useState<VoiceGender>("male");
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [qaScopeOnUploaded, setQaScopeOnUploaded] = useState(true);
+  const [blockExternalSearch, setBlockExternalSearch] = useState(true);
+  const [attentionWarn, setAttentionWarn] = useState(true);
 
-  const fetchLecture = useCallback(async () => {
-    // BACKEND_ASKS.STUDIO §4: 단일 강의 조회 GET /api/lectures/{id} 가 도착하면
-    // 한 호출로 끝. 도착 전까지는 강좌 → 강좌별 강의 순회로 매칭하는 fallback.
-    try {
-      const { data: courses } = await api.get<{ id: string }[]>(
-        "/api/courses",
-      );
-      for (const c of courses) {
-        const { data: lecs } = await api.get<Lecture[]>(
-          `/api/courses/${c.id}/lectures`,
-        );
-        const found = lecs.find((l) => l.id === lectureId);
-        if (found) {
-          setLecture(found);
-          return;
-        }
-      }
-    } catch {
-      toast(t("common.loading"), "error");
-    }
-  }, [lectureId, toast, t]);
+  // ── Generation modal ────────────────────────────────────────────────────────
+  const [genOpen, setGenOpen] = useState(false);
+  const [genPercent, setGenPercent] = useState(0);
+  const [genStage, setGenStage] = useState<1 | 2 | 3 | 4>(1);
+  const [genDone, setGenDone] = useState(false);
+  const [approved, setApproved] = useState(false);
+  const renderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // 첫 진입: 강의 메타 + 영상 메타 가져오기.
+  // ── 1) 강의 + 비디오 ID 로드 ─────────────────────────────────────────────────
   useEffect(() => {
+    if (!lectureId) return;
     let cancelled = false;
     (async () => {
-      await fetchLecture();
-
-      // video.id 확보 — 파이프라인이 video row 만들 때까지 대기 필요.
       try {
-        const { data } = await api.get<{ id: string; status: string }>(
-          `/api/lectures/${lectureId}/video`,
-        );
-        if (!cancelled) setVideoId(data.id);
-      } catch {
-        // 404 — 파이프라인이 아직 video 를 만들지 않음. 폴링이 처리한다.
+        const { data: courses } = await api.get<{ id: string }[]>("/api/courses");
+        for (const c of courses) {
+          const { data: lecs } = await api.get<Lecture[]>(
+            `/api/courses/${c.id}/lectures`,
+          );
+          const found = lecs.find((l) => l.id === lectureId);
+          if (found) {
+            if (!cancelled) {
+              setLecture(found);
+              setVoiceGender(found.voice_gender);
+              setExpiresAt(found.expires_at);
+            }
+            break;
+          }
+        }
+        try {
+          const { data } = await api.get<{ id: string }>(
+            `/api/lectures/${lectureId}/video`,
+          );
+          if (!cancelled) setVideoId(data.id);
+        } catch {
+          /* 파이프라인이 video 를 만들기 전 — 폴링이 처리 */
+        }
+      } finally {
+        if (!cancelled) setLectureLoading(false);
       }
-      if (!cancelled) setLectureLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [lectureId, fetchLecture]);
+  }, [lectureId]);
 
-  // 첫 lecture 로드 시 wizard 의 voiceGender 를 백엔드 값으로 동기화 — 사용자가
-  // 새로고침해도 토글이 기존 선택을 반영. lectureId 가 바뀔 때만 발동해
-  // 사용자가 Step3 에서 변경 중인 dirty 상태를 덮어쓰지 않는다.
+  // video.id 폴링 (파이프라인 도착 대기)
   useEffect(() => {
-    if (lecture && lecture.id === lectureId) {
-      wizard.setVoiceGender(lecture.voice_gender);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lectureId, lecture?.id]);
-
-  // video.id 미확보 시 주기 폴링 (파이프라인 진행 중).
-  useEffect(() => {
-    if (videoId) return;
-    if (wizard.state.step === 1) return;
+    if (videoId || !lectureId) return;
     let cancelled = false;
     const tick = async () => {
       try {
@@ -149,22 +138,20 @@ export default function StudioWizardPage() {
       }
     };
     tick();
-    const handle = setInterval(tick, SCRIPT_POLL_MS);
+    const id = setInterval(tick, SCRIPT_POLL_MS);
     return () => {
       cancelled = true;
-      clearInterval(handle);
+      clearInterval(id);
     };
-  }, [videoId, wizard.state.step, lectureId]);
+  }, [videoId, lectureId]);
 
-  // 스크립트 폴링 — pending_review 도달까지.
+  // 스크립트 폴링
   useEffect(() => {
     if (!videoId) {
       setScript(null);
       setScriptLoading(true);
       return;
     }
-    if (wizard.state.step >= 5) return;
-
     let cancelled = false;
     const tick = async () => {
       try {
@@ -174,11 +161,10 @@ export default function StudioWizardPage() {
         if (cancelled) return;
         setScript(data);
         setScriptLoading(false);
-        // status === pending_review (또는 그 이후) 면 폴링 중단.
         if (data.status !== "draft" && data.segments.length > 0) {
-          if (pollHandle.current) {
-            clearInterval(pollHandle.current);
-            pollHandle.current = null;
+          if (scriptPollRef.current) {
+            clearInterval(scriptPollRef.current);
+            scriptPollRef.current = null;
           }
         }
       } catch {
@@ -186,299 +172,324 @@ export default function StudioWizardPage() {
       }
     };
     tick();
-    pollHandle.current = setInterval(tick, SCRIPT_POLL_MS);
+    scriptPollRef.current = setInterval(tick, SCRIPT_POLL_MS);
     return () => {
       cancelled = true;
-      if (pollHandle.current) {
-        clearInterval(pollHandle.current);
-        pollHandle.current = null;
+      if (scriptPollRef.current) {
+        clearInterval(scriptPollRef.current);
+        scriptPollRef.current = null;
       }
     };
-  }, [videoId, wizard.state.step]);
+  }, [videoId]);
 
-  // ── 스크립트 저장 / 리셋 ──────────────────────────────────────────────────
-  const handleSaveScript = useCallback(
-    async (segments: ScriptSegment[]) => {
-      if (!videoId) return;
-      setSaving(true);
-      try {
-        const { data } = await api.patch<ScriptResponse>(
-          `/api/videos/${videoId}/script`,
-          { segments },
-        );
-        setScript(data);
-        wizard.setEditedSegments(null); // 저장됐으니 메모리 편집본 비움
-        toast(t("step2.saveSuccess"), "success");
-      } catch {
-        toast(t("step2.saveError"), "error");
-      } finally {
-        setSaving(false);
-      }
-    },
-    [videoId, wizard, toast, t],
-  );
-
-  const handleResetToAi = useCallback(async () => {
-    if (!videoId) return;
-    try {
-      const { data } = await api.post<ScriptResponse>(
-        `/api/videos/${videoId}/script/reset`,
-      );
-      setScript(data);
-      wizard.setEditedSegments(null);
-      toast(t("step2.saveSuccess"), "info");
-    } catch {
-      toast(t("step2.saveError"), "error");
+  // ── 슬라이드 목록 도출 ───────────────────────────────────────────────────────
+  const slides: StudioSlide[] = useMemo(() => {
+    const segs = script?.segments ?? [];
+    const grouped = new Map<number, ScriptSegment[]>();
+    for (const s of segs) {
+      const arr = grouped.get(s.slide_index) ?? [];
+      arr.push(s);
+      grouped.set(s.slide_index, arr);
     }
-  }, [videoId, wizard, toast, t]);
+    const indices = Array.from(grouped.keys()).sort((a, b) => a - b);
 
-  // ── HeyGen 아바타 목록 ───────────────────────────────────────────────────
-  const [avatars, setAvatars] = useState<HeyGenAvatar[]>([]);
-  const [avatarsLoading, setAvatarsLoading] = useState(false);
-  const [avatarsError, setAvatarsError] = useState<string | null>(null);
+    // 데이터 부재 시 prototype 把자문 8슬라이드 시연 데이터 (planning/05 §5.3.3)
+    if (indices.length === 0) {
+      const hanChar = "把";
+      return [
+        { index: 0, title: "把자문 도입", thumbChar: hanChar, status: "warn" },
+        { index: 1, title: "把자문의 의미", thumbChar: hanChar, status: "adopted" },
+        { index: 2, title: "어순 비교 — SVO vs 把자문", thumbChar: hanChar, status: "adopted" },
+        { index: 3, title: "把의 문법적 기능", thumbChar: hanChar, status: "warn" },
+        { index: 4, title: "把자문 예시", thumbChar: hanChar, status: "adopted" },
+        { index: 5, title: "사용 조건", thumbChar: hanChar, status: "adopted" },
+        { index: 6, title: "흔한 오류", thumbChar: hanChar, status: "warn" },
+        { index: 7, title: "마무리", thumbChar: hanChar, status: "adopted" },
+      ];
+    }
 
-  useEffect(() => {
-    if (wizard.state.step !== 3) return;
-    if (avatars.length > 0) return;
-    let cancelled = false;
-    setAvatarsLoading(true);
-    (async () => {
-      try {
-        const { data } = await api.get<{ avatars: HeyGenAvatar[] }>(
-          "/api/v1/render/avatars",
-        );
-        if (!cancelled) setAvatars(data.avatars ?? []);
-      } catch {
-        if (!cancelled) setAvatarsError("error");
-      } finally {
-        if (!cancelled) setAvatarsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [wizard.state.step, avatars.length]);
+    return indices.map((idx) => {
+      const first = grouped.get(idx)?.[0];
+      const text = first?.text ?? "";
+      const hanMatch = text.match(/[㐀-䶿一-鿿]/);
+      const title = text.slice(0, 26).trim() || `슬라이드 ${idx + 1}`;
+      const review = reviewByIndex[idx];
+      const status: StudioSlide["status"] =
+        review === "accepted" || review === "edited"
+          ? "adopted"
+          : review === "rejected" || review === "warning"
+            ? "warn"
+            : "empty";
+      return { index: idx, title, thumbChar: hanMatch?.[0], status };
+    });
+  }, [script, reviewByIndex]);
 
-  // ── 플랜 사용량 (placeholder) ─────────────────────────────────────────────
-  // 실제 endpoint 미존재 — BACKEND_ASKS.STUDIO §2.
-  // 임시로 무제한 plan (limit=0) 표시 → 모든 영상 생성을 차단하지 않음.
-  const usage: PlanUsage = useMemo(
-    () => ({ used: 0, limit: 0, monthlyVideoCount: 0, monthlyVideoLimit: 0 }),
-    [],
+  const activeOrigSegment = useMemo(() => {
+    return script?.segments?.find((s) => s.slide_index === activeIndex) ?? null;
+  }, [script, activeIndex]);
+
+  const activeAiSegment = useMemo(() => {
+    return (
+      script?.ai_segments?.find((s) => s.slide_index === activeIndex) ?? null
+    );
+  }, [script, activeIndex]);
+
+  const acceptedCount = useMemo(
+    () =>
+      Object.values(reviewByIndex).filter((r) => r === "accepted" || r === "edited")
+        .length,
+    [reviewByIndex],
   );
 
-  // ── 승인 + 렌더 진행 ─────────────────────────────────────────────────────
-  const [approveModalOpen, setApproveModalOpen] = useState(false);
-  const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState(false);
-  const [renderStatus, setRenderStatus] = useState<RenderStatus | null>(null);
+  const handleAccept = useCallback(() => {
+    setReviewByIndex((prev) => ({ ...prev, [activeIndex]: "accepted" }));
+  }, [activeIndex]);
 
-  const segments: ScriptSegment[] = wizard.state.editedSegments ?? script?.segments ?? [];
-  const estimateMinutes = Math.max(
-    2,
-    Math.ceil(segments.reduce((s, x) => s + (x.end_seconds - x.start_seconds), 0) / 60) * 2,
-  );
+  const handleReject = useCallback(() => {
+    setReviewByIndex((prev) => ({ ...prev, [activeIndex]: "rejected" }));
+  }, [activeIndex]);
 
-  const handleConfirmApprove = useCallback(async () => {
-    if (!videoId) return;
-    setApproving(true);
+  const handleNext = useCallback(() => {
+    setActiveIndex((i) => Math.min(slides.length - 1, i + 1));
+  }, [slides.length]);
+
+  const handlePrev = useCallback(() => {
+    setActiveIndex((i) => Math.max(0, i - 1));
+  }, []);
+
+  // ── 전체 생성 시작 ───────────────────────────────────────────────────────────
+  const handleGenerate = useCallback(async () => {
+    if (!videoId || !lecture) {
+      // 파이프라인 미준비 — 시뮬레이션 모드 (백엔드 없이 시각 데모)
+      setGenOpen(true);
+      setGenPercent(0);
+      setGenStage(1);
+      setGenDone(false);
+      let pct = 0;
+      const id = setInterval(() => {
+        pct = Math.min(100, pct + 8);
+        setGenPercent(pct);
+        if (pct < 25) setGenStage(1);
+        else if (pct < 70) setGenStage(2);
+        else if (pct < 95) setGenStage(3);
+        else setGenStage(4);
+        if (pct >= 100) {
+          clearInterval(id);
+          setGenDone(true);
+        }
+      }, 450);
+      return;
+    }
+
     try {
-      // dirty 한 segments 가 있으면 먼저 저장.
-      if (wizard.state.editedSegments) {
-        await api.patch(`/api/videos/${videoId}/script`, {
-          segments: wizard.state.editedSegments,
-        });
-        wizard.setEditedSegments(null);
-      }
-      // 사용자가 Step3 에서 변경했을 수 있는 voice_gender 를 렌더 시작 직전에 반영.
-      // 백엔드 render task 가 lecture.voice_gender 를 읽어 _MALE/_FEMALE 분기하므로
-      // approve 전에 PATCH 가 commit 되어야 한다. 현재 값과 동일해도 idempotent.
-      if (lecture && wizard.state.voiceGender !== lecture.voice_gender) {
+      setGenOpen(true);
+      setGenPercent(0);
+      setGenStage(1);
+      setGenDone(false);
+
+      // 음성·만료 PATCH (idempotent)
+      if (
+        lecture.voice_gender !== voiceGender ||
+        lecture.expires_at !== expiresAt
+      ) {
         const { data } = await api.patch<Lecture>(
-          `/api/lectures/${lecture.id}`,
-          { voice_gender: wizard.state.voiceGender },
+          `/api/lectures/${lectureId}`,
+          { voice_gender: voiceGender, expires_at: expiresAt },
         );
         setLecture(data);
       }
+
       await api.post(`/api/videos/${videoId}/approve`);
       setApproved(true);
-      setApproveModalOpen(false);
     } catch {
       toast(t("step2.saveError"), "error");
-    } finally {
-      setApproving(false);
+      setGenOpen(false);
     }
-  }, [videoId, wizard, lecture, toast, t]);
+  }, [videoId, lecture, lectureId, voiceGender, expiresAt, toast, t]);
 
-  // 렌더 진행 폴링 — Step 4 진입 시 + approved 인 동안.
+  // 렌더 진행 폴링 (approved 인 동안)
   useEffect(() => {
-    if (wizard.state.step !== 4) return;
-    if (!approved && wizard.state.step !== 4) return;
-    if (!lectureId) return;
-    let cancelled = false;
+    if (!approved || !lectureId) return;
     const tick = async () => {
       try {
         const { data } = await api.get<RenderStatus>(
           `/api/v1/render/lecture/${lectureId}`,
         );
-        if (cancelled) return;
-        setRenderStatus(data);
-        if (data.total > 0 && data.completed === data.total) {
-          // 모두 ready — 자동으로 Step 5 권유 (사용자가 "viewResult" 클릭으로 이동)
+        const total = data.total || slides.length || 1;
+        const completed = data.completed;
+        const pct = Math.min(100, Math.round((completed / total) * 100));
+        setGenPercent(pct);
+        if (pct < 25) setGenStage(1);
+        else if (pct < 70) setGenStage(2);
+        else if (pct < 95) setGenStage(3);
+        else setGenStage(4);
+        if (total > 0 && completed === total) {
+          setGenDone(true);
+          if (renderPollRef.current) {
+            clearInterval(renderPollRef.current);
+            renderPollRef.current = null;
+          }
         }
       } catch {
         /* keep polling */
       }
     };
     tick();
-    const handle = setInterval(tick, RENDER_POLL_MS);
+    renderPollRef.current = setInterval(tick, RENDER_POLL_MS);
     return () => {
-      cancelled = true;
-      clearInterval(handle);
-    };
-  }, [wizard.state.step, approved, lectureId]);
-
-  // ── Step 5 — 게시 토글 ────────────────────────────────────────────────────
-  const [publishing, setPublishing] = useState(false);
-
-  const handlePublishToggle = useCallback(
-    async (publish: boolean) => {
-      if (!lecture) return;
-      setPublishing(true);
-      try {
-        // Step3 의 만료일도 같은 PATCH 에 포함 — wizard.state.expiresAt 이
-        // 미설정이면 백엔드의 기존 값이 그대로 유지되도록 키 자체를 생략.
-        const body: Record<string, unknown> = { is_published: publish };
-        if (wizard.state.expiresAt) body.expires_at = wizard.state.expiresAt;
-
-        const { data } = await api.patch<Lecture>(
-          `/api/lectures/${lecture.id}`,
-          body,
-        );
-        setLecture(data);
-        if (publish) toast(t("step5.publishedSuccess"), "success");
-      } catch {
-        toast(t("step2.saveError"), "error");
-      } finally {
-        setPublishing(false);
+      if (renderPollRef.current) {
+        clearInterval(renderPollRef.current);
+        renderPollRef.current = null;
       }
-    },
-    [lecture, wizard.state.expiresAt, toast, t],
-  );
+    };
+  }, [approved, lectureId, slides.length]);
 
-  // ── 렌더링 ───────────────────────────────────────────────────────────────
+  const handleViewVideo = useCallback(() => {
+    setGenOpen(false);
+    router.push(`/professor/lecture/${lectureId}`);
+  }, [router, lectureId]);
+
+  // ── 렌더링 ───────────────────────────────────────────────────────────────────
   if (lectureLoading) {
-    return <LoadingSpinner fullScreen label={t("common.loading")} />;
-  }
-
-  if (!lecture) {
     return (
-      <div className="bg-white border border-gray-200 rounded-2xl p-8">
-        <p className="text-sm text-gray-500">{t("common.loading")}</p>
+      <div
+        className="flex items-center justify-center"
+        style={{ height: "100%" }}
+      >
+        <LoadingSpinner label={t("common.loading")} />
       </div>
     );
   }
 
-  const totalDuration = segments.reduce(
-    (s, x) => s + Math.max(0, x.end_seconds - x.start_seconds),
-    0,
-  );
+  if (!lecture) {
+    return (
+      <div className="flex items-center justify-center p-10" style={{ height: "100%" }}>
+        <div
+          role="alert"
+          style={{
+            background: "rgba(239, 68, 68, 0.06)",
+            border: "1px solid rgba(239, 68, 68, 0.24)",
+            borderRadius: 12,
+            padding: "16px 22px",
+            color: "#B91C1C",
+            fontSize: 14,
+          }}
+        >
+          강의 정보를 찾을 수 없습니다.
+        </div>
+      </div>
+    );
+  }
 
-  const reviewable = wizard.state.step === 5;
+  const activeSlide = slides[activeIndex];
+  const slideTitle = activeSlide?.title ?? lecture.title;
+
+  // URL ?step=5 호환성 (기존 진입로 보존)
+  if (searchParams.get("step") === "5") {
+    router.replace(`/professor/lecture/${lectureId}`);
+  }
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1
-          className="text-2xl font-bold text-gray-900"
-          style={{ fontFamily: "'Paperlogy', 'Pretendard Variable', sans-serif" }}
-        >
-          {t("pageTitle")}
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">{lecture.title}</p>
-      </header>
-
-      <StepIndicator
-        current={wizard.state.step}
-        reviewable={reviewable}
-        onJump={(s) => wizard.goTo(s)}
+    <div
+      style={{
+        height: "100%",
+        display: "grid",
+        gridTemplateColumns: "240px 1fr 340px",
+        gridTemplateRows: "1fr auto",
+        minHeight: 0,
+      }}
+    >
+      <SlidePanel
+        slides={slides}
+        activeIndex={activeIndex}
+        onSelect={setActiveIndex}
       />
 
-      {!videoId && wizard.state.step <= 4 && (
-        <GuardrailBanner variant="noPipeline" />
-      )}
+      <WorkArea
+        slideNumber={activeIndex + 1}
+        totalSlides={slides.length}
+        slideTitle={slideTitle}
+        originalText={
+          activeOrigSegment?.text ??
+          (scriptLoading
+            ? "AI 가 PPT 노트를 추출하고 있어요. 잠시만 기다려주세요…"
+            : "원본 PPT 노트가 비어 있습니다.")
+        }
+        aiText={
+          activeAiSegment?.text ??
+          (scriptLoading
+            ? "AI 다듬은 스크립트가 곧 표시됩니다."
+            : "다듬은 스크립트가 준비되지 않았습니다.")
+        }
+        meta={
+          activeAiSegment
+            ? `예상 ${formatDuration(activeAiSegment)} · ${activeAiSegment.text.length}자`
+            : undefined
+        }
+        onAccept={handleAccept}
+        onReject={handleReject}
+      />
 
-      {wizard.state.step === 2 && (
-        <Step2ScriptReview
-          script={script}
-          loading={scriptLoading}
-          reviewByIndex={wizard.state.reviewByIndex}
-          onReview={wizard.setReview}
-          editedSegments={wizard.state.editedSegments}
-          onEditedChange={wizard.setEditedSegments}
-          saving={saving}
-          onSave={handleSaveScript}
-          onResetToAi={handleResetToAi}
-          onNext={() => wizard.goTo(3)}
+      <SettingsPanel
+        avatarName="김교수"
+        ttsProvider="elevenlabs"
+        voiceGender={voiceGender}
+        expiresAt={expiresAt}
+        qaScopeOnUploaded={qaScopeOnUploaded}
+        blockExternalSearch={blockExternalSearch}
+        attentionWarn={attentionWarn}
+        onChangeExpires={setExpiresAt}
+        onToggleQaScope={setQaScopeOnUploaded}
+        onToggleBlockExternal={setBlockExternalSearch}
+        onToggleAttentionWarn={setAttentionWarn}
+      />
+
+      <div style={{ gridColumn: "1 / -1" }}>
+        <ActionBar
+          current={activeIndex + 1}
+          total={slides.length}
+          acceptedCount={acceptedCount}
+          canPrev={activeIndex > 0}
+          canNext={activeIndex < slides.length - 1}
+          onPrev={handlePrev}
+          onNext={handleNext}
+          onGenerate={handleGenerate}
         />
-      )}
+      </div>
 
-      {wizard.state.step === 3 && (
-        <Step3AvatarVoice
-          segments={segments}
-          avatars={avatars}
-          avatarsLoading={avatarsLoading}
-          avatarsError={avatarsError}
-          selectedAvatarId={wizard.state.selectedAvatarId}
-          onSelectAvatar={wizard.setSelectedAvatar}
-          ttsProvider={wizard.state.ttsProvider}
-          onChangeTtsProvider={wizard.setTtsProvider}
-          voiceGender={wizard.state.voiceGender}
-          onChangeVoiceGender={wizard.setVoiceGender}
-          expiresAt={wizard.state.expiresAt}
-          onChangeExpiresAt={wizard.setExpiresAt}
-          usage={usage}
-          onNext={() => wizard.goTo(4)}
-        />
-      )}
-
-      {wizard.state.step === 4 && (
-        <Step4RenderProgress
-          approved={approved || lecture.is_published}
-          approving={approving}
-          approveModalOpen={approveModalOpen}
-          onOpenApproveModal={() => setApproveModalOpen(true)}
-          onCloseApproveModal={() => setApproveModalOpen(false)}
-          onConfirmApprove={handleConfirmApprove}
-          estimateMinutes={estimateMinutes}
-          renderStatus={renderStatus}
-          emailNotify={wizard.state.emailNotify}
-          onChangeEmailNotify={wizard.setEmailNotify}
-          onComplete={() => wizard.goTo(5)}
-        />
-      )}
-
-      {wizard.state.step === 5 && (
-        <Step5Share
-          lecture={lecture}
-          durationSeconds={totalDuration}
-          origin={
-            typeof window !== "undefined" ? window.location.origin : ""
-          }
-          onPublishToggle={handlePublishToggle}
-          publishing={publishing}
-          classCode={null}
-        />
-      )}
-
-      {/* 비용 추정 노출 — Step 4 직전이거나 진행 중일 때 작은 박스로 표시 */}
-      {wizard.state.step === 4 && segments.length > 0 && (
-        <p className="text-xs text-gray-400 tabular-nums text-right">
-          $
-          {estimateCost(segments, wizard.state.ttsProvider).total.toFixed(2)} ·{" "}
-          {totalDuration}s
-        </p>
-      )}
+      <GenerationModal
+        open={genOpen}
+        percent={genPercent}
+        activeStage={genStage}
+        eta={genDone ? undefined : "약 2분 30초"}
+        lectureTitle={lecture.title}
+        slideCount={slides.length}
+        processedSlides={Math.min(
+          Math.round((genPercent / 100) * slides.length),
+          slides.length,
+        )}
+        expectedDuration="약 5분 12초"
+        done={genDone}
+        onBackground={() => setGenOpen(false)}
+        onViewVideo={handleViewVideo}
+        onDevAdd={(d) => setGenPercent((p) => Math.min(100, p + d))}
+        onDevComplete={() => {
+          setGenPercent(100);
+          setGenDone(true);
+        }}
+        onDevBackground={() => setGenOpen(false)}
+      />
     </div>
   );
+}
+
+/* ───────── helpers ───────── */
+
+function formatDuration(seg: ScriptSegment | null): string {
+  if (!seg) return "—";
+  const d = Math.max(0, seg.end_seconds - seg.start_seconds);
+  const m = Math.floor(d / 60);
+  const s = Math.floor(d % 60);
+  if (m > 0) return `${m}분 ${s}초`;
+  return `${s}초`;
 }
