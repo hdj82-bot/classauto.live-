@@ -205,8 +205,8 @@ export default function SignupWizard({ next }: SignupWizardProps) {
           ))}
         </div>
         <span className={styles.progressLabel}>
-          <span className={styles.progressLabelNow}>{step}</span>{" "}
-          {t("student.signupV2.stepFormat", { current: "", total: "3" }).replace(/[\s\d/]+/, " / 3")}
+          <span className={styles.progressLabelNow}>{step}</span>
+          {" / 3"}
         </span>
       </div>
 

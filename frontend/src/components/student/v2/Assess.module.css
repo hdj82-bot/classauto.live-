@@ -1,0 +1,297 @@
+/* Assess.module.css — /lecture/[slug]/assess 형성평가 페이지.
+ * 라이트 톤 (영상 없음). 06 prototype 의 SignupV2 폼 카드 스타일을 차용.
+ */
+
+.wrap {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 16px 28px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.kicker {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: var(--gold-on-light);
+  border: 1px solid var(--gold-medium);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  align-self: flex-start;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: var(--text-light);
+}
+.subtitle {
+  font-size: 14.5px;
+  color: var(--text-light-muted);
+  line-height: 1.6;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.progressBar {
+  flex: 1;
+  height: 6px;
+  background: rgba(10, 10, 10, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  border-radius: 999px;
+  transition: width 360ms var(--ease-out);
+}
+.progressLabel {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-light-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.card {
+  background: var(--bg-card-light);
+  border: 1px solid var(--line-light);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 4px 20px rgba(10, 10, 10, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.qNumber {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--gold-on-light);
+  text-transform: uppercase;
+}
+.qText {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  line-height: 1.45;
+  color: var(--text-light);
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-light);
+  border: 1.5px solid var(--line-light-strong);
+  border-radius: 12px;
+  font-size: 14.5px;
+  color: var(--text-light);
+  cursor: pointer;
+  transition: border-color 160ms, background 160ms, box-shadow 160ms;
+  text-align: left;
+  position: relative;
+}
+.option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.option:hover {
+  border-color: var(--text-light-subtle);
+}
+.option:has(input:checked) {
+  border-color: var(--gold);
+  background: var(--gold-soft);
+  box-shadow: 0 0 0 3px rgba(255, 182, 39, 0.10);
+}
+.optionLetter {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 10, 10, 0.06);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-light-muted);
+  font-variant-numeric: tabular-nums;
+}
+.option:has(input:checked) .optionLetter {
+  background: var(--gold);
+  color: #0a0a0a;
+}
+
+.shortAnswer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shortAnswer textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 14px 16px;
+  background: var(--bg-light);
+  border: 1px solid var(--line-light-strong);
+  border-radius: 12px;
+  font: inherit;
+  font-size: 14.5px;
+  color: var(--text-light);
+  resize: vertical;
+  outline: none;
+  transition: border-color 180ms, box-shadow 180ms;
+}
+.shortAnswer textarea:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 4px rgba(255, 182, 39, 0.10);
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.navPrev {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-light-muted);
+  cursor: pointer;
+  padding: 8px 4px;
+  transition: color 180ms;
+}
+.navPrev:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.navPrev:hover:not(:disabled) {
+  color: var(--text-light);
+}
+.navPrev svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Completion */
+.completeCard {
+  background: var(--bg-card-light);
+  border: 1px solid var(--line-light);
+  border-radius: 22px;
+  padding: 48px 28px;
+  box-shadow: 0 12px 40px rgba(255, 182, 39, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+.completeIllust {
+  width: 96px;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 182, 39, 0.22), transparent 70%);
+}
+.completeIllust svg {
+  width: 72px;
+  height: 72px;
+}
+.completeTitle {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 30px;
+  letter-spacing: -0.025em;
+  color: var(--text-light);
+}
+.completeScore {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 44px;
+  letter-spacing: -0.03em;
+  color: var(--gold-on-light);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.completeDetail {
+  font-size: 14px;
+  color: var(--text-light-muted);
+  font-variant-numeric: tabular-nums;
+}
+.completeDesc {
+  font-size: 14.5px;
+  color: var(--text-light-muted);
+  max-width: 360px;
+  line-height: 1.55;
+}
+
+/* Empty / error */
+.emptyCard {
+  background: var(--bg-card-light);
+  border: 1px solid var(--line-light);
+  border-radius: 18px;
+  padding: 56px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+.emptyCard h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 22px;
+  color: var(--text-light);
+}
+.emptyCard p {
+  font-size: 14px;
+  color: var(--text-light-muted);
+  max-width: 340px;
+  line-height: 1.55;
+}
+
+@media (max-width: 560px) {
+  .wrap {
+    padding: 16px 20px 80px;
+  }
+  .card {
+    padding: 22px;
+  }
+  .title {
+    font-size: 26px;
+  }
+}

@@ -1,0 +1,820 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "@/lib/api";
+import { tokens as tokenStorage } from "@/lib/tokens";
+import { useI18n } from "@/contexts/I18nContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useAttention } from "@/hooks/useAttention";
+import { parseCourseTitle } from "@/components/student/v2/CourseTitle";
+import OnboardingFlowV2 from "@/components/student/v2/OnboardingFlowV2";
+import PlayerSurfaceDark from "./PlayerSurfaceDark";
+import AttentionWarningV2 from "./AttentionWarningV2";
+import InterstitialQuiz, { type QuizQuestion } from "./InterstitialQuiz";
+import styles from "./Player.module.css";
+
+/**
+ * PlayerV2 — /lecture/[slug] 영상 시청 페이지의 다크 톤 UI.
+ *
+ * 출처: docs/prototypes/06-student-flow.extracted.html SCREEN 4
+ *      + docs/planning/06-student-pages.md §6-8.
+ *
+ * 기능:
+ *  1. 상단바: 강의 주차·제목 (한자 강조) + 학생 정보 + 설정 아이콘
+ *  2. 영상 stage(60%) + 컨트롤 바(재생/시간/익명 반응×4/자막/풀스크린)
+ *  3. Q&A 사이드 패널(40%) — 다크 톤, 영상 화면 연속
+ *  4. 인터스티셜 퀴즈 오버레이 (DEMO 트리거 + 백엔드 신호 시 자동)
+ *  5. 집중 경고 3단계 오버레이 (useAttention 훅 통합)
+ *  6. 첫 진입 온보딩 4슬라이드 (sessionStorage 1탭 1회)
+ *
+ * 영상 세션 생명주기는 v1 LectureViewerPage 와 동일 — POST /sessions
+ * + attention/start, beforeunload 시 paused 처리.
+ */
+
+interface LectureData {
+  id: string;
+  title: string;
+  description: string | null;
+  video_url: string | null;
+  slug: string;
+  is_expired?: boolean;
+  // 06 prototype 시연 필드 — 백엔드 PR 후 자동 채움
+  professor_name?: string | null;
+  course_name?: string | null;
+  school_name?: string | null;
+  week_number?: number | null;
+  lesson_number?: number | null;
+}
+
+interface QAMessage {
+  role: "user" | "assistant";
+  text: string;
+  source?: string | null;
+}
+
+interface ReactionCount {
+  like: number;
+  curious: number;
+  fun: number;
+  aha: number;
+}
+
+const DEFAULT_QUIZ: QuizQuestion = {
+  // 06 prototype 시연 퀴즈 (把자문). 실 서비스에서는 백엔드가 영상 시점별로
+  // 자동 출제 — 본 fallback 은 "퀴즈 트리거" 데모 버튼이 사용한다.
+  id: "demo",
+  prompt: "把자문에서 把 뒤에 오는 명사는 어떤 의미를 가질까요?",
+  options: [
+    { letter: "A", text: "동작의 주체" },
+    { letter: "B", text: "동작의 대상" },
+    { letter: "C", text: "동작의 장소" },
+    { letter: "D", text: "동작의 시간" },
+  ],
+  correctLetter: "B",
+};
+
+export interface PlayerV2Props {
+  slug: string;
+}
+
+export default function PlayerV2({ slug }: PlayerV2Props) {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { t } = useI18n();
+
+  const [lecture, setLecture] = useState<LectureData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progressSec, setProgressSec] = useState(0);
+  const [durationSec, setDurationSec] = useState(0);
+
+  // Q&A
+  const [qaMessages, setQaMessages] = useState<QAMessage[]>([
+    { role: "assistant", text: "" }, // placeholder welcome (replaced after t() loads)
+  ]);
+  const [qaInput, setQaInput] = useState("");
+  const [qaSending, setQaSending] = useState(false);
+  const [micOn, setMicOn] = useState(false);
+  const qaBottomRef = useRef<HTMLDivElement>(null);
+  const [reactions, setReactions] = useState<ReactionCount>({
+    like: 12,
+    curious: 4,
+    fun: 7,
+    aha: 3,
+  });
+
+  // 인터스티셜 퀴즈
+  const [quizOpen, setQuizOpen] = useState(false);
+  const [quizQuestion] = useState<QuizQuestion>(DEFAULT_QUIZ);
+
+  // 첫 진입 온보딩 (sessionStorage 기준)
+  const [showOnboarding, setShowOnboarding] = useState(true);
+
+  // ─── 강의 fetch ───
+  useEffect(() => {
+    if (!slug) {
+      router.replace("/dashboard");
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await api.get<LectureData>(`/api/lectures/${slug}/public`);
+        if (data.is_expired) {
+          router.replace("/expired");
+          return;
+        }
+        setLecture(data);
+      } catch {
+        router.replace("/dashboard");
+      }
+      setLoading(false);
+    })();
+  }, [slug, router]);
+
+  // ─── 세션 생성 + 첫 환영 메시지 ───
+  useEffect(() => {
+    if (!lecture || !user || !durationSec) return;
+    (async () => {
+      try {
+        const { data } = await api.post("/api/v1/sessions", null, {
+          params: { lecture_id: lecture.id, total_sec: Math.ceil(durationSec) },
+        });
+        setSessionId(data.id);
+        await api.post("/api/v1/attention/start", {
+          session_id: data.id,
+          user_id: user.id,
+          lecture_id: lecture.id,
+        });
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [lecture, user, durationSec]);
+
+  // 환영 메시지를 i18n locale 로드 후 한 번 세팅 (placeholder → 실제 텍스트).
+  useEffect(() => {
+    setQaMessages((prev) =>
+      prev.length === 1 && prev[0]?.text === ""
+        ? [
+            {
+              role: "assistant",
+              text: t("student.playerV2.qaWelcome"),
+              source: t("student.playerV2.qaSourceFallback"),
+            },
+          ]
+        : prev,
+    );
+  }, [t]);
+
+  // ─── 언로드 시 세션 paused ───
+  useEffect(() => {
+    if (!sessionId) return;
+    const pause = () => {
+      const url = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+      const tok = tokenStorage.getAccess();
+      fetch(`${url}/api/v1/sessions/${sessionId}?status=paused`, {
+        method: "PATCH",
+        keepalive: true,
+        headers: tok ? { Authorization: `Bearer ${tok}` } : undefined,
+      }).catch(() => {});
+    };
+    window.addEventListener("beforeunload", pause);
+    return () => {
+      window.removeEventListener("beforeunload", pause);
+      pause();
+    };
+  }, [sessionId]);
+
+  const attention = useAttention({ sessionId: sessionId || "" });
+
+  // ─── 영상 핸들러 ───
+  const handleTimeUpdate = () => {
+    if (!videoRef.current) return;
+    const sec = Math.floor(videoRef.current.currentTime);
+    setProgressSec(sec);
+    attention.setProgress(sec);
+  };
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) setDurationSec(videoRef.current.duration || 0);
+  };
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) {
+      v.play().catch(() => {});
+      setIsPlaying(true);
+    } else {
+      v.pause();
+      setIsPlaying(false);
+    }
+  };
+  const seekDelta = (delta: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + delta));
+  };
+  const toggleFullscreen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      v.requestFullscreen?.().catch(() => {});
+    }
+  };
+
+  // ─── 익명 반응 ───
+  const bumpReaction = (key: keyof ReactionCount) => {
+    setReactions((r) => ({ ...r, [key]: r[key] + 1 }));
+  };
+
+  // ─── Q&A 전송 ───
+  const sendQuestion = async (text?: string) => {
+    const question = (text ?? qaInput).trim();
+    if (!question || !sessionId) return;
+    setQaInput("");
+    setQaMessages((m) => [...m, { role: "user", text: question }]);
+    setQaSending(true);
+    try {
+      const { data } = await api.post(`/api/v1/qa`, {
+        session_id: sessionId,
+        lecture_id: lecture?.id,
+        question,
+      });
+      setQaMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text: data.answer ?? t("student.playerV2.qaGenericFallback"),
+          source: data.source ?? t("student.playerV2.qaSourceFallback"),
+        },
+      ]);
+    } catch {
+      setQaMessages((m) => [
+        ...m,
+        {
+          role: "assistant",
+          text: t("student.playerV2.qaErrorAnswer"),
+          source: null,
+        },
+      ]);
+    }
+    setQaSending(false);
+    setTimeout(() => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+  };
+
+  if (loading) {
+    return (
+      <PlayerSurfaceDark>
+        <div
+          style={{
+            minHeight: "100vh",
+            display: "grid",
+            placeItems: "center",
+            color: "rgba(255,255,255,0.55)",
+            fontSize: 14,
+          }}
+        >
+          <p role="status">{t("student.entry.loadingLecture")}</p>
+        </div>
+      </PlayerSurfaceDark>
+    );
+  }
+  if (!lecture) return null;
+
+  const titleSegments = parseCourseTitle(lecture.title);
+  const week = lecture.week_number ?? null;
+  const userInitial = (user?.name ?? user?.email ?? "?").trim().charAt(0).toUpperCase();
+  const userSchoolDept = (() => {
+    // useAuth 의 AuthUser 에는 school / department 가 없어 안전하게 옵셔널.
+    type Maybe = { school?: string; department?: string; year?: number | string };
+    const u = (user ?? null) as (typeof user & Maybe) | null;
+    const parts: string[] = [];
+    if (u?.school) parts.push(u.school);
+    if (u?.department) parts.push(u.department);
+    if (u?.year) parts.push(`${u.year}학년`);
+    return parts.join(" · ");
+  })();
+
+  return (
+    <PlayerSurfaceDark>
+      <div className={styles.player}>
+        {/* Top bar */}
+        <header className={styles.bar}>
+          <div className={styles.course}>
+            <span className={styles.crumb}>
+              {week
+                ? t("student.playerV2.crumb", { week: String(week) })
+                : t("student.entry.lessonNumberFallback")}
+            </span>
+            <span className={styles.courseTitle}>
+              {titleSegments.map((seg, i) =>
+                seg.kind === "han" ? (
+                  <span key={i} className="han">
+                    {seg.text}
+                  </span>
+                ) : seg.kind === "pcl" ? (
+                  <span key={i} className="pcl">
+                    {seg.text}
+                  </span>
+                ) : (
+                  <span key={i}>{seg.text}</span>
+                ),
+              )}
+            </span>
+          </div>
+          <div className={styles.user}>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              aria-label={t("student.playerV2.userSettings")}
+              onClick={() => router.push("/profile")}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+              </svg>
+            </button>
+            <div className={styles.userInfo}>
+              <span className="name">{user?.name ?? "—"}</span>
+              {userSchoolDept && <span className="school">{userSchoolDept}</span>}
+            </div>
+            <div className={styles.userAvatar} aria-hidden="true">
+              {userInitial}
+            </div>
+          </div>
+        </header>
+
+        {/* Body */}
+        <div className={styles.body}>
+          <div className={styles.stage}>
+            <div className={styles.video}>
+              {lecture.video_url ? (
+                <video
+                  ref={videoRef}
+                  src={lecture.video_url}
+                  preload="metadata"
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={handleLoadedMetadata}
+                  onClick={togglePlay}
+                  aria-label={lecture.title}
+                />
+              ) : (
+                <div className={styles.placeholder}>
+                  <div className={styles.playOrb}>
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
+                    </svg>
+                  </div>
+                  <span className={styles.placeholderLabel}>
+                    {t("student.playerV2.videoNotReady")}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom controls */}
+            <div className={styles.controls}>
+              <div
+                className={styles.progress}
+                role="progressbar"
+                aria-valuenow={progressSec}
+                aria-valuemin={0}
+                aria-valuemax={durationSec || 100}
+                onClick={(e) => {
+                  const v = videoRef.current;
+                  if (!v || !durationSec) return;
+                  const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                  const x = e.clientX - rect.left;
+                  v.currentTime = (x / rect.width) * durationSec;
+                }}
+              >
+                <div
+                  className={styles.progressBuffer}
+                  style={{
+                    width: `${durationSec > 0 ? Math.min(((progressSec + 20) / durationSec) * 100, 100) : 0}%`,
+                  }}
+                />
+                <div
+                  className={styles.progressFill}
+                  style={{
+                    width: `${durationSec > 0 ? (progressSec / durationSec) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+              <div className={styles.controlsRow}>
+                <div className={styles.controlsLeft}>
+                  <button
+                    type="button"
+                    className={`${styles.ctrl} ${styles.play}`}
+                    onClick={togglePlay}
+                    aria-label={t("student.playerV2.controlPlay")}
+                  >
+                    {isPlaying ? (
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="5" width="4" height="14" rx="1" />
+                        <rect x="14" y="5" width="4" height="14" rx="1" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
+                      </svg>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.ctrl}
+                    onClick={() => seekDelta(-10)}
+                    aria-label={t("student.playerV2.controlBack10")}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M11 17l-5-5 5-5" />
+                      <path d="M6 12h8a6 6 0 1 1 0 12h-2" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.ctrl}
+                    onClick={() => seekDelta(10)}
+                    aria-label={t("student.playerV2.controlFwd10")}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M13 17l5-5-5-5" />
+                      <path d="M18 12h-8a6 6 0 1 0 0 12h2" />
+                    </svg>
+                  </button>
+                  <span className={styles.timeLabel}>
+                    {formatClock(progressSec)} / {formatClock(durationSec)}
+                  </span>
+                </div>
+                <div className={styles.reacts} role="group" aria-label="익명 반응">
+                  <ReactBtn
+                    label={t("student.playerV2.reactionLike")}
+                    count={reactions.like}
+                    onClick={() => bumpReaction("like")}
+                    icon={
+                      <svg viewBox="0 0 24 24" fill="url(#ca-grad-electric)" stroke="none">
+                        <path d="M7 22V11l5-8a2 2 0 0 1 3 2l-1 6h4a3 3 0 0 1 3 3l-2 7a3 3 0 0 1-3 2h-9z" />
+                      </svg>
+                    }
+                  />
+                  <ReactBtn
+                    label={t("student.playerV2.reactionCurious")}
+                    count={reactions.curious}
+                    onClick={() => bumpReaction("curious")}
+                    icon={
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="url(#ca-grad-violet)"
+                        strokeWidth={2.2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <circle cx="12" cy="12" r="9" />
+                        <path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.6c-1 .8-1.5 1.2-1.5 2.4" />
+                        <circle cx="12" cy="17" r="0.6" fill="currentColor" />
+                      </svg>
+                    }
+                  />
+                  <ReactBtn
+                    label={t("student.playerV2.reactionFun")}
+                    count={reactions.fun}
+                    onClick={() => bumpReaction("fun")}
+                    icon={
+                      <svg viewBox="0 0 24 24" fill="url(#ca-grad-success)" stroke="none">
+                        <circle cx="12" cy="12" r="10" />
+                        <path
+                          d="M8 14q4 4 8 0"
+                          stroke="#0A0A0A"
+                          strokeWidth={1.8}
+                          fill="none"
+                          strokeLinecap="round"
+                        />
+                        <circle cx="9" cy="10" r="1.2" fill="#0A0A0A" />
+                        <circle cx="15" cy="10" r="1.2" fill="#0A0A0A" />
+                      </svg>
+                    }
+                  />
+                  <ReactBtn
+                    label={t("student.playerV2.reactionAha")}
+                    count={reactions.aha}
+                    onClick={() => bumpReaction("aha")}
+                    icon={
+                      <svg viewBox="0 0 24 24" fill="none">
+                        <path
+                          d="M12 3l1.5 4 4 .4-3 2.8.9 4-3.4-2-3.4 2 .9-4-3-2.8 4-.4z"
+                          fill="url(#ca-grad-electric)"
+                        />
+                        <path
+                          d="M12 14v6"
+                          stroke="url(#ca-grad-electric)"
+                          strokeWidth={2.2}
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    }
+                  />
+                </div>
+                <div className={styles.controlsRight}>
+                  <button
+                    type="button"
+                    className={styles.quizTrigger}
+                    onClick={() => setQuizOpen(true)}
+                    aria-label="DEMO 퀴즈 트리거"
+                  >
+                    DEMO · 퀴즈
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.assessTrigger}
+                    onClick={() =>
+                      router.push(
+                        `/lecture/${slug}/assess${sessionId ? `?session_id=${sessionId}` : ""}`,
+                      )
+                    }
+                  >
+                    {t("student.playerV2.startAssess")}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.ctrl}
+                    aria-label={t("student.playerV2.controlCaptions")}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="3" y="5" width="18" height="14" rx="2" />
+                      <line x1="7" y1="11" x2="11" y2="11" />
+                      <line x1="7" y1="15" x2="15" y2="15" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.ctrl}
+                    onClick={toggleFullscreen}
+                    aria-label={t("student.playerV2.controlFullscreen")}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Q&A panel */}
+          <aside className={styles.qa} aria-label={t("student.playerV2.qaTitle")}>
+            <div className={styles.qaHead}>
+              <h3>{t("student.playerV2.qaTitle")}</h3>
+              <span className={styles.askPill}>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.4}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                {t("student.playerV2.qaAskPill")}
+              </span>
+            </div>
+            <div className={styles.qaQuota}>
+              <span className={styles.qaQuotaPill}>
+                {t("student.playerV2.qaQuotaEpisode", {
+                  used: String(Math.max(qaMessages.filter((m) => m.role === "user").length, 0)),
+                  limit: "100",
+                })}
+              </span>
+              <span>{t("student.playerV2.qaQuotaDaily", { used: "12", limit: "30" })}</span>
+            </div>
+
+            <div className={styles.qaBody} aria-live="polite">
+              {qaMessages.map((m, i) =>
+                m.role === "assistant" ? (
+                  <div key={i} className={styles.msg}>
+                    <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
+                    <div>
+                      <div className={styles.bubble}>{m.text}</div>
+                      {m.source && (
+                        <span className={styles.source}>
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={2.4}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M12 22s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12z" />
+                          </svg>
+                          {m.source}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div key={i} className={`${styles.msg} ${styles.me}`}>
+                    <span className={`${styles.msgAv} ${styles.msgAvMe}`}>나</span>
+                    <div className={styles.bubble}>{m.text}</div>
+                  </div>
+                ),
+              )}
+              {qaSending && (
+                <div className={styles.msg}>
+                  <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
+                  <div className={styles.bubble}>•••</div>
+                </div>
+              )}
+              <div ref={qaBottomRef} />
+            </div>
+
+            <div className={styles.suggest}>
+              <span className={styles.suggestLabel}>
+                {t("student.playerV2.qaSuggestLabel")}
+              </span>
+              <button
+                type="button"
+                className={styles.chip}
+                onClick={() => sendQuestion("把자문은 언제 사용하나요?")}
+              >
+                把자문은 언제 사용하나요?
+              </button>
+              <button
+                type="button"
+                className={styles.chip}
+                onClick={() => sendQuestion("일반 어순과 어떻게 다른가요?")}
+              >
+                일반 어순과 어떻게 다른가요?
+              </button>
+            </div>
+
+            <form
+              className={styles.qaInput}
+              onSubmit={(e) => {
+                e.preventDefault();
+                sendQuestion();
+              }}
+            >
+              <button
+                type="button"
+                className={`${styles.micBtn} ${micOn ? styles.on : ""}`}
+                onClick={() => setMicOn((v) => !v)}
+                aria-label={t("student.playerV2.qaMic")}
+                aria-pressed={micOn}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <rect x="9" y="3" width="6" height="12" rx="3" />
+                  <path d="M5 11a7 7 0 0 0 14 0" />
+                  <line x1="12" y1="18" x2="12" y2="22" />
+                  <line x1="8" y1="22" x2="16" y2="22" />
+                </svg>
+              </button>
+              <div className={styles.ipWrap}>
+                <label htmlFor="qa-input" style={{ display: "none" }}>
+                  {t("student.playerV2.qaPlaceholder")}
+                </label>
+                <input
+                  id="qa-input"
+                  type="text"
+                  placeholder={t("student.playerV2.qaPlaceholder")}
+                  value={qaInput}
+                  maxLength={500}
+                  onChange={(e) => setQaInput(e.target.value)}
+                />
+              </div>
+              <button
+                type="submit"
+                className={styles.sendBtn}
+                disabled={qaSending || !qaInput.trim()}
+                aria-label={t("student.playerV2.qaSend")}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" />
+                </svg>
+              </button>
+            </form>
+          </aside>
+        </div>
+      </div>
+
+      {/* Interstitial quiz */}
+      <InterstitialQuiz
+        open={quizOpen}
+        question={quizQuestion}
+        onClose={() => setQuizOpen(false)}
+      />
+
+      {/* Attention warning — useAttention 의 warningLevel 이 1/2/3 일 때만 표시 */}
+      {attention.isPaused && attention.warningLevel >= 1 && attention.warningLevel <= 3 && (
+        <AttentionWarningV2
+          level={attention.warningLevel as 1 | 2 | 3}
+          onResume={attention.resume}
+          onTakeQuiz={() => {
+            attention.resume();
+            setQuizOpen(true);
+          }}
+          onRestart={() => {
+            const v = videoRef.current;
+            if (v) v.currentTime = 0;
+            attention.resume();
+          }}
+        />
+      )}
+
+      {/* 첫 진입 4슬라이드 온보딩 (라이트→다크 전환). sessionStorage 가드. */}
+      {showOnboarding && (
+        <OnboardingFlowV2
+          onComplete={() => setShowOnboarding(false)}
+          onSkip={() => setShowOnboarding(false)}
+        />
+      )}
+    </PlayerSurfaceDark>
+  );
+}
+
+function ReactBtn({
+  label,
+  count,
+  icon,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  icon: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={styles.react}
+      aria-label={label}
+      onClick={onClick}
+    >
+      {icon}
+      <span className={styles.reactCount}>{count}</span>
+    </button>
+  );
+}
+
+function formatClock(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return "0:00";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
