@@ -14,6 +14,38 @@
       "metaMobile": "Mobile-friendly",
       "scrollHint": "Pick a field below to start"
     },
+    "heroV2": {
+      "eyebrow": "DEMO · The student-side screen",
+      "headlineLead": "The lecture video",
+      "headlineAccent": "answers students back.",
+      "subtitle": "An AI lecture video made from a single PPT — answering student questions on the spot, holding their attention with interstitial quizzes. You get analytics you can take back into the lecture hall. See what your students actually see, right now.",
+      "observerBadge": "Two-way learning with an AI instructor",
+      "metaTime": "~3 minutes",
+      "metaQuestions": "3 free questions",
+      "metaMobile": "Mobile-friendly",
+      "primaryCta": "▶ See the student screen",
+      "secondaryCta": "Browse the features instead"
+    },
+    "fieldSelectV2": {
+      "title": "Pick one of two videos",
+      "subtitle": "Field doesn't matter. Each clip walks you through suggested questions, source citations, an interstitial quiz, and an off-topic refusal — in five minutes.",
+      "social": {
+        "tagline": "A · LIBERAL ARTS",
+        "label": "Humanities · 5-min clip",
+        "title": "Chinese Grammar (the 把 construction)",
+        "subtitle": "Centred on the word order of the 把字句 — followed by suggested questions, source citations, and an off-topic refusal.",
+        "elements": "8 slides · 2 suggested questions · 1 quiz",
+        "start": "Start"
+      },
+      "natural": {
+        "tagline": "B · NATURAL SCIENCE",
+        "label": "Natural science · 5-min clip",
+        "title": "Photosynthesis",
+        "subtitle": "Centred on how light energy converts to chemical energy — followed by suggested questions, source citations, and an off-topic refusal.",
+        "elements": "8 slides · 2 suggested questions · 1 quiz",
+        "start": "Start"
+      }
+    },
     "fieldSelect": {
       "title": "Which field would you like to try?",
       "subtitle": "We'll instantly show you a 5-minute lecture clip and AI tutor tailored to your choice.",

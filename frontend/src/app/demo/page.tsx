@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import DemoCTAModal from "@/components/demo/DemoCTAModal";
 import DemoFAQ from "@/components/demo/DemoFAQ";
@@ -11,20 +12,23 @@ import { useDemoI18n } from "@/components/demo/useDemoI18n";
 import type { DemoField } from "@/components/demo/demoTypes";
 
 /**
- * /demo 페이지 — 베타 신청 전환의 핵심 체험 페이지.
+ * /demo 페이지 — 베타 신청 전환의 핵심 체험 페이지 (v2).
  *
- * 설계 근거: docs/planning/04-demo-page.md (확정 2026-05-05).
+ * 설계 근거: docs/planning/04-demo-page.md (확정 2026-05-05 · 갱신 2026-05-06).
  *
- * 단일 목적: "3분 안에 학생 입장이 되어보고 '진짜 다르네'를 느끼게."
+ * v2 메시지 정정 (heroV2 키 신규):
+ *   - ❌ "학생이 되어보세요" (잘못된 메시지 — 04-demo-page.md §4.2)
+ *   - ✅ "강의 영상이 학생에게 답합니다" (관찰자 시점 §1)
  *
  * 페이지 구조 (Section 3):
- *   1. 미니 히어로 + 분야 선택
+ *   1. 미니 히어로 + 분야 선택 (라이트 미니 히어로 위 다크 카드 슬롯이 정책상
+ *      가능하지만, 본 PR 은 단순성과 영상 몰입을 위해 페이지 전체 다크 유지)
  *   2. 체험 환경 (영상 + Q&A)
  *   3. CTA 모달 (3건 사용 시 트리거)
  *   4. 데모 FAQ (4문항)
  *   5. 푸터 CTA
  *
- * 전체 페이지를 다크 모드 강제 (`#0A0A0A`) — 학습자 시점 시각 신호.
+ * 전체 페이지를 다크 모드 강제 (`#0A0A0A`) — colors.md §1 (영상이 있으면 다크).
  */
 interface DemoSession {
   field: DemoField;
@@ -33,19 +37,15 @@ interface DemoSession {
 
 export default function DemoPage() {
   const { t } = useDemoI18n();
-  // field 와 startedAt 을 한 객체로 묶어 startedAt 이 항상 field 와 함께
-  // 정의되도록 한다 — Date.now() 를 render 에서 호출하지 않게 하기 위함.
   const [session, setSession] = useState<DemoSession | null>(null);
   const [ctaOpen, setCtaOpen] = useState(false);
   const [challengeDone, setChallengeDone] = useState(false);
   const inputAnchorRef = useRef<HTMLDivElement>(null);
 
-  // 분야 선택 → 체험 시작 타임스탬프 기록
   const handleSelect = useCallback((f: DemoField) => {
     setSession({ field: f, startedAt: Date.now() });
     setCtaOpen(false);
     setChallengeDone(false);
-    // 다음 paint 후 체험 영역으로 스크롤
     queueMicrotask(() => {
       document
         .getElementById("demo-experience")
@@ -62,7 +62,6 @@ export default function DemoPage() {
   }, []);
 
   const handleLimitReached = useCallback(() => {
-    // 시각적 모먼텀을 위해 살짝 늦춰서 모달 노출
     window.setTimeout(() => setCtaOpen(true), 400);
   }, []);
 
@@ -71,7 +70,8 @@ export default function DemoPage() {
     document.getElementById("demo-q-input")?.focus();
   }, []);
 
-  // 페이지 진입 시 다크 모드 색상 변수 강제
+  // 페이지 진입 시 다크 모드 색상 변수 강제 — 다른 페이지로 이동 시 복원.
+  // 04-demo-page.md §6.2 "페이지 진입 즉시 다크 모드".
   useEffect(() => {
     const root = document.documentElement;
     const previousBg = root.style.getPropertyValue("--background");
@@ -85,7 +85,16 @@ export default function DemoPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div
+      className="min-h-screen bg-[#0A0A0A] text-white antialiased"
+      style={{
+        fontFamily:
+          "var(--font-body, 'Pretendard Variable'), 'Pretendard', system-ui, sans-serif",
+      }}
+    >
+      {/* 다크 셸 위의 최소 헤더 — 메인으로 복귀 링크 + 베타 신청 CTA */}
+      <DemoTopBar />
+
       <DemoHero
         canSwitch={session !== null}
         onSwitch={handleSwitchField}
@@ -116,13 +125,70 @@ export default function DemoPage() {
         onReplay={handleSwitchField}
       />
 
-      {/* 한국어 검색 엔진 친화 — 페이지 본문 외 메타 텍스트 */}
       <span className="sr-only">{t("meta.pageDescription")}</span>
     </div>
   );
 }
 
 /* ---------------- Sub-sections ---------------- */
+
+/**
+ * 데모 페이지 전용 최소 상단 바 — 다크 톤이므로 LightMarketingShell 사용 안 함.
+ * CA 워드마크 + 베타 신청 골드 CTA + 메인 복귀 outline.
+ */
+function DemoTopBar() {
+  return (
+    <header className="sticky top-0 z-30 backdrop-blur-md bg-black/40 border-b border-white/5">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+        <Link
+          href="/"
+          aria-label="ClassAuto home"
+          className="flex items-center gap-2 group"
+        >
+          <span
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold tracking-wider text-[#1A1A1A] transition-transform group-hover:scale-105 motion-reduce:transition-none"
+            style={{
+              background:
+                "linear-gradient(135deg, #FFC74D 0%, #FFB627 50%, #E89E0B 100%)",
+            }}
+            aria-hidden="true"
+          >
+            CA
+          </span>
+          <span
+            className="text-sm font-semibold tracking-wide hidden sm:inline"
+            style={{
+              fontFamily:
+                "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+            }}
+          >
+            ClassAuto
+          </span>
+        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/features"
+            className="hidden sm:inline-flex text-xs font-medium text-white/65 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition motion-reduce:transition-none"
+          >
+            기능
+          </Link>
+          <Link
+            href="/pricing"
+            className="hidden sm:inline-flex text-xs font-medium text-white/65 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition motion-reduce:transition-none"
+          >
+            요금제
+          </Link>
+          <Link
+            href="/beta-apply"
+            className="inline-flex text-xs font-semibold rounded-lg bg-[#FFB627] text-[#1A1A1A] px-3 py-1.5 hover:bg-[#FFC74D] transition motion-reduce:transition-none"
+          >
+            베타 신청
+          </Link>
+        </div>
+      </div>
+    </header>
+  );
+}
 
 function DemoHero({
   canSwitch,
@@ -134,50 +200,70 @@ function DemoHero({
   const { t } = useDemoI18n();
   return (
     <header
-      className="relative pt-12 pb-10 sm:pt-16 sm:pb-12 px-4 sm:px-6 overflow-hidden"
+      className="relative pt-14 pb-12 sm:pt-20 sm:pb-16 px-4 sm:px-6 overflow-hidden"
       aria-labelledby="demo-hero-title"
     >
-      {/* aurora background */}
+      {/* aurora background (다크 데모 한정, animations.md §2.1 톤) */}
       <div
         aria-hidden="true"
-        className="absolute inset-0 pointer-events-none"
+        className="absolute inset-0 pointer-events-none opacity-80"
         style={{
           background:
-            "radial-gradient(ellipse at 20% 30%, rgba(167,139,250,0.18), transparent 50%), radial-gradient(ellipse at 80% 70%, rgba(255,182,39,0.14), transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(34,211,238,0.10), transparent 60%)",
+            "radial-gradient(ellipse at 20% 30%, rgba(167,139,250,0.18), transparent 50%), radial-gradient(ellipse at 80% 70%, rgba(255,182,39,0.16), transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(34,211,238,0.10), transparent 60%)",
         }}
       />
       <div className="relative max-w-5xl mx-auto text-center">
+        {/* 관찰자 배지 — "체험" 단어 미사용, 관찰자 시점 명시 */}
+        <span
+          className="inline-flex items-center rounded-full border border-[rgba(255,182,39,0.40)] bg-[rgba(255,182,39,0.06)] px-3 py-1 text-[11px] tracking-[0.16em] uppercase text-[#FFB627] font-semibold mb-5"
+        >
+          {t("heroV2.observerBadge")}
+        </span>
         <p className="text-[11px] tracking-[0.22em] uppercase text-[#FFB627] mb-4">
-          {t("hero.eyebrow")}
+          {t("heroV2.eyebrow")}
         </p>
         <h1
           id="demo-hero-title"
-          className="font-bold tracking-tight text-white"
+          className="text-white"
           style={{
-            fontFamily: "'Paperlogy', 'Pretendard Variable', sans-serif",
+            fontFamily:
+              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
             fontSize: "clamp(36px, 6vw, 64px)",
+            fontWeight: 800,
             lineHeight: 1.05,
             letterSpacing: "-0.04em",
           }}
         >
-          {t("hero.headline1")}
+          {t("heroV2.headlineLead")}
           <br />
-          <span style={{ color: "#FFB627" }}>{t("hero.headline2")}</span>
+          <span style={{ color: "#FFB627" }}>{t("heroV2.headlineAccent")}</span>
         </h1>
-        <p className="mt-5 text-base sm:text-lg text-white/65 max-w-2xl mx-auto leading-relaxed">
-          {t("hero.subtitle")}
+        <p className="mt-6 text-base sm:text-lg text-white/65 max-w-2xl mx-auto leading-relaxed">
+          {t("heroV2.subtitle")}
         </p>
-        <ul className="mt-6 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs text-white/55">
-          <li>⏱️ {t("hero.metaTime")}</li>
-          <li>💬 {t("hero.metaQuestions")}</li>
-          <li>📱 {t("hero.metaMobile")}</li>
+        <ul
+          className="mt-7 flex flex-wrap justify-center gap-2 sm:gap-3 text-xs"
+          aria-label={t("heroV2.observerBadge")}
+        >
+          {[
+            t("heroV2.metaTime"),
+            t("heroV2.metaQuestions"),
+            t("heroV2.metaMobile"),
+          ].map((chip) => (
+            <li
+              key={chip}
+              className="inline-flex items-center rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-white/75"
+            >
+              {chip}
+            </li>
+          ))}
         </ul>
 
         {canSwitch && (
           <button
             type="button"
             onClick={onSwitch}
-            className="mt-6 inline-flex items-center gap-1 text-xs text-white/55 hover:text-white transition"
+            className="mt-6 inline-flex items-center gap-1 text-xs text-white/55 hover:text-white transition motion-reduce:transition-none"
           >
             ↺ {t("fieldSelect.switch")}
           </button>
@@ -204,16 +290,20 @@ function FieldSelectionSection({
           <h2
             id="demo-field-heading"
             className="text-2xl sm:text-3xl font-bold text-white"
-            style={{ fontFamily: "'Paperlogy', 'Pretendard Variable', sans-serif", letterSpacing: "-0.03em" }}
+            style={{
+              fontFamily:
+                "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+              letterSpacing: "-0.03em",
+            }}
           >
-            {t("fieldSelect.title")}
+            {t("fieldSelectV2.title")}
           </h2>
-          <p className="mt-2 text-sm text-white/55 max-w-xl mx-auto">
-            {t("fieldSelect.subtitle")}
+          <p className="mt-3 text-sm sm:text-base text-white/55 max-w-2xl mx-auto leading-relaxed">
+            {t("fieldSelectV2.subtitle")}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
           <FieldSelectCard field="social" onSelect={onSelect} />
           <FieldSelectCard field="natural" onSelect={onSelect} />
         </div>
@@ -274,7 +364,7 @@ function ExperienceSection({
             type="button"
             onClick={onSwitch}
             aria-label={t("a11y.switchField")}
-            className="text-white/65 hover:text-white transition"
+            className="text-white/65 hover:text-white transition motion-reduce:transition-none"
           >
             ↺ {t("fieldSelect.switch")}
           </button>
@@ -310,7 +400,11 @@ function FooterCTA() {
         <h2
           id="demo-footer-cta-heading"
           className="text-2xl sm:text-3xl font-bold text-white mb-3"
-          style={{ fontFamily: "'Paperlogy', 'Pretendard Variable', sans-serif", letterSpacing: "-0.03em" }}
+          style={{
+            fontFamily:
+              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+            letterSpacing: "-0.03em",
+          }}
         >
           {t("footerCta.title")}
         </h2>
@@ -318,19 +412,19 @@ function FooterCTA() {
           {t("footerCta.subtitle")}
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <a
+          <Link
             href="/beta-apply"
             data-testid="demo-footer-beta-cta"
-            className="inline-flex items-center justify-center px-7 py-3.5 rounded-xl bg-[#FFB627] text-[#0A0A0A] font-semibold text-sm hover:bg-[#FFC74D] transition shadow-lg shadow-[#FFB627]/20"
+            className="inline-flex items-center justify-center px-7 py-3.5 rounded-xl bg-[#FFB627] text-[#1A1A1A] font-semibold text-sm hover:bg-[#FFC74D] transition motion-reduce:transition-none shadow-lg shadow-[#FFB627]/30"
           >
             {t("footerCta.primary")}
-          </a>
-          <a
+          </Link>
+          <Link
             href="/pricing"
-            className="inline-flex items-center justify-center px-7 py-3.5 rounded-xl border border-white/15 text-white/85 font-semibold text-sm hover:bg-white/5 transition"
+            className="inline-flex items-center justify-center px-7 py-3.5 rounded-xl border border-white/15 text-white/85 font-semibold text-sm hover:bg-white/5 transition motion-reduce:transition-none"
           >
             {t("footerCta.secondary")}
-          </a>
+          </Link>
         </div>
       </div>
     </section>
