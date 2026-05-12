@@ -1,7 +1,7 @@
 // IFL Platform — Service Worker
 // 캐시 전략: 정적 자산 → Cache First, API → Network First
 
-const CACHE_NAME = "ifl-v1";
+const CACHE_NAME = "ifl-v2";
 const OFFLINE_URL = "/offline";
 
 const STATIC_ASSETS = [
@@ -40,11 +40,15 @@ self.addEventListener("fetch", (event) => {
   // 같은 origin만 처리
   if (url.origin !== self.location.origin) return;
 
-  // API 요청 → Network First
-  if (url.pathname.startsWith("/api/")) {
-    event.respondWith(networkFirst(request));
+  // OAuth 콜백·리다이렉트 흐름은 SW가 절대 가로채면 안 된다.
+  // navigate 핸들러가 자체 fetch를 돌리면 1회용 auth_code/state 가 두 번 소비되어
+  // invalid_state / expired 로 떨어진다. 브라우저 기본 네트워크로 패스스루.
+  if (url.pathname.startsWith("/auth/") || url.pathname.startsWith("/api/auth/")) {
     return;
   }
+
+  // API 요청 → Network First
+  if (url.pathname.startsWith("/api/")) {
 
   // 정적 자산 (CSS, JS, fonts, images) → Cache First
   if (isStaticAsset(url.pathname)) {
