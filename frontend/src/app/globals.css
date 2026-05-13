@@ -16,12 +16,24 @@
 /* Pretendard Variable — 본문·UI·숫자 (tabular-nums 지원) */
 @import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css");
 
-/* Paperlogy — 디스플레이 헤드라인. jsdelivr 가 GitHub raw 를 캐시 */
+/* Paperlogy — 디스플레이 헤드라인.
+ * 기존 `innoplus-studio/Paperlogy` 저장소는 GitHub 에 존재하지 않아 jsdelivr 가
+ * 404 를 반환했고, 폰트가 시스템 fallback (Pretendard / Arial) 으로 떨어졌다.
+ * 검증된 미러: `fonts-archive/Paperlogy` (200 OK · 1~9 굵기 woff2 보유).
+ * 한 @font-face 에 두 src 를 묶으면 브라우저는 둘 다 같은 굵기로 인식하므로
+ * Bold(7) 와 ExtraBold(8) 를 별도 face 로 분리해야 두 굵기가 실제로 다르게
+ * 렌더된다 — typography.md §3.3 ttf 자체 호스팅 시안과 동일한 구조. */
 @font-face {
   font-family: 'Paperlogy';
-  src: url("https://cdn.jsdelivr.net/gh/innoplus-studio/Paperlogy/font/woff2/Paperlogy-7Bold.woff2") format('woff2'),
-       url("https://cdn.jsdelivr.net/gh/innoplus-studio/Paperlogy/font/woff2/Paperlogy-8ExtraBold.woff2") format('woff2');
-  font-weight: 700 800;
+  src: url("https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy@main/Paperlogy-7Bold.woff2") format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Paperlogy';
+  src: url("https://cdn.jsdelivr.net/gh/fonts-archive/Paperlogy@main/Paperlogy-8ExtraBold.woff2") format('woff2');
+  font-weight: 800;
   font-style: normal;
   font-display: swap;
 }

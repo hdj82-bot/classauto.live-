@@ -35,15 +35,17 @@ describe("LandingPage 통합", () => {
     expect(screen.getByText("지금 바로 시작하세요")).toBeTruthy();
   });
 
-  it("신규 섹션 — Stats Strip (3 stat) / Platform / Adoption 모두 마운트", () => {
+  // v3.1 (2026-05-13 PM): 사용자 결정으로 Stats Strip / Platform mesh /
+  // Adoption chart / 4가지 차별점 / 3단계 / Anchor case / Final CTA 모든 섹션을
+  // 메인 사이트에서 제거 (긴 마케팅 콘텐츠는 /features · /use-cases · /pricing
+  // 으로 분산). 따라서 본 어서션은 무효 — skip 처리하고 후속 PR 에서 새 v3.1
+  // 구조 (hero + fields 만) 회귀 테스트로 교체.
+  it.skip("신규 섹션 — Stats Strip (3 stat) / Platform / Adoption 모두 마운트 (v3, deprecated)", () => {
     renderPage(<LandingPage />);
-    // Stats labels
     expect(screen.getByText("교수자가 이미 사용 중")).toBeTruthy();
     expect(screen.getByText("생성된 강의 영상")).toBeTruthy();
     expect(screen.getByText("절약된 강의 준비 시간")).toBeTruthy();
-    // Platform
     expect(screen.getByText(/한 번 업로드/)).toBeTruthy();
-    // Adoption
     expect(screen.getByText(/검증된 학습 효과/)).toBeTruthy();
     expect(screen.getByText("시청 완료율")).toBeTruthy();
     expect(screen.getByText("Q&A 참여")).toBeTruthy();
@@ -55,7 +57,7 @@ describe("LandingPage 통합", () => {
     const loginLinks = screen
       .getAllByRole("link")
       .filter((el) => el.getAttribute("href") === "/auth/login");
-    expect(loginLinks.length).toBeGreaterThanOrEqual(2); // header + hero + cta 등
+    expect(loginLinks.length).toBeGreaterThanOrEqual(2);
   });
 
   it("IconDefs 가 마운트되어 그라데이션 6종 defs 존재 (DOM 안에)", () => {
@@ -67,7 +69,9 @@ describe("LandingPage 통합", () => {
     expect(container.querySelector("#grad-pink")).toBeTruthy();
   });
 
-  it("MeshNetworkVisual 6 노드 라벨 모두 노출", () => {
+  // v3.1 (2026-05-13 PM): MeshNetworkVisual 도 메인에서 제거. /features 페이지로
+  // 이동 예정. 본 어서션은 무효.
+  it.skip("MeshNetworkVisual 6 노드 라벨 모두 노출 (v3, deprecated)", () => {
     renderPage(<LandingPage />);
     expect(screen.getByText("PPT")).toBeTruthy();
     expect(screen.getByText("AI 스크립트")).toBeTruthy();
@@ -75,5 +79,27 @@ describe("LandingPage 통합", () => {
     expect(screen.getByText("RAG Q&A")).toBeTruthy();
     expect(screen.getByText("자동 평가")).toBeTruthy();
     expect(screen.getByText("다국어")).toBeTruthy();
+  });
+
+  // v3.1 (2026-05-13 PM): 새 구조 — hero + fields 두 섹션만, 그 이후는 모두 제거.
+  // 핵심 회귀 가드: 분야 카드 2장이 보이고, 제거되어야 할 섹션이 다시 들어오지
+  // 않는지를 함께 검증.
+  it("v3.1 짧은 게이트웨이 — hero + fields 만 마운트, 후속 섹션은 없다", () => {
+    renderPage(<LandingPage />);
+    // hero
+    expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
+    // 분야 카드 2장 — testid 또는 라벨로 식별 (FieldSelectCard 는 button 또는
+    // link 역할로 분야명을 노출한다)
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    // h2 가 최소 1개 (분야 선택 섹션 헤딩) 존재
+    expect(headings.length).toBeGreaterThanOrEqual(1);
+
+    // 제거되어야 할 섹션의 시그니처 텍스트가 없는지 확인 (회귀 가드)
+    expect(screen.queryByText("교수자가 이미 사용 중")).toBeNull(); // Stats
+    expect(screen.queryByText("시청 완료율")).toBeNull(); // Adoption chart
+    expect(screen.queryByText("Q&A 참여")).toBeNull(); // Adoption chart
+    // 'PPT' 단일 텍스트는 MeshNetworkVisual 의 노드 라벨. HeroFlowStage 의
+    // 'PPT 업로드' 는 별도 텍스트이므로 정확 매칭으로 회귀 가드.
+    expect(screen.queryByText("PPT")).toBeNull();
   });
 });
