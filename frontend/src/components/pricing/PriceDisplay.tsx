@@ -14,6 +14,12 @@ interface Props {
   freeLabel?: string;
   /** Pretendard tabular-nums 600 — typography.md §1. 추가 클래스 합치기 용. */
   className?: string;
+  /**
+   * 베타 기간 가격 미공개 모드 (사용자 결정 2026-05-13 PM).
+   * true 이면 ₩숫자 대신 큰 `-` 만 노출. 가격 데이터(PLANS) 자체는 보존하고
+   * 표시만 가린다 → 정책 확정 후 false 로 되돌리면 즉시 가격 복원.
+   */
+  hideForBeta?: boolean;
 }
 
 /**
@@ -31,6 +37,7 @@ export default function PriceDisplay({
   cycle,
   freeLabel,
   className = "",
+  hideForBeta = false,
 }: Props) {
   const { t } = usePricingHubI18n();
   const isFree = monthlyKrw === 0 && annualMonthlyKrw === 0;
@@ -45,6 +52,24 @@ export default function PriceDisplay({
           style={{ fontVariantNumeric: "tabular-nums" }}
         >
           {freeLabel ?? t("plans.free.priceFree")}
+        </span>
+      </div>
+    );
+  }
+
+  // 베타 기간 가격 미공개 — 큰 `-` 한 글자로 대체. 데이터(monthlyKrw 등) 는
+  // 그대로 받지만 렌더에서만 가린다. cycle attribute 는 검증 용도로 유지.
+  if (hideForBeta) {
+    return (
+      <div className={`flex items-baseline gap-2 ${className}`}>
+        <span
+          data-testid="price-display-hidden"
+          data-cycle={cycle}
+          aria-label={t("plans.free.priceFree") /* "베타 — 가격 미공개" 의도, 임시로 a11y 용 fallback */}
+          className="text-4xl sm:text-5xl font-semibold tracking-tight tabular-nums text-[rgba(10,10,10,0.55)]"
+          style={{ fontVariantNumeric: "tabular-nums" }}
+        >
+          —
         </span>
       </div>
     );
