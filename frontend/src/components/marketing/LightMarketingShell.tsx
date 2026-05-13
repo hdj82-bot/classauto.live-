@@ -52,30 +52,50 @@ export default function LightMarketingShell({
     >
       <header className="sticky top-0 z-30 backdrop-blur-md bg-[#FAFAF7]/80 border-b border-[rgba(10,10,10,0.08)]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          {/* 사용자 결정 2026-05-13 PM: /demo 의 DemoTopBar 와 동일한 brand
+              규격으로 통일. 28px 골드 박스 + 방패+체크 SVG + 20px Paperlogy 800
+              워드마크. 'CA' 워드마크가 demo 보다 작아 보이던 불일치 해소.
+              demo-v3.css 의 .ca-* 스타일은 demo 페이지 전용 import 라 본
+              컴포넌트는 inline style 로 동일 규격을 직접 박는다. */}
           <Link
             href="/"
-            className="flex items-center gap-2 group"
+            className="flex items-center group transition-transform motion-reduce:transition-none hover:scale-[1.02]"
             aria-label="ClassAuto home"
+            style={{
+              gap: "10px",
+              fontFamily:
+                "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+              fontWeight: 800,
+              fontSize: "20px",
+              letterSpacing: "-0.03em",
+              color: "#0A0A0A",
+            }}
           >
             <span
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold tracking-wider text-[#1A1A1A] transition-transform group-hover:scale-105 motion-reduce:transition-none"
-              style={{
-                background:
-                  "linear-gradient(135deg, #FFC74D 0%, #FFB627 50%, #E89E0B 100%)",
-              }}
               aria-hidden="true"
-            >
-              CA
-            </span>
-            <span
-              className="text-sm font-semibold tracking-wide hidden sm:inline"
+              className="flex items-center justify-center text-white"
               style={{
-                fontFamily:
-                  "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+                width: "28px",
+                height: "28px",
+                borderRadius: "8px",
+                background: "linear-gradient(135deg, #FFB627, #E89E0E)",
               }}
             >
-              ClassAuto
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="16"
+                height="16"
+              >
+                <path d="M5 6.5l7-3 7 3v6c0 4-3 6.7-7 8.5-4-1.8-7-4.5-7-8.5v-6z" />
+                <path d="M9 11.5l2.2 2.2L15 9.5" />
+              </svg>
             </span>
+            <span className="hidden sm:inline">ClassAuto</span>
           </Link>
 
           <nav
