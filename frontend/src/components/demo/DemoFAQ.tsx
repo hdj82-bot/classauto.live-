@@ -6,7 +6,7 @@ import { useDemoI18n } from "./useDemoI18n";
 /**
  * 데모 한정 FAQ — 4문항 (기획서 Section 18).
  *
- * `<details>` 기반 접힘으로 ARIA 패턴 자동 처리, JS 의존도 최소화.
+ * 2026-05-13 PM: 라이트 톤 변환 (페이지 라이트 베이지 위 흰 카드).
  */
 export default function DemoFAQ() {
   const { t } = useDemoI18n();
@@ -26,8 +26,12 @@ export default function DemoFAQ() {
       <div className="max-w-3xl mx-auto">
         <h2
           id="demo-faq-heading"
-          className="text-2xl sm:text-3xl font-bold text-white mb-8 text-center"
-          style={{ fontFamily: "'Paperlogy', 'Pretendard Variable', sans-serif", letterSpacing: "-0.03em" }}
+          className="text-2xl sm:text-3xl font-bold text-[#0A0A0A] mb-8 text-center"
+          style={{
+            fontFamily:
+              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
+            letterSpacing: "-0.03em",
+          }}
         >
           {t("faq.title")}
         </h2>
@@ -37,24 +41,27 @@ export default function DemoFAQ() {
             return (
               <li
                 key={i}
-                className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden"
+                className="rounded-xl border border-[rgba(10,10,10,0.08)] bg-white overflow-hidden shadow-[0_1px_2px_rgba(10,10,10,0.04)]"
               >
                 <button
                   type="button"
-                  className="w-full flex items-center justify-between text-left px-4 py-3 text-sm font-medium text-white hover:bg-white/[0.02] transition"
+                  className="w-full flex items-center justify-between text-left px-4 py-3 text-sm font-medium text-[#0A0A0A] hover:bg-[rgba(10,10,10,0.02)] transition motion-reduce:transition-none"
                   aria-expanded={isOpen}
                   aria-controls={`demo-faq-panel-${i}`}
                   onClick={() => setOpenIdx(isOpen ? null : i)}
                 >
                   <span>{it.q}</span>
-                  <span aria-hidden="true" className={`text-white/55 transition-transform ${isOpen ? "rotate-45" : ""}`}>
+                  <span
+                    aria-hidden="true"
+                    className={`text-[rgba(10,10,10,0.55)] transition-transform motion-reduce:transition-none ${isOpen ? "rotate-45" : ""}`}
+                  >
                     +
                   </span>
                 </button>
                 {isOpen && (
                   <div
                     id={`demo-faq-panel-${i}`}
-                    className="px-4 pb-4 text-sm text-white/65 leading-relaxed animate-fade-in"
+                    className="px-4 pb-4 text-sm text-[rgba(10,10,10,0.65)] leading-relaxed animate-fade-in"
                   >
                     {it.a}
                   </div>
