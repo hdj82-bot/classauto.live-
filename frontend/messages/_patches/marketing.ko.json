@@ -300,15 +300,15 @@
       },
       "hero": {
         "eyebrow": "BETA APPLICATION",
-        "title": "ClassAuto 베타에 함께해주세요",
-        "subtitle": "한국 대학 교수자 우선. 학교 이메일(.ac.kr 등)로 신청하시면 빠르게 검토합니다."
+        "title": "ClassAuto 베타에\n함께해 주세요",
+        "subtitle": "한국 대학 교수자 우선. 학교 이메일(.ac.kr 등)로 신청하시면\n빠르게 검토하겠습니다."
       },
       "fields": {
         "name": "이름",
         "namePlaceholder": "예) 하두진",
         "school": "학교",
         "schoolPlaceholder": "예) 경기대학교",
-        "department": "학과",
+        "department": "학과/전공",
         "departmentPlaceholder": "예) 중어중문학과",
         "title": "직책",
         "titlePlaceholder": "교수 / 부교수 / 조교수 / 강사 등",
