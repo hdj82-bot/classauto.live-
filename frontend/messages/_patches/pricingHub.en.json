@@ -22,7 +22,7 @@
         "name": "Free",
         "tagline": "First-time pilots",
         "ctaLabel": "Start free",
-        "ctaHref": "/auth/signup",
+        "ctaHref": "/beta-apply",
         "perMonthLabel": "Free forever",
         "currencySymbol": "₩",
         "priceFree": "Free",
@@ -41,7 +41,6 @@
         "tagline": "Language & active instructors",
         "ctaLabel": "Start Basic",
         "ctaHref": "/beta-apply",
-        "ctaNote": "During the beta, university faculty get full Pro access for free.",
         "features": [
           "Everything in Free",
           "8 video renders / month",
