@@ -30,8 +30,11 @@ describe("FieldSelectCard", () => {
   });
 
   it("exposes an aria-label that names the field for screen readers", () => {
+    // 2026-05-13: a11y 라벨이 분야명(자연계열) + 강의명(광합성) 까지 포함하도록
+    // 갱신됨 (v1: '자연과학' → v3: '자연계열 — 광합성의 원리'). 두 표현 중
+    // 하나라도 매칭되면 통과하도록 분야 식별 키워드만 검증.
     renderWithI18n(<FieldSelectCard field="natural" onSelect={() => {}} />);
     const button = screen.getByTestId("demo-field-natural");
-    expect(button.getAttribute("aria-label")).toMatch(/자연과학/);
+    expect(button.getAttribute("aria-label")).toMatch(/자연계열|광합성/);
   });
 });

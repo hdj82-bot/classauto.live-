@@ -69,7 +69,9 @@ describe("QASimulator", () => {
     const input = screen.getByTestId("demo-input") as HTMLTextAreaElement;
     const send = screen.getByTestId("demo-send");
 
-    for (const q of ["광속이 일정한 이유?", "쌍둥이 역설?", "광속 불변?"]) {
+    // 강의 주제 갱신 후 (2026-05-13): natural = 광합성. 세 질문 모두 광합성
+    // 키워드를 포함해야 on-topic 으로 분기 (한도 도달 흐름 자체는 분기와 무관).
+    for (const q of ["광합성의 원리?", "엽록소의 역할?", "명반응과 암반응 차이?"]) {
       fireEvent.change(input, { target: { value: q } });
       fireEvent.click(send);
       await act(async () => {
