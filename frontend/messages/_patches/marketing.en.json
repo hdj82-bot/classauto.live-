@@ -300,15 +300,15 @@
       },
       "hero": {
         "eyebrow": "BETA APPLICATION",
-        "title": "Join the ClassAuto beta",
-        "subtitle": "Korean university faculty have priority. Use a school email (.ac.kr / .edu) for fastest review."
+        "title": "Join the ClassAuto\nbeta with us",
+        "subtitle": "Korean university faculty have priority. Use a school email (.ac.kr / .edu)\nfor fastest review."
       },
       "fields": {
         "name": "Name",
         "namePlaceholder": "e.g. Ha Doo-jin",
         "school": "School",
         "schoolPlaceholder": "e.g. Kyonggi University",
-        "department": "Department",
+        "department": "Department / Major",
         "departmentPlaceholder": "e.g. Chinese Language and Literature",
         "title": "Title",
         "titlePlaceholder": "Professor / Associate / Assistant / Instructor",

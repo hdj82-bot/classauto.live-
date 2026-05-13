@@ -187,8 +187,11 @@ export default function BetaApplyContent() {
         <p className="text-[11px] sm:text-xs font-semibold tracking-[0.22em] text-[#B88308] uppercase mb-5">
           {t("betaApply.hero.eyebrow")}
         </p>
+        {/* 사용자 결정 2026-05-13 PM: 의도된 줄바꿈을 i18n 문자열 안의 `\n` 으로
+            표현하고, `whitespace-pre-line` 으로 그대로 렌더. 좁은 폭에서는 추가
+            wrap 도 자연스럽게 일어나, 모바일·태블릿 양쪽에서 카피가 잘리지 않는다. */}
         <h1
-          className="text-[#0A0A0A] tracking-tight leading-[1.08]"
+          className="text-[#0A0A0A] tracking-tight leading-[1.08] whitespace-pre-line"
           style={{
             fontFamily:
               "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
@@ -199,7 +202,7 @@ export default function BetaApplyContent() {
         >
           {t("betaApply.hero.title")}
         </h1>
-        <p className="mt-5 text-base sm:text-lg text-[rgba(10,10,10,0.62)] max-w-xl mx-auto leading-relaxed">
+        <p className="mt-5 text-base sm:text-lg text-[rgba(10,10,10,0.62)] max-w-xl mx-auto leading-relaxed whitespace-pre-line">
           {t("betaApply.hero.subtitle")}
         </p>
       </section>
