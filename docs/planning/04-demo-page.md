@@ -1,9 +1,20 @@
 # /demo 페이지 상세 기획
 
-> **상태**: 확정 · 2026-05-05 · **갱신 2026-05-06** (시연 주제 변경)
+> **상태**: 확정 · 2026-05-05 · **갱신 2026-05-06** (시연 주제 변경) · **갱신 2026-05-13** (히어로 카피 standalone 정합)
 > **우선순위**: 🔴 1순위 (베타 보급 전환 핵심)
 > **연관 문서**: [02-guardrails.md](./02-guardrails.md), [06-student-pages.md](./06-student-pages.md)
-> **프로토타입**: [docs/prototypes/04-demo-page.html](../prototypes/04-demo-page.html)
+> **프로토타입**: [docs/prototypes/04-demo-page.html.html](../prototypes/04-demo-page.html.html) (standalone)
+>
+> **2026-05-13 변경 요약**:
+> - §4.1 미니 히어로 카피를 standalone 프로토타입에 맞춰 갱신.
+>   - 헤드라인: "강의 영상이 학생에게 답합니다" → "대본 한 번, 학생과는 끝없는 대화" (가용 강조: 끝없는 대화)
+>   - 배지: "AI 교수자와의 양방향 학습" → "AI 강의 자동 생성 플랫폼"
+>   - 1차 CTA: "▶ 학생 화면 확인하기" → "학생 화면 미리보기"
+> - §4.2 절대 금지 문구 ("학생이 되어보세요", "체험")는 **visible UI 한정으로 계속 유효** —
+>   page `<title>` 등 비가시 영역은 standalone 디자인이 우선.
+> - 페이지 표면을 **라이트 베이지(`#FAFAF7`) 기본 + 시청 영역 한정 다크** 로 전환
+>   (v2 강제 다크 폐기, colors.md §1 dual-surface 원칙 정합).
+> - 분야 카드 아래 4-cell Trust strip 신규 (24h 자동 삭제 / RAG 0.65 / 200자·3건 / IP·1일·3회).
 
 ---
 

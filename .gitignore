@@ -38,3 +38,6 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+
+# 로컬 스크래치 (디자인 번들 추출 등 임시 작업물)
+.tmp/

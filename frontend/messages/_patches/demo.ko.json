@@ -26,6 +26,76 @@
       "primaryCta": "▶ 학생 화면 확인하기",
       "secondaryCta": "기능 자세히 보기"
     },
+    "heroV3": {
+      "observerBadge": "AI 강의 자동 생성 플랫폼",
+      "headlineLead": "대본 한 번,",
+      "headlineAccent": "끝없는 대화",
+      "headlineTail": "학생과는",
+      "subtitle": "PPT를 업로드하면 AI가 강의 영상을 만들고, 학생들과 양방향으로 소통합니다 교수님은 AI가 제공하는 학습 보고서로 대면 수업을 다듬으세요",
+      "subTag": "학생이 만나는 화면을 먼저 확인해보세요.",
+      "metaTime": "약 3분 소요",
+      "metaQuestions": "질문 3건 무료",
+      "metaMobile": "모바일 가능",
+      "primaryCta": "학생 화면 미리보기",
+      "secondaryCta": "기능 자세히 보기"
+    },
+    "flowStage": {
+      "topStatus": "데모 미리보기 · 흐름 요약",
+      "topSub": "실제 영상은 추후 추가",
+      "step1": "PPT 업로드",
+      "step2": "AI 영상 합성",
+      "step3": "학생과 대화",
+      "aiTag1": "스크립트",
+      "aiTag2": "TTS",
+      "aiTag3": "아바타",
+      "chatSource": "출처 인용",
+      "bottomLead": "교수님은",
+      "bottomEmphasis": "학습 보고서",
+      "bottomTail": "로 다음 강의를 다듬습니다."
+    },
+    "marketingHeader": {
+      "navFeatures": "기능",
+      "navUseCases": "사용 사례",
+      "navPricing": "가격",
+      "livePill": "Live Demo",
+      "cta": "베타 신청"
+    },
+    "fieldSelectV3": {
+      "title": "두 분야 중 하나를 골라주세요",
+      "subtitle": "인문계열과 자연계열 — 같은 가드레일이 어떻게 다른 강의에 적용되는지 비교해보세요.",
+      "social": {
+        "tagline": "A · Liberal Arts",
+        "metaLine": "인문계열 · {minutes}분 클립",
+        "minutes": "5",
+        "title": "중국어문법의 이해",
+        "subtitle": "把자문(把字句)의 어순 규칙을 중심으로 — 추천 질문, 출처 인용, 그리고 강의 외 질문 거부까지 차례로 시연됩니다.",
+        "statSlides": "{count} 슬라이드",
+        "statSlidesCount": "8",
+        "statSecondary": "AI 자동 퀴즈",
+        "start": "시작하기"
+      },
+      "natural": {
+        "tagline": "B · Natural Science",
+        "metaLine": "자연계열 · {minutes}분 클립",
+        "minutes": "5",
+        "title": "광합성의 원리",
+        "subtitle": "빛 에너지가 화학 에너지로 전환되는 과정을 중심으로 — 추천 질문, 출처 인용, 그리고 강의 외 질문 거부까지 차례로 시연됩니다.",
+        "statSlides": "{count} 슬라이드",
+        "statSlidesCount": "8",
+        "statSecondary": "AI 자동 퀴즈",
+        "start": "시작하기"
+      }
+    },
+    "trustStrip": {
+      "dataLabel": "데이터 보호",
+      "dataValue": "24시간 후 자동 삭제",
+      "ragLabel": "RAG 임계값",
+      "ragValue": "0.65 · 체험용 완화",
+      "inputLabel": "입력 한도",
+      "inputValue": "200자 · 세션당 3건",
+      "sessionLabel": "세션 관리",
+      "sessionValue": "익명 · IP당 1일 3회"
+    },
     "fieldSelectV2": {
       "title": "두 영상 중 하나를 골라보세요",
       "subtitle": "분야는 무관합니다. 각 영상은 5분 클립 안에 추천 질문, 출처 인용, 인터스티셜 퀴즈, 강의 외 질문 거부까지 시연됩니다.",

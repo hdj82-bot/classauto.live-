@@ -1,34 +1,47 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DemoCTAModal from "@/components/demo/DemoCTAModal";
 import DemoFAQ from "@/components/demo/DemoFAQ";
 import DemoVideo from "@/components/demo/DemoVideo";
 import FieldSelectCard from "@/components/demo/FieldSelectCard";
+import GradientDefs from "@/components/demo/GradientDefs";
+import HeroFlowStage from "@/components/demo/HeroFlowStage";
 import OffTopicHint from "@/components/demo/OffTopicHint";
 import QASimulator from "@/components/demo/QASimulator";
+import TrustStrip from "@/components/demo/TrustStrip";
 import { useDemoI18n } from "@/components/demo/useDemoI18n";
+import {
+  buildDemoHeroFlowLabels,
+  buildDemoTrustStripLabels,
+} from "@/components/demo/labels";
 import type { DemoField } from "@/components/demo/demoTypes";
+import "./demo-v3.css";
 
 /**
- * /demo 페이지 — 베타 신청 전환의 핵심 체험 페이지 (v2).
+ * /demo 페이지 — 베타 신청 전환의 핵심 체험 페이지 (v3).
  *
- * 설계 근거: docs/planning/04-demo-page.md (확정 2026-05-05 · 갱신 2026-05-06).
+ * 디자인 근거:
+ *   - docs/prototypes/04-demo-page.html.html (standalone, 2026-05-13)
+ *   - docs/planning/04-demo-page.md (스펙, 2026-05-06 갱신; 본 PR 에서 미니
+ *     히어로 카피만 standalone 에 맞춰 갱신 — 갱신 이력은 동일 문서 참조)
  *
- * v2 메시지 정정 (heroV2 키 신규):
- *   - ❌ "학생이 되어보세요" (잘못된 메시지 — 04-demo-page.md §4.2)
- *   - ✅ "강의 영상이 학생에게 답합니다" (관찰자 시점 §1)
+ * v3 핵심 변경:
+ *   - 페이지 진입 표면이 **라이트 베이지(`#FAFAF7`)** 로 전환 (v2 강제 다크 폐기).
+ *   - 다크 톤은 학생 시청 영역(`ExperienceSection`) 안에서만 적용 — colors.md §1
+ *     "영상이 있으면 다크" 원칙 유지.
+ *   - 미니 히어로 2-column (텍스트 + flow-stage 일러스트), 카피 "대본 한 번,
+ *     학생과는 끝없는 대화" — 사용자 결정(2026-05-13).
+ *   - 분야 카드 라이트 톤 + 코너 그라데이션 mesh.
+ *   - 분야 카드 아래 4-cell Trust strip 신규 (24시간 자동 삭제, RAG 0.65 등).
  *
- * 페이지 구조 (Section 3):
- *   1. 미니 히어로 + 분야 선택 (라이트 미니 히어로 위 다크 카드 슬롯이 정책상
- *      가능하지만, 본 PR 은 단순성과 영상 몰입을 위해 페이지 전체 다크 유지)
- *   2. 체험 환경 (영상 + Q&A)
- *   3. CTA 모달 (3건 사용 시 트리거)
- *   4. 데모 FAQ (4문항)
- *   5. 푸터 CTA
- *
- * 전체 페이지를 다크 모드 강제 (`#0A0A0A`) — colors.md §1 (영상이 있으면 다크).
+ * 유지:
+ *   - DemoField / DEMO_FIELDS / isOnTopic 도메인 모델
+ *   - handleSelect → setSession → ExperienceSection 라우팅
+ *   - QASimulator → onLimitReached → DemoCTAModal
+ *   - DemoFAQ / FooterCTA (다크) — standalone 디자인 범위 밖, 변경 없음
  */
 interface DemoSession {
   field: DemoField;
@@ -36,11 +49,39 @@ interface DemoSession {
 }
 
 export default function DemoPage() {
+  // useSearchParams 는 Suspense boundary 안에서만 동작 → 별도 컴포넌트로 격리.
+  return (
+    <Suspense fallback={null}>
+      <DemoPageBody />
+    </Suspense>
+  );
+}
+
+function DemoPageBody() {
   const { t } = useDemoI18n();
-  const [session, setSession] = useState<DemoSession | null>(null);
+  const searchParams = useSearchParams();
+  const initialField = useMemo(() => {
+    const raw = searchParams.get("field");
+    return raw === "social" || raw === "natural" ? raw : null;
+  }, [searchParams]);
+
+  const [session, setSession] = useState<DemoSession | null>(() =>
+    initialField ? { field: initialField, startedAt: Date.now() } : null,
+  );
   const [ctaOpen, setCtaOpen] = useState(false);
   const [challengeDone, setChallengeDone] = useState(false);
   const inputAnchorRef = useRef<HTMLDivElement>(null);
+
+  // / 페이지의 분야 카드에서 `/demo?field=X` 로 deep-link 진입 시 자동 스크롤.
+  useEffect(() => {
+    if (initialField) {
+      queueMicrotask(() => {
+        document
+          .getElementById("demo-experience")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+  }, [initialField]);
 
   const handleSelect = useCallback((f: DemoField) => {
     setSession({ field: f, startedAt: Date.now() });
@@ -70,53 +111,56 @@ export default function DemoPage() {
     document.getElementById("demo-q-input")?.focus();
   }, []);
 
-  // 페이지 진입 시 다크 모드 색상 변수 강제 — 다른 페이지로 이동 시 복원.
-  // 04-demo-page.md §6.2 "페이지 진입 즉시 다크 모드".
-  useEffect(() => {
-    const root = document.documentElement;
-    const previousBg = root.style.getPropertyValue("--background");
-    const previousFg = root.style.getPropertyValue("--foreground");
-    root.style.setProperty("--background", "#0A0A0A");
-    root.style.setProperty("--foreground", "#FFFFFF");
-    return () => {
-      root.style.setProperty("--background", previousBg);
-      root.style.setProperty("--foreground", previousFg);
-    };
+  const handleStartCta = useCallback(() => {
+    document
+      .getElementById("demo-field-select")
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   return (
     <div
-      className="min-h-screen bg-[#0A0A0A] text-white antialiased"
+      className="ca-demo-root min-h-screen antialiased"
       style={{
+        background: "#FAFAF7",
+        color: "var(--ca-text, #0A0A0A)",
         fontFamily:
           "var(--font-body, 'Pretendard Variable'), 'Pretendard', system-ui, sans-serif",
       }}
     >
-      {/* 다크 셸 위의 최소 헤더 — 메인으로 복귀 링크 + 베타 신청 CTA */}
+      <GradientDefs />
+
       <DemoTopBar />
 
-      <DemoHero
-        canSwitch={session !== null}
-        onSwitch={handleSwitchField}
-      />
-
-      {session === null ? (
-        <FieldSelectionSection onSelect={handleSelect} />
-      ) : (
-        <ExperienceSection
-          key={session.field}
-          field={session.field}
-          startedAt={session.startedAt}
-          challengeDone={challengeDone}
-          onLimitReached={handleLimitReached}
-          onTryNow={handleTryNow}
+      <main>
+        <DemoHero
+          canSwitch={session !== null}
           onSwitch={handleSwitchField}
-          inputAnchorRef={inputAnchorRef}
+          onStart={handleStartCta}
         />
-      )}
 
+        {session === null ? (
+          <>
+            <FieldSelectionSection onSelect={handleSelect} />
+            <TrustStrip labels={buildDemoTrustStripLabels(t)} />
+          </>
+        ) : (
+          <ExperienceSection
+            key={session.field}
+            field={session.field}
+            startedAt={session.startedAt}
+            challengeDone={challengeDone}
+            onLimitReached={handleLimitReached}
+            onTryNow={handleTryNow}
+            onSwitch={handleSwitchField}
+            inputAnchorRef={inputAnchorRef}
+          />
+        )}
+      </main>
+
+      {/* FAQ / FooterCTA 는 standalone 디자인 범위 밖 — 기존 다크 톤 유지.
+          (라이트 → 다크 전환 위로 한 번 표시되는 식. 후속 PR 에서 라이트 버전
+          만든다면 별도 결정.) */}
       <DemoFAQ />
-
       <FooterCTA />
 
       <DemoCTAModal
@@ -133,58 +177,41 @@ export default function DemoPage() {
 /* ---------------- Sub-sections ---------------- */
 
 /**
- * 데모 페이지 전용 최소 상단 바 — 다크 톤이므로 LightMarketingShell 사용 안 함.
- * CA 워드마크 + 베타 신청 골드 CTA + 메인 복귀 outline.
+ * 라이트 톤 상단 바 — standalone 디자인의 header 그대로 변환.
+ * 방패+체크 brand mark, 4-link nav (Live Demo pill 포함), outline 베타 신청 CTA.
  */
 function DemoTopBar() {
+  const { t } = useDemoI18n();
   return (
-    <header className="sticky top-0 z-30 backdrop-blur-md bg-black/40 border-b border-white/5">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        <Link
-          href="/"
-          aria-label="ClassAuto home"
-          className="flex items-center gap-2 group"
-        >
-          <span
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold tracking-wider text-[#1A1A1A] transition-transform group-hover:scale-105 motion-reduce:transition-none"
-            style={{
-              background:
-                "linear-gradient(135deg, #FFC74D 0%, #FFB627 50%, #E89E0B 100%)",
-            }}
-            aria-hidden="true"
-          >
-            CA
+    <header className="ca-header">
+      <div className="ca-header-inner">
+        <Link href="/" className="ca-brand" aria-label="ClassAuto 홈으로">
+          <span className="ca-brand-mark" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M5 6.5l7-3 7 3v6c0 4-3 6.7-7 8.5-4-1.8-7-4.5-7-8.5v-6z" />
+              <path d="M9 11.5l2.2 2.2L15 9.5" />
+            </svg>
           </span>
-          <span
-            className="text-sm font-semibold tracking-wide hidden sm:inline"
-            style={{
-              fontFamily:
-                "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
-            }}
-          >
-            ClassAuto
-          </span>
+          ClassAuto
         </Link>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/features"
-            className="hidden sm:inline-flex text-xs font-medium text-white/65 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition motion-reduce:transition-none"
-          >
-            기능
-          </Link>
-          <Link
-            href="/pricing"
-            className="hidden sm:inline-flex text-xs font-medium text-white/65 hover:text-white px-3 py-1.5 rounded-lg hover:bg-white/5 transition motion-reduce:transition-none"
-          >
-            요금제
-          </Link>
-          <Link
-            href="/beta-apply"
-            className="inline-flex text-xs font-semibold rounded-lg bg-[#FFB627] text-[#1A1A1A] px-3 py-1.5 hover:bg-[#FFC74D] transition motion-reduce:transition-none"
-          >
-            베타 신청
-          </Link>
-        </div>
+
+        <nav className="ca-header-nav" aria-label="Primary">
+          <Link href="/features">{t("marketingHeader.navFeatures")}</Link>
+          <Link href="/use-cases">{t("marketingHeader.navUseCases")}</Link>
+          <Link href="/pricing">{t("marketingHeader.navPricing")}</Link>
+          <span className="ca-demo-pill">{t("marketingHeader.livePill")}</span>
+        </nav>
+
+        <Link href="/beta-apply" className="ca-header-cta">
+          {t("marketingHeader.cta")}
+        </Link>
       </div>
     </header>
   );
@@ -193,83 +220,124 @@ function DemoTopBar() {
 function DemoHero({
   canSwitch,
   onSwitch,
+  onStart,
 }: {
   canSwitch: boolean;
   onSwitch: () => void;
+  onStart: () => void;
 }) {
   const { t } = useDemoI18n();
   return (
-    <header
-      className="relative pt-14 pb-12 sm:pt-20 sm:pb-16 px-4 sm:px-6 overflow-hidden"
-      aria-labelledby="demo-hero-title"
-    >
-      {/* aurora background (다크 데모 한정, animations.md §2.1 톤) */}
-      <div
-        aria-hidden="true"
-        className="absolute inset-0 pointer-events-none opacity-80"
-        style={{
-          background:
-            "radial-gradient(ellipse at 20% 30%, rgba(167,139,250,0.18), transparent 50%), radial-gradient(ellipse at 80% 70%, rgba(255,182,39,0.16), transparent 50%), radial-gradient(ellipse at 50% 50%, rgba(34,211,238,0.10), transparent 60%)",
-        }}
-      />
-      <div className="relative max-w-5xl mx-auto text-center">
-        {/* 관찰자 배지 — "체험" 단어 미사용, 관찰자 시점 명시 */}
-        <span
-          className="inline-flex items-center rounded-full border border-[rgba(255,182,39,0.40)] bg-[rgba(255,182,39,0.06)] px-3 py-1 text-[11px] tracking-[0.16em] uppercase text-[#FFB627] font-semibold mb-5"
-        >
-          {t("heroV2.observerBadge")}
-        </span>
-        <p className="text-[11px] tracking-[0.22em] uppercase text-[#FFB627] mb-4">
-          {t("heroV2.eyebrow")}
-        </p>
-        <h1
-          id="demo-hero-title"
-          className="text-white"
-          style={{
-            fontFamily:
-              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
-            fontSize: "clamp(36px, 6vw, 64px)",
-            fontWeight: 800,
-            lineHeight: 1.05,
-            letterSpacing: "-0.04em",
-          }}
-        >
-          {t("heroV2.headlineLead")}
-          <br />
-          <span style={{ color: "#FFB627" }}>{t("heroV2.headlineAccent")}</span>
-        </h1>
-        <p className="mt-6 text-base sm:text-lg text-white/65 max-w-2xl mx-auto leading-relaxed">
-          {t("heroV2.subtitle")}
-        </p>
-        <ul
-          className="mt-7 flex flex-wrap justify-center gap-2 sm:gap-3 text-xs"
-          aria-label={t("heroV2.observerBadge")}
-        >
-          {[
-            t("heroV2.metaTime"),
-            t("heroV2.metaQuestions"),
-            t("heroV2.metaMobile"),
-          ].map((chip) => (
-            <li
-              key={chip}
-              className="inline-flex items-center rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-white/75"
-            >
-              {chip}
-            </li>
-          ))}
-        </ul>
+    <section className="ca-hero" aria-labelledby="demo-hero-title">
+      <div className="ca-aurora" aria-hidden="true" />
 
-        {canSwitch && (
-          <button
-            type="button"
-            onClick={onSwitch}
-            className="mt-6 inline-flex items-center gap-1 text-xs text-white/55 hover:text-white transition motion-reduce:transition-none"
-          >
-            ↺ {t("fieldSelect.switch")}
-          </button>
-        )}
+      <div className="ca-hero-inner">
+        <div className="ca-hero-text">
+          <span className="ca-hero-eyebrow">
+            <span className="ca-dot" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M5 12l5 5L20 7" />
+              </svg>
+            </span>
+            {t("heroV3.observerBadge")}
+          </span>
+
+          <h1 id="demo-hero-title">
+            {t("heroV3.headlineLead")}
+            <br />
+            {t("heroV3.headlineTail")}{" "}
+            <span className="ca-accent">{t("heroV3.headlineAccent")}</span>
+          </h1>
+
+          <p className="ca-hero-sub">{t("heroV3.subtitle")}</p>
+          <p className="ca-hero-sub-tag">{t("heroV3.subTag")}</p>
+
+          <div className="ca-hero-meta">
+            <span className="ca-meta-chip">{t("heroV3.metaTime")}</span>
+            <span className="ca-meta-chip">{t("heroV3.metaQuestions")}</span>
+            <span className="ca-meta-chip">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
+                <path d="M11 18.5h2" />
+              </svg>
+              {t("heroV3.metaMobile")}
+            </span>
+          </div>
+
+          <div className="ca-hero-actions">
+            <button
+              type="button"
+              className="ca-btn-primary"
+              onClick={onStart}
+              data-testid="demo-hero-start"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
+              </svg>
+              {t("heroV3.primaryCta")}
+            </button>
+            <Link href="/features" className="ca-btn-secondary">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="url(#ca-grad-violet)"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                width="16"
+                height="16"
+              >
+                <path d="M4 5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5z" />
+                <path d="M13 3v5h5" />
+              </svg>
+              {t("heroV3.secondaryCta")}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+                width="14"
+                height="14"
+              >
+                <path d="M5 12h14M13 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+
+          {canSwitch && (
+            <button
+              type="button"
+              onClick={onSwitch}
+              className="mt-6 inline-flex items-center gap-1 text-xs font-medium transition motion-reduce:transition-none"
+              style={{ color: "var(--ca-text-subtle, rgba(10,10,10,0.42))" }}
+            >
+              ↺ {t("fieldSelect.switch")}
+            </button>
+          )}
+        </div>
+
+        <HeroFlowStage labels={buildDemoHeroFlowLabels(t)} />
       </div>
-    </header>
+    </section>
   );
 }
 
@@ -282,28 +350,20 @@ function FieldSelectionSection({
   return (
     <section
       id="demo-field-select"
-      className="px-4 sm:px-6 pb-20"
+      className="ca-fields"
       aria-labelledby="demo-field-heading"
     >
-      <div className="max-w-5xl mx-auto">
-        <div className="text-center mb-10">
-          <h2
-            id="demo-field-heading"
-            className="text-2xl sm:text-3xl font-bold text-white"
-            style={{
-              fontFamily:
-                "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
-              letterSpacing: "-0.03em",
-            }}
-          >
-            {t("fieldSelectV2.title")}
-          </h2>
-          <p className="mt-3 text-sm sm:text-base text-white/55 max-w-2xl mx-auto leading-relaxed">
-            {t("fieldSelectV2.subtitle")}
-          </p>
+      <div className="ca-fields-inner">
+        <div className="ca-fields-header">
+          <div>
+            <h2 className="ca-fields-title" id="demo-field-heading">
+              {t("fieldSelectV3.title")}
+            </h2>
+            <p className="ca-fields-subtitle">{t("fieldSelectV3.subtitle")}</p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+        <div className="ca-field-grid">
           <FieldSelectCard field="social" onSelect={onSelect} />
           <FieldSelectCard field="natural" onSelect={onSelect} />
         </div>
@@ -312,6 +372,10 @@ function FieldSelectionSection({
   );
 }
 
+/**
+ * 분야 선택 후 시청·Q&A 영역. 디자인 standalone 범위 밖 — colors.md §1
+ * (영상은 다크) 에 따라 자체 다크 표면을 가진다. 기존 v2 스타일 유지.
+ */
 function ExperienceSection({
   field,
   startedAt,
@@ -351,7 +415,8 @@ function ExperienceSection({
   return (
     <section
       id="demo-experience"
-      className="px-4 sm:px-6 pb-16"
+      className="px-4 sm:px-6 pb-16 pt-12 text-white"
+      style={{ background: "#0A0A0A" }}
       aria-label={t("experience.chatTitle")}
     >
       <div className="max-w-6xl mx-auto">
@@ -393,13 +458,13 @@ function FooterCTA() {
   const { t } = useDemoI18n();
   return (
     <section
-      className="border-t border-white/10 bg-[#0E0E0E] py-16 px-4 sm:px-6"
+      className="border-t border-white/10 bg-[#0E0E0E] py-16 px-4 sm:px-6 text-white"
       aria-labelledby="demo-footer-cta-heading"
     >
       <div className="max-w-3xl mx-auto text-center">
         <h2
           id="demo-footer-cta-heading"
-          className="text-2xl sm:text-3xl font-bold text-white mb-3"
+          className="text-2xl sm:text-3xl font-bold mb-3"
           style={{
             fontFamily:
               "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",

@@ -20,6 +20,48 @@
       "primaryCtaSub": "Phase-2 beta · free for academia",
       "identityNote": "A tool built by scholars, for scholars"
     },
+    "heroV3": {
+      "observerBadge": "AI lecture generation platform",
+      "headlineLead": "Script it once,",
+      "headlineTail": "with students —",
+      "headlineAccent": "endless conversation",
+      "subtitle": "Upload a PPT and the AI builds the lecture video, then talks with students both ways. You take the AI's learning reports back into the lecture hall to refine in-person teaching.",
+      "subTag": "Start with the screen your students actually see.",
+      "metaTime": "~3 minutes",
+      "metaQuestions": "3 free questions",
+      "metaMobile": "Mobile-friendly",
+      "primaryCta": "Preview the student screen",
+      "secondaryCta": "Browse the features"
+    },
+    "demoFlow": {
+      "topStatus": "Demo preview · flow summary",
+      "topSub": "Real video footage coming soon",
+      "step1": "Upload PPT",
+      "step2": "AI video synthesis",
+      "step3": "Talk with students",
+      "aiTag1": "Script",
+      "aiTag2": "TTS",
+      "aiTag3": "Avatar",
+      "chatSource": "Source cited",
+      "bottomLead": "You refine the next lecture using the",
+      "bottomEmphasis": "learning report",
+      "bottomTail": "."
+    },
+    "demoFieldShowcase": {
+      "title": "Pick one of the two fields",
+      "subtitle": "Humanities and natural sciences — compare how the same guardrails play out in two very different lectures."
+    },
+    "demoTrustStrip": {
+      "ariaLabel": "Data protection notice",
+      "dataLabel": "Data protection",
+      "dataValue": "Auto-deleted after 24h",
+      "ragLabel": "RAG threshold",
+      "ragValue": "0.65 · relaxed for demo",
+      "inputLabel": "Input limit",
+      "inputValue": "200 chars · 3 per session",
+      "sessionLabel": "Session policy",
+      "sessionValue": "Anonymous · 3/day per IP"
+    },
     "differentiators": {
       "eyebrow": "Four differences",
       "title": "Why ClassAuto isn't just another EdTech app",
