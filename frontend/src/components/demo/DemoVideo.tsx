@@ -53,9 +53,12 @@ export default function DemoVideo({ field }: Props) {
     }
   };
 
+  // 2026-05-13 PM: 외곽 컨테이너는 라이트 카드 (#FFFFFF, 라이트 베이지 페이지와
+  // 매치), 영상 박스 자체(aspect-video)만 검은색 유지 (영상 콘텐츠 시청 측면).
+  // YouTube / Vimeo 와 동일한 패턴.
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-      <div className="aspect-video w-full">
+    <div className="relative w-full overflow-hidden rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04)]">
+      <div className="aspect-video w-full bg-black">
         {hasSource ? (
           <video
             ref={ref}
@@ -99,7 +102,7 @@ export default function DemoVideo({ field }: Props) {
         <button
           type="button"
           onClick={togglePlay}
-          className="absolute inset-0 flex items-center justify-center bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB627] rounded-2xl"
+          className="absolute inset-x-0 top-0 aspect-video flex items-center justify-center bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB627] rounded-t-2xl"
           aria-label={playing ? t("experience.videoControlsPause") : t("experience.videoControlsPlay")}
         >
           <span className="sr-only">
@@ -108,7 +111,7 @@ export default function DemoVideo({ field }: Props) {
         </button>
       )}
 
-      <p className="px-4 py-2 text-[11px] text-white/45">
+      <p className="px-4 py-2.5 text-[11px] text-[rgba(10,10,10,0.55)]">
         {t("experience.videoCaption")}
       </p>
     </div>

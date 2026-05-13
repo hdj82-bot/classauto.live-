@@ -44,6 +44,7 @@ export default function OffTopicHint({
 
   if (phase === "hidden") return null;
 
+  // 2026-05-13 PM: 라이트 톤 (배지 + 토스트). 페이지 라이트 베이지와 통일.
   if (phase === "badge") {
     return (
       <button
@@ -53,10 +54,10 @@ export default function OffTopicHint({
         className={[
           "fixed top-20 right-4 z-30",
           "rounded-full px-3 py-1.5 text-[11px] font-medium",
-          "border transition",
+          "border transition motion-reduce:transition-none",
           challengeDone
-            ? "bg-emerald-500/15 border-emerald-400/40 text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.25)]"
-            : "bg-[#141414]/80 border-white/15 text-white/70 hover:bg-white/10",
+            ? "bg-emerald-50 border-emerald-300 text-emerald-700 shadow-[0_0_20px_rgba(16,185,129,0.18)]"
+            : "bg-white/90 backdrop-blur-sm border-[rgba(10,10,10,0.12)] text-[rgba(10,10,10,0.65)] hover:bg-white",
         ].join(" ")}
       >
         {challengeDone ? t("toast.challengeDone") : t("toast.challengeBadge")}
@@ -70,15 +71,15 @@ export default function OffTopicHint({
       data-testid="demo-offtopic-toast"
       className={[
         "fixed top-20 right-4 z-30 max-w-xs",
-        "bg-[#141414] border border-[#FFB627]/40 rounded-2xl",
-        "p-4 shadow-[0_8px_32px_rgba(0,0,0,0.4)]",
+        "bg-white border border-[rgba(184,131,8,0.30)] rounded-2xl",
+        "p-4 shadow-[0_8px_32px_rgba(184,131,8,0.16)]",
         "animate-scale-in",
       ].join(" ")}
     >
-      <p className="text-sm font-semibold text-white mb-1.5">
+      <p className="text-sm font-semibold text-[#0A0A0A] mb-1.5">
         {t("toast.offTopicTitle")}
       </p>
-      <p className="text-xs text-white/65 leading-relaxed mb-3">
+      <p className="text-xs text-[rgba(10,10,10,0.65)] leading-relaxed mb-3">
         {t("toast.offTopicBody")}
       </p>
       <div className="flex gap-2">
@@ -88,7 +89,7 @@ export default function OffTopicHint({
             onTryNow?.();
             setPhase("badge");
           }}
-          className="px-3 py-1.5 rounded-full bg-[#FFB627] text-[#0A0A0A] text-xs font-semibold"
+          className="px-3 py-1.5 rounded-full bg-[#FFB627] text-[#1A1A1A] text-xs font-semibold hover:bg-[#FFC74D] transition motion-reduce:transition-none"
         >
           {t("toast.offTopicCta")}
         </button>
@@ -96,7 +97,7 @@ export default function OffTopicHint({
           type="button"
           aria-label={t("a11y.closeToast")}
           onClick={() => setPhase("badge")}
-          className="px-3 py-1.5 rounded-full border border-white/10 text-white/65 text-xs hover:bg-white/5 transition"
+          className="px-3 py-1.5 rounded-full border border-[rgba(10,10,10,0.10)] text-[rgba(10,10,10,0.62)] text-xs hover:bg-[rgba(10,10,10,0.04)] transition motion-reduce:transition-none"
         >
           ×
         </button>

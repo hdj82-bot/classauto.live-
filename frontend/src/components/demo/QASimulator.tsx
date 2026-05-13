@@ -162,21 +162,23 @@ export default function QASimulator({ field, onLimitReached }: Props) {
     }));
   }, [cfg.suggestedKeys, chat, t]);
 
+  // 2026-05-13 PM: 라이트 톤 변환. 다크 표면(`#141414` + `text-white`) 폐기.
+  // 흰 카드(`#FFFFFF`) on 라이트 베이지 페이지, 골드 포인트(#FFB627) 유지.
   return (
     <section
-      className="flex flex-col h-full bg-[#141414] border border-white/10 rounded-2xl overflow-hidden"
+      className="flex flex-col h-full bg-white border border-[rgba(10,10,10,0.08)] rounded-2xl overflow-hidden shadow-[0_1px_2px_rgba(10,10,10,0.04)]"
       aria-label={t("experience.chatTitle")}
     >
       {/* Header */}
-      <header className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+      <header className="px-5 py-4 border-b border-[rgba(10,10,10,0.06)] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span aria-hidden="true" className="text-lg">💬</span>
-          <h2 className="text-sm font-semibold text-white">
+          <h2 className="text-sm font-semibold text-[#0A0A0A]">
             {t("experience.chatTitle")}
           </h2>
         </div>
         <span
-          className="text-[11px] text-white/55 tabular-nums"
+          className="text-[11px] text-[rgba(10,10,10,0.55)] tabular-nums"
           data-testid="demo-questions-counter"
         >
           {t("experience.questionsRemaining", {
@@ -197,13 +199,13 @@ export default function QASimulator({ field, onLimitReached }: Props) {
           turn.role === "greeting" ? (
             <div key={turn.id} className="flex gap-3 items-start animate-fade-in">
               <span aria-hidden="true" className="text-xl">🤖</span>
-              <p className="text-sm text-white/80 leading-relaxed">
+              <p className="text-sm text-[rgba(10,10,10,0.78)] leading-relaxed">
                 {t("experience.chatGreeting")}
               </p>
             </div>
           ) : turn.role === "user" ? (
             <div key={turn.id} className="flex justify-end animate-fade-in">
-              <div className="max-w-[85%] px-4 py-2.5 rounded-2xl bg-[#FFB627] text-[#0A0A0A] text-sm font-medium">
+              <div className="max-w-[85%] px-4 py-2.5 rounded-2xl bg-[#FFB627] text-[#1A1A1A] text-sm font-medium">
                 {turn.content}
               </div>
             </div>
@@ -216,16 +218,16 @@ export default function QASimulator({ field, onLimitReached }: Props) {
           <div className="flex gap-3 items-start" aria-live="polite">
             <span aria-hidden="true" className="text-xl">🤖</span>
             <div className="flex items-center gap-1 mt-2">
-              <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-pulse" />
-              <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-pulse [animation-delay:120ms]" />
-              <span className="w-1.5 h-1.5 bg-white/40 rounded-full animate-pulse [animation-delay:240ms]" />
+              <span className="w-1.5 h-1.5 bg-[rgba(10,10,10,0.30)] rounded-full animate-pulse" />
+              <span className="w-1.5 h-1.5 bg-[rgba(10,10,10,0.30)] rounded-full animate-pulse [animation-delay:120ms]" />
+              <span className="w-1.5 h-1.5 bg-[rgba(10,10,10,0.30)] rounded-full animate-pulse [animation-delay:240ms]" />
               <span className="sr-only">{t("experience.sending")}</span>
             </div>
           </div>
         )}
 
         {remaining === 1 && !pending && (
-          <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2">
+          <p className="text-xs text-[#8C6300] bg-[rgba(255,182,39,0.10)] border border-[rgba(184,131,8,0.30)] rounded-xl px-3 py-2">
             {t("experience.lastQuestionHint")}
           </p>
         )}
@@ -233,8 +235,8 @@ export default function QASimulator({ field, onLimitReached }: Props) {
 
       {/* Suggested questions */}
       {remaining > 0 && (
-        <div className="px-5 pt-2 pb-3 border-t border-white/10">
-          <p className="text-[11px] text-white/45 mb-2">
+        <div className="px-5 pt-2 pb-3 border-t border-[rgba(10,10,10,0.06)]">
+          <p className="text-[11px] text-[rgba(10,10,10,0.45)] mb-2">
             {t("experience.suggestedHeader")}
           </p>
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -246,8 +248,8 @@ export default function QASimulator({ field, onLimitReached }: Props) {
                 disabled={s.disabled || pending}
                 className={[
                   "shrink-0 text-xs px-3 py-2 rounded-full transition",
-                  "border border-white/10 bg-white/5 text-white/80",
-                  "hover:bg-white/10 hover:border-[#FFB627]/40",
+                  "border border-[rgba(10,10,10,0.10)] bg-[rgba(10,10,10,0.02)] text-[rgba(10,10,10,0.78)]",
+                  "hover:bg-[rgba(255,182,39,0.08)] hover:border-[rgba(184,131,8,0.30)]",
                   "disabled:opacity-40 disabled:cursor-not-allowed",
                 ].join(" ")}
                 data-testid={`demo-suggested-${s.key}`}
@@ -262,23 +264,23 @@ export default function QASimulator({ field, onLimitReached }: Props) {
       {/* Input */}
       <form
         onSubmit={handleSubmit}
-        className="px-5 pt-3 pb-4 border-t border-white/10 bg-black/20"
+        className="px-5 pt-3 pb-4 border-t border-[rgba(10,10,10,0.06)] bg-[rgba(10,10,10,0.015)]"
         aria-label={t("experience.send")}
       >
         {remaining <= 0 ? (
           <div
-            className="rounded-xl bg-[#FFB627]/10 border border-[#FFB627]/30 p-4 text-center"
+            className="rounded-xl bg-[rgba(255,182,39,0.10)] border border-[rgba(184,131,8,0.30)] p-4 text-center"
             data-testid="demo-limit-reached"
           >
-            <p className="text-sm font-semibold text-white mb-1">
+            <p className="text-sm font-semibold text-[#0A0A0A] mb-1">
               {t("experience.limitReachedTitle")}
             </p>
-            <p className="text-xs text-white/65 mb-3">
+            <p className="text-xs text-[rgba(10,10,10,0.65)] mb-3">
               {t("experience.limitReachedDesc")}
             </p>
             <a
               href="/beta-apply"
-              className="inline-flex items-center justify-center px-5 py-2.5 rounded-full bg-[#FFB627] text-[#0A0A0A] font-semibold text-sm"
+              className="inline-flex items-center justify-center px-5 py-2.5 rounded-full bg-[#FFB627] text-[#1A1A1A] font-semibold text-sm hover:bg-[#FFC74D] transition motion-reduce:transition-none"
             >
               {t("experience.limitReachedCta")}
             </a>
@@ -304,9 +306,9 @@ export default function QASimulator({ field, onLimitReached }: Props) {
               maxLength={DEMO_INPUT_MAX}
               data-testid="demo-input"
               className={[
-                "flex-1 resize-none bg-white/5 border border-white/10 rounded-xl",
-                "px-3 py-2.5 text-sm text-white placeholder-white/35",
-                "focus:outline-none focus:border-[#FFB627]/60",
+                "flex-1 resize-none bg-white border border-[rgba(10,10,10,0.14)] rounded-xl",
+                "px-3 py-2.5 text-sm text-[#0A0A0A] placeholder-[rgba(10,10,10,0.35)]",
+                "focus:outline-none focus:border-[#B88308]",
               ].join(" ")}
             />
             <button
@@ -315,8 +317,8 @@ export default function QASimulator({ field, onLimitReached }: Props) {
               data-testid="demo-send"
               className={[
                 "shrink-0 px-4 py-2.5 rounded-xl text-sm font-semibold",
-                "bg-[#FFB627] text-[#0A0A0A]",
-                "hover:bg-[#FFC74D] transition",
+                "bg-[#FFB627] text-[#1A1A1A]",
+                "hover:bg-[#FFC74D] transition motion-reduce:transition-none",
                 "disabled:opacity-40 disabled:cursor-not-allowed",
               ].join(" ")}
             >
@@ -325,7 +327,7 @@ export default function QASimulator({ field, onLimitReached }: Props) {
           </div>
         )}
         {remaining > 0 && (
-          <p className="text-right text-[11px] text-white/40 mt-1 tabular-nums">
+          <p className="text-right text-[11px] text-[rgba(10,10,10,0.40)] mt-1 tabular-nums">
             {t("experience.inputCounter", {
               count: input.length,
               max: DEMO_INPUT_MAX,
@@ -337,7 +339,7 @@ export default function QASimulator({ field, onLimitReached }: Props) {
   );
 }
 
-/** AI 답변 버블 — 출처/영상시점/거부 분기 시각화 */
+/** AI 답변 버블 — 출처/영상시점/거부 분기 시각화 (라이트 톤, 2026-05-13 PM). */
 function AssistantBubble({ turn }: { turn: ChatTurn }) {
   const { t } = useDemoI18n();
   const a = turn.answer;
@@ -351,34 +353,34 @@ function AssistantBubble({ turn }: { turn: ChatTurn }) {
       <span aria-hidden="true" className="text-xl">🤖</span>
       <div className="flex-1 space-y-3">
         {a.offTopic ? (
-          <div className="p-4 rounded-2xl border border-rose-500/30 bg-rose-500/5">
-            <p className="text-sm font-semibold text-rose-200 mb-1">
+          <div className="p-4 rounded-2xl border border-rose-200 bg-rose-50">
+            <p className="text-sm font-semibold text-rose-700 mb-1">
               {t("answer.offTopicTitle")}
             </p>
-            <p className="text-sm text-white/75 leading-relaxed">{a.body}</p>
-            <span className="inline-block mt-3 text-[10px] uppercase tracking-[0.16em] text-rose-300/80">
+            <p className="text-sm text-[rgba(10,10,10,0.78)] leading-relaxed">{a.body}</p>
+            <span className="inline-block mt-3 text-[10px] uppercase tracking-[0.16em] text-rose-600">
               {t("answer.offTopicTag")}
             </span>
           </div>
         ) : (
           <>
-            <p className="text-sm text-white/85 leading-relaxed">{a.body}</p>
+            <p className="text-sm text-[rgba(10,10,10,0.85)] leading-relaxed">{a.body}</p>
             {a.sourceSlide && a.videoTimeRange && (
-              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-white/60 space-y-1">
+              <div className="rounded-xl border border-[rgba(10,10,10,0.08)] bg-[rgba(10,10,10,0.025)] px-3 py-2.5 text-xs text-[rgba(10,10,10,0.62)] space-y-1">
                 <p>
-                  📍 <span className="text-white/80">{t("answer.sourceLabel")}</span>:{" "}
-                  <span className="font-medium text-white/90">{a.sourceSlide}</span>
+                  📍 <span className="text-[rgba(10,10,10,0.78)]">{t("answer.sourceLabel")}</span>:{" "}
+                  <span className="font-medium text-[#0A0A0A]">{a.sourceSlide}</span>
                 </p>
                 <p>
-                  ⏱️ <span className="text-white/80">{t("answer.videoTime")}</span>:{" "}
-                  <span className="font-medium text-white/90 tabular-nums">{a.videoTimeRange}</span>
+                  ⏱️ <span className="text-[rgba(10,10,10,0.78)]">{t("answer.videoTime")}</span>:{" "}
+                  <span className="font-medium text-[#0A0A0A] tabular-nums">{a.videoTimeRange}</span>
                 </p>
               </div>
             )}
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 text-white/60 hover:text-white hover:border-white/30 transition"
+                className="text-[11px] px-2.5 py-1 rounded-full border border-[rgba(10,10,10,0.10)] text-[rgba(10,10,10,0.62)] hover:text-[#0A0A0A] hover:border-[rgba(10,10,10,0.24)] transition motion-reduce:transition-none"
                 disabled
                 title="W4 단계에서 TTS 연동 예정"
               >
@@ -386,7 +388,7 @@ function AssistantBubble({ turn }: { turn: ChatTurn }) {
               </button>
               <button
                 type="button"
-                className="text-[11px] px-2.5 py-1 rounded-full border border-white/10 text-white/60 hover:text-white hover:border-white/30 transition"
+                className="text-[11px] px-2.5 py-1 rounded-full border border-[rgba(10,10,10,0.10)] text-[rgba(10,10,10,0.62)] hover:text-[#0A0A0A] hover:border-[rgba(10,10,10,0.24)] transition motion-reduce:transition-none"
                 disabled
                 title="W4 단계에서 영상 점프 연동 예정"
               >
