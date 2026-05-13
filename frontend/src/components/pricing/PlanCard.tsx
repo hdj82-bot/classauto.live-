@@ -55,7 +55,11 @@ export default function PlanCard({
       data-testid={`plan-card-${plan.id}`}
       data-highlighted={highlighted}
       className={[
-        "relative rounded-2xl p-6 sm:p-7 flex flex-col gap-5 transition-shadow duration-300 motion-reduce:transition-none",
+        // 사용자 결정 2026-05-13 PM: 카드 features 개수가 달라도 CTA 가 카드
+        // 바닥에 일치하도록 `h-full` 로 row 높이를 가득 채운다. 부모 grid 가
+        // 기본 `items-stretch` 라 한 row 안의 두 카드는 같은 높이가 되고,
+        // `mt-auto` 가 붙은 CTA 영역이 정확히 바닥에 정렬된다.
+        "relative h-full rounded-2xl p-6 sm:p-7 flex flex-col gap-5 transition-shadow duration-300 motion-reduce:transition-none",
         highlighted
           ? "bg-gradient-to-b from-[rgba(255,182,39,0.10)] to-[rgba(255,182,39,0.02)] border border-[rgba(184,131,8,0.45)] shadow-[0_8px_32px_rgba(255,182,39,0.18)]"
           : "bg-white border border-[rgba(10,10,10,0.08)] hover:border-[rgba(10,10,10,0.20)] hover:shadow-[0_4px_16px_rgba(10,10,10,0.05)]",
