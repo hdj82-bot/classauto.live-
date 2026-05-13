@@ -86,11 +86,14 @@ describe("PlanCard", () => {
     expect(savings.textContent).toMatch(/45,600/);
   });
 
-  it("Basic CTA targets the existing /professor/subscription page (Stripe handoff)", () => {
+  // 2026-05-13 PM 사용자 결정: 베타 기간 동안 Basic/Pro 결제 흐름 비활성.
+  // CTA 가 /professor/subscription (Stripe handoff) 대신 /beta-apply 로
+  // 이동 — 옛 IFL 로그인 화면으로 빠지는 회귀를 막는다.
+  it("Basic CTA points to /beta-apply during beta (was /professor/subscription)", () => {
     wrap(
       <PlanCard plan={PLANS.basic} cycle="annual" highlighted onOpenLimits={() => {}} />,
     );
     const cta = screen.getByTestId("plan-card-basic-cta") as HTMLAnchorElement;
-    expect(cta.getAttribute("href")).toBe("/professor/subscription");
+    expect(cta.getAttribute("href")).toBe("/beta-apply");
   });
 });

@@ -40,8 +40,8 @@
         "name": "Basic",
         "tagline": "Language & active instructors",
         "ctaLabel": "Start Basic",
-        "ctaHref": "/professor/subscription",
-        "ctaNote": "Continue checkout from the subscription page.",
+        "ctaHref": "/beta-apply",
+        "ctaNote": "During the beta, university faculty get full Pro access for free.",
         "features": [
           "Everything in Free",
           "8 video renders / month",
@@ -59,7 +59,7 @@
         "name": "Pro",
         "tagline": "Researchers · multi-course faculty",
         "ctaLabel": "Start Pro",
-        "ctaHref": "/professor/subscription",
+        "ctaHref": "/beta-apply",
         "features": [
           "Everything in Basic",
           "20 video renders / month",
