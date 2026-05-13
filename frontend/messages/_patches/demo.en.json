@@ -28,9 +28,9 @@
     },
     "heroV3": {
       "observerBadge": "AI lecture generation platform",
-      "headlineLead": "Script it once,",
-      "headlineAccent": "endless conversation",
-      "headlineTail": "with students —",
+      "headlineLead": "Interactive with students",
+      "headlineAccent": "AI educational videos",
+      "headlineTail": "",
       "subtitle": "Upload a PPT and the AI builds the lecture video, then talks with students both ways. You take the AI's learning reports back into the lecture hall to refine in-person teaching.",
       "subTag": "Start with the screen your students actually see.",
       "metaTime": "~3 minutes",
@@ -120,15 +120,15 @@
       "title": "Which field would you like to try?",
       "subtitle": "We'll instantly show you a 5-minute lecture clip and AI tutor tailored to your choice.",
       "social": {
-        "label": "Social Sciences",
-        "title": "Understanding Modern Chinese Society",
+        "label": "Humanities",
+        "title": "Chinese Grammar",
         "duration": "~5 min",
         "tag": "Real lecture by Prof. Eoheung",
         "start": "▶ Start"
       },
       "natural": {
-        "label": "Natural Sciences · Engineering",
-        "title": "Intro to Special Relativity",
+        "label": "Natural Sciences",
+        "title": "Photosynthesis",
         "duration": "~5 min",
         "tag": "Re-synthesized with AI avatar voice",
         "start": "▶ Start"
@@ -178,16 +178,16 @@
       "offTopicTag": "RAG scope limit"
     },
     "mockAnswers": {
-      "socialQ1": "GDP measures everything produced inside a country, while GNP measures what a country's nationals produce at home and abroad. Since launching the digital yuan, China has improved the accuracy of its GDP statistics.",
-      "socialQ2": "The digital yuan is fundamentally different from Bitcoin: it's issued directly by the central bank and every transaction is traceable. The design prioritizes policy visibility over anonymity.",
-      "naturalQ1": "The constancy of the speed of light means the speed measured in any inertial frame is always about 299,792,458 m/s. From this single assumption, time dilation and length contraction follow naturally.",
-      "naturalQ2": "The twin paradox is a thought experiment in which one twin travels near light speed and returns younger than the twin who stayed home. The asymmetry from the traveling twin's acceleration is the key."
+      "socialQ1": "The 把 construction (把字句) places the object before the verb to emphasize that the object is being 'disposed of' or 'handled' in a specific way. It works when there's a definite object and the verb conveys a result, completion, movement, or change. e.g. 我把书放在桌子上 (I put the book on the table).",
+      "socialQ2": "A plain SVO sentence (我吃饭) describes the action itself, while the 把 sentence (我把饭吃了) emphasizes the result of the action on the object. The object must be definite, and the verb usually appears with a complement (result, direction) or the aspect marker 了 — bare verbs feel unnatural.",
+      "naturalQ1": "Photosynthesis converts light energy into chemical energy: plants absorb sunlight and use CO₂ and water to produce glucose (C₆H₁₂O₆) and oxygen. It happens inside chloroplasts in two stages — the light reactions (light energy → ATP and NADPH) and the Calvin cycle (fixing CO₂ into glucose).",
+      "naturalQ2": "Chlorophyll is the pigment that absorbs light during photosynthesis. It mostly absorbs blue and red wavelengths and reflects green, which is why leaves look green. The absorbed light energy travels down an electron transport chain and becomes the chemical energy (ATP, NADPH) used to build glucose."
     },
     "suggested": {
-      "socialQ1": "What is the difference between GDP and GNP?",
-      "socialQ2": "How is the digital yuan different from Bitcoin?",
-      "naturalQ1": "Why is the speed of light constant?",
-      "naturalQ2": "What is the twin paradox?"
+      "socialQ1": "When should I use the 把 construction?",
+      "socialQ2": "How is the 把 sentence different from a regular sentence?",
+      "naturalQ1": "What's the basic principle of photosynthesis?",
+      "naturalQ2": "What role does chlorophyll play?"
     },
     "ctaModal": {
       "title": "How was the experience?",
@@ -220,8 +220,8 @@
       "secondary": "See pricing"
     },
     "a11y": {
-      "fieldCardSocial": "Start the social sciences demo",
-      "fieldCardNatural": "Start the natural sciences demo",
+      "fieldCardSocial": "Start the humanities demo — Chinese Grammar",
+      "fieldCardNatural": "Start the natural sciences demo — Photosynthesis",
       "switchField": "Re-select demo field",
       "closeToast": "Dismiss hint toast",
       "questionInput": "Question for the lecture assistant",

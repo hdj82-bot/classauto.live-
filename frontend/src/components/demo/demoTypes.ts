@@ -60,53 +60,81 @@ export const DEMO_INPUT_MAX = 200;
  *
  * 베타 단계 mock 분기. 실제 RAG 임계값(0.65) 적용은 backend `/api/demo/qa`
  * 연동 후. 여기서는 강의 키워드 사전 비교로 단순 분기.
+ *
+ * 강의 주제 (PR #116 디자인 갱신 이후, 2026-05-13):
+ *   - social  = 인문계열 · "중국어문법의 이해" (把자문 어순 규칙)
+ *   - natural = 자연계열 · "광합성의 원리" (빛 에너지 → 화학 에너지)
+ *
+ * v1 의 GDP/위안화/광속/상대성 키워드는 폐기 (옛 강의 주제). 자연스러운 학생
+ * 질문 ("광합성은 무슨 원리인가요?", "把자문은 언제 쓰나요?") 이 한 키워드만
+ * 포함하면 통과하도록 충분히 넓게 깔되, 학습과 무관한 일상 질문은 막는다.
  */
 export function isOnTopic(question: string, field: DemoField): boolean {
   const q = question.toLowerCase().trim();
   if (!q) return false;
   const keywords: Record<DemoField, ReadonlyArray<string>> = {
+    // 인문계열 · 중국어문법의 이해 (把자문)
     social: [
-      "gdp",
-      "gnp",
-      "위안",
-      "yuan",
-      "중국",
-      "china",
-      "디지털",
-      "digital",
-      "경제",
-      "economy",
-      "사회",
-      "society",
-      "무역",
-      "trade",
-      "blockchain",
-      "블록체인",
-      "비트코인",
-      "bitcoin",
-      "암호화폐",
-      "crypto",
+      "把",
+      "把자문",
+      "把字句",
+      "ba구문",
+      "ba sentence",
+      "중국어",
+      "중국어문법",
+      "한어",
+      "汉语",
+      "中文",
+      "chinese",
+      "어순",
+      "어법",
+      "문법",
+      "syntax",
+      "grammar",
+      "동사",
+      "verb",
+      "목적어",
+      "object",
+      "주어",
+      "subject",
+      "전치사",
+      "preposition",
+      "처치",
+      "처치문",
+      "처치식",
     ],
+    // 자연계열 · 광합성의 원리
     natural: [
-      "광속",
-      "speed of light",
+      "광합성",
+      "photosynthesis",
+      "엽록",
+      "chlorophyl",
+      "chloroplast",
       "빛",
       "light",
-      "상대성",
-      "relativ",
-      "시간",
-      "time",
-      "팽창",
-      "dilation",
-      "쌍둥이",
-      "twin",
-      "관성",
-      "inertial",
+      "명반응",
+      "암반응",
+      "calvin",
+      "이산화탄소",
+      "co2",
+      "carbon dioxide",
+      "산소",
+      "oxygen",
+      "포도당",
+      "glucose",
+      "atp",
+      "nadph",
+      "화학",
+      "chemical",
       "에너지",
       "energy",
-      "질량",
-      "mass",
+      "식물",
+      "plant",
+      "잎",
+      "leaf",
+      "원리",
+      "principle",
     ],
   };
-  return keywords[field].some((k) => q.includes(k));
+  return keywords[field].some((k) => q.includes(k.toLowerCase()));
 }

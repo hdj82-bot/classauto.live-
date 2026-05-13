@@ -249,11 +249,13 @@ function DemoHero({
             {t("heroV3.observerBadge")}
           </span>
 
+          {/* 사용자 결정 2026-05-13 PM: 메인(/)과 동일 카피. 첫 줄(headlineLead)
+              에 ca-accent 골드 그라데이션을 적용하고, 둘째 줄(headlineAccent)은
+              다크 평문. heroV3.headlineTail 은 빈 값으로 보존 (i18n parity). */}
           <h1 id="demo-hero-title">
-            {t("heroV3.headlineLead")}
+            <span className="ca-accent">{t("heroV3.headlineLead")}</span>
             <br />
-            {t("heroV3.headlineTail")}{" "}
-            <span className="ca-accent">{t("heroV3.headlineAccent")}</span>
+            {t("heroV3.headlineAccent")}
           </h1>
 
           <p className="ca-hero-sub">{t("heroV3.subtitle")}</p>
