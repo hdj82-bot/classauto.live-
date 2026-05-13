@@ -769,6 +769,137 @@
   }
 }
 
+/* ───────── Hero preview · 추가 동적 효과 (homeHero v1, 2026-05-13) ─────────
+ *
+ * 학자 톤을 깨지 않는 선에서 우측 일러스트에 두 가지 효과를 더한다:
+ *
+ *   1) `ca-hero-preview` 의 코너 그라데이션을 매우 천천히(40s) drift —
+ *      배경이 "살아 있다" 는 느낌을 주되 시선을 빼앗지 않는 amplitude.
+ *   2) 3개 flow card 가 시간차로 1.5px 만 부유 — 너무 흔들리면 prototype 같은
+ *      느낌이 나므로 amplitude 는 최소화한다.
+ *   3) PPT → AI → Chat 사이의 화살표에 빛이 우→좌→우 로 흐르는 sweep.
+ *
+ * 모두 transform / opacity / background-position 만 변경 → 60fps 보장.
+ * `prefers-reduced-motion: reduce` 사용자는 아래 블록 전체가 무력화된다
+ * (페이지 레벨 가드가 `.ca-demo-root` 안의 모든 animation-duration 을 0.01ms
+ * 로 단축한다). */
+
+.ca-hero-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 70% 60% at 0% 0%, rgba(167, 139, 250, 0.20), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(255, 182, 39, 0.20), transparent 55%),
+    radial-gradient(ellipse 50% 50% at 50% 100%, rgba(34, 211, 238, 0.14), transparent 60%);
+  animation: ca-preview-drift 40s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.ca-flow-stage { position: relative; z-index: 1; }
+@keyframes ca-preview-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  33%      { transform: translate3d(1.5%, -1%, 0) scale(1.04); opacity: 0.92; }
+  66%      { transform: translate3d(-1%, 1.5%, 0) scale(1.02); opacity: 0.96; }
+}
+
+/* 3개 flow card 가 시간차로 부유. nth-child 가 아니라 step 인덱스를 갖는
+ * 부모 (.ca-flow-step) 에 적용해야 카드+라벨이 함께 떠오른다. */
+.ca-flow-row .ca-flow-step {
+  animation: ca-flow-float 6s ease-in-out infinite;
+}
+.ca-flow-row .ca-flow-step:nth-of-type(3) { animation-delay: 0.8s; }
+.ca-flow-row .ca-flow-step:nth-of-type(5) { animation-delay: 1.6s; }
+@keyframes ca-flow-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1.5px); }
+}
+
+/* 화살표에 빛 sweep — SVG stroke 그라데이션 자체는 정적이라, 화살표 컨테이너에
+ * radial 광 layer 를 깔고 좌→우로 이동시킨다. */
+.ca-flow-arrow {
+  position: relative;
+  overflow: hidden;
+}
+.ca-flow-arrow::after {
+  content: '';
+  position: absolute;
+  inset: -50% -100%;
+  background: radial-gradient(ellipse 30% 80% at 50% 50%, rgba(255, 182, 39, 0.55), transparent 70%);
+  filter: blur(2px);
+  animation: ca-arrow-sweep 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.ca-flow-arrow:nth-of-type(4)::after { animation-delay: 0.6s; }
+@keyframes ca-arrow-sweep {
+  0%   { transform: translateX(-80%); opacity: 0; }
+  40%  { opacity: 1; }
+  100% { transform: translateX(80%); opacity: 0; }
+}
+
+/* ───────── Field cards · 추가 동적 효과 (homeHero v1, 2026-05-13) ─────────
+ *
+ *   1) hover 시 카드 상단을 좌→우 가로지르는 그라데이션 shimmer line —
+ *      "강의 클립" 의 시청 진행 바를 연상시키되 영구 노출이 아닌 hover 한정.
+ *   2) hover 시 아이콘 박스에 골드 펄스 (이미 페이지 진입 시 한 번 펄스하지만
+ *      hover 에도 응답).
+ *
+ * 두 효과 모두 hover/focus-visible 시에만 발동 → 기본 상태는 v3 그대로. */
+
+.ca-field-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(184, 131, 8, 0) 30%,
+    rgba(232, 158, 14, 0.85) 50%,
+    rgba(184, 131, 8, 0) 70%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  transition: transform 800ms ease-out;
+  pointer-events: none;
+  z-index: 1;
+}
+.ca-field-card:hover::before,
+.ca-field-card:focus-visible::before {
+  transform: translateX(100%);
+}
+
+.ca-field-icon {
+  transition: transform 400ms ease-out, background 400ms, border-color 400ms;
+}
+.ca-field-card:hover .ca-field-icon,
+.ca-field-card:focus-visible .ca-field-icon {
+  background: var(--ca-gold-soft);
+  border-color: var(--ca-gold-medium);
+  transform: scale(1.06) rotate(-4deg);
+}
+
+/* social 카드 hover: globe 가 살짝 회전. natural 카드 hover: atom 의 ellipse
+ * 들이 펄스. 둘 다 motion-safe 한 amplitude 로 한정. */
+.ca-field-card[data-field="social"]:hover .ca-field-icon svg,
+.ca-field-card[data-field="social"]:focus-visible .ca-field-icon svg {
+  animation: ca-globe-spin 8s linear infinite;
+}
+.ca-field-card[data-field="natural"]:hover .ca-field-icon svg,
+.ca-field-card[data-field="natural"]:focus-visible .ca-field-icon svg {
+  animation: ca-atom-pulse 2.4s ease-in-out infinite;
+}
+@keyframes ca-globe-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes ca-atom-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
+}
+
 /* ───────── Reduced motion ───────── */
 @media (prefers-reduced-motion: reduce) {
   .ca-demo-root *,

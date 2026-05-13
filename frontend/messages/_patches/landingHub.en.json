@@ -33,6 +33,10 @@
       "primaryCta": "Preview the student screen",
       "secondaryCta": "Browse the features"
     },
+    "homeHero": {
+      "headlineLead": "Educational videos that",
+      "headlineAccent": "talk with students"
+    },
     "demoFlow": {
       "topStatus": "Demo preview · flow summary",
       "topSub": "Real video footage coming soon",

@@ -92,11 +92,12 @@ export default function LandingPage() {
                 {tHub("heroV3.observerBadge")}
               </span>
 
+              {/* 메인 사이트 전용 카피 — homeHero.*. /demo 와 컴포넌트는 공유하되
+                  카피는 분리 (heroV3.* 는 demo 페이지가 그대로 사용). */}
               <h1 id="landing-hero-title">
-                {tHub("heroV3.headlineLead")}
+                {tHub("homeHero.headlineLead")}
                 <br />
-                {tHub("heroV3.headlineTail")}{" "}
-                <span className="ca-accent">{tHub("heroV3.headlineAccent")}</span>
+                <span className="ca-accent">{tHub("homeHero.headlineAccent")}</span>
               </h1>
 
               <p className="ca-hero-sub">{tHub("heroV3.subtitle")}</p>

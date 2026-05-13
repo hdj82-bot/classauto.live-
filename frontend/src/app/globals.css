@@ -138,6 +138,9 @@
   --font-body:    var(--font-body);
   --font-han:     var(--font-han);
   --font-sans:    var(--font-body);  /* Tailwind 기본 font-sans 호환 */
+  /* typography.md §1: 코드 / 모노스페이스 폐기. font-mono 유틸이 어딘가에 남아
+   * 있어도 시스템 monospace 로 떨어지지 않도록 Pretendard 로 매핑한다. */
+  --font-mono:    var(--font-body);
 }
 
 /* ── Body 기본 ─────────────────────────────────────────────────────────── */
@@ -152,6 +155,14 @@ body {
   -webkit-tap-highlight-color: transparent;
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 폼·인터랙티브 컨트롤은 브라우저별로 폰트 상속이 일관되지 않아
+ * (Safari/Edge 일부 버전이 시스템 폰트로 떨어진다) 명시적으로 inherit 강제.
+ * typography.md §1 — 메인 페이지의 모든 텍스트는 Paperlogy 또는 Pretendard
+ * 두 가지 폰트로만 그려지도록 safety net 역할. */
+button, input, select, textarea, optgroup {
+  font-family: inherit;
 }
 
 /* Dark surface 컨테이너 (player, 인터스티셜 등) — `.surface-dark` wrapper 에

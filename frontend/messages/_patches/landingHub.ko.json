@@ -33,6 +33,10 @@
       "primaryCta": "학생 화면 미리보기",
       "secondaryCta": "기능 자세히 보기"
     },
+    "homeHero": {
+      "headlineLead": "학생과 상호작용하는",
+      "headlineAccent": "교육영상"
+    },
     "demoFlow": {
       "topStatus": "데모 미리보기 · 흐름 요약",
       "topSub": "실제 영상은 추후 추가",
