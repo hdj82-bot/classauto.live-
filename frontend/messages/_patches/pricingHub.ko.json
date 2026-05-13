@@ -40,7 +40,6 @@
         "name": "Basic",
         "tagline": "어학 · 활성 교수자",
         "ctaLabel": "Basic 시작하기",
-        "_ctaHrefNote": "베타 기간(2026) 동안 결제 흐름 비활성. 사용자 결정 2026-05-13 PM: 모든 유료 플랜 CTA 를 /beta-apply 로. 정식 출시 후 /professor/subscription 로 복원.",
         "ctaHref": "/beta-apply",
         "ctaNote": "베타 기간 동안 학계 교수자는 Pro 기능 전체를 무료로 사용하실 수 있습니다.",
         "features": [
