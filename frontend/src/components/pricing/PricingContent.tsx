@@ -90,12 +90,17 @@ export default function PricingContent() {
           data-testid="pricing-plan-grid"
           className="grid grid-cols-1 md:grid-cols-3 gap-5"
         >
+          {/* 베타 기간 가격 미공개 (사용자 결정 2026-05-13 PM): Free 는 0원이라
+              영향 없음, Basic/Pro 는 가격을 `-` 로 가린다. PLANS 의 숫자(가격
+              데이터) 는 그대로 유지 → 정책 확정 시 hideForBeta 전달만 제거하면
+              즉시 원복. */}
           {PLAN_ORDER.map((id) => (
             <PlanCard
               key={id}
               plan={PLANS[id]}
               cycle={cycle}
               highlighted={id === "basic"}
+              hideForBeta={id !== "free"}
               onOpenLimits={openLimits}
             />
           ))}

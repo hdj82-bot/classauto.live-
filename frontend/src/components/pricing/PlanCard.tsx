@@ -12,6 +12,12 @@ interface Props {
   highlighted?: boolean;
   /** "세부 한도 보기" 클릭 시 부모(LimitsModal 호스트) 호출. */
   onOpenLimits: (planId: PlanRow["id"]) => void;
+  /**
+   * 베타 기간 가격 미공개 (사용자 결정 2026-05-13 PM). true 면 가격이 `-` 로
+   * 노출되고, 연 결제 절약 hint 도 함께 숨긴다 (가격이 숨겨졌으므로 절약 금액도
+   * 무의미). Free 카드는 가격이 원래 0이라 이 prop 의 영향 없음.
+   */
+  hideForBeta?: boolean;
 }
 
 /**
@@ -27,6 +33,7 @@ export default function PlanCard({
   cycle,
   highlighted = false,
   onOpenLimits,
+  hideForBeta = false,
 }: Props) {
   const { t, tValue } = usePricingHubI18n();
   const features = tValue<string[]>(`plans.${plan.id}.features`) ?? [];
@@ -37,8 +44,9 @@ export default function PlanCard({
   const ctaNote = t(`plans.${plan.id}.ctaNote`);
   const showCtaNote = ctaNote !== `plans.${plan.id}.ctaNote`;
 
+  // 가격이 hideForBeta 로 가려진 경우 annual savings hint 도 무의미하므로 숨김.
   const annualHint =
-    cycle === "annual" && plan.pricing.annualSavingsKrw > 0
+    !hideForBeta && cycle === "annual" && plan.pricing.annualSavingsKrw > 0
       ? t("annualSavings", { amount: `₩${formatKrw(plan.pricing.annualSavingsKrw)}` })
       : null;
 
@@ -84,6 +92,7 @@ export default function PlanCard({
         monthlyKrw={plan.pricing.monthlyKrw}
         annualMonthlyKrw={plan.pricing.annualMonthlyKrw}
         cycle={cycle}
+        hideForBeta={hideForBeta}
       />
 
       {plan.pricing.monthlyKrw === 0 ? (
