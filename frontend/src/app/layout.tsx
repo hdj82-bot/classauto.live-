@@ -3,7 +3,9 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ToastProvider } from "@/components/ui/Toast";
-import OfflineBanner from "@/components/OfflineBanner";
+// 사용자 결정 2026-05-13 PM: 글로벌 OfflineBanner 제거 (모든 페이지에서 상단
+// 빨간 띠 노출 차단). 컴포넌트 파일(`@/components/OfflineBanner`) 자체는 보존
+// 하므로 특정 페이지에서 다시 켜고 싶으면 그쪽에서 직접 import 하면 된다.
 
 /**
  * v2 (2026-05-12): Geist · Geist_Mono 제거. Pretendard·Paperlogy·Noto Serif KR
@@ -40,7 +42,6 @@ export default function RootLayout({
         <I18nProvider>
           <ToastProvider>
             <AuthProvider>
-              <OfflineBanner />
               {children}
             </AuthProvider>
           </ToastProvider>
