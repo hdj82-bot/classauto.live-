@@ -10,8 +10,11 @@ import { useDemoI18n } from "./useDemoI18n";
  */
 export default function DemoFAQ() {
   const { t } = useDemoI18n();
+  // 사용자 결정 2026-05-13 PM: q1 ("회원가입 없이 정말 다 써볼 수 있나요?") 항목
+  // 삭제. 실제 데모 진입 경로가 회원가입을 요구하는 상황과 어긋나는 카피였다.
+  // i18n 키(faq.q1/a1)는 보존 — 다른 곳에서 import 가능성 + 정책 재변경 시 복원
+  // 비용 최소화. 화면에 렌더되는 항목만 q2~q4 로 축소.
   const items = [
-    { q: t("faq.q1"), a: t("faq.a1") },
     { q: t("faq.q2"), a: t("faq.a2") },
     { q: t("faq.q3"), a: t("faq.a3") },
     { q: t("faq.q4"), a: t("faq.a4") },

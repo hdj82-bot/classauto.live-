@@ -34,8 +34,9 @@
       "secondaryCta": "기능 자세히 보기"
     },
     "homeHero": {
+      "_note": "page.tsx 의 마크업이 headlineLead 에 ca-accent (골드 그라데이션) 를 적용한다. headlineAccent 는 일반(다크) 텍스트.",
       "headlineLead": "학생과 상호작용하는",
-      "headlineAccent": "교육영상"
+      "headlineAccent": "AI 교육영상"
     },
     "demoFlow": {
       "topStatus": "데모 미리보기 · 흐름 요약",
