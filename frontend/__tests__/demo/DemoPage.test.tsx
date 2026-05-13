@@ -54,9 +54,13 @@ describe("DemoPage", () => {
     expect(cta.getAttribute("href")).toBe("/beta-apply");
   });
 
-  it("renders the demo-only FAQ section with all four questions", () => {
+  // v3.2 (2026-05-13 PM): "회원가입 없이 정말 다 써볼 수 있나요?" 어서션 제거.
+  // 사용자 결정으로 q1 항목이 화면에서 빠짐 (실제 데모 진입이 회원가입을
+  // 요구하는 상황과 어긋나는 카피였음). i18n 키 자체는 보존하지만 화면 렌더
+  // 회귀 테스트는 q2~q4 만 검증한다.
+  it("renders the demo-only FAQ section with three questions (q1 deprecated)", () => {
     renderPage(<DemoPage />);
-    expect(screen.getByText(/회원가입 없이 정말 다 써볼 수 있나요/)).toBeTruthy();
+    expect(screen.queryByText(/회원가입 없이 정말 다 써볼 수 있나요/)).toBeNull();
     expect(screen.getByText(/내 강의로도 이런 영상이 만들어지나요/)).toBeTruthy();
     expect(screen.getByText(/학생 입장 화면이 실제와 같나요/)).toBeTruthy();
     expect(screen.getByText(/두 데모 영상 모두 체험할 수 있나요/)).toBeTruthy();

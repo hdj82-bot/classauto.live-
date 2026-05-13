@@ -93,11 +93,13 @@ export default function LandingPage() {
               </span>
 
               {/* 메인 사이트 전용 카피 — homeHero.*. /demo 와 컴포넌트는 공유하되
-                  카피는 분리 (heroV3.* 는 demo 페이지가 그대로 사용). */}
+                  카피는 분리 (heroV3.* 는 demo 페이지가 그대로 사용).
+                  사용자 결정 2026-05-13 PM: 골드 그라데이션을 첫 줄 ('학생과
+                  상호작용하는') 에 적용. 둘째 줄 ('AI 교육영상') 은 다크 평문. */}
               <h1 id="landing-hero-title">
-                {tHub("homeHero.headlineLead")}
+                <span className="ca-accent">{tHub("homeHero.headlineLead")}</span>
                 <br />
-                <span className="ca-accent">{tHub("homeHero.headlineAccent")}</span>
+                {tHub("homeHero.headlineAccent")}
               </h1>
 
               <p className="ca-hero-sub">{tHub("heroV3.subtitle")}</p>

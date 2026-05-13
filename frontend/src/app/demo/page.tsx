@@ -440,11 +440,16 @@ function ExperienceSection({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4">
-          <div ref={inputAnchorRef} className="space-y-4">
+        {/* 사용자 결정 2026-05-13 PM: 영상 박스와 Q&A 패널의 너비·높이 동일.
+            grid 를 1:1 로 변경하고 (`auto-rows-fr` 로 한 row 안의 두 cell 이
+            같은 높이 stretch), 각 cell 안의 컴포넌트가 `h-full` 로 row 높이를
+            채우게 한다. DemoVideo / QASimulator 내부에서 자체 채움 (h-full
+            + flex) 을 처리. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:auto-rows-fr">
+          <div ref={inputAnchorRef} className="flex">
             <DemoVideo field={field} />
           </div>
-          <div className="min-h-[480px]">
+          <div className="flex min-h-[480px]">
             <QASimulator field={field} onLimitReached={onLimitReached} />
           </div>
         </div>
