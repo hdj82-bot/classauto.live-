@@ -1,5 +1,6 @@
 "use client";
 
+import { type ReactNode } from "react";
 import { type DemoField } from "./demoTypes";
 import { useDemoI18n } from "./useDemoI18n";
 
@@ -9,53 +10,51 @@ interface Props {
 }
 
 /**
- * 분야 선택 카드 (인문계열 / 자연계열) v2.
+ * 분야 선택 카드 (인문계열 / 자연계열) v3 — 라이트 베이지 표면.
  *
- * docs/planning/04-demo-page.md §5.1 도식대로:
- *   인문계열                          자연계열
- *   A · LIBERAL ARTS                 B · NATURAL SCIENCE
- *   [한자/잎사귀 그라데이션 SVG]     [잎사귀 SVG]
- *   인문계열 · 5분 클립               자연계열 · 5분 클립
- *   중국어문법의 이해                  광합성의 원리
- *   [부제 §5.3]                       [부제 §5.3]
- *   8 슬라이드 · 2 추천 질문 · 1 퀴즈  8 슬라이드 · 2 추천 질문 · 1 퀴즈
- *   [시작하기 →]                     [시작하기 →]
+ * 디자인 근거: docs/prototypes/04-demo-page.html.html (standalone, 2026-05-13)
+ *   - 라이트 카드 (`#FFFFFF`) on 라이트 베이지 (`#FAFAF7`)
+ *   - 코너 그라데이션 mesh: social = violet/cyan, science = gold/pink
+ *   - 64px 라운드 아이콘 박스, A·Liberal Arts / B·Natural Science 태그
+ *   - hover: -4px translateY + gold-medium 외곽선 + field-go 골드 채움
  *
- * 시연 주제 변경 (2026-05-06):
- *   - 현대중국사회의이해 → 중국어문법의 이해 (把자문)
- *   - 특수상대성이론 → 광합성의 원리
- *
- * 옵션 C 정책 (icons.md): 이모지 폐기. 분야 아이콘은 인라인 SVG 로 통일.
- * 한자 강조(HanCharBadge)는 사용자 결정에 따라 랜딩 히어로 한정, 본 카드에서는
- * 미사용 — 외국 사용자도 한 번에 분야를 식별할 수 있도록 도형 + 라벨 우선.
+ * 이전 v2 카드(다크 톤)는 폐기. 숫자(분·슬라이드 수)에는 `.num` 클래스(tabular-nums)
+ * 를 입히기 위해 `{placeholder}` 자리에서 분할 후 `<span>` 으로 감싼다 — 다른
+ * 페이지에서도 같은 패턴을 쓰면 헬퍼로 승격할 수 있다.
  */
 export default function FieldSelectCard({ field, onSelect }: Props) {
   const { t } = useDemoI18n();
-  const meta = field === "social"
-    ? {
-        labelKey: "fieldSelectV2.social.label",
-        taglineKey: "fieldSelectV2.social.tagline",
-        titleKey: "fieldSelectV2.social.title",
-        subtitleKey: "fieldSelectV2.social.subtitle",
-        elementsKey: "fieldSelectV2.social.elements",
-        startKey: "fieldSelectV2.social.start",
-        a11yKey: "a11y.fieldCardSocial",
-        accent: "from-[rgba(167,139,250,0.18)] to-[rgba(99,102,241,0.05)]",
-        gradId: "demoFieldGradSocial",
-        gradStops: ["#A78BFA", "#6366F1"] as const,
-      }
-    : {
-        labelKey: "fieldSelectV2.natural.label",
-        taglineKey: "fieldSelectV2.natural.tagline",
-        titleKey: "fieldSelectV2.natural.title",
-        subtitleKey: "fieldSelectV2.natural.subtitle",
-        elementsKey: "fieldSelectV2.natural.elements",
-        startKey: "fieldSelectV2.natural.start",
-        a11yKey: "a11y.fieldCardNatural",
-        accent: "from-[rgba(34,211,238,0.18)] to-[rgba(14,165,233,0.05)]",
-        gradId: "demoFieldGradNatural",
-        gradStops: ["#22D3EE", "#0EA5E9"] as const,
-      };
+
+  const meta =
+    field === "social"
+      ? {
+          taglineKey: "fieldSelectV3.social.tagline",
+          metaLineKey: "fieldSelectV3.social.metaLine",
+          minutesKey: "fieldSelectV3.social.minutes",
+          titleKey: "fieldSelectV3.social.title",
+          subtitleKey: "fieldSelectV3.social.subtitle",
+          statSlidesKey: "fieldSelectV3.social.statSlides",
+          statSlidesCountKey: "fieldSelectV3.social.statSlidesCount",
+          statSecondaryKey: "fieldSelectV3.social.statSecondary",
+          startKey: "fieldSelectV3.social.start",
+          a11yKey: "a11y.fieldCardSocial",
+          dataField: "social",
+          glyph: <GlobeGlyph />,
+        }
+      : {
+          taglineKey: "fieldSelectV3.natural.tagline",
+          metaLineKey: "fieldSelectV3.natural.metaLine",
+          minutesKey: "fieldSelectV3.natural.minutes",
+          titleKey: "fieldSelectV3.natural.title",
+          subtitleKey: "fieldSelectV3.natural.subtitle",
+          statSlidesKey: "fieldSelectV3.natural.statSlides",
+          statSlidesCountKey: "fieldSelectV3.natural.statSlidesCount",
+          statSecondaryKey: "fieldSelectV3.natural.statSecondary",
+          startKey: "fieldSelectV3.natural.start",
+          a11yKey: "a11y.fieldCardNatural",
+          dataField: "natural",
+          glyph: <AtomGlyph />,
+        };
 
   return (
     <button
@@ -63,59 +62,51 @@ export default function FieldSelectCard({ field, onSelect }: Props) {
       onClick={() => onSelect(field)}
       aria-label={t(meta.a11yKey)}
       data-testid={`demo-field-${field}`}
-      className={[
-        "group relative w-full text-left",
-        "rounded-3xl border border-white/10 bg-[#141414]",
-        "p-6 sm:p-8",
-        "transition-all duration-300 motion-reduce:transition-none",
-        "hover:border-[#FFB627] hover:shadow-[0_0_32px_rgba(255,182,39,0.18)] hover:-translate-y-0.5",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB627]",
-      ].join(" ")}
+      data-field={meta.dataField}
+      className="ca-field-card"
     >
-      <div
-        aria-hidden="true"
-        className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${meta.accent} opacity-50 group-hover:opacity-90 transition-opacity motion-reduce:transition-none`}
-      />
-      <div className="relative">
-        <div className="flex items-center justify-between mb-6">
-          <FieldGlyph variant={field} gradId={meta.gradId} stops={meta.gradStops} />
-          <div className="text-right">
-            <p className="text-[10px] tracking-[0.20em] uppercase text-[#FFB627] font-semibold">
-              {t(meta.taglineKey)}
-            </p>
-            <p className="text-[11px] uppercase tracking-[0.16em] text-white/55 mt-0.5">
-              {t(meta.labelKey)}
-            </p>
-          </div>
+      <span className="ca-field-card-bg" aria-hidden="true" />
+
+      <div className="ca-field-card-top">
+        <div className="ca-field-icon" aria-hidden="true">
+          {meta.glyph}
         </div>
+        <span className="ca-field-tag">{t(meta.taglineKey)}</span>
+      </div>
 
-        <h3
-          className="text-xl sm:text-2xl font-bold text-white leading-snug mb-2"
-          style={{
-            fontFamily:
-              "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {t(meta.titleKey)}
-        </h3>
-        <p className="text-sm text-white/65 mb-4 leading-relaxed">
-          {t(meta.subtitleKey)}
+      <div>
+        <p className="ca-field-meta-line">
+          {renderWithSpan(t(meta.metaLineKey), "{minutes}", t(meta.minutesKey), "num")}
         </p>
-        <p className="text-xs text-white/45 mb-6 tabular-nums">
-          {t(meta.elementsKey)}
-        </p>
+        <h3 className="ca-field-name">{t(meta.titleKey)}</h3>
+        <p className="ca-field-desc">{t(meta.subtitleKey)}</p>
+      </div>
 
-        <span
-          className={[
-            "inline-flex items-center gap-2 px-5 py-2.5 rounded-full",
-            "bg-[#FFB627] text-[#1A1A1A] font-semibold text-sm",
-            "transition-transform duration-200 motion-reduce:transition-none",
-            "group-hover:translate-x-1",
-          ].join(" ")}
-        >
+      <div className="ca-field-card-bottom">
+        <div className="ca-field-stats">
+          <span>
+            {renderWithSpan(
+              t(meta.statSlidesKey),
+              "{count}",
+              t(meta.statSlidesCountKey),
+              "ca-field-stat-num num",
+            )}
+          </span>
+          <span>{t(meta.statSecondaryKey)}</span>
+        </div>
+        <span className="ca-field-go">
           {t(meta.startKey)}
-          <span aria-hidden="true">→</span>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M5 12h14M13 5l7 7-7 7" />
+          </svg>
         </span>
       </div>
     </button>
@@ -123,69 +114,63 @@ export default function FieldSelectCard({ field, onSelect }: Props) {
 }
 
 /**
- * 분야 글리프 — 옵션 C (icons.md) 정책에 따른 그라데이션 SVG.
+ * 템플릿 문자열의 `placeholder` 위치를 `<span className={spanClass}>{value}</span>`
+ * 으로 치환해 JSX 노드로 반환. placeholder 가 없으면 원문을 그대로 돌려준다.
  *
- * - social (인문) : 도서 + 점선 (텍스트의 메타) 형상
- * - natural (자연): 잎사귀 (광합성 직결)
- *
- * 한자 강조(HanCharBadge)는 사용자 결정에 따라 랜딩 히어로에만 사용 — 본 카드는
- * 분야 식별을 명확히 하기 위해 도형 SVG 사용.
+ * `t()` 가 `{key}` placeholder 를 보존하도록 params 없이 호출한 결과를 받는다
+ * (I18nContext §211: params 미지정 시 placeholder 그대로 반환).
  */
-function FieldGlyph({
-  variant,
-  gradId,
-  stops,
-}: {
-  variant: DemoField;
-  gradId: string;
-  stops: readonly [string, string];
-}) {
-  const stroke = `url(#${gradId})`;
+function renderWithSpan(
+  template: string,
+  placeholder: string,
+  value: string,
+  spanClass: string,
+): ReactNode {
+  const parts = template.split(placeholder);
+  if (parts.length !== 2) return template;
+  return (
+    <>
+      {parts[0]}
+      <span className={spanClass}>{value}</span>
+      {parts[1]}
+    </>
+  );
+}
+
+/** 인문계열 글리프 — 위도/경도 globe (grad-globe). */
+function GlobeGlyph() {
   return (
     <svg
-      width="48"
-      height="48"
-      viewBox="0 0 48 48"
+      viewBox="0 0 24 24"
       fill="none"
-      aria-hidden="true"
-      focusable="false"
+      stroke="url(#ca-grad-globe)"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor={stops[0]} />
-          <stop offset="100%" stopColor={stops[1]} />
-        </linearGradient>
-      </defs>
-      {variant === "social" ? (
-        <g
-          stroke={stroke}
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* book + dotted underline */}
-          <path d="M10 8h20a3 3 0 013 3v26a3 3 0 01-3 3H13a3 3 0 01-3-3V8z" />
-          <path d="M14 14h14M14 20h14M14 26h10" />
-          <line
-            x1="10"
-            y1="42"
-            x2="38"
-            y2="42"
-            strokeDasharray="2 4"
-          />
-        </g>
-      ) : (
-        <g
-          stroke={stroke}
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* leaf — 광합성 직결 형상 */}
-          <path d="M10 38c0-14 12-26 28-28-2 16-14 28-28 28z" />
-          <path d="M10 38c8-2 16-10 20-22" />
-        </g>
-      )}
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18" />
+      <path d="M12 3a14 14 0 0 1 0 18" />
+      <path d="M12 3a14 14 0 0 0 0 18" />
+    </svg>
+  );
+}
+
+/** 자연계열 글리프 — 원자 (grad-atom). */
+function AtomGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="url(#ca-grad-atom)"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <circle cx="12" cy="12" r="2" />
+      <ellipse cx="12" cy="12" rx="10" ry="4" />
+      <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)" />
+      <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-60 12 12)" />
     </svg>
   );
 }

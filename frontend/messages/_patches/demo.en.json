@@ -26,6 +26,76 @@
       "primaryCta": "▶ See the student screen",
       "secondaryCta": "Browse the features instead"
     },
+    "heroV3": {
+      "observerBadge": "AI lecture generation platform",
+      "headlineLead": "Script it once,",
+      "headlineAccent": "endless conversation",
+      "headlineTail": "with students —",
+      "subtitle": "Upload a PPT and the AI builds the lecture video, then talks with students both ways. You take the AI's learning reports back into the lecture hall to refine in-person teaching.",
+      "subTag": "Start with the screen your students actually see.",
+      "metaTime": "~3 minutes",
+      "metaQuestions": "3 free questions",
+      "metaMobile": "Mobile-friendly",
+      "primaryCta": "Preview the student screen",
+      "secondaryCta": "Browse the features"
+    },
+    "flowStage": {
+      "topStatus": "Demo preview · flow summary",
+      "topSub": "Real video footage coming soon",
+      "step1": "Upload PPT",
+      "step2": "AI video synthesis",
+      "step3": "Talk with students",
+      "aiTag1": "Script",
+      "aiTag2": "TTS",
+      "aiTag3": "Avatar",
+      "chatSource": "Source cited",
+      "bottomLead": "You refine the next lecture using the",
+      "bottomEmphasis": "learning report",
+      "bottomTail": "."
+    },
+    "marketingHeader": {
+      "navFeatures": "Features",
+      "navUseCases": "Use cases",
+      "navPricing": "Pricing",
+      "livePill": "Live Demo",
+      "cta": "Apply for beta"
+    },
+    "fieldSelectV3": {
+      "title": "Pick one of the two fields",
+      "subtitle": "Humanities and natural sciences — compare how the same guardrails play out in two very different lectures.",
+      "social": {
+        "tagline": "A · Liberal Arts",
+        "metaLine": "Humanities · {minutes}-min clip",
+        "minutes": "5",
+        "title": "Chinese Grammar",
+        "subtitle": "Centred on the word order of the 把字句 — followed by suggested questions, source citations, and an off-topic refusal.",
+        "statSlides": "{count} slides",
+        "statSlidesCount": "8",
+        "statSecondary": "Auto-quiz",
+        "start": "Start"
+      },
+      "natural": {
+        "tagline": "B · Natural Science",
+        "metaLine": "Natural science · {minutes}-min clip",
+        "minutes": "5",
+        "title": "Photosynthesis",
+        "subtitle": "Centred on how light energy converts to chemical energy — followed by suggested questions, source citations, and an off-topic refusal.",
+        "statSlides": "{count} slides",
+        "statSlidesCount": "8",
+        "statSecondary": "Auto-quiz",
+        "start": "Start"
+      }
+    },
+    "trustStrip": {
+      "dataLabel": "Data protection",
+      "dataValue": "Auto-deleted after 24h",
+      "ragLabel": "RAG threshold",
+      "ragValue": "0.65 · relaxed for demo",
+      "inputLabel": "Input limit",
+      "inputValue": "200 chars · 3 per session",
+      "sessionLabel": "Session policy",
+      "sessionValue": "Anonymous · 3/day per IP"
+    },
     "fieldSelectV2": {
       "title": "Pick one of two videos",
       "subtitle": "Field doesn't matter. Each clip walks you through suggested questions, source citations, an interstitial quiz, and an off-topic refusal — in five minutes.",
