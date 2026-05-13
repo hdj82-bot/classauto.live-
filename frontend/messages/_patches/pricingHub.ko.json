@@ -22,7 +22,7 @@
         "name": "Free",
         "tagline": "처음 써보는 분 (시범 운영)",
         "ctaLabel": "무료로 시작",
-        "ctaHref": "/auth/signup",
+        "ctaHref": "/beta-apply",
         "perMonthLabel": "영원히 무료",
         "currencySymbol": "₩",
         "priceFree": "무료",
@@ -41,7 +41,6 @@
         "tagline": "어학 · 활성 교수자",
         "ctaLabel": "Basic 시작하기",
         "ctaHref": "/beta-apply",
-        "ctaNote": "베타 기간 동안 학계 교수자는 Pro 기능 전체를 무료로 사용하실 수 있습니다.",
         "features": [
           "Free 모든 기능 사용 가능",
           "월 영상 8편 생성",
