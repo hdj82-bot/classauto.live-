@@ -56,7 +56,8 @@ export default function LegalShell({ spec }: { spec: DocumentSpec }) {
     label: t("common.changeHistoryTitle"),
   };
 
-  const heroEyebrow = t(`${i18nKey}.hero.eyebrow`);
+  // heroEyebrow i18n 키는 더 이상 렌더하지 않음 (사용자 결정 2026-05-13 PM).
+  // 키는 보존하므로 다른 곳에서 재참조 가능.
   const heroTitle = t(`${i18nKey}.hero.title`);
   const heroSubtitle = t(`${i18nKey}.hero.subtitle`);
   const lastUpdated = t(`${i18nKey}.hero.lastUpdated`);
@@ -69,14 +70,14 @@ export default function LegalShell({ spec }: { spec: DocumentSpec }) {
 
   return (
     <LightMarketingShell>
-      {/* Hero */}
+      {/* Hero — 사용자 결정 2026-05-13 PM: 'LEGAL · 개인정보처리방침' eyebrow
+          는 바로 아래 <h1>{heroTitle}</h1> 과 정보가 중복되어 제거. heroEyebrow
+          i18n 키 자체는 보존 (다른 페이지가 import 할 수 있고, 정책 재변경 시
+          복원 비용 최소화). */}
       <section
         data-testid={`legal-${spec.kind}-hero`}
         className="max-w-6xl mx-auto px-4 sm:px-6 pt-20 sm:pt-28 pb-10"
       >
-        <p className="text-[11px] font-semibold tracking-[0.18em] text-[#B88308] uppercase mb-3">
-          {heroEyebrow}
-        </p>
         <h1
           className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight leading-tight text-[#0A0A0A]"
           style={{

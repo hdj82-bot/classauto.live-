@@ -29,10 +29,10 @@ export default function LegalSection({
       className="scroll-mt-24"
       aria-labelledby={`${id}-heading`}
     >
+      {/* 사용자 결정 2026-05-13 PM: 번호 라벨을 별도 작은 골드 카피로 띄우지
+          않고 h2 안에 번호 + 제목을 한 줄로 통합 ("1. 총칙"). 시각 위계를
+          단순화 — 사이드바 TOC 가 이미 같은 형식이라 일관성도 높아진다. */}
       <header className="mb-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#B88308] mb-2">
-          {data.number}
-        </p>
         <h2
           id={`${id}-heading`}
           className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#0A0A0A]"
@@ -42,7 +42,7 @@ export default function LegalSection({
             letterSpacing: "-0.025em",
           }}
         >
-          {data.title}
+          {data.number} {data.title}
         </h2>
       </header>
 
