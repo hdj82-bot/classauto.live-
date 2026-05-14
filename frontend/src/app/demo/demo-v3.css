@@ -191,6 +191,28 @@
   .ca-hero-video { display: none; }
 }
 
+/* 영상 배경 hero (랜딩 전용) 위 본문·메타칩 가독성 보강 (2026-05-14).
+   :has(.ca-hero-video) 로 영상이 실제로 깔린 hero 에만 적용 → /demo 페이지
+   (영상 없는 라이트 베이지) 의 기존 디자인은 영향 없음.
+
+   적용:
+   - .ca-hero-sub: muted(62%) → full text + 굵기 500 + 미세 텍스트 그림자
+   - .ca-meta-chip: 거의 투명한 배경 → 반투명 흰 칩 + backdrop-blur 로 부유감
+*/
+.ca-hero:has(.ca-hero-video) .ca-hero-sub {
+  color: var(--ca-text);
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65);
+}
+.ca-hero:has(.ca-hero-video) .ca-meta-chip {
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-color: rgba(10, 10, 10, 0.12);
+  color: var(--ca-text);
+  font-weight: 500;
+}
+
 /* ───────── Hero ───────── */
 .ca-hero {
   position: relative;
