@@ -48,8 +48,9 @@ export default function LoginContent() {
         )}
 
         {/* Card */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 space-y-6">
-          {/* Role selection */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 sm:p-8 space-y-6">
+          {/* Role selection — 모바일에서도 2-col 유지하되, 카드 패딩(p-5)을
+              줄여 좁은 폭에서도 RoleButton 이 잘리지 않게 한다. */}
           <fieldset>
             <legend className="text-sm font-medium text-gray-700 mb-3">
               {t("auth.accountType")}

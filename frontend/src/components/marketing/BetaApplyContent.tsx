@@ -227,7 +227,7 @@ export default function BetaApplyContent() {
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="space-y-5 rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-6 sm:p-8 shadow-[0_4px_16px_rgba(10,10,10,0.04)]"
+          className="space-y-4 sm:space-y-5 rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white p-4 sm:p-6 md:p-8 shadow-[0_4px_16px_rgba(10,10,10,0.04)]"
         >
           <FormField
             label={t("betaApply.fields.name")}

@@ -102,8 +102,18 @@ export default function LandingPage() {
                 {tHub("homeHero.headlineAccent")}
               </h1>
 
-              <p className="ca-hero-sub">{tHub("heroV3.subtitle")}</p>
-              <p className="ca-hero-sub-tag">{tHub("heroV3.subTag")}</p>
+              {/* 사용자 결정 2026-05-14: 서브카피는 3-line 구조로 명시적 줄바꿈.
+                  데스크탑에선 세 문장이 시각적으로 분리되어 가독성이 올라가고,
+                  모바일에서는 줄바꿈이 자연스럽게 잘려도 의미 단위가 보존된다.
+                  서브태그 ('학생이 만나는 화면을 먼저 확인해보세요.') 는 새 카피
+                  스펙에서 제외되어 본 페이지에서 렌더하지 않는다. */}
+              <p className="ca-hero-sub">
+                {tHub("heroV3.subtitleLine1")}
+                <br />
+                {tHub("heroV3.subtitleLine2")}
+                <br />
+                {tHub("heroV3.subtitleLine3")}
+              </p>
 
               <div className="ca-hero-meta">
                 <span className="ca-meta-chip">{tHub("heroV3.metaTime")}</span>

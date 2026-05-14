@@ -46,7 +46,7 @@ export default function CategoryGrid({
   const { t } = useHelpHubI18n();
 
   return (
-    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
       {HELP_CATEGORY_IDS.map((id) => {
         const isActive = active === id;
         const count = itemCounts[id] ?? 0;
