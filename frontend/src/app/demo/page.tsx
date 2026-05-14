@@ -132,14 +132,23 @@ function DemoPageBody() {
       <DemoTopBar />
 
       <main>
-        <DemoHero
-          canSwitch={session !== null}
-          onSwitch={handleSwitchField}
-          onStart={handleStartCta}
-        />
-
+        {/* 사용자 결정 2026-05-14 (#130 후속): / 의 "학생 화면 미리보기" 가
+            /demo?field=X 로 deep-link 진입할 때, DemoHero 가 / 의 hero 와
+            카피·메타칩·버튼이 거의 동일해서 "이동이 안 됐다" 는 인상을 줬다.
+            session 이 채워진 진입(= ?field=X 또는 분야 카드 클릭 후) 에서는
+            hero 를 숨기고 곧장 ExperienceSection 만 렌더 — 학생 시점 영상 +
+            Q&A 가 첫 화면이 된다. session 이 null 인 일반 /demo 진입(분야
+            선택 단계) 에서는 기존대로 hero + 분야 카드 + Trust strip 을
+            그대로 노출한다. 다른 분야로 바꾸려는 학생은 ExperienceSection
+            상단 status bar 의 ↺ "분야 바꾸기" 로 전환 가능 (handleSwitchField
+            → setSession(null) → hero 다시 노출). */}
         {session === null ? (
           <>
+            <DemoHero
+              canSwitch={false}
+              onSwitch={handleSwitchField}
+              onStart={handleStartCta}
+            />
             <FieldSelectionSection onSelect={handleSelect} />
             <TrustStrip labels={buildDemoTrustStripLabels(t)} />
           </>
