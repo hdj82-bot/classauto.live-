@@ -132,14 +132,23 @@ function DemoPageBody() {
       <DemoTopBar />
 
       <main>
-        <DemoHero
-          canSwitch={session !== null}
-          onSwitch={handleSwitchField}
-          onStart={handleStartCta}
-        />
-
+        {/* 사용자 결정 2026-05-14 (#130 후속): / 의 "학생 화면 미리보기" 가
+            /demo?field=X 로 deep-link 진입할 때, DemoHero 가 / 의 hero 와
+            카피·메타칩·버튼이 거의 동일해서 "이동이 안 됐다" 는 인상을 줬다.
+            session 이 채워진 진입(= ?field=X 또는 분야 카드 클릭 후) 에서는
+            hero 를 숨기고 곧장 ExperienceSection 만 렌더 — 학생 시점 영상 +
+            Q&A 가 첫 화면이 된다. session 이 null 인 일반 /demo 진입(분야
+            선택 단계) 에서는 기존대로 hero + 분야 카드 + Trust strip 을
+            그대로 노출한다. 다른 분야로 바꾸려는 학생은 ExperienceSection
+            상단 status bar 의 ↺ "분야 바꾸기" 로 전환 가능 (handleSwitchField
+            → setSession(null) → hero 다시 노출). */}
         {session === null ? (
           <>
+            <DemoHero
+              canSwitch={false}
+              onSwitch={handleSwitchField}
+              onStart={handleStartCta}
+            />
             <FieldSelectionSection onSelect={handleSelect} />
             <TrustStrip labels={buildDemoTrustStripLabels(t)} />
           </>
@@ -249,11 +258,13 @@ function DemoHero({
             {t("heroV3.observerBadge")}
           </span>
 
+          {/* 사용자 결정 2026-05-13 PM: 메인(/)과 동일 카피. 첫 줄(headlineLead)
+              에 ca-accent 골드 그라데이션을 적용하고, 둘째 줄(headlineAccent)은
+              다크 평문. heroV3.headlineTail 은 빈 값으로 보존 (i18n parity). */}
           <h1 id="demo-hero-title">
-            {t("heroV3.headlineLead")}
+            <span className="ca-accent">{t("heroV3.headlineLead")}</span>
             <br />
-            {t("heroV3.headlineTail")}{" "}
-            <span className="ca-accent">{t("heroV3.headlineAccent")}</span>
+            {t("heroV3.headlineAccent")}
           </h1>
 
           <p className="ca-hero-sub">{t("heroV3.subtitle")}</p>
@@ -373,8 +384,14 @@ function FieldSelectionSection({
 }
 
 /**
- * 분야 선택 후 시청·Q&A 영역. 디자인 standalone 범위 밖 — colors.md §1
- * (영상은 다크) 에 따라 자체 다크 표면을 가진다. 기존 v2 스타일 유지.
+ * 분야 선택 후 시청·Q&A 영역.
+ *
+ * 색상 정책 변경 (2026-05-13 PM, 사용자 결정):
+ *   - 이전: 자체 다크 표면 (#0A0A0A) — colors.md §1 "영상은 다크" 의 페이지 단위 적용.
+ *   - 현재: 페이지 라이트 베이지(#FAFAF7) 와 통일. 영상 박스(<DemoVideo>) 만
+ *     자체 검은색 frame 을 유지하고, 그 외 표면(status bar / Q&A 패널)은 라이트.
+ *     메인 사이트와 시각적 단절을 줄이기 위함. colors.md §1 의 "영상은 다크" 는
+ *     이제 컴포넌트 단위(영상 박스)에만 적용된다.
  */
 function ExperienceSection({
   field,
@@ -415,13 +432,12 @@ function ExperienceSection({
   return (
     <section
       id="demo-experience"
-      className="px-4 sm:px-6 pb-16 pt-12 text-white"
-      style={{ background: "#0A0A0A" }}
+      className="px-4 sm:px-6 pb-16 pt-12 text-[#0A0A0A]"
       aria-label={t("experience.chatTitle")}
     >
       <div className="max-w-6xl mx-auto">
-        {/* 상태 바 */}
-        <div className="mb-4 flex items-center justify-between rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] text-white/55">
+        {/* 상태 바 — 라이트 표면. 페이지 베이지 위 흰 알약. */}
+        <div className="mb-4 flex items-center justify-between rounded-full border border-[rgba(10,10,10,0.08)] bg-white/70 backdrop-blur-sm px-4 py-2 text-[11px] text-[rgba(10,10,10,0.55)]">
           <span data-testid="demo-status-bar">
             {t("experience.statusBar", { field: fieldLabel, elapsed })}
           </span>
@@ -429,17 +445,22 @@ function ExperienceSection({
             type="button"
             onClick={onSwitch}
             aria-label={t("a11y.switchField")}
-            className="text-white/65 hover:text-white transition motion-reduce:transition-none"
+            className="text-[rgba(10,10,10,0.65)] hover:text-[#0A0A0A] transition motion-reduce:transition-none"
           >
             ↺ {t("fieldSelect.switch")}
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4">
-          <div ref={inputAnchorRef} className="space-y-4">
+        {/* 사용자 결정 2026-05-13 PM: 영상 박스와 Q&A 패널의 너비·높이 동일.
+            grid 를 1:1 로 변경하고 (`auto-rows-fr` 로 한 row 안의 두 cell 이
+            같은 높이 stretch), 각 cell 안의 컴포넌트가 `h-full` 로 row 높이를
+            채우게 한다. DemoVideo / QASimulator 내부에서 자체 채움 (h-full
+            + flex) 을 처리. */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:auto-rows-fr">
+          <div ref={inputAnchorRef} className="flex">
             <DemoVideo field={field} />
           </div>
-          <div className="min-h-[480px]">
+          <div className="flex min-h-[480px]">
             <QASimulator field={field} onLimitReached={onLimitReached} />
           </div>
         </div>
@@ -458,7 +479,7 @@ function FooterCTA() {
   const { t } = useDemoI18n();
   return (
     <section
-      className="border-t border-white/10 bg-[#0E0E0E] py-16 px-4 sm:px-6 text-white"
+      className="border-t border-[rgba(10,10,10,0.06)] bg-[#F6F4EE] py-16 px-4 sm:px-6 text-[#0A0A0A]"
       aria-labelledby="demo-footer-cta-heading"
     >
       <div className="max-w-3xl mx-auto text-center">
@@ -473,7 +494,7 @@ function FooterCTA() {
         >
           {t("footerCta.title")}
         </h2>
-        <p className="text-white/60 max-w-xl mx-auto mb-8">
+        <p className="text-[rgba(10,10,10,0.62)] max-w-xl mx-auto mb-8">
           {t("footerCta.subtitle")}
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
@@ -486,7 +507,7 @@ function FooterCTA() {
           </Link>
           <Link
             href="/pricing"
-            className="inline-flex items-center justify-center px-7 py-3.5 rounded-xl border border-white/15 text-white/85 font-semibold text-sm hover:bg-white/5 transition motion-reduce:transition-none"
+            className="inline-flex items-center justify-center px-7 py-3.5 rounded-xl border border-[rgba(10,10,10,0.14)] text-[#0A0A0A] font-semibold text-sm hover:bg-white/60 transition motion-reduce:transition-none"
           >
             {t("footerCta.secondary")}
           </Link>

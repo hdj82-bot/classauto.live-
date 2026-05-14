@@ -12,6 +12,12 @@ interface Props {
   highlighted?: boolean;
   /** "세부 한도 보기" 클릭 시 부모(LimitsModal 호스트) 호출. */
   onOpenLimits: (planId: PlanRow["id"]) => void;
+  /**
+   * 베타 기간 가격 미공개 (사용자 결정 2026-05-13 PM). true 면 가격이 `-` 로
+   * 노출되고, 연 결제 절약 hint 도 함께 숨긴다 (가격이 숨겨졌으므로 절약 금액도
+   * 무의미). Free 카드는 가격이 원래 0이라 이 prop 의 영향 없음.
+   */
+  hideForBeta?: boolean;
 }
 
 /**
@@ -27,6 +33,7 @@ export default function PlanCard({
   cycle,
   highlighted = false,
   onOpenLimits,
+  hideForBeta = false,
 }: Props) {
   const { t, tValue } = usePricingHubI18n();
   const features = tValue<string[]>(`plans.${plan.id}.features`) ?? [];
@@ -37,8 +44,9 @@ export default function PlanCard({
   const ctaNote = t(`plans.${plan.id}.ctaNote`);
   const showCtaNote = ctaNote !== `plans.${plan.id}.ctaNote`;
 
+  // 가격이 hideForBeta 로 가려진 경우 annual savings hint 도 무의미하므로 숨김.
   const annualHint =
-    cycle === "annual" && plan.pricing.annualSavingsKrw > 0
+    !hideForBeta && cycle === "annual" && plan.pricing.annualSavingsKrw > 0
       ? t("annualSavings", { amount: `₩${formatKrw(plan.pricing.annualSavingsKrw)}` })
       : null;
 
@@ -47,7 +55,11 @@ export default function PlanCard({
       data-testid={`plan-card-${plan.id}`}
       data-highlighted={highlighted}
       className={[
-        "relative rounded-2xl p-6 sm:p-7 flex flex-col gap-5 transition-shadow duration-300 motion-reduce:transition-none",
+        // 사용자 결정 2026-05-13 PM: 카드 features 개수가 달라도 CTA 가 카드
+        // 바닥에 일치하도록 `h-full` 로 row 높이를 가득 채운다. 부모 grid 가
+        // 기본 `items-stretch` 라 한 row 안의 두 카드는 같은 높이가 되고,
+        // `mt-auto` 가 붙은 CTA 영역이 정확히 바닥에 정렬된다.
+        "relative h-full rounded-2xl p-6 sm:p-7 flex flex-col gap-5 transition-shadow duration-300 motion-reduce:transition-none",
         highlighted
           ? "bg-gradient-to-b from-[rgba(255,182,39,0.10)] to-[rgba(255,182,39,0.02)] border border-[rgba(184,131,8,0.45)] shadow-[0_8px_32px_rgba(255,182,39,0.18)]"
           : "bg-white border border-[rgba(10,10,10,0.08)] hover:border-[rgba(10,10,10,0.20)] hover:shadow-[0_4px_16px_rgba(10,10,10,0.05)]",
@@ -84,6 +96,7 @@ export default function PlanCard({
         monthlyKrw={plan.pricing.monthlyKrw}
         annualMonthlyKrw={plan.pricing.annualMonthlyKrw}
         cycle={cycle}
+        hideForBeta={hideForBeta}
       />
 
       {plan.pricing.monthlyKrw === 0 ? (

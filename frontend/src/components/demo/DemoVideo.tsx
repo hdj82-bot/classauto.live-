@@ -53,9 +53,18 @@ export default function DemoVideo({ field }: Props) {
     }
   };
 
+  // 2026-05-13 PM: 외곽 컨테이너는 라이트 카드 (#FFFFFF, 라이트 베이지 페이지와
+  // 매치), 영상 박스 자체만 검은색 유지 (영상 콘텐츠 시청 측면). YouTube/Vimeo
+  // 와 동일한 패턴.
+  //
+  // 사이즈 정렬 (사용자 결정 2026-05-13 PM): 부모 grid 가 1:1 비율로 두 cell 을
+  // stretch 시키므로, 본 컴포넌트는 `h-full + flex flex-col` 로 row 높이를 가득
+  // 채우고, 영상 박스(`flex-1`) 가 캡션을 제외한 나머지 공간을 모두 차지하게
+  // 한다. aspect-video 는 제거 — 16:9 가 깨질 우려는 video 의 object-cover 가
+  // 처리. placeholder 분기도 동일하게 채움.
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
-      <div className="aspect-video w-full">
+    <div className="relative w-full h-full overflow-hidden rounded-2xl border border-[rgba(10,10,10,0.08)] bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04)] flex flex-col">
+      <div className="flex-1 w-full bg-black relative">
         {hasSource ? (
           <video
             ref={ref}
@@ -64,7 +73,7 @@ export default function DemoVideo({ field }: Props) {
             preload="metadata"
             playsInline
             controls
-            className="w-full h-full object-cover"
+            className="absolute inset-0 w-full h-full object-cover"
             data-testid="demo-video"
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
@@ -73,7 +82,7 @@ export default function DemoVideo({ field }: Props) {
           </video>
         ) : (
           <div
-            className="w-full h-full flex flex-col items-center justify-center text-center px-6"
+            className="absolute inset-0 flex flex-col items-center justify-center text-center px-6"
             data-testid="demo-video-placeholder"
           >
             <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mb-4">
@@ -93,22 +102,22 @@ export default function DemoVideo({ field }: Props) {
             )}
           </div>
         )}
+
+        {hasSource && (
+          <button
+            type="button"
+            onClick={togglePlay}
+            className="absolute inset-0 flex items-center justify-center bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB627]"
+            aria-label={playing ? t("experience.videoControlsPause") : t("experience.videoControlsPlay")}
+          >
+            <span className="sr-only">
+              {playing ? t("experience.videoControlsPause") : t("experience.videoControlsPlay")}
+            </span>
+          </button>
+        )}
       </div>
 
-      {hasSource && (
-        <button
-          type="button"
-          onClick={togglePlay}
-          className="absolute inset-0 flex items-center justify-center bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB627] rounded-2xl"
-          aria-label={playing ? t("experience.videoControlsPause") : t("experience.videoControlsPlay")}
-        >
-          <span className="sr-only">
-            {playing ? t("experience.videoControlsPause") : t("experience.videoControlsPlay")}
-          </span>
-        </button>
-      )}
-
-      <p className="px-4 py-2 text-[11px] text-white/45">
+      <p className="px-4 py-2.5 text-[11px] text-[rgba(10,10,10,0.55)] shrink-0">
         {t("experience.videoCaption")}
       </p>
     </div>

@@ -44,10 +44,12 @@
   max-width: 1280px;
   margin: 0 auto;
   height: 64px;
-  padding: 0 32px;
+  /* v3 (2026-05-14): clamp 으로 좌우 패딩을 점진 축소. 320px 까지 16px 보장. */
+  padding: 0 clamp(16px, 3vw, 32px);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 .ca-brand {
   display: flex;
@@ -190,7 +192,10 @@
 /* ───────── Hero ───────── */
 .ca-hero {
   position: relative;
-  padding: 80px 32px 48px;
+  /* v3 (2026-05-14): 좌우 패딩을 clamp 으로 잡아 320px ~ 1440px+ 의 전 폭에서
+   * 자연스럽게 줄어들도록 한다. 모바일에서 80px 상단 패딩이 너무 크다는
+   * 피드백 반영 — 작은 화면에서는 32px 까지 줄어든다. */
+  padding: clamp(32px, 6vw, 80px) clamp(16px, 4vw, 32px) clamp(28px, 4vw, 48px);
   overflow: hidden;
 }
 .ca-hero-inner {
@@ -200,7 +205,7 @@
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1.05fr 1fr;
-  gap: 64px;
+  gap: clamp(24px, 4vw, 64px);
   align-items: center;
 }
 .ca-hero-eyebrow {
@@ -412,6 +417,28 @@
   box-shadow: 0 6px 20px rgba(10, 10, 10, 0.06);
   overflow: hidden;
   padding: 12px;
+  /* v2 (2026-05-14): 글리프 기반 카드는 중앙 정렬이 기본. 카드별 추가
+   * 레이아웃(태그·소스 pill) 은 카드별 클래스에서 재정의한다. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* 큰 SVG 글리프 — 카드 크기에 비례 (% 단위) 로 정의해 어떤 사이즈에서도
+ * 카드를 벗어나지 않는다. min/max 로 극단 사이즈에서도 가독성 보장.
+ *
+ * v3 (2026-05-14): viewBox 100x100 의 글리프가 카드 한 변의 ~70% 를 차지하도록
+ * 확대. 카드 안 padding(12px) 만큼 빼고도 잘리지 않으면서 한눈에 의미가
+ * 들어오는 비율. min 을 50 으로 올려 좁은 폭에서도 stroke 가 무너지지 않음. */
+.ca-step-glyph {
+  width: 72%;
+  max-width: 84px;
+  min-width: 50px;
+  aspect-ratio: 1;
+  display: block;
+  flex-shrink: 0;
 }
 .ca-flow-label {
   display: flex;
@@ -436,132 +463,33 @@
 }
 .ca-flow-arrow svg { width: 28px; height: 18px; }
 
-/* PPT card */
-.ca-ppt-bar { display: flex; gap: 4px; margin-bottom: 10px; }
-.ca-ppt-bar span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: rgba(10, 10, 10, 0.10);
-}
-.ca-ppt-body { display: flex; flex-direction: column; gap: 6px; }
-.ca-ppt-line {
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(10, 10, 10, 0.08);
-}
-.ca-ppt-line-title {
-  height: 9px;
-  width: 70%;
-  background: linear-gradient(90deg, rgba(184, 131, 8, 0.45), rgba(184, 131, 8, 0.15));
-}
-.ca-ppt-line-short { width: 50%; }
-.ca-ppt-thumb {
-  margin-top: 6px;
-  flex: 1;
-  min-height: 38px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.22), rgba(34, 211, 238, 0.18) 60%, rgba(255, 182, 39, 0.18));
-  border: 1px solid rgba(10, 10, 10, 0.05);
+/* PPT card — 글리프 단독 (별도 배경 톤 없음). */
+.ca-flow-card-ppt {
+  background:
+    radial-gradient(ellipse at 50% 100%, rgba(255, 182, 39, 0.10), transparent 70%),
+    #FFFFFF;
 }
 
-/* AI card */
+/* AI card — violet/cyan 톤. v3: 글리프 단독. */
 .ca-flow-card-ai {
   background:
-    radial-gradient(ellipse at 50% 40%, rgba(167, 139, 250, 0.12), transparent 70%),
+    radial-gradient(ellipse at 50% 30%, rgba(167, 139, 250, 0.12), transparent 70%),
     #FFFFFF;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.ca-ai-orb {
-  width: 52%;
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: conic-gradient(from 90deg, #A78BFA, #22D3EE, #FFB627, #F472B6, #A78BFA);
-  filter: blur(0.4px);
-  position: relative;
-  animation: ca-spin 14s linear infinite;
-}
-.ca-ai-orb-inner {
-  position: absolute;
-  inset: 22%;
-  border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: inset 0 0 12px rgba(10, 10, 10, 0.05);
-}
-@keyframes ca-spin { to { transform: rotate(360deg); } }
-.ca-ai-tags { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
-.ca-ai-tag {
-  font-size: 9.5px;
-  font-weight: 600;
-  padding: 3px 7px;
-  border-radius: 999px;
-  background: rgba(10, 10, 10, 0.04);
-  border: 1px solid rgba(10, 10, 10, 0.08);
-  color: var(--ca-text-muted);
-}
-.ca-ai-progress {
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: rgba(10, 10, 10, 0.06);
-  overflow: hidden;
-}
-.ca-ai-progress-fill {
-  height: 100%;
-  width: 64%;
-  background: linear-gradient(90deg, #FFB627, #E89E0E);
-  border-radius: 999px;
-  animation: ca-progress-fill 4s ease-in-out infinite;
-}
-@keyframes ca-progress-fill {
-  0%, 100% { width: 28%; }
-  50% { width: 86%; }
 }
 
-/* Chat card */
+/* Chat card — gold 톤. v3: 글리프 단독. */
 .ca-flow-card-chat {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  justify-content: flex-start;
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(255, 182, 39, 0.10), transparent 70%),
+    #FFFFFF;
 }
-.ca-chat-row { display: flex; align-items: center; gap: 5px; }
-.ca-chat-row-user { justify-content: flex-end; }
-.ca-chat-avatar {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #FFB627, #E89E0E);
-  flex-shrink: 0;
-}
-.ca-chat-bubble {
-  height: 8px;
-  border-radius: 4px;
-  background: rgba(10, 10, 10, 0.07);
-  width: 60%;
-}
-.ca-chat-bubble-long { width: 78%; height: 16px; }
-.ca-chat-bubble-user {
-  width: 42%;
-  background: linear-gradient(90deg, rgba(184, 131, 8, 0.18), rgba(184, 131, 8, 0.32));
-}
-.ca-chat-source-pill {
-  margin-top: auto;
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 9.5px;
-  font-weight: 600;
-  padding: 3px 7px;
-  border-radius: 5px;
-  background: var(--ca-gold-soft);
-  border: 1px solid var(--ca-gold-medium);
-  color: var(--ca-gold);
+
+/* v2 잔재 — .ca-ai-tags / .ca-chat-source-pill 셀렉터는 더 이상 컴포넌트에서
+ * 렌더되지 않지만, 혹시 다른 곳에서 클래스가 다시 등장해도 시각 충돌 없이
+ * 숨겨지도록 안전망 hide 규칙만 남긴다 (HeroFlowStage v3 주석 참조). */
+.ca-flow-card .ca-ai-tags,
+.ca-flow-card .ca-chat-source-pill {
+  display: none;
 }
 
 .ca-flow-stage-bottom {
@@ -788,19 +716,254 @@
   color: var(--ca-text);
 }
 
-/* ───────── Responsive ───────── */
-@media (max-width: 960px) {
-  .ca-hero-inner { grid-template-columns: 1fr; gap: 40px; }
-  .ca-hero { padding: 56px 24px 40px; }
+/* ───────── Responsive ─────────
+ *
+ * v3 (2026-05-14): "모든 페이지가 모바일에서 비율이 안 맞는다" 는 피드백을
+ * 반영해 브레이크포인트를 다음과 같이 정리:
+ *   - 1024px 이하 (태블릿): hero 가 2-col 에서 1-col 로 전환 (기존 960 → 1024)
+ *     → 태블릿 portrait (768~1024) 에서 우측 일러스트가 좁아져 글리프가
+ *     깎이던 문제 해결.
+ *   - 768px 이하 (작은 태블릿/큰 폰): fields 2-col → 1-col, header nav 숨김,
+ *     hero 카드 정사각 비율 해제 + 가로 카드(글리프 좌·라벨 우) 로 전환
+ *     → 세로 폰에서 카드가 잘리지 않는다.
+ *   - 480px 이하 (일반 폰): 글꼴·버튼 추가 축소, CTA 세로 정렬.
+ *   - 360px 이하 (매우 좁은 폰): trust strip 1열, 좌우 패딩 12px 까지 축소.
+ */
+@media (max-width: 1024px) {
+  .ca-hero-inner { grid-template-columns: 1fr; gap: 36px; }
+  .ca-header-nav { gap: 18px; }
+}
+@media (max-width: 768px) {
   .ca-field-grid { grid-template-columns: 1fr; }
   .ca-header-nav { display: none; }
-  .ca-fields { padding-left: 24px; padding-right: 24px; }
-}
-@media (max-width: 720px) {
-  /* trust strip 4-col → 2-col */
-  .ca-trust-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .ca-trust-grid { grid-template-columns: repeat(2, 1fr); }
+  .ca-header-inner { height: 56px; }
+  .ca-brand { font-size: 17px; }
+  .ca-hero-eyebrow {
+    white-space: normal;
+    text-align: left;
   }
+  .ca-fields { padding: 24px 16px 64px; }
+  .ca-fields-title { font-size: 26px; }
+  .ca-field-card { padding: 22px; min-height: 0; gap: 16px; }
+
+  /* hero preview 비율 잠금 해제 — 콘텐츠가 카드 안에서 결정 */
+  .ca-hero-preview { aspect-ratio: auto; }
+  .ca-flow-stage {
+    position: static;
+    padding: 18px 16px;
+    gap: 14px;
+  }
+  /* 3-step 행을 세로 스택으로 전환 + 화살표는 가로 → 세로 회전 */
+  .ca-flow-row {
+    grid-template-columns: 1fr;
+    grid-auto-rows: auto;
+    gap: 8px;
+  }
+  .ca-flow-step {
+    flex-direction: row;
+    align-items: center;
+    gap: 14px;
+  }
+  .ca-flow-card {
+    /* 정사각 비율 해제 — 가로 행 카드는 96x96 고정 (글리프 가독성 확보) */
+    aspect-ratio: auto;
+    width: 96px;
+    height: 96px;
+    flex-shrink: 0;
+    padding: 12px;
+    gap: 4px;
+  }
+  .ca-flow-card .ca-step-glyph {
+    width: 100%;
+    max-width: 72px;
+    min-width: 0;
+  }
+  .ca-flow-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    white-space: normal;
+    align-items: center;
+  }
+  .ca-flow-num {
+    font-size: 12px;
+    padding: 3px 7px;
+  }
+  /* 화살표를 세로 방향으로 회전 + 중앙 정렬 + 살짝 작게 */
+  .ca-flow-arrow {
+    justify-self: center;
+    transform: rotate(90deg);
+    width: 24px;
+    height: 18px;
+  }
+  .ca-flow-arrow svg { width: 24px; height: 16px; }
+  .ca-flow-stage-bottom {
+    font-size: 11px;
+    padding: 8px 10px;
+    text-wrap: pretty;
+  }
+}
+@media (max-width: 480px) {
+  .ca-hero h1 {
+    font-size: clamp(30px, 9vw, 40px);
+  }
+  .ca-hero-sub { font-size: 15px; line-height: 1.6; }
+  .ca-meta-chip { font-size: 12px; padding: 7px 12px; }
+  .ca-hero-actions { flex-direction: column; align-items: stretch; gap: 10px; }
+  .ca-btn-primary, .ca-btn-secondary { justify-content: center; padding: 14px 22px; }
+  .ca-fields { padding: 20px 16px 56px; }
+  .ca-field-card { padding: 20px; gap: 14px; }
+  .ca-field-name { font-size: 22px; }
+  .ca-field-icon { width: 52px; height: 52px; border-radius: 14px; }
+  .ca-field-icon svg { width: 26px; height: 26px; }
+  .ca-field-card-bottom { flex-direction: column; align-items: stretch; gap: 12px; }
+  .ca-field-stats { flex-wrap: wrap; gap: 10px 16px; }
+  .ca-field-go { justify-content: center; }
+  /* 좁은 화면에서 hero 카드의 정사각 글리프가 답답하지 않도록 한 단계 더 축소 */
+  .ca-flow-card { width: 84px; height: 84px; padding: 10px; }
+  .ca-flow-card .ca-step-glyph { max-width: 60px; }
+}
+/* 매우 좁은 폰 (320~360px) — trust strip 1열 + 헤더 패딩 12px 까지 축소 */
+@media (max-width: 360px) {
+  .ca-trust-grid { grid-template-columns: 1fr; }
+  .ca-header-inner { padding: 0 12px; }
+  .ca-hero { padding-left: 12px; padding-right: 12px; }
+  .ca-flow-card { width: 76px; height: 76px; padding: 9px; }
+  .ca-flow-card .ca-step-glyph { max-width: 54px; }
+  .ca-hero-meta { gap: 6px; }
+  .ca-meta-chip { padding: 6px 10px; }
+}
+
+/* ───────── Hero preview · 추가 동적 효과 (homeHero v1, 2026-05-13) ─────────
+ *
+ * 학자 톤을 깨지 않는 선에서 우측 일러스트에 두 가지 효과를 더한다:
+ *
+ *   1) `ca-hero-preview` 의 코너 그라데이션을 매우 천천히(40s) drift —
+ *      배경이 "살아 있다" 는 느낌을 주되 시선을 빼앗지 않는 amplitude.
+ *   2) 3개 flow card 가 시간차로 1.5px 만 부유 — 너무 흔들리면 prototype 같은
+ *      느낌이 나므로 amplitude 는 최소화한다.
+ *   3) PPT → AI → Chat 사이의 화살표에 빛이 우→좌→우 로 흐르는 sweep.
+ *
+ * 모두 transform / opacity / background-position 만 변경 → 60fps 보장.
+ * `prefers-reduced-motion: reduce` 사용자는 아래 블록 전체가 무력화된다
+ * (페이지 레벨 가드가 `.ca-demo-root` 안의 모든 animation-duration 을 0.01ms
+ * 로 단축한다). */
+
+.ca-hero-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 70% 60% at 0% 0%, rgba(167, 139, 250, 0.20), transparent 55%),
+    radial-gradient(ellipse 60% 50% at 100% 100%, rgba(255, 182, 39, 0.20), transparent 55%),
+    radial-gradient(ellipse 50% 50% at 50% 100%, rgba(34, 211, 238, 0.14), transparent 60%);
+  animation: ca-preview-drift 40s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+.ca-flow-stage { position: relative; z-index: 1; }
+@keyframes ca-preview-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  33%      { transform: translate3d(1.5%, -1%, 0) scale(1.04); opacity: 0.92; }
+  66%      { transform: translate3d(-1%, 1.5%, 0) scale(1.02); opacity: 0.96; }
+}
+
+/* 3개 flow card 가 시간차로 부유. nth-child 가 아니라 step 인덱스를 갖는
+ * 부모 (.ca-flow-step) 에 적용해야 카드+라벨이 함께 떠오른다. */
+.ca-flow-row .ca-flow-step {
+  animation: ca-flow-float 6s ease-in-out infinite;
+}
+.ca-flow-row .ca-flow-step:nth-of-type(3) { animation-delay: 0.8s; }
+.ca-flow-row .ca-flow-step:nth-of-type(5) { animation-delay: 1.6s; }
+@keyframes ca-flow-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1.5px); }
+}
+
+/* 화살표에 빛 sweep — SVG stroke 그라데이션 자체는 정적이라, 화살표 컨테이너에
+ * radial 광 layer 를 깔고 좌→우로 이동시킨다. */
+.ca-flow-arrow {
+  position: relative;
+  overflow: hidden;
+}
+.ca-flow-arrow::after {
+  content: '';
+  position: absolute;
+  inset: -50% -100%;
+  background: radial-gradient(ellipse 30% 80% at 50% 50%, rgba(255, 182, 39, 0.55), transparent 70%);
+  filter: blur(2px);
+  animation: ca-arrow-sweep 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+.ca-flow-arrow:nth-of-type(4)::after { animation-delay: 0.6s; }
+@keyframes ca-arrow-sweep {
+  0%   { transform: translateX(-80%); opacity: 0; }
+  40%  { opacity: 1; }
+  100% { transform: translateX(80%); opacity: 0; }
+}
+
+/* ───────── Field cards · 추가 동적 효과 (homeHero v1, 2026-05-13) ─────────
+ *
+ *   1) hover 시 카드 상단을 좌→우 가로지르는 그라데이션 shimmer line —
+ *      "강의 클립" 의 시청 진행 바를 연상시키되 영구 노출이 아닌 hover 한정.
+ *   2) hover 시 아이콘 박스에 골드 펄스 (이미 페이지 진입 시 한 번 펄스하지만
+ *      hover 에도 응답).
+ *
+ * 두 효과 모두 hover/focus-visible 시에만 발동 → 기본 상태는 v3 그대로. */
+
+.ca-field-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(184, 131, 8, 0) 30%,
+    rgba(232, 158, 14, 0.85) 50%,
+    rgba(184, 131, 8, 0) 70%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  transition: transform 800ms ease-out;
+  pointer-events: none;
+  z-index: 1;
+}
+.ca-field-card:hover::before,
+.ca-field-card:focus-visible::before {
+  transform: translateX(100%);
+}
+
+.ca-field-icon {
+  transition: transform 400ms ease-out, background 400ms, border-color 400ms;
+}
+.ca-field-card:hover .ca-field-icon,
+.ca-field-card:focus-visible .ca-field-icon {
+  background: var(--ca-gold-soft);
+  border-color: var(--ca-gold-medium);
+  transform: scale(1.06) rotate(-4deg);
+}
+
+/* social 카드 hover: globe 가 살짝 회전. natural 카드 hover: atom 의 ellipse
+ * 들이 펄스. 둘 다 motion-safe 한 amplitude 로 한정. */
+.ca-field-card[data-field="social"]:hover .ca-field-icon svg,
+.ca-field-card[data-field="social"]:focus-visible .ca-field-icon svg {
+  animation: ca-globe-spin 8s linear infinite;
+}
+.ca-field-card[data-field="natural"]:hover .ca-field-icon svg,
+.ca-field-card[data-field="natural"]:focus-visible .ca-field-icon svg {
+  animation: ca-atom-pulse 2.4s ease-in-out infinite;
+}
+@keyframes ca-globe-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes ca-atom-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
 }
 
 /* ───────── Reduced motion ───────── */

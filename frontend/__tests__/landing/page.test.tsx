@@ -13,7 +13,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-describe("LandingPage 통합 (v3.1)", () => {
+describe("LandingPage 통합", () => {
   // v2 (2026-05-13): 본문 카피·구조 재작성으로 무효. 후속 PR 에서 v2 hero/feature 어서션 재작성.
   it.skip("기존 콘텐츠 (Hero / Features 6 / Steps 3 / CTA) 모두 회귀 없이 노출 (v1)", () => {
     renderPage(<LandingPage />);
@@ -35,57 +35,20 @@ describe("LandingPage 통합 (v3.1)", () => {
     expect(screen.getByText("지금 바로 시작하세요")).toBeTruthy();
   });
 
-  // v3.1 (2026-05-13): 사용자 결정으로 Stats / Differentiators / Platform mesh /
-  // Steps / Adoption / Anchor / Final CTA 섹션 전부 삭제 — `/` 는 standalone
-  // hero + 분야 카드 + Trust strip 만 노출.
-  it("v3.1 — 한자 강조 hero 및 삭제된 섹션 콘텐츠 부재", () => {
+  // v3.1 (2026-05-13 PM): 사용자 결정으로 Stats Strip / Platform mesh /
+  // Adoption chart / 4가지 차별점 / 3단계 / Anchor case / Final CTA 모든 섹션을
+  // 메인 사이트에서 제거 (긴 마케팅 콘텐츠는 /features · /use-cases · /pricing
+  // 으로 분산). 따라서 본 어서션은 무효 — skip 처리하고 후속 PR 에서 새 v3.1
+  // 구조 (hero + fields 만) 회귀 테스트로 교체.
+  it.skip("신규 섹션 — Stats Strip (3 stat) / Platform / Adoption 모두 마운트 (v3, deprecated)", () => {
     renderPage(<LandingPage />);
-    // 폐기된 한자 강조 hero
-    expect(screen.queryByText("INTERACTIVE FLIPPED LEARNING")).toBeNull();
-    expect(screen.queryByText("학자가 학자를 위해 만든 도구")).toBeNull();
-    // 폐기된 Stats / Platform / Adoption 라벨
-    expect(screen.queryByText("교수자가 이미 사용 중")).toBeNull();
-    expect(screen.queryByText("절약된 강의 준비 시간")).toBeNull();
-    expect(screen.queryByText("시청 완료율")).toBeNull();
-    expect(screen.queryByText("Q&A 참여")).toBeNull();
-    // 폐기된 IconDefs (기존 #grad-violet 등) — 새 GradientDefs 는 #ca-grad-* 사용
-    const { container } = renderPage(<LandingPage />);
-    expect(container.querySelector("#grad-violet")).toBeNull();
-    expect(container.querySelector("#grad-success")).toBeNull();
-  });
-
-  it("v3.1 — standalone hero 카피 + 2개 분야 카드 + 4-cell Trust strip 마운트", () => {
-    renderPage(<LandingPage />);
-    // Hero
-    expect(screen.getByText("AI 강의 자동 생성 플랫폼")).toBeTruthy();
-    expect(screen.getByText(/대본 한 번/)).toBeTruthy();
-    expect(screen.getByText("끝없는 대화")).toBeTruthy();
-    expect(screen.getByText("학생이 만나는 화면을 먼저 확인해보세요.")).toBeTruthy();
-    // Hero CTA — /demo 로 deep-link
-    const primary = screen.getByTestId("landing-hero-start");
-    expect(primary).toBeTruthy();
-    expect(primary.getAttribute("href")).toBe("/demo");
-    // 분야 카드 — social + natural 두 장
-    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
-    expect(screen.getByTestId("demo-field-social")).toBeTruthy();
-    expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
-    // Trust strip — 4-cell
-    expect(screen.getByText("데이터 보호")).toBeTruthy();
-    expect(screen.getByText("24시간 후 자동 삭제")).toBeTruthy();
-    expect(screen.getByText("RAG 임계값")).toBeTruthy();
-    expect(screen.getByText("0.65 · 체험용 완화")).toBeTruthy();
-    expect(screen.getByText("입력 한도")).toBeTruthy();
-    expect(screen.getByText("세션 관리")).toBeTruthy();
-  });
-
-  it("v3.1 — GradientDefs 의 6종 ca-grad-* 정의 존재", () => {
-    const { container } = renderPage(<LandingPage />);
-    expect(container.querySelector("#ca-grad-violet")).toBeTruthy();
-    expect(container.querySelector("#ca-grad-electric")).toBeTruthy();
-    expect(container.querySelector("#ca-grad-cyan")).toBeTruthy();
-    expect(container.querySelector("#ca-grad-pink")).toBeTruthy();
-    expect(container.querySelector("#ca-grad-globe")).toBeTruthy();
-    expect(container.querySelector("#ca-grad-atom")).toBeTruthy();
+    expect(screen.getByText("교수자가 이미 사용 중")).toBeTruthy();
+    expect(screen.getByText("생성된 강의 영상")).toBeTruthy();
+    expect(screen.getByText("절약된 강의 준비 시간")).toBeTruthy();
+    expect(screen.getByText(/한 번 업로드/)).toBeTruthy();
+    expect(screen.getByText(/검증된 학습 효과/)).toBeTruthy();
+    expect(screen.getByText("시청 완료율")).toBeTruthy();
+    expect(screen.getByText("Q&A 참여")).toBeTruthy();
   });
 
   // v2 (2026-05-13): hero CTA 링크 경로·개수 재구성. 후속 PR 에서 새 어서션 작성.
@@ -95,5 +58,48 @@ describe("LandingPage 통합 (v3.1)", () => {
       .getAllByRole("link")
       .filter((el) => el.getAttribute("href") === "/auth/login");
     expect(loginLinks.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("IconDefs 가 마운트되어 그라데이션 6종 defs 존재 (DOM 안에)", () => {
+    const { container } = renderPage(<LandingPage />);
+    // grad-violet, grad-electric, grad-cyan, grad-pink, grad-success, grad-warning
+    expect(container.querySelector("#grad-violet")).toBeTruthy();
+    expect(container.querySelector("#grad-electric")).toBeTruthy();
+    expect(container.querySelector("#grad-cyan")).toBeTruthy();
+    expect(container.querySelector("#grad-pink")).toBeTruthy();
+  });
+
+  // v3.1 (2026-05-13 PM): MeshNetworkVisual 도 메인에서 제거. /features 페이지로
+  // 이동 예정. 본 어서션은 무효.
+  it.skip("MeshNetworkVisual 6 노드 라벨 모두 노출 (v3, deprecated)", () => {
+    renderPage(<LandingPage />);
+    expect(screen.getByText("PPT")).toBeTruthy();
+    expect(screen.getByText("AI 스크립트")).toBeTruthy();
+    expect(screen.getByText("아바타 영상")).toBeTruthy();
+    expect(screen.getByText("RAG Q&A")).toBeTruthy();
+    expect(screen.getByText("자동 평가")).toBeTruthy();
+    expect(screen.getByText("다국어")).toBeTruthy();
+  });
+
+  // v3.1 (2026-05-13 PM): 새 구조 — hero + fields 두 섹션만, 그 이후는 모두 제거.
+  // 핵심 회귀 가드: 분야 카드 2장이 보이고, 제거되어야 할 섹션이 다시 들어오지
+  // 않는지를 함께 검증.
+  it("v3.1 짧은 게이트웨이 — hero + fields 만 마운트, 후속 섹션은 없다", () => {
+    renderPage(<LandingPage />);
+    // hero
+    expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
+    // 분야 카드 2장 — testid 또는 라벨로 식별 (FieldSelectCard 는 button 또는
+    // link 역할로 분야명을 노출한다)
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    // h2 가 최소 1개 (분야 선택 섹션 헤딩) 존재
+    expect(headings.length).toBeGreaterThanOrEqual(1);
+
+    // 제거되어야 할 섹션의 시그니처 텍스트가 없는지 확인 (회귀 가드)
+    expect(screen.queryByText("교수자가 이미 사용 중")).toBeNull(); // Stats
+    expect(screen.queryByText("시청 완료율")).toBeNull(); // Adoption chart
+    expect(screen.queryByText("Q&A 참여")).toBeNull(); // Adoption chart
+    // 'PPT' 단일 텍스트는 MeshNetworkVisual 의 노드 라벨. HeroFlowStage 의
+    // 'PPT 업로드' 는 별도 텍스트이므로 정확 매칭으로 회귀 가드.
+    expect(screen.queryByText("PPT")).toBeNull();
   });
 });

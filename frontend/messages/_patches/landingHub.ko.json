@@ -21,17 +21,25 @@
       "identityNote": "학자가 학자를 위해 만든 도구"
     },
     "heroV3": {
-      "observerBadge": "AI 강의 자동 생성 플랫폼",
+      "observerBadge": "교수자의 의도가 모든 결정에 반영되는 AI 강의 플랫폼",
       "headlineLead": "대본 한 번,",
       "headlineTail": "학생과는",
       "headlineAccent": "끝없는 대화",
-      "subtitle": "PPT를 업로드하면 AI가 강의 영상을 만들고, 학생들과 양방향으로 소통합니다 교수님은 AI가 제공하는 학습 보고서로 대면 수업을 다듬으세요",
+      "subtitle": "PPT를 올리면 AI가 교수자와 대화하며 강의 컨셉을 잡고 영상을 생성합니다. 완성된 영상은 학생과 양방향으로 상호작용하며, 교수자는 학습 데이터로 대면 수업을 다듬습니다.",
+      "subtitleLine1": "PPT를 올리면 AI가 교수자와 대화하며 강의 컨셉을 잡고 영상을 생성합니다.",
+      "subtitleLine2": "완성된 영상은 학생과 양방향으로 상호작용하며,",
+      "subtitleLine3": "교수자는 학습 데이터로 대면 수업을 다듬습니다.",
       "subTag": "학생이 만나는 화면을 먼저 확인해보세요.",
       "metaTime": "약 3분 소요",
       "metaQuestions": "질문 3건 무료",
       "metaMobile": "모바일 가능",
       "primaryCta": "학생 화면 미리보기",
       "secondaryCta": "기능 자세히 보기"
+    },
+    "homeHero": {
+      "_note": "page.tsx 의 마크업이 headlineLead 에 ca-accent (골드 그라데이션) 를 적용한다. headlineAccent 는 일반(다크) 텍스트.",
+      "headlineLead": "학생과 상호작용하는",
+      "headlineAccent": "AI 교육영상"
     },
     "demoFlow": {
       "topStatus": "데모 미리보기 · 흐름 요약",

@@ -21,22 +21,31 @@ describe("/pricing — full page composition", () => {
     expect(screen.getByTestId("pricing-footer-primary")).toBeTruthy();
   });
 
+  // 사용자 결정 2026-05-13 PM: 베타 기간 동안 Basic/Pro 가격을 미공개로 전환
+  // (PricingContent 가 두 플랜에 hideForBeta={true} 전달). 가격 amount 가
+  // 노출되지 않고 hidden(`-`) 셀이 그 자리를 차지하므로, 옛 amount 어서션을
+  // hidden cell 어서션으로 교체. cycle 토글 자체는 aria-pressed 로 검증.
   it("starts on annual cycle by default (정책 §4.1 anchoring)", () => {
     wrap(<PricingContent />);
     const annualBtn = screen.getByTestId("pricing-billing-annual");
     expect(annualBtn.getAttribute("aria-pressed")).toBe("true");
-    // Basic 가격 = ₩15,200 (연 환산) 노출
     const basicCard = screen.getByTestId("plan-card-basic");
-    const amount = within(basicCard).getByTestId("price-display-amount");
-    expect(amount.textContent?.replace(/[^0-9]/g, "")).toBe("15200");
+    // 가격 amount 는 hideForBeta 로 가려졌고 hidden cell 의 cycle 만 검증.
+    expect(within(basicCard).queryByTestId("price-display-amount")).toBeNull();
+    const hidden = within(basicCard).getByTestId("price-display-hidden");
+    expect(hidden.getAttribute("data-cycle")).toBe("annual");
+    expect(hidden.textContent).toContain("—");
   });
 
-  it("toggling to monthly switches Basic price to ₩19,000", () => {
+  it("toggling to monthly switches the billing cycle (price stays hidden during beta)", () => {
     wrap(<PricingContent />);
     fireEvent.click(screen.getByTestId("pricing-billing-monthly"));
+    const monthlyBtn = screen.getByTestId("pricing-billing-monthly");
+    expect(monthlyBtn.getAttribute("aria-pressed")).toBe("true");
     const basicCard = screen.getByTestId("plan-card-basic");
-    const amount = within(basicCard).getByTestId("price-display-amount");
-    expect(amount.textContent?.replace(/[^0-9]/g, "")).toBe("19000");
+    expect(within(basicCard).queryByTestId("price-display-amount")).toBeNull();
+    const hidden = within(basicCard).getByTestId("price-display-hidden");
+    expect(hidden.getAttribute("data-cycle")).toBe("monthly");
   });
 
   it("opens the limits modal from a plan card and closes it via close button", () => {

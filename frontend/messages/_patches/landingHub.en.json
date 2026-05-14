@@ -21,17 +21,24 @@
       "identityNote": "A tool built by scholars, for scholars"
     },
     "heroV3": {
-      "observerBadge": "AI lecture generation platform",
+      "observerBadge": "An AI lecture platform where the instructor's intent shapes every decision",
       "headlineLead": "Script it once,",
       "headlineTail": "with students —",
       "headlineAccent": "endless conversation",
-      "subtitle": "Upload a PPT and the AI builds the lecture video, then talks with students both ways. You take the AI's learning reports back into the lecture hall to refine in-person teaching.",
+      "subtitle": "Upload a PPT — the AI talks with you to shape the lecture concept, then generates the video. The finished video interacts with students both ways, and you refine in-person teaching from the learning data.",
+      "subtitleLine1": "Upload a PPT — the AI talks with you to shape the lecture concept, then generates the video.",
+      "subtitleLine2": "The finished video interacts with students both ways,",
+      "subtitleLine3": "and you refine in-person teaching from the learning data.",
       "subTag": "Start with the screen your students actually see.",
       "metaTime": "~3 minutes",
       "metaQuestions": "3 free questions",
       "metaMobile": "Mobile-friendly",
       "primaryCta": "Preview the student screen",
       "secondaryCta": "Browse the features"
+    },
+    "homeHero": {
+      "headlineLead": "Interactive with students",
+      "headlineAccent": "AI educational videos"
     },
     "demoFlow": {
       "topStatus": "Demo preview · flow summary",

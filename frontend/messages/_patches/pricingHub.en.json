@@ -22,7 +22,7 @@
         "name": "Free",
         "tagline": "First-time pilots",
         "ctaLabel": "Start free",
-        "ctaHref": "/auth/signup",
+        "ctaHref": "/beta-apply",
         "perMonthLabel": "Free forever",
         "currencySymbol": "₩",
         "priceFree": "Free",
@@ -40,9 +40,9 @@
         "name": "Basic",
         "tagline": "Language & active instructors",
         "ctaLabel": "Start Basic",
-        "ctaHref": "/professor/subscription",
-        "ctaNote": "Continue checkout from the subscription page.",
+        "ctaHref": "/beta-apply",
         "features": [
+          "Everything in Free",
           "8 video renders / month",
           "80 monthly active learners",
           "Persona avatar + dual TTS",
@@ -58,8 +58,9 @@
         "name": "Pro",
         "tagline": "Researchers · multi-course faculty",
         "ctaLabel": "Start Pro",
-        "ctaHref": "/professor/subscription",
+        "ctaHref": "/beta-apply",
         "features": [
+          "Everything in Basic",
           "20 video renders / month",
           "150 monthly active learners",
           "Multilingual subtitles + custom voice tags",
@@ -211,7 +212,7 @@
     },
     "betaCallout": {
       "title": "Beta — Pro free for academia",
-      "body": "Until the end of the 2026 beta, university faculty can use the full Pro tier free of charge. Beta users keep a lifetime 30% discount.",
+      "body": "Until the end of the 2026 beta, university faculty can use the full Pro tier free of charge. Pricing after general availability will be decided once we've gathered user feedback at the end of the beta.",
       "ctaLabel": "Apply for beta",
       "ctaHref": "/beta-apply"
     },
