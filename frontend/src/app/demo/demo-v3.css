@@ -202,7 +202,13 @@
 .ca-hero:has(.ca-hero-video) .ca-hero-sub {
   color: var(--ca-text);
   font-weight: 500;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65);
+  /* 2026-05-14: 다중 white halo — 가까운 8px blur 로 글자 outline 효과,
+     16px blur 로 영역 전체에 부드러운 발광 베이지층 생성. 어떤 영상 프레임
+     위에서도 다크 텍스트가 또렷이 떠오른다. */
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.95),
+    0 0 16px rgba(255, 255, 255, 0.7),
+    0 1px 3px rgba(255, 255, 255, 0.8);
 }
 .ca-hero:has(.ca-hero-video) .ca-meta-chip {
   background: rgba(255, 255, 255, 0.86);
