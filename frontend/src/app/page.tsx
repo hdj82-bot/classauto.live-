@@ -75,7 +75,23 @@ export default function LandingPage() {
         <GradientDefs />
 
         <section className="ca-hero" aria-labelledby="landing-hero-title">
+          {/* 배경 영상 (z:0) → 오로라 메쉬 (z:0, 위) → 베이지 오버레이 (z:0, 위)
+              → .ca-hero-inner (z:1) 순으로 쌓인다. muted+playsInline+autoPlay 는
+              모바일(iOS Safari) 자동재생의 필수 3종. preload=metadata 로 LCP 보호.
+              prefers-reduced-motion 시엔 demo-v3.css 에서 display:none 처리됨. */}
+          <video
+            className="ca-hero-video"
+            src="/hero-bg.mp4"
+            poster="/hero-bg-poster.jpg"
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
+          />
           <div className="ca-aurora" aria-hidden="true" />
+          <div className="ca-hero-overlay" aria-hidden="true" />
           <div className="ca-hero-inner">
             <div className="ca-hero-text">
               <span className="ca-hero-eyebrow">
