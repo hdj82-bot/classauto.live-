@@ -136,8 +136,15 @@ export default function LandingPage() {
               </div>
 
               <div className="ca-hero-actions">
+                {/* "학생 화면 미리보기" — 사용자 결정 2026-05-14: 클릭 시
+                    /demo 의 동일 hero 를 거치지 않고 곧장 학생 시청 화면
+                    (ExperienceSection) 으로 진입한다. /demo 는 `?field=` 쿼리를
+                    받으면 자동으로 해당 분야 세션을 시작하고 #demo-experience 로
+                    스크롤한다 (frontend/src/app/demo/page.tsx 76-84). 기본 분야는
+                    아래 ca-field-grid 의 첫 카드와 일치하도록 'social' 선택.
+                    분야는 학생 화면 상단 ↺ "분야 바꾸기" 버튼으로 즉시 전환 가능. */}
                 <Link
-                  href="/demo"
+                  href="/demo?field=social"
                   className="ca-btn-primary"
                   data-testid="landing-hero-start"
                 >
