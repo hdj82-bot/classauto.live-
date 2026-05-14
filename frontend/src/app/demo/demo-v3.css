@@ -155,6 +155,64 @@
   66% { transform: translate(-1%, 2%) rotate(-1deg); }
 }
 
+/* ───────── Hero 배경 영상 (2026-05-14) ─────────
+   `/` 랜딩 hero 의 대문 텍스트 뒤에 깔리는 mp4. `.ca-hero` 의 `position:
+   relative` + `overflow: hidden` 컨테이너 안에 absolute 로 채우고, 그 위에
+   기존 `.ca-aurora` (메쉬) 와 `.ca-hero-overlay` (베이지 가독성 그라디언트)
+   가 차례로 쌓인다. `.ca-hero-inner` 는 z:1 이라 모두 가려지지 않는다. */
+.ca-hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: 0;
+  pointer-events: none;
+}
+.ca-hero-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* 왼쪽(텍스트) 진하게 → 오른쪽(플로우 카드) 살짝 비치게.
+     라이트 베이지(#FAFAF7) 그대로 유지하여 디자인 시스템 v2 톤 보존.
+     2026-05-14: 사용자 피드백 — 영상이 더 또렷이 보이도록 농도 일괄 인하
+     (0.92→0.72 / 0.78→0.55 / 0.58→0.32). 왼쪽은 본문 가독성 한계선 근처. */
+  background: linear-gradient(
+    to right,
+    rgba(250, 250, 247, 0.72) 0%,
+    rgba(250, 250, 247, 0.55) 45%,
+    rgba(250, 250, 247, 0.32) 100%
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 모션 민감 사용자에겐 영상 대신 poster 만 보이도록. */
+  .ca-hero-video { display: none; }
+}
+
+/* 영상 배경 hero (랜딩 전용) 위 본문·메타칩 가독성 보강 (2026-05-14).
+   :has(.ca-hero-video) 로 영상이 실제로 깔린 hero 에만 적용 → /demo 페이지
+   (영상 없는 라이트 베이지) 의 기존 디자인은 영향 없음.
+
+   적용:
+   - .ca-hero-sub: muted(62%) → full text + 굵기 500 + 미세 텍스트 그림자
+   - .ca-meta-chip: 거의 투명한 배경 → 반투명 흰 칩 + backdrop-blur 로 부유감
+*/
+.ca-hero:has(.ca-hero-video) .ca-hero-sub {
+  color: var(--ca-text);
+  font-weight: 500;
+  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.65);
+}
+.ca-hero:has(.ca-hero-video) .ca-meta-chip {
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-color: rgba(10, 10, 10, 0.12);
+  color: var(--ca-text);
+  font-weight: 500;
+}
+
 /* ───────── Hero ───────── */
 .ca-hero {
   position: relative;
