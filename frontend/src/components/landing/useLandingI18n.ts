@@ -2,30 +2,28 @@
 
 import { useCallback, useMemo } from "react";
 import { useI18n, type Locale } from "@/contexts/I18nContext";
-import landingKo from "../../../messages/_patches/landingHub.ko.json";
-import landingEn from "../../../messages/_patches/landingHub.en.json";
+import ko from "../../../messages/ko.json";
+import en from "../../../messages/en.json";
 
 /**
- * 랜딩 페이지 동적 요소 전용 i18n 훅 — 자체 patch import + prefix 어댑터.
+ * 랜딩 페이지 동적 요소 전용 i18n 훅 — `landingHub.*` 네임스페이스 prefix +
+ * 숫자 lookup 어댑터.
  *
- * **격리 이유**: 본 PR 은 `I18nContext.tsx` 와 `messages/{ko,en}.json` 을
- * 무수정 상태로 두고 patch 만 추가한다 (병렬 워크트리 안전). main 의 기존
- * `landing.*` 네임스페이스는 그대로 유지하고, 동적 요소 관련 새 키만
- * `landingHub.*` 에 격리한다.
- *
- * **통합 PR 시 thin wrapper 다운그레이드**: R3 의 `useStudioI18n` 등과 동일
- * 패턴. `I18nContext` 의 patches 배열에 `landingHub` 등록 후 본 훅을
- * `useI18n` + 자동 prefix 어댑터로 단순화 가능.
+ * `landingHub.*` 키는 후속 정리 PR 에서 `_patches/landingHub.{ko,en}.json`
+ * → `messages/{ko,en}.json` 본체로 통합 완료됐다. 본 훅은 그대로 본체에서
+ * `landingHub` 서브트리를 읽되, 호출자 API(짧은 키 + `tNumber`)는 깨지
+ * 않게 유지하는 어댑터로 남는다. 기존 `landing.*` 키는 호출자가
+ * `useI18n()` 의 `t("landing.title1")` 로 직접 접근 (분리 유지).
  *
  * 호출자는 `t("stats.educatorsLabel")` 형태로 짧은 키만 쓴다 — 자동으로
- * `"landingHub.stats.educatorsLabel"` 가 lookup 된다. 기존 `landing.*` 키는
- * 호출자가 `useI18n()` 의 `t("landing.title1")` 로 직접 접근 (분리 유지).
+ * `landingHub.stats.educatorsLabel` 가 lookup 된다. 카운트업 target 등
+ * 숫자 값은 `tNumber` 로 읽는다 (`useI18n().t` 는 string 전용).
  */
 
 type Messages = Record<string, unknown>;
 const HUB_DICT: Record<Locale, Messages> = {
-  ko: (landingKo as Messages).landingHub as Messages,
-  en: (landingEn as Messages).landingHub as Messages,
+  ko: (ko as Messages).landingHub as Messages,
+  en: (en as Messages).landingHub as Messages,
 };
 
 function lookup(

@@ -25,12 +25,20 @@ afterEach(() => {
 });
 
 describe("DemoPage", () => {
-  // v2 (2026-05-13): demo 페이지 hero 카피 변경 ("30초만 학생이 되어보세요" →
-  // "강의 영상이 학생에게 답합니다"). 후속 PR 에서 새 카피 어서션 작성.
-  it.skip("renders the hero with the headline copy from the demo planning doc (v1)", () => {
+  // v2 회귀 (후속 정리 ③): v1 "30초만 학생이 되어보세요" hero 는 v2 에서
+  // 관찰자 시점 hero(heroV3)로 전면 교체됐다. DEPLOYMENT_PROGRESS 가 인용한
+  // PR #113 본문 카피("강의 영상이 학생에게 답합니다")는 PR 작성 시점 문구로,
+  // 이후 사용자 결정(2026-05-13 PM)으로 heroV3 카피로 정착했다. 테스트는 PR
+  // 산문이 아니라 실제 렌더 DOM(현재 소스의 heroV3 i18n)을 기준으로 한다.
+  it("renders the v2 observer hero (heroV3) and drops the v1 '30초' copy", () => {
     renderPage(<DemoPage />);
-    expect(screen.getByText(/30초만 학생이 되어보세요/)).toBeTruthy();
-    expect(screen.getByText(/교수님,/)).toBeTruthy();
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1.textContent).toContain("학생과 상호작용하는");
+    expect(h1.textContent).toContain("AI 교육영상");
+    // 관찰자 eyebrow 배지
+    expect(screen.getByText(/AI 강의 자동 생성 플랫폼/)).toBeTruthy();
+    // v1 카피는 더 이상 없어야 한다 (회귀 가드)
+    expect(screen.queryByText(/30초만 학생이 되어보세요/)).toBeNull();
   });
 
   it("starts on field selection and surfaces both demo cards", () => {

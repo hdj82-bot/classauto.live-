@@ -14,50 +14,49 @@ beforeEach(() => {
 });
 
 describe("LandingPage 통합", () => {
-  // v2 (2026-05-13): 본문 카피·구조 재작성으로 무효. 후속 PR 에서 v2 hero/feature 어서션 재작성.
-  it.skip("기존 콘텐츠 (Hero / Features 6 / Steps 3 / CTA) 모두 회귀 없이 노출 (v1)", () => {
+  // v2 회귀 (후속 정리 ③): v1 의 Hero "AI로 만드는 / 인터랙티브 플립드 러닝"
+  // + Features 6 + Steps 3 + "지금 바로 시작하세요" CTA 구조는 v3.1 짧은
+  // 게이트웨이(hero + 분야 카드만)로 전면 교체됐다. v2 의 실제 hero/필드
+  // 카피·구조를 회귀 가드한다.
+  it("v2 hero + 분야 쇼케이스 카피·카드가 정상 마운트된다", () => {
     renderPage(<LandingPage />);
-    // Hero
-    expect(screen.getByText("AI로 만드는")).toBeTruthy();
-    expect(screen.getByText("인터랙티브 플립드 러닝")).toBeTruthy();
-    // Features 6 — 제목 정확 매칭
-    expect(screen.getByText("AI 영상 자동 생성")).toBeTruthy();
-    expect(screen.getByText("RAG 기반 Q&A")).toBeTruthy();
-    expect(screen.getByText("실시간 집중도 추적")).toBeTruthy();
-    expect(screen.getByText("자동 평가 시스템")).toBeTruthy();
-    expect(screen.getByText("학습 분석 대시보드")).toBeTruthy();
-    expect(screen.getByText("다국어 번역 지원")).toBeTruthy();
-    // Steps 3
-    expect(screen.getByText("PPT 업로드")).toBeTruthy();
-    expect(screen.getByText("AI 스크립트 편집")).toBeTruthy();
-    expect(screen.getByText("학생에게 공유")).toBeTruthy();
-    // CTA
-    expect(screen.getByText("지금 바로 시작하세요")).toBeTruthy();
+    // homeHero — / 전용 카피 (헤딩 level 1)
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1.textContent).toContain("학생과 상호작용하는");
+    expect(h1.textContent).toContain("AI 교육영상");
+    // 관찰자 eyebrow (landingHub.heroV3.observerBadge)
+    expect(
+      screen.getByText(/교수자의 의도가 모든 결정에 반영되는 AI 강의 플랫폼/),
+    ).toBeTruthy();
+    // 분야 쇼케이스 헤딩 + 카드 2장
+    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
+    expect(screen.getByTestId("demo-field-social")).toBeTruthy();
+    expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
+    // v1 시그니처 카피는 회귀하지 않아야 한다
+    expect(screen.queryByText("인터랙티브 플립드 러닝")).toBeNull();
+    expect(screen.queryByText("지금 바로 시작하세요")).toBeNull();
   });
 
-  // v3.1 (2026-05-13 PM): 사용자 결정으로 Stats Strip / Platform mesh /
-  // Adoption chart / 4가지 차별점 / 3단계 / Anchor case / Final CTA 모든 섹션을
-  // 메인 사이트에서 제거 (긴 마케팅 콘텐츠는 /features · /use-cases · /pricing
-  // 으로 분산). 따라서 본 어서션은 무효 — skip 처리하고 후속 PR 에서 새 v3.1
-  // 구조 (hero + fields 만) 회귀 테스트로 교체.
-  it.skip("신규 섹션 — Stats Strip (3 stat) / Platform / Adoption 모두 마운트 (v3, deprecated)", () => {
-    renderPage(<LandingPage />);
-    expect(screen.getByText("교수자가 이미 사용 중")).toBeTruthy();
-    expect(screen.getByText("생성된 강의 영상")).toBeTruthy();
-    expect(screen.getByText("절약된 강의 준비 시간")).toBeTruthy();
-    expect(screen.getByText(/한 번 업로드/)).toBeTruthy();
-    expect(screen.getByText(/검증된 학습 효과/)).toBeTruthy();
-    expect(screen.getByText("시청 완료율")).toBeTruthy();
-    expect(screen.getByText("Q&A 참여")).toBeTruthy();
-  });
+  // 참고: v3.1 에서 제거된 Stats Strip / MeshNetworkVisual 등 deprecated
+  // 섹션의 부재는 아래 "v3.1 짧은 게이트웨이 …" 케이스가 negative 어서션으로
+  // 이미 회귀 가드한다 → 해당 섹션용 skip 테스트는 재작성 대신 삭제했다
+  // (제거된 콘텐츠를 위한 테스트는 존재 의미가 없음).
 
-  // v2 (2026-05-13): hero CTA 링크 경로·개수 재구성. 후속 PR 에서 새 어서션 작성.
-  it.skip("Hero CTA 두 개 모두 /auth/login 또는 #features anchor 로 link (v1)", () => {
+  // v2 회귀 (후속 정리 ③): v1 의 hero CTA 2개가 /auth/login 으로 가던 구조는
+  // 폐기됐다. v3.1 hero 의 primary 는 /demo?field=social (학생 화면 미리보기),
+  // secondary 는 /features 다. /auth/login 회귀가 없는지도 함께 가드.
+  it("v2 hero CTA — primary=/demo?field=social, secondary=/features", () => {
     renderPage(<LandingPage />);
+    const primary = screen.getByTestId("landing-hero-start");
+    expect(primary.getAttribute("href")).toBe("/demo?field=social");
+    const featureLinks = screen
+      .getAllByRole("link")
+      .filter((el) => el.getAttribute("href") === "/features");
+    expect(featureLinks.length).toBeGreaterThanOrEqual(1);
     const loginLinks = screen
       .getAllByRole("link")
       .filter((el) => el.getAttribute("href") === "/auth/login");
-    expect(loginLinks.length).toBeGreaterThanOrEqual(2);
+    expect(loginLinks.length).toBe(0);
   });
 
   it("IconDefs 가 마운트되어 그라데이션 6종 defs 존재 (DOM 안에)", () => {
@@ -69,17 +68,8 @@ describe("LandingPage 통합", () => {
     expect(container.querySelector("#grad-pink")).toBeTruthy();
   });
 
-  // v3.1 (2026-05-13 PM): MeshNetworkVisual 도 메인에서 제거. /features 페이지로
-  // 이동 예정. 본 어서션은 무효.
-  it.skip("MeshNetworkVisual 6 노드 라벨 모두 노출 (v3, deprecated)", () => {
-    renderPage(<LandingPage />);
-    expect(screen.getByText("PPT")).toBeTruthy();
-    expect(screen.getByText("AI 스크립트")).toBeTruthy();
-    expect(screen.getByText("아바타 영상")).toBeTruthy();
-    expect(screen.getByText("RAG Q&A")).toBeTruthy();
-    expect(screen.getByText("자동 평가")).toBeTruthy();
-    expect(screen.getByText("다국어")).toBeTruthy();
-  });
+  // (MeshNetworkVisual 6-노드 skip 테스트 삭제 — v3.1 에서 컴포넌트 자체가
+  // 메인에서 제거됨. 부재 회귀는 바로 아래 케이스의 negative 어서션이 커버.)
 
   // v3.1 (2026-05-13 PM): 새 구조 — hero + fields 두 섹션만, 그 이후는 모두 제거.
   // 핵심 회귀 가드: 분야 카드 2장이 보이고, 제거되어야 할 섹션이 다시 들어오지

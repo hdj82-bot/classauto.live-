@@ -7,51 +7,44 @@ import { I18nProvider } from "@/contexts/I18nContext";
 const renderWithI18n = (ui: ReactNode) => render(<I18nProvider>{ui}</I18nProvider>);
 
 /**
- * v2 (2026-05-13): 메인 랜딩이 v2 디자인 언어로 전면 재작성되어 6개 케이스
- * (hero heading, CTA button, 6 feature cards, 3-step flow, footer, navigation)
- * 의 DOM 셀렉터가 모두 무효화됨.
- *
- * 임시로 describe 전체를 skip 처리하여 머지 차단을 해제하고, 후속 PR 에서
- * v2 의 새 본문에 맞춰 회귀 케이스 재작성. landing/page.test.tsx 가 통합
- * 테스트로 일부 회귀를 커버하므로 손실 최소화.
+ * v2 회귀 (후속 정리 ③): 메인 랜딩이 v3.1 짧은 게이트웨이(hero + 분야 카드,
+ * LightMarketingShell 헤더·푸터)로 재작성되며 v1 의 6개 케이스(hero heading /
+ * "무료로 시작하기" CTA / feature 6 / 3-step / "All rights reserved" 푸터 /
+ * /auth/login nav)가 모두 무효화됐다. v2 의 실제 DOM 에 맞춰 재작성한다.
+ * landing/page.test.tsx 가 통합 회귀를 함께 커버하므로 본 파일은 핵심
+ * 셀렉터 단위 가드만 둔다.
  */
-describe.skip("LandingPage (v1 — v2 재작성됨, 후속 PR 에서 회귀 케이스 재작성)", () => {
-  it("renders hero heading", () => {
+describe("LandingPage (v2 — 짧은 게이트웨이)", () => {
+  it("renders the v2 hero heading copy", () => {
     renderWithI18n(<LandingPage />);
-    expect(screen.getByText("인터랙티브 플립드 러닝")).toBeTruthy();
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1.textContent).toContain("학생과 상호작용하는");
+    expect(h1.textContent).toContain("AI 교육영상");
   });
 
-  it("renders CTA button", () => {
+  it("renders the primary hero CTA → /demo?field=social", () => {
     renderWithI18n(<LandingPage />);
-    const buttons = screen.getAllByText("무료로 시작하기");
-    expect(buttons.length).toBeGreaterThanOrEqual(1);
+    const primary = screen.getByTestId("landing-hero-start");
+    expect(primary.getAttribute("href")).toBe("/demo?field=social");
+    expect(primary.textContent).toContain("학생 화면 미리보기");
   });
 
-  it("renders 6 feature cards", () => {
+  it("renders the field showcase with both demo cards", () => {
     renderWithI18n(<LandingPage />);
-    expect(screen.getByText("AI 영상 자동 생성")).toBeTruthy();
-    expect(screen.getByText("RAG 기반 Q&A")).toBeTruthy();
-    expect(screen.getByText("실시간 집중도 추적")).toBeTruthy();
-    expect(screen.getByText("자동 평가 시스템")).toBeTruthy();
-    expect(screen.getByText("학습 분석 대시보드")).toBeTruthy();
-    expect(screen.getByText("다국어 번역 지원")).toBeTruthy();
+    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
+    expect(screen.getByTestId("demo-field-social")).toBeTruthy();
+    expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
   });
 
-  it("renders 3-step flow", () => {
-    renderWithI18n(<LandingPage />);
-    expect(screen.getByText("PPT 업로드")).toBeTruthy();
-    expect(screen.getByText("AI 스크립트 편집")).toBeTruthy();
-    expect(screen.getByText("학생에게 공유")).toBeTruthy();
+  it("renders the LightMarketingShell footer with a /beta-apply link", () => {
+    const { container } = renderWithI18n(<LandingPage />);
+    const footer = container.querySelector("footer");
+    expect(footer).toBeTruthy();
+    expect(footer!.querySelector('a[href="/beta-apply"]')).toBeTruthy();
   });
 
-  it("renders footer", () => {
+  it("no longer links to the v1 /auth/login from the landing page", () => {
     renderWithI18n(<LandingPage />);
-    expect(screen.getByText(/All rights reserved/)).toBeTruthy();
-  });
-
-  it("renders navigation with login link", () => {
-    renderWithI18n(<LandingPage />);
-    const links = document.querySelectorAll('a[href="/auth/login"]');
-    expect(links.length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelectorAll('a[href="/auth/login"]').length).toBe(0);
   });
 });

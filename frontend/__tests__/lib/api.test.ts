@@ -51,70 +51,10 @@ describe("isStripeCheckoutUrl", () => {
   });
 });
 
-describe("oauthState", () => {
-  beforeEach(() => {
-    vi.resetModules();
-    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.com");
-    window.sessionStorage.clear();
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it("issues a fresh state and persists it to sessionStorage", async () => {
-    const { oauthState } = await loadApiModule();
-    const s1 = oauthState.issue();
-    expect(s1.length).toBeGreaterThanOrEqual(8);
-    expect(window.sessionStorage.getItem("ifl_oauth_state")).toBe(s1);
-  });
-
-  it("issue() produces unique values", async () => {
-    const { oauthState } = await loadApiModule();
-    const a = oauthState.issue();
-    const b = oauthState.issue();
-    expect(a).not.toBe(b);
-  });
-
-  it("consume() succeeds when received state matches and clears storage", async () => {
-    const { oauthState } = await loadApiModule();
-    const issued = oauthState.issue();
-    const result = oauthState.consume(issued);
-    expect(result.ok).toBe(true);
-    expect(window.sessionStorage.getItem("ifl_oauth_state")).toBeNull();
-  });
-
-  it("consume() fails on mismatch and still clears storage (no replay)", async () => {
-    const { oauthState } = await loadApiModule();
-    oauthState.issue();
-    const result = oauthState.consume("attacker-state");
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe("mismatch");
-    expect(window.sessionStorage.getItem("ifl_oauth_state")).toBeNull();
-  });
-
-  it("consume() fails when state was never issued", async () => {
-    const { oauthState } = await loadApiModule();
-    const result = oauthState.consume("anything");
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe("absent");
-  });
-
-  it("consume() fails when received state is null", async () => {
-    const { oauthState } = await loadApiModule();
-    oauthState.issue();
-    const result = oauthState.consume(null);
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe("missing");
-  });
-
-  it("hasIssued reflects sessionStorage state", async () => {
-    const { oauthState } = await loadApiModule();
-    expect(oauthState.hasIssued()).toBe(false);
-    oauthState.issue();
-    expect(oauthState.hasIssued()).toBe(true);
-  });
-});
+// 후속 정리 ④: frontend OAuth state 레이어(oauthState issue/consume/hasIssued
+// + OAUTH_STATE_KEY)는 백엔드 Redis 단일 검증 일원화(2026-05-12)로 dead
+// code 가 되어 제거됐다. 해당 7개 단위 테스트도 함께 careful drop. 아래
+// startGoogleLogin 케이스를 "state 미발급" 회귀 가드로 재작성해 손실 보전.
 
 describe("startGoogleLogin", () => {
   let originalLocation: Location;
@@ -135,7 +75,7 @@ describe("startGoogleLogin", () => {
     vi.unstubAllEnvs();
   });
 
-  it("issues state and redirects with role and state in query", async () => {
+  it("redirects with role only — no frontend state issued (backend single-source)", async () => {
     const { startGoogleLogin } = await loadApiModule();
 
     let assigned = "";
@@ -158,8 +98,9 @@ describe("startGoogleLogin", () => {
     expect(url.origin).toBe("https://api.example.com");
     expect(url.pathname).toBe("/api/auth/google");
     expect(url.searchParams.get("role")).toBe("professor");
-    const stateInUrl = url.searchParams.get("state");
-    expect(stateInUrl).not.toBeNull();
-    expect(window.sessionStorage.getItem("ifl_oauth_state")).toBe(stateInUrl);
+    // 프론트는 더 이상 state 를 발급/동봉하지 않는다 (백엔드 Redis 단일 검증).
+    expect(url.searchParams.get("state")).toBeNull();
+    // 레거시 sessionStorage 키도 쓰지 않는다 (잔재는 silent ignore).
+    expect(window.sessionStorage.getItem("ifl_oauth_state")).toBeNull();
   });
 });

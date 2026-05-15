@@ -59,31 +59,33 @@ describe("/pricing — full page composition", () => {
 
   // v2 (2026-05-13): pricing 페이지가 v2 디자인으로 재작성되어 filled-gold CTA
   // 카운트·셀렉터가 변경됨. 후속 PR 에서 새 카운트 어서션 작성.
-  it.skip("renders only ONE filled-gold CTA on the page (colors.md §3 — 골드 채움 1번, v1)", () => {
+  // v2 회귀 (후속 정리 ③): v1 의 `bg-amber-400` className 시그니처 휴리스틱은
+  // v2 에서 무효 — PlanCard 가 highlighted(=Basic)에만 inline
+  // `backgroundColor:#FFB627` 골드 채움을 주고 나머지는 outline 이다
+  // (colors.md §3 "CTA 골드 채움 1번"). v2 의 안정 셀렉터(data-highlighted +
+  // 카드 CTA inline 배경)로 "골드 채움 CTA 는 Basic 1개" 규칙을 가드한다.
+  // jsdom 은 inline `#FFB627` 를 `rgb(255, 182, 39)` 로 정규화한다.
+  it("applies the single gold-filled plan CTA to Basic only (colors.md §3, v2)", () => {
     wrap(<PricingContent />);
-    // 골드 채움 = `bg-amber-400` className 시그니처. outline/border 만 있는 골드는 제외.
-    const allButtons = document.querySelectorAll("a, button");
-    const filledGold: Element[] = [];
-    allButtons.forEach((el) => {
-      const cls = el.getAttribute("class") ?? "";
-      // BillingToggle 의 annual 버튼도 활성 시 bg-amber-400 인데, 이는 토글 컨트롤
-      // (CTA 가 아님). data-testid 로 제외.
-      if (el.getAttribute("data-testid") === "pricing-billing-annual") return;
-      // MarketingShell 의 topCta 도 bg-amber-400 임 — pricing 본문 영역만 검사하기
-      // 위해 Link/button 의 textContent 가 베타 신청 라벨이면 제외 (shell 외부).
-      // 더 견고하게: marketing footer 의 link 들도 제외.
-      const inHeader = el.closest("header");
-      const inFooter = el.closest("footer");
-      if (inHeader || inFooter) return;
-      // BillingToggle 의 popularBadge 류 span 등 inline element 도 제외 (a/button 만 선택했으니 OK)
-      if (cls.includes("bg-amber-400") && !cls.includes("border-amber-400")) {
-        filledGold.push(el);
-      }
-    });
-    // popularBadge 는 span 이므로 위 a/button 쿼리에는 잡히지 않는다.
-    // 본문에서 필드 골드 CTA 는 Basic 카드 1개여야 한다.
-    expect(filledGold.length, `expected 1 filled-gold CTA, found ${filledGold.length}`).toBe(1);
-    expect(filledGold[0].getAttribute("data-testid")).toBe("plan-card-basic-cta");
+    const GOLD = "rgb(255, 182, 39)";
+
+    const grid = screen.getByTestId("pricing-plan-grid");
+    const cards = within(grid).getAllByTestId(/^plan-card-(free|basic|pro)$/);
+    const highlighted = cards.filter(
+      (c) => c.getAttribute("data-highlighted") === "true",
+    );
+    // 정확히 1장(= Basic)만 강조 카드
+    expect(highlighted.length).toBe(1);
+    expect(highlighted[0].getAttribute("data-testid")).toBe("plan-card-basic");
+
+    const basicCta = screen.getByTestId("plan-card-basic-cta") as HTMLElement;
+    const freeCta = screen.getByTestId("plan-card-free-cta") as HTMLElement;
+    const proCta = screen.getByTestId("plan-card-pro-cta") as HTMLElement;
+
+    // Basic CTA 만 골드 채움, 나머지는 채움 없음(outline)
+    expect(basicCta.style.backgroundColor).toBe(GOLD);
+    expect(freeCta.style.backgroundColor).not.toBe(GOLD);
+    expect(proCta.style.backgroundColor).not.toBe(GOLD);
   });
 
   it("does not register any localStorage writes (constraint: localStorage 사용 0건)", () => {

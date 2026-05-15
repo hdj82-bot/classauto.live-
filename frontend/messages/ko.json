@@ -322,5 +322,1094 @@
     "systemRedisMemory": "사용 메모리",
     "systemRedisClients": "연결된 클라이언트",
     "systemQueueLen": "대기열 길이"
+  },
+  "demo": {
+    "meta": {
+      "pageTitle": "데모 체험 — ClassAuto",
+      "pageDescription": "회원가입 없이 학생 입장으로 ClassAuto AI 튜터를 3분 안에 체험하세요."
+    },
+    "hero": {
+      "eyebrow": "DEMO · 학생 시점",
+      "headline1": "교수님,",
+      "headline2": "30초만 학생이 되어보세요.",
+      "subtitle": "실제 강의 영상을 보면서 AI 튜터에게 질문해보세요. 회원가입 없이 바로 시작하실 수 있습니다.",
+      "metaTime": "약 3분 소요",
+      "metaQuestions": "질문 3건 무료",
+      "metaMobile": "모바일 가능",
+      "scrollHint": "아래에서 분야를 선택하세요"
+    },
+    "heroV2": {
+      "eyebrow": "DEMO · 학생 시점 화면",
+      "headlineLead": "강의 영상이",
+      "headlineAccent": "학생에게 답합니다.",
+      "subtitle": "PPT 한 장으로 만든 AI 강의 영상이, 학생의 질문에 실시간으로 답하고 중간 퀴즈로 집중을 유지합니다. 교수님은 학습 데이터로 대면 수업을 개선하실 수 있습니다. 지금 학생들이 만나는 화면을 직접 확인해보세요.",
+      "observerBadge": "AI 교수자와의 양방향 학습",
+      "metaTime": "약 3분 소요",
+      "metaQuestions": "질문 3건 무료",
+      "metaMobile": "모바일 가능",
+      "primaryCta": "▶ 학생 화면 확인하기",
+      "secondaryCta": "기능 자세히 보기"
+    },
+    "heroV3": {
+      "observerBadge": "AI 강의 자동 생성 플랫폼",
+      "headlineLead": "학생과 상호작용하는",
+      "headlineAccent": "AI 교육영상",
+      "headlineTail": "",
+      "subtitle": "PPT를 업로드하면 AI가 강의 영상을 만들고, 학생들과 양방향으로 소통합니다. 교수님은 AI가 제공하는 학습 보고서로 대면 수업을 다듬으세요.",
+      "subTag": "학생이 만나는 화면을 먼저 확인해보세요.",
+      "metaTime": "약 3분 소요",
+      "metaQuestions": "질문 3건 무료",
+      "metaMobile": "모바일 가능",
+      "primaryCta": "학생 화면 미리보기",
+      "secondaryCta": "기능 자세히 보기"
+    },
+    "flowStage": {
+      "topStatus": "데모 미리보기 · 흐름 요약",
+      "topSub": "실제 영상은 추후 추가",
+      "step1": "PPT 업로드",
+      "step2": "AI 영상 합성",
+      "step3": "학생과 대화",
+      "aiTag1": "스크립트",
+      "aiTag2": "TTS",
+      "aiTag3": "아바타",
+      "chatSource": "출처 인용",
+      "bottomLead": "교수님은",
+      "bottomEmphasis": "학습 보고서",
+      "bottomTail": "로 다음 강의를 다듬습니다."
+    },
+    "marketingHeader": {
+      "navFeatures": "기능",
+      "navStudentGuide": "학습자 가이드",
+      "navAnalytics": "분석 예시",
+      "navUseCases": "사용 사례",
+      "navPricing": "가격",
+      "livePill": "Live Demo",
+      "cta": "베타 신청"
+    },
+    "fieldSelectV3": {
+      "title": "두 분야 중 하나를 골라주세요",
+      "subtitle": "인문계열과 자연계열 — 같은 가드레일이 어떻게 다른 강의에 적용되는지 비교해보세요.",
+      "social": {
+        "tagline": "A · Liberal Arts",
+        "metaLine": "인문계열 · {minutes}분 클립",
+        "minutes": "5",
+        "title": "중국어문법의 이해",
+        "subtitle": "把자문(把字句)의 어순 규칙을 중심으로 — 추천 질문, 출처 인용, 그리고 강의 외 질문 거부까지 차례로 시연됩니다.",
+        "statSlides": "{count} 슬라이드",
+        "statSlidesCount": "8",
+        "statSecondary": "AI 자동 퀴즈",
+        "start": "시작하기"
+      },
+      "natural": {
+        "tagline": "B · Natural Science",
+        "metaLine": "자연계열 · {minutes}분 클립",
+        "minutes": "5",
+        "title": "광합성의 원리",
+        "subtitle": "빛 에너지가 화학 에너지로 전환되는 과정을 중심으로 — 추천 질문, 출처 인용, 그리고 강의 외 질문 거부까지 차례로 시연됩니다.",
+        "statSlides": "{count} 슬라이드",
+        "statSlidesCount": "8",
+        "statSecondary": "AI 자동 퀴즈",
+        "start": "시작하기"
+      }
+    },
+    "trustStrip": {
+      "dataLabel": "데이터 보호",
+      "dataValue": "24시간 후 자동 삭제",
+      "ragLabel": "RAG 임계값",
+      "ragValue": "0.65 · 체험용 완화",
+      "inputLabel": "입력 한도",
+      "inputValue": "200자 · 세션당 3건",
+      "sessionLabel": "세션 관리",
+      "sessionValue": "익명 · IP당 1일 3회"
+    },
+    "fieldSelectV2": {
+      "title": "두 영상 중 하나를 골라보세요",
+      "subtitle": "분야는 무관합니다. 각 영상은 5분 클립 안에 추천 질문, 출처 인용, 인터스티셜 퀴즈, 강의 외 질문 거부까지 시연됩니다.",
+      "social": {
+        "tagline": "A · LIBERAL ARTS",
+        "label": "인문계열 · 5분 클립",
+        "title": "중국어문법의 이해 (把자문)",
+        "subtitle": "把자문(把字句)의 어순 규칙을 중심으로 — 추천 질문, 출처 인용, 그리고 강의 외 질문 거부까지 차례로 시연됩니다.",
+        "elements": "8 슬라이드 · 2 추천 질문 · 1 퀴즈",
+        "start": "시작하기"
+      },
+      "natural": {
+        "tagline": "B · NATURAL SCIENCE",
+        "label": "자연계열 · 5분 클립",
+        "title": "광합성의 원리",
+        "subtitle": "빛 에너지가 화학 에너지로 전환되는 과정을 중심으로 — 추천 질문, 출처 인용, 그리고 강의 외 질문 거부까지 차례로 시연됩니다.",
+        "elements": "8 슬라이드 · 2 추천 질문 · 1 퀴즈",
+        "start": "시작하기"
+      }
+    },
+    "fieldSelect": {
+      "title": "어느 분야를 체험하시겠어요?",
+      "subtitle": "선택한 분야에 맞춘 5분 강의 클립과 AI 튜터를 즉시 보여드립니다.",
+      "social": {
+        "label": "인문계열",
+        "title": "중국어문법의 이해",
+        "duration": "약 5분",
+        "tag": "어흥 교수님 실제 강의",
+        "start": "▶ 시작하기"
+      },
+      "natural": {
+        "label": "자연계열",
+        "title": "광합성의 원리",
+        "duration": "약 5분",
+        "tag": "AI 아바타 음성 재합성",
+        "start": "▶ 시작하기"
+      },
+      "switch": "다른 분야로 바꾸기"
+    },
+    "experience": {
+      "statusBar": "데모 모드 · {field}편 · 체험 시간 {elapsed} / 5:00",
+      "videoPlaceholderTitle": "데모 영상이 곧 도착합니다",
+      "videoPlaceholderDesc": "실제 강의 클립은 베타 단계에서 준비 중입니다. 지금은 미리보기 정지 화면만 노출됩니다.",
+      "videoTodo": "TODO: /public/demo/{slug}.mp4 파일 추가 후 <video src> 연결",
+      "videoControlsPlay": "재생",
+      "videoControlsPause": "일시정지",
+      "videoCaption": "AI 아바타 음성으로 재합성된 강의 미리보기",
+      "chatTitle": "강의 도우미",
+      "chatGreeting": "안녕하세요! 강의에 대해 무엇이든 물어보세요.",
+      "suggestedHeader": "👇 추천 질문",
+      "questionsLeft": "{used}/{max} 사용",
+      "questionsRemaining": "{remaining} / {max} 남음",
+      "inputPlaceholder": "질문을 입력하세요...",
+      "inputCounter": "{count}/{max}",
+      "send": "질문 보내기",
+      "sending": "AI가 답변을 작성 중입니다...",
+      "limitReachedTitle": "🎉 3가지 질문을 모두 사용하셨어요",
+      "limitReachedDesc": "학생들의 진짜 질문을 받아보고 싶으세요? 직접 강의를 만들어보세요.",
+      "limitReachedCta": "베타 신청하기",
+      "lastQuestionHint": "💡 마지막 질문이에요. 강의와 무관한 질문도 한 번 시도해보세요!"
+    },
+    "toast": {
+      "offTopicTitle": "💡 시도해볼까요?",
+      "offTopicBody": "\"오늘 점심 뭐 먹지?\" 같은 강의와 무관한 질문도 입력해보세요. AI가 어떻게 반응하는지 확인할 수 있어요.",
+      "offTopicCta": "지금 시도",
+      "challengeBadge": "🏆 도전 과제: 강의 외 질문 시도하기",
+      "challengeDone": "✓ 차별점 1개 발견!"
+    },
+    "answer": {
+      "sourceLabel": "출처",
+      "sourceSlideSocial": "슬라이드 7-8",
+      "sourceSlideNatural": "슬라이드 4-5",
+      "videoTime": "영상 시점",
+      "videoTimeRangeSocial": "2:14-3:02",
+      "videoTimeRangeNatural": "1:48-2:36",
+      "replayAudio": "🔄 다시 듣기",
+      "jumpToVideo": "📌 이 부분 다시 보기",
+      "offTopicTitle": "이 질문은 강의 범위 밖이에요.",
+      "offTopicBody": "강의 자료에서 답을 찾을 수 없습니다. 다른 EdTech AI 챗봇은 이런 질문에도 답하지만, ClassAuto는 학생이 학습에 집중하도록 설계되었습니다.",
+      "offTopicTag": "RAG 범위 제한"
+    },
+    "mockAnswers": {
+      "socialQ1": "把자문은 목적어를 동사 앞에 두어 '~을(를) 어떻게 처치한다'는 의미를 강조할 때 사용합니다. 처치 가능한 구체적 대상(definite object)이 있고, 동사가 결과·완성·이동·변화를 동반할 때 자연스럽습니다. 예: 我把书放在桌子上 (나는 책을 책상 위에 놓았다).",
+      "socialQ2": "일반 SVO 어순(我吃饭)은 행위 자체를 서술하지만, 把자문(我把饭吃了)은 목적어에 대한 처치의 결과를 강조합니다. 把자문에서는 목적어가 한정적이어야 하고, 동사 단독으로는 잘 쓰이지 않으며 결과보어·방향보어·시상조사 了 등이 따라붙는 게 일반적입니다.",
+      "naturalQ1": "광합성은 빛 에너지를 흡수해 이산화탄소(CO₂)와 물(H₂O)을 포도당(C₆H₁₂O₆)과 산소(O₂)로 전환하는 과정입니다. 엽록체 안에서 두 단계로 진행됩니다 — 명반응(빛 에너지 → ATP·NADPH)과 암반응(칼빈 회로, 이산화탄소를 포도당으로 고정).",
+      "naturalQ2": "엽록소는 광합성에서 빛을 흡수하는 색소입니다. 주로 청색·적색 파장을 흡수하고 녹색 파장을 반사해 잎이 녹색으로 보입니다. 흡수한 빛 에너지는 전자 전달계를 따라 화학 에너지(ATP·NADPH)로 전환되어 포도당 합성에 쓰입니다."
+    },
+    "suggested": {
+      "socialQ1": "把자문은 언제 써야 하나요?",
+      "socialQ2": "把자문과 일반 문장은 어떻게 다른가요?",
+      "naturalQ1": "광합성의 기본 원리가 뭔가요?",
+      "naturalQ2": "엽록소는 어떤 역할을 하나요?"
+    },
+    "ctaModal": {
+      "title": "체험은 어떠셨나요?",
+      "body": "방금 보신 영상은 어흥 교수님의 실제 강의 일부입니다. PPT 한 장으로 시작해, 약 12분 만에 만들어졌습니다.",
+      "primary": "🎓 베타 신청하고 직접 만들기",
+      "secondary": "💰 가격 보기",
+      "shareTitle": "동료 교수님께도 공유해보세요",
+      "shareEmail": "이메일",
+      "shareKakao": "카톡",
+      "shareX": "X",
+      "shareUrl": "URL 복사",
+      "shareUrlDone": "URL이 복사되었어요",
+      "replay": "✕ 한 번 더 체험하기"
+    },
+    "faq": {
+      "title": "데모 한정 FAQ",
+      "q1": "회원가입 없이 정말 다 써볼 수 있나요?",
+      "a1": "네, 영상 시청과 AI 챗봇과의 대화까지 회원가입 없이 가능합니다.",
+      "q2": "내 강의로도 이런 영상이 만들어지나요?",
+      "a2": "네, PPT 한 장만 있으면 됩니다.",
+      "q3": "학생 입장 화면이 실제와 같나요?",
+      "a3": "본 데모는 실제 학생이 보는 화면과 동일합니다.",
+      "q4": "두 데모 영상 모두 체험할 수 있나요?",
+      "a4": "한 세션당 한 영상이지만, '한 번 더 체험' 옵션으로 다른 영상도 시도 가능합니다."
+    },
+    "footerCta": {
+      "title": "이제 직접 만들어볼 차례예요",
+      "subtitle": "베타 신청은 무료이며, PPT 한 장으로 12분 안에 첫 강의를 만들 수 있습니다.",
+      "primary": "베타 신청하기 →",
+      "secondary": "가격 보기"
+    },
+    "a11y": {
+      "fieldCardSocial": "인문계열 — 중국어문법의 이해 데모 시작하기",
+      "fieldCardNatural": "자연계열 — 광합성의 원리 데모 시작하기",
+      "switchField": "데모 분야 다시 선택",
+      "closeToast": "안내 토스트 닫기",
+      "questionInput": "강의 도우미에게 보낼 질문",
+      "answerSection": "AI 답변"
+    }
+  },
+  "landingHub": {
+    "meta": {
+      "title": "ClassAuto · AI 플립러닝 플랫폼",
+      "description": "PPT 한 장을 양방향 강의 영상으로. 학생의 질문에 영상이 답하고, 인터스티셜 퀴즈로 집중을 유지합니다. 학자가 학자를 위해 만든 플립러닝 도구."
+    },
+    "heroV2": {
+      "eyebrow": "INTERACTIVE FLIPPED LEARNING",
+      "titleLead": "강의 영상이",
+      "titleHan": "答",
+      "titleHanReading": "답",
+      "titleTail": "한다",
+      "titleSub": "학생에게",
+      "subtitle": "PPT 한 장에서 시작합니다. AI가 스크립트를 다듬고, 아바타가 강의를 합니다. 학생의 질문에 영상이 답하고, 5분 간격의 인터스티셜 퀴즈가 집중을 유지합니다. 12분이면 한 편이 완성됩니다.",
+      "metaChip1": "PPT 한 장 → 12분",
+      "metaChip2": "RAG 범위 제한 Q&A",
+      "metaChip3": "광고 미사용 · 졸업 후 자동 삭제",
+      "primaryCta": "베타 신청하기",
+      "secondaryCta": "데모 먼저 보기",
+      "primaryCtaSub": "Phase 2 베타 · 학계 무료",
+      "identityNote": "학자가 학자를 위해 만든 도구"
+    },
+    "heroV3": {
+      "observerBadge": "교수자의 의도가 모든 결정에 반영되는 AI 강의 플랫폼",
+      "headlineLead": "대본 한 번,",
+      "headlineTail": "학생과는",
+      "headlineAccent": "끝없는 대화",
+      "subtitle": "PPT를 올리면 AI가 교수자와 대화하며 강의 컨셉을 잡고 영상을 생성합니다. 완성된 영상은 학생과 양방향으로 상호작용하며, 교수자는 학습 데이터로 대면 수업을 다듬습니다.",
+      "subtitleLine1": "PPT를 올리면 AI가 교수자와 대화하며 강의 컨셉을 잡고 영상을 생성합니다.",
+      "subtitleLine2": "완성된 영상은 학생과 양방향으로 상호작용하며,",
+      "subtitleLine3": "교수자는 학습 데이터로 대면 수업을 다듬습니다.",
+      "subTag": "학생이 만나는 화면을 먼저 확인해보세요.",
+      "metaTime": "약 3분 소요",
+      "metaQuestions": "질문 3건 무료",
+      "metaMobile": "모바일 가능",
+      "primaryCta": "학생 화면 미리보기",
+      "secondaryCta": "기능 자세히 보기"
+    },
+    "homeHero": {
+      "headlineLead": "학생과 상호작용하는",
+      "headlineAccent": "AI 교육영상"
+    },
+    "demoFlow": {
+      "topStatus": "데모 미리보기 · 흐름 요약",
+      "topSub": "실제 영상은 추후 추가",
+      "step1": "PPT 업로드",
+      "step2": "AI 영상 합성",
+      "step3": "학생과 대화",
+      "aiTag1": "스크립트",
+      "aiTag2": "TTS",
+      "aiTag3": "아바타",
+      "chatSource": "출처 인용",
+      "bottomLead": "교수님은",
+      "bottomEmphasis": "학습 보고서",
+      "bottomTail": "로 다음 강의를 다듬습니다."
+    },
+    "demoFieldShowcase": {
+      "title": "두 분야 중 하나를 골라주세요",
+      "subtitle": "인문계열과 자연계열 — 같은 가드레일이 어떻게 다른 강의에 적용되는지 비교해보세요."
+    },
+    "demoTrustStrip": {
+      "ariaLabel": "데이터 보호 안내",
+      "dataLabel": "데이터 보호",
+      "dataValue": "24시간 후 자동 삭제",
+      "ragLabel": "RAG 임계값",
+      "ragValue": "0.65 · 체험용 완화",
+      "inputLabel": "입력 한도",
+      "inputValue": "200자 · 세션당 3건",
+      "sessionLabel": "세션 관리",
+      "sessionValue": "익명 · IP당 1일 3회"
+    },
+    "differentiators": {
+      "eyebrow": "핵심 차별점",
+      "title": "ClassAuto가 일반 EdTech와 다른 4가지",
+      "subtitle": "학생이 학습에 집중하도록 설계 단계부터 가드레일이 깔려 있습니다.",
+      "items": {
+        "rag": {
+          "title": "RAG 범위 제한 Q&A",
+          "description": "강의 자료 밖 질문은 AI가 자동 거부합니다 (유사도 임계값 0.7). 챗봇이 일반 검색 엔진처럼 쓰일 수 없습니다."
+        },
+        "limit": {
+          "title": "한도 투명성",
+          "description": "구독제이므로 비용을 보여드리지 않습니다. 매 화면에서 편수와 학생 수가 한도 단위로 명확히 표시됩니다."
+        },
+        "antiCheat": {
+          "title": "부정행위 방지",
+          "description": "인터스티셜 퀴즈, 동시 재생 제한, 매크로 탐지가 기본 활성화입니다. 영상 학습이 시험과 분리되지 않습니다."
+        },
+        "studentData": {
+          "title": "학생 데이터 보호",
+          "description": "광고에 사용하지 않습니다. 졸업 후 자동 삭제하며, 학생이 즉시 삭제 요청할 수 있습니다."
+        }
+      }
+    },
+    "stepsV2": {
+      "eyebrow": "한 편이 만들어지는 과정",
+      "title": "PPT 한 장에서 시작합니다",
+      "subtitle": "교수자가 하는 일은 PPT 업로드와 스크립트 검토뿐입니다. 나머지는 AI 파이프라인이 처리합니다.",
+      "step1": {
+        "label": "1",
+        "title": "PPT 업로드",
+        "description": "기존 강의 자료를 그대로 올리시면 됩니다. 8 슬라이드 기준 약 1분 안에 임베딩이 완료됩니다."
+      },
+      "step2": {
+        "label": "2",
+        "title": "AI 스크립트 다듬기",
+        "description": "AI가 슬라이드별 스크립트를 생성합니다. 교수자는 인라인 diff 로 한두 문장만 다듬으면 됩니다."
+      },
+      "step3": {
+        "label": "3",
+        "title": "아바타 합성·공유",
+        "description": "TTS + 아바타 합성이 자동으로 돌아갑니다. 완료되면 강의 링크와 QR 코드가 생성되어 학생에게 공유할 수 있습니다."
+      }
+    },
+    "trustStrip": {
+      "eyebrow": "이미 시작한 곳",
+      "anchor": "경기대학교 중어중문학과 · 어흥 교수님 (앵커 케이스)",
+      "more": "그 외 학과별 사례 보기 →",
+      "betaBadge": "Phase 2 베타 · 학계 무료 보급 중"
+    },
+    "ctaV2": {
+      "title": "한 학기 강의 준비, 한 주에 끝내세요",
+      "subtitle": "Phase 2 베타 기간 동안 학계 대학 교수자는 Pro 기능을 모두 무료로 쓰실 수 있습니다.",
+      "primaryButton": "베타 신청하고 직접 만들기",
+      "secondaryButton": "가격 정책 보기",
+      "tertiaryButton": "기관 라이선스 문의",
+      "note": "신청 후 1-2 영업일 안에 학교 이메일로 안내드립니다."
+    },
+    "stats": {
+      "educatorsValue": 320,
+      "educatorsLabel": "교수자가 이미 사용 중",
+      "educatorsSuffix": "+",
+      "lecturesValue": 1840,
+      "lecturesLabel": "생성된 강의 영상",
+      "lecturesSuffix": "+",
+      "hoursValue": 12000,
+      "hoursLabel": "절약된 강의 준비 시간",
+      "hoursSuffix": "h"
+    },
+    "platform": {
+      "eyebrow": "플랫폼",
+      "title": "한 번 업로드, 모든 학습이 연결됩니다",
+      "subtitle": "PPT 한 장에서 시작해 영상·평가·집중도·다국어까지 자동으로 흐릅니다.",
+      "node": {
+        "ppt": "PPT",
+        "ai": "AI 스크립트",
+        "video": "아바타 영상",
+        "rag": "RAG Q&A",
+        "assess": "자동 평가",
+        "translate": "다국어"
+      }
+    },
+    "adoption": {
+      "eyebrow": "검증된 학습 효과",
+      "title": "참여도와 완료율이 함께 올라갑니다",
+      "subtitle": "기존 비대면 강의 대비 시청 완료율 평균 32%p 상승, Q&A 참여 2.4배 증가.",
+      "chart": {
+        "completionLabel": "시청 완료율",
+        "participationLabel": "Q&A 참여",
+        "weekLabel": "{n}주차",
+        "yAxisLabel": "비율 (%)"
+      }
+    },
+    "a11y": {
+      "auroraDecoration": "히어로 배경 장식",
+      "meshDecoration": "플랫폼 연결성 시각화",
+      "chartDescription": "주차별 시청 완료율과 Q&A 참여 비율 변화 추이"
+    }
+  },
+  "marketing": {
+    "common": {
+      "backToHome": "처음으로",
+      "footerCopyright": "© 2026 ClassAuto · Interactive Flipped Learning",
+      "footerTagline": "학자가 학자를 위해 만든 플립러닝 도구",
+      "ctaApplyBeta": "베타 신청하기",
+      "ctaContactSales": "기관 문의하기",
+      "primaryNavLabel": "주 메뉴",
+      "footerNavLabel": "푸터 메뉴",
+      "languageSwitcherLabel": "언어 선택",
+      "navFeatures": "기능",
+      "navStudentGuide": "학습자 가이드",
+      "navAnalytics": "분석 예시",
+      "navPricing": "요금제",
+      "navUseCases": "활용 사례",
+      "navTrust": "학생 데이터",
+      "navSecurity": "보안",
+      "navBeta": "베타 신청",
+      "navContact": "기관 문의",
+      "navChangelog": "업데이트",
+      "navHelp": "도움말",
+      "navPrivacy": "개인정보 처리방침",
+      "navTerms": "이용약관",
+      "limitTransparencyTitle": "한도 투명성",
+      "limitTransparencyDesc": "구독제이므로 비용은 보여드리지 않습니다. 매 화면에서 이번 달 영상 편수와 활성 학습자 수가 한도 단위로 명확히 표시됩니다."
+    },
+    "analyticsExample": {
+      "previewBadge": "PREVIEW",
+      "previewBody": "이 화면은 「분석 리포트」 한 화면을 그대로 보여드리는 정적 미리보기입니다. 좌측 사이드바·상단 도구막대 등 콘솔의 다른 메뉴는 클릭되지 않으며, 베타 가입 후 실제 콘솔에서 사용하실 수 있습니다.",
+      "previewCta": "베타 신청"
+    },
+    "useCases": {
+      "meta": {
+        "title": "활용 사례 — ClassAuto",
+        "description": "어학·인문·이공계·사회과학 등 분야별로 ClassAuto가 어떻게 쓰이는지 확인하세요."
+      },
+      "hero": {
+        "eyebrow": "USE CASES · 학과별",
+        "title": "내 분야에서도 쓸 수 있을까요?",
+        "subtitle": "PPT 한 장과 강의자가 있다면, 분야 무관하게 12분 안에 영상 강의가 만들어집니다.",
+        "anchorBadge": "앵커 케이스 · 어흥 교수님"
+      },
+      "anchor": {
+        "field": "중국학·어학",
+        "professor": "하두진 교수님 (실제 사용자)",
+        "school": "경기대학교 중어중문학과",
+        "before": "매주 시사 중국어 영상을 새로 만들고 싶었지만, 매번 자료를 갱신할 시간이 없었습니다.",
+        "after": "PPT 한 장 + AI 스크립트 + 이중 TTS = 12분. 한 학기 14주 분량을 한 주에 준비합니다.",
+        "metricLabel": "출석률 변화",
+        "metricFrom": "78%",
+        "metricTo": "92%",
+        "features": [
+          "이중 TTS (한국어 + 중국어)",
+          "RAG 범위 제한 Q&A",
+          "취약점 히트맵"
+        ]
+      },
+      "cards": {
+        "social": {
+          "field": "사회과학·국제학",
+          "professor": "김○○ 교수님 (가상)",
+          "school": "A 대학 정치외교학과",
+          "before": "시사 흐름이 빨라 영상 자료가 금방 낡습니다. 매주 새로 만들 여유가 없었어요.",
+          "after": "PPT 한 장 + AI 스크립트 = 12분. 학생 출석률이 78% → 92%로 올랐습니다.",
+          "features": [
+            "이중 TTS (한국어 + 영어)",
+            "인터스티셜 퀴즈",
+            "취약점 히트맵"
+          ]
+        },
+        "humanities": {
+          "field": "인문·문학",
+          "professor": "박○○ 교수님 (가상)",
+          "school": "B 대학 국문학과",
+          "before": "고전 텍스트는 학생들이 미리 읽고 와야 토론이 됩니다. 그런데 사전 학습률이 낮았어요.",
+          "after": "사전 학습 영상 5분 + Q&A 챗봇으로 확인. 토론 수업 참여율이 두 배가 됐습니다.",
+          "features": [
+            "RAG 기반 Q&A",
+            "참여 히트맵",
+            "다국어 자막"
+          ]
+        },
+        "engineering": {
+          "field": "공학·이공계",
+          "professor": "이○○ 교수님 (가상)",
+          "school": "C 공과대학 컴퓨터공학과",
+          "before": "수식·도식 위주라 영상 한 편에 4시간이 들었습니다.",
+          "after": "PPT 슬라이드 그대로 + 음성만 합성. 한 편당 15분으로 단축됐습니다.",
+          "features": [
+            "수식 LaTeX 렌더",
+            "코드 블록 강조",
+            "출처 슬라이드 점프"
+          ]
+        },
+        "lab": {
+          "field": "실험·실습",
+          "professor": "최○○ 교수님 (가상)",
+          "school": "D 대학 생명과학과",
+          "before": "실험 안전 교육은 매 학기 똑같은 내용을 반복했습니다.",
+          "after": "한 번 만든 영상으로 6학기 사용 + 매년 실험 사고 데이터로 퀴즈 자동 갱신.",
+          "features": [
+            "버전 관리",
+            "필수 시청 인증",
+            "안전 점검 퀴즈"
+          ]
+        },
+        "arts": {
+          "field": "예체능",
+          "professor": "정○○ 교수님 (가상)",
+          "school": "E 대학 음악학과",
+          "before": "이론 강의를 영상화하면 학생 집중도가 떨어졌습니다.",
+          "after": "5분 단위 + 인터스티셜 퀴즈로 집중 유지. 정답률이 학기 평균 82%까지 올랐습니다.",
+          "features": [
+            "5분 마이크로러닝",
+            "인터스티셜 퀴즈",
+            "익명 반응 4종"
+          ]
+        }
+      },
+      "labels": {
+        "before": "Before",
+        "after": "After",
+        "keyFeatures": "핵심 기능",
+        "viewDetail": "자세히 보기",
+        "modalClose": "닫기",
+        "comingMore": "다른 분야 사례 추가 예정"
+      },
+      "ctaSection": {
+        "title": "내 분야에 ClassAuto가 맞을지 직접 시험해보세요",
+        "description": "베타 기간 동안 무료입니다. 학교 이메일로 신청하면 1-2 영업일 안에 안내드립니다.",
+        "applyButton": "베타 신청",
+        "demoButton": "먼저 데모 체험"
+      }
+    },
+    "trust": {
+      "meta": {
+        "title": "학생 데이터 보호 — ClassAuto",
+        "description": "ClassAuto가 학생 데이터를 어떻게 다루는지 한 페이지로 정리했습니다."
+      },
+      "hero": {
+        "eyebrow": "TRUST · 학생 데이터 보호",
+        "title": "ClassAuto는 학생을 위한 도구입니다.",
+        "subtitle": "광고에 학생 데이터를 사용하지 않습니다. 졸업 후 자동 삭제합니다."
+      },
+      "principles": {
+        "title": "4가지 약속",
+        "items": {
+          "ragLimit": {
+            "title": "RAG 범위 제한 Q&A",
+            "description": "강의 자료 밖 질문은 AI가 자동으로 거부합니다 (유사도 임계값 0.7). 학생이 챗봇을 일반 검색 엔진처럼 쓸 수 없도록 설계했습니다."
+          },
+          "transparentCost": {
+            "title": "비용 투명성",
+            "description": "영상 한 편을 만들 때 드는 API 원가를 교수자에게 그대로 공개합니다. 마진을 숨기지 않습니다."
+          },
+          "antiCheat": {
+            "title": "부정행위 방지",
+            "description": "인터스티셜 퀴즈, 동시 재생 제한, 매크로 탐지가 기본 활성화됩니다. 끄지 않으면 영상 학습이 시험과 분리되지 않습니다."
+          },
+          "studentData": {
+            "title": "학생 데이터 보호",
+            "description": "광고에 사용하지 않습니다. 졸업 후 자동 삭제하며, 학생 본인이 즉시 삭제 요청할 수 있습니다."
+          }
+        }
+      },
+      "sections": {
+        "collected": {
+          "title": "어떤 데이터를 수집하나요?",
+          "items": [
+            "영상 시청 기록 (몇 분 봤는지)",
+            "Q&A 질문 내용",
+            "퀴즈 응답",
+            "출석 정보"
+          ]
+        },
+        "access": {
+          "title": "누가 볼 수 있나요?",
+          "items": [
+            "해당 강의 교수자만",
+            "광고에 사용하지 않습니다",
+            "제3자에게 판매하지 않습니다"
+          ]
+        },
+        "deletion": {
+          "title": "언제 삭제되나요?",
+          "items": [
+            "졸업 후 자동 삭제",
+            "학생이 요청 시 즉시 삭제",
+            "백업까지 30일 내 완전 삭제"
+          ]
+        },
+        "location": {
+          "title": "어디에 저장되나요?",
+          "items": [
+            "한국 데이터센터",
+            "KISA 가이드라인 준수",
+            "전송 TLS 1.3, 저장 AES-256"
+          ]
+        }
+      },
+      "rights": {
+        "title": "학생의 권리",
+        "items": [
+          "자신의 데이터 다운로드 요청",
+          "삭제 요청 (즉시 처리)",
+          "사용 내역 조회",
+          "처리 정지 요청"
+        ],
+        "contact": "문의: privacy@classauto.live"
+      },
+      "footerLink": "자세한 법적 처리 방침은 개인정보처리방침에서 확인하세요."
+    },
+    "security": {
+      "meta": {
+        "title": "보안 정책 — ClassAuto",
+        "description": "ClassAuto의 인프라·접근 통제·인시던트 대응 방침입니다. 학과장·전산팀 검토용 자료입니다."
+      },
+      "hero": {
+        "eyebrow": "SECURITY · 학과장·전산팀용",
+        "title": "기관 도입 검토에 필요한 보안 정보",
+        "subtitle": "Vercel·Railway·Supabase 위에서 동작하며 한국 개인정보보호법을 준수합니다."
+      },
+      "sections": {
+        "encryption": {
+          "title": "1. 데이터 암호화",
+          "items": [
+            "전송 구간: TLS 1.3 (Let's Encrypt + HSTS)",
+            "저장 구간: AES-256 (Supabase Postgres)",
+            "DB 컬럼 단위 암호화: 학번·이메일 등 식별자"
+          ]
+        },
+        "access": {
+          "title": "2. 접근 통제",
+          "items": [
+            "RBAC (Role-Based Access Control)",
+            "교수자 → 자기 강의 데이터만 조회",
+            "학과장 (Phase 4) → 학과 단위 통계만, 개별 학생 미접근",
+            "JWT + httpOnly refresh token (XSS 방어)"
+          ]
+        },
+        "incident": {
+          "title": "3. 인시던트 대응",
+          "items": [
+            "Sentry + Prometheus 24/7 모니터링",
+            "침해 사고 시 72시간 내 통지 (개인정보보호법 §34)",
+            "분기별 보안 감사 (외부 점검 포함 예정)"
+          ]
+        },
+        "audit": {
+          "title": "4. 외부 감사 (계획)",
+          "items": [
+            "ISMS-P 인증 (2027 목표)",
+            "SOC 2 Type II (글로벌 확장 단계)",
+            "모의 침투 테스트 연 1회"
+          ]
+        },
+        "korea": {
+          "title": "5. 한국 법률 준수",
+          "items": [
+            "개인정보보호법",
+            "정보통신망 이용촉진 및 정보보호 등에 관한 법률",
+            "KISA 가이드라인 (개인정보 처리 위탁 포함)"
+          ]
+        },
+        "api": {
+          "title": "6. API 보안",
+          "items": [
+            "OAuth 2.0 (Google 학교 계정)",
+            "Rate limiting: IP·사용자 단위",
+            "API 키 회전 정책 (90일)",
+            "CSRF state 토큰 1회용 sessionStorage"
+          ]
+        }
+      },
+      "infrastructure": {
+        "title": "인프라 구성",
+        "rows": [
+          {
+            "name": "Frontend",
+            "vendor": "Vercel",
+            "region": "ICN1 (서울)"
+          },
+          {
+            "name": "Backend / Celery",
+            "vendor": "Railway",
+            "region": "Asia-Northeast"
+          },
+          {
+            "name": "Database / Auth / Storage",
+            "vendor": "Supabase",
+            "region": "ap-northeast-2 (서울)"
+          },
+          {
+            "name": "AI 모델",
+            "vendor": "Anthropic / OpenAI",
+            "region": "글로벌 (개인정보 위탁 약관)"
+          },
+          {
+            "name": "Avatar / TTS",
+            "vendor": "HeyGen / ElevenLabs / Google TTS",
+            "region": "글로벌 (해외 이전 동의)"
+          }
+        ]
+      },
+      "downloads": {
+        "title": "다운로드 자료 (요청 시 제공)",
+        "items": [
+          "보안 백서 (Security Whitepaper)",
+          "데이터 처리 약관 (DPA)",
+          "벤더 위탁 명세 (Sub-processor List)"
+        ],
+        "note": "현재 베타 단계로 일부 자료는 작성 중입니다. 기관 검토용으로 필요하시면 아래 이메일로 요청해주세요."
+      },
+      "contact": {
+        "title": "보안 문의 / 취약점 제보",
+        "general": "일반 문의: security@classauto.live",
+        "vuln": "취약점 제보: 책임 있는 공개 정책에 따라 90일 내 패치 후 공개합니다.",
+        "vulnEmail": "vuln@classauto.live"
+      }
+    },
+    "betaApply": {
+      "meta": {
+        "title": "베타 신청 — ClassAuto",
+        "description": "ClassAuto 베타에 신청하세요. 1-2 영업일 안에 안내드립니다."
+      },
+      "hero": {
+        "eyebrow": "BETA APPLICATION",
+        "title": "ClassAuto 베타에\n함께해 주세요",
+        "subtitle": "한국 대학 교수자 우선. 학교 이메일(.ac.kr 등)로 신청하시면\n빠르게 검토하겠습니다."
+      },
+      "fields": {
+        "name": "이름",
+        "namePlaceholder": "예) 하두진",
+        "school": "학교",
+        "schoolPlaceholder": "예) 경기대학교",
+        "department": "학과/전공",
+        "departmentPlaceholder": "예) 중어중문학과",
+        "title": "직책",
+        "titlePlaceholder": "교수 / 부교수 / 조교수 / 강사 등",
+        "email": "학교 이메일",
+        "emailPlaceholder": "name@school.ac.kr",
+        "subject": "가르치는 과목",
+        "subjectPlaceholder": "예) 현대중국사회의이해",
+        "studentCount": "학생 수 (대략, 선택)",
+        "studentCountPlaceholder": "예) 60",
+        "startTiming": "시작 희망 시기",
+        "startOptions": {
+          "now": "즉시",
+          "nextSemester": "다음 학기",
+          "undecided": "미정"
+        },
+        "channel": "어떻게 알게 되셨나요?",
+        "channelOptions": {
+          "referral": "동료 추천",
+          "conference": "학회·세미나",
+          "search": "검색",
+          "other": "기타"
+        },
+        "message": "추가로 하고 싶은 말씀 (선택)",
+        "messagePlaceholder": "기대하는 점, 궁금한 점 등을 자유롭게 적어주세요."
+      },
+      "validation": {
+        "required": "필수 항목입니다",
+        "emailFormat": "올바른 이메일 형식이 아닙니다",
+        "schoolEmail": "학교 이메일(.ac.kr / .edu 등)을 권장합니다. 그래도 신청은 가능합니다.",
+        "studentNumberFormat": "숫자만 입력해주세요"
+      },
+      "submitButton": "신청서 제출",
+      "submittingButton": "제출 중...",
+      "successTitle": "신청이 접수되었습니다",
+      "successBody": "1-2 영업일 안에 학교 이메일로 안내드립니다.\n그동안 데모 페이지에서 학생 입장을 체험해보세요.",
+      "successCtaDemo": "데모 체험하기",
+      "successCtaHome": "처음으로",
+      "errorBanner": "제출 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      "mockNotice": "베타 신청 API는 아직 백엔드에 연결되어 있지 않습니다. 현재는 클라이언트 검증만 수행하고 모의 성공 화면을 보여드립니다.",
+      "footerNote": "문의: beta@classauto.live"
+    },
+    "contact": {
+      "meta": {
+        "title": "기관 견적 문의 — ClassAuto",
+        "description": "대학·기관용 견적 문의를 보내주시면 1 영업일 안에 영업 담당자가 답신드립니다."
+      },
+      "hero": {
+        "eyebrow": "CONTACT · 기관 도입",
+        "title": "기관 라이선스 견적 문의",
+        "subtitle": "학과·단과대·전체 도입 모두 가능합니다. 검토 단계에 맞춰 안내드립니다."
+      },
+      "fields": {
+        "organization": "기관명",
+        "organizationPlaceholder": "예) ○○대학교",
+        "name": "담당자 이름",
+        "namePlaceholder": "예) 홍길동",
+        "title": "직책",
+        "titlePlaceholder": "학과장 / 학장 / 교무처 / 전산실 등",
+        "email": "이메일",
+        "emailPlaceholder": "name@organization.ac.kr",
+        "phone": "연락처",
+        "phonePlaceholder": "예) 02-1234-5678",
+        "stage": "도입 검토 단계",
+        "stageOptions": {
+          "info": "정보 수집 중",
+          "internal": "내부 논의 중",
+          "decision": "의사결정자 결재 단계",
+          "ready": "즉시 도입 가능"
+        },
+        "professorCount": "예상 교수자 수",
+        "professorCountPlaceholder": "예) 12",
+        "studentCount": "예상 학생 수",
+        "studentCountPlaceholder": "예) 600",
+        "lms": "검토 중인 LMS",
+        "lmsOptions": {
+          "moodle": "Moodle",
+          "canvas": "Canvas",
+          "blackboard": "Blackboard",
+          "klas": "KLAS",
+          "eclass": "eClass",
+          "other": "기타·없음"
+        },
+        "callTime": "통화 가능 시간",
+        "callTimePlaceholder": "예) 평일 오후 2-5시",
+        "message": "추가 문의 사항 (자유 입력)",
+        "messagePlaceholder": "도입 배경·예산·일정 등 자유롭게 적어주세요."
+      },
+      "validation": {
+        "required": "필수 항목입니다",
+        "emailFormat": "올바른 이메일 형식이 아닙니다",
+        "numberOnly": "숫자만 입력해주세요"
+      },
+      "submitButton": "견적 문의 보내기",
+      "submittingButton": "전송 중...",
+      "successTitle": "문의가 접수되었습니다",
+      "successBody": "1 영업일 안에 영업 담당자가 답신드립니다.\n급하시면 contact@classauto.live 로도 연락 가능합니다.",
+      "errorBanner": "전송에 실패했습니다. 잠시 후 다시 시도해주세요.",
+      "mockNotice": "기관 문의 API는 아직 백엔드에 연결되어 있지 않습니다. 현재는 클라이언트 검증만 수행하고 모의 성공 화면을 보여드립니다.",
+      "footerNote": "긴급 문의: contact@classauto.live"
+    }
+  },
+  "student": {
+    "entry": {
+      "fromProfessor": "{name} 교수님이 보낸 강의입니다",
+      "fromProfessorAnon": "교수님이 공유한 강의입니다",
+      "watchToProceed": "이 강의를 시청하려면 로그인 또는 가입이 필요합니다",
+      "loginCta": "학교 Google 계정으로 로그인",
+      "signupCta": "처음이신가요? 학생으로 가입하기",
+      "guestNotice": "ClassAuto는 학생 학습 도구입니다. 광고를 사용하지 않으며, 졸업 후 데이터가 자동 삭제됩니다.",
+      "privacyLink": "학생 데이터 보호 정책 보기",
+      "lectureNotFoundTitle": "강의를 찾을 수 없습니다",
+      "lectureNotFoundDesc": "링크가 잘못됐거나 강의가 삭제되었을 수 있습니다.",
+      "backToHome": "처음으로",
+      "loadingLecture": "강의를 불러오는 중...",
+      "metaPlaceholder": "강의 정보 불러오는 중",
+      "openInPlayer": "강의 시청 화면으로 이동",
+      "verifiedBadge": "인증",
+      "senderVerifiedTitle": "기관 인증 교수자",
+      "courseTagLesson": "{week}주차 · LESSON {lesson}",
+      "statDuration": "영상 길이",
+      "statLearners": "학습자",
+      "statAccuracy": "평균 정답률",
+      "statLearnerCount": "{count}명 학습 중",
+      "reqsTitle": "시청 조건",
+      "reqsEmailLine": "학교 이메일 인증",
+      "reqsCodeLine": "학습 코드 입력",
+      "reqsOr": "또는",
+      "ctaEmailStart": "학교 이메일로 시작",
+      "ctaCodeStart": "학습 코드로 시작",
+      "tutHook": "처음 사용하시나요?",
+      "tutLink": "1분 안내 보기 →",
+      "footPrivacyLink": "학생 데이터 보호 정책 보기 →",
+      "footNotice": "ClassAuto는 학생 학습 도구입니다. 광고를 사용하지 않으며, 시청 데이터는 해당 강의 교수자만 볼 수 있습니다.",
+      "openLecture": "강의 시청 시작",
+      "lessonNumberFallback": "이번 주차"
+    },
+    "signup": {
+      "title": "학생 가입",
+      "subtitle": "Google 계정으로 빠르게 가입하고 강의를 시청하세요",
+      "googleCta": "Google 계정으로 가입",
+      "googleRedirecting": "Google로 이동 중...",
+      "name": "이름",
+      "namePlaceholder": "예) 홍길동",
+      "preferredLanguage": "선호 언어",
+      "studentNumber": "학번 (선택)",
+      "studentNumberPlaceholder": "예) 20240001",
+      "agreement": "가입 시 이용약관과 개인정보처리방침에 동의합니다",
+      "validation": {
+        "nameRequired": "이름을 입력해주세요",
+        "nameTooShort": "이름은 최소 1자 이상이어야 합니다",
+        "studentNumberFormat": "학번은 숫자 4-12자리로 입력해주세요"
+      },
+      "alreadyHaveAccount": "이미 계정이 있으신가요?",
+      "loginLink": "로그인",
+      "noteOAuth": "Google 가입 후 추가 정보 입력 화면으로 이동합니다."
+    },
+    "signupV2": {
+      "back": "이전 단계로",
+      "stepFormat": "{current} / {total}",
+      "step1": {
+        "headLine1": "학교 이메일을",
+        "headLine2": "입력해주세요",
+        "subLine1": "ClassAuto는 학교 이메일로만 가입할 수 있어요.",
+        "subLine2": ".ac.kr 또는 .edu 이메일을 사용해주세요.",
+        "label": "학교 이메일",
+        "placeholder": "name@kgu.ac.kr",
+        "hintDefault": "학교에서 발급한 .ac.kr 이메일을 입력해주세요",
+        "hintValidGeneric": "학교 이메일이 확인됐어요",
+        "hintValidWithSchool": "{school} 이메일이 확인됐어요",
+        "hintInvalid": "학교 이메일(.ac.kr)을 입력해주세요",
+        "ctaSend": "인증 메일 보내기",
+        "altUseCode": "또는 학습 코드로 시작 →"
+      },
+      "step2": {
+        "title": "메일을 보내드렸어요",
+        "sub": "링크를 클릭하면 자동으로 다음 단계로 이동합니다.",
+        "helperTitle": "메일이 안 보이세요?",
+        "helperSub": "스팸 메일함도 한 번 확인해주세요. 대부분 1분 이내에 도착해요.",
+        "resendBtn": "인증 메일 다시 보내기",
+        "resendTimer": " · {sec}초 뒤 가능",
+        "resendDone": "✓ 메일을 다시 보냈어요",
+        "demoAdvance": "데모: 링크 클릭 시뮬레이션"
+      },
+      "step3": {
+        "title": "거의 다 됐어요",
+        "sub": "마지막으로 몇 가지만 알려주세요.",
+        "name": "이름",
+        "namePlaceholder": "홍길동",
+        "studentNumber": "학번",
+        "studentNumberPlaceholder": "202012345",
+        "school": "학교",
+        "schoolAutoTag": "자동 매칭",
+        "major": "학과 / 전공",
+        "majorPlaceholder": "학과를 선택해주세요",
+        "majorOther": "기타",
+        "year": "학년",
+        "yearOption": "{n}학년",
+        "yearGrad": "대학원",
+        "policyTitle": "데이터 처리 사전 고지",
+        "policyCollectLabel": "수집 데이터",
+        "policyCollectValue": "영상 시청 · Q&A · 출석",
+        "policyReadLabel": "열람 권한",
+        "policyReadValueA": "해당 강의 ",
+        "policyReadValueEm": "교수자만",
+        "policyDeleteLabel": "삭제 정책",
+        "policyDeleteValueEm": "졸업 후 ",
+        "policyDeleteValueB": "자동 삭제",
+        "agreeTitle": "데이터 처리 방침에 동의합니다",
+        "agreeRequired": " · 필수",
+        "agreeSub": "위 3가지 조건을 확인하고 동의합니다.",
+        "submitBtn": "가입 완료",
+        "successToast": "가입이 완료됐어요. 공부하러 가볼까요?"
+      }
+    },
+    "completeProfileV2": {
+      "title": "추가 정보 입력",
+      "subtitleStudent": "학생으로 가입하기 위해 한 가지만 더 입력해주세요.",
+      "subtitleProfessor": "교수자로 가입하기 위해 소속을 알려주세요.",
+      "googleAccountLabel": "Google 계정",
+      "studentBadge": "학습자",
+      "professorBadge": "교수자",
+      "studentNumber": "학번",
+      "studentNumberPlaceholder": "예) 20240001",
+      "school": "학교",
+      "schoolPlaceholder": "예) 경기대학교",
+      "department": "학과",
+      "departmentPlaceholder": "예) 중어중문학과",
+      "submit": "가입 완료",
+      "submitting": "가입 중...",
+      "error": "오류가 발생했습니다. 다시 시도해주세요.",
+      "loading": "Google 정보 확인 중..."
+    },
+    "onboardingV2": {
+      "skip": "건너뛰기 →",
+      "next": "다음",
+      "previous": "이전",
+      "countFormat": "{current} / 4",
+      "slide1": {
+        "head": "영상을 보면서 배워요",
+        "subLine1": "원하는 시점에 멈추고, 되돌리고, 다시 보세요.",
+        "subLine2": "교수자는 단 한 번만 설명하면 됩니다."
+      },
+      "slide2": {
+        "head": "궁금한 건 물어보세요",
+        "subLine1": "AI 도우미가 강의 자료 범위 안에서",
+        "subLine2": "정확한 출처와 함께 답해줍니다."
+      },
+      "slide3": {
+        "head": "가끔 퀴즈가 나와요",
+        "subLine1": "잠깐 이해도를 확인하는 시간이에요.",
+        "subLine2": "틀려도 괜찮아요 — 다시 볼 수 있어요."
+      },
+      "slide4": {
+        "head": "이해했나요?",
+        "sub": "이제 함께 공부해볼 시간이에요.",
+        "cta": "영상 시작하기"
+      }
+    },
+    "onboarding": {
+      "title": "잠시만요, 한 가지만 확인할게요",
+      "description": "더 나은 학습 경험을 위해 이름과 언어를 확인해주세요. 나중에 프로필에서 변경할 수 있습니다.",
+      "nameLabel": "어떻게 불러드릴까요?",
+      "namePlaceholder": "이름 또는 닉네임",
+      "languageLabel": "선호하는 언어",
+      "saveButton": "저장하고 시작",
+      "skipButton": "건너뛰기",
+      "saved": "환영합니다!"
+    },
+    "playerV2": {
+      "crumb": "{week}주차 · 수업 중",
+      "userSettings": "설정",
+      "videoPlaceholder": "강의 영상 · {time}",
+      "videoNotReady": "영상이 아직 준비되지 않았습니다",
+      "videoNotReadyDesc": "렌더링이 완료되면 자동으로 표시됩니다",
+      "controlPlay": "재생/일시정지",
+      "controlBack10": "10초 뒤로",
+      "controlFwd10": "10초 앞으로",
+      "controlCaptions": "자막",
+      "controlFullscreen": "전체화면",
+      "reactionLike": "좋아요",
+      "reactionCurious": "궁금해요",
+      "reactionFun": "재미있어요",
+      "reactionAha": "아하—그렇구나",
+      "qaTitle": "강의 Q&A",
+      "qaAskPill": "질문하기",
+      "qaQuotaEpisode": "편당 {used} / {limit}",
+      "qaQuotaDaily": "· 오늘 {used} / {limit}",
+      "qaPlaceholder": "강의 내용을 물어보세요…",
+      "qaSend": "보내기",
+      "qaMic": "음성으로 질문하기",
+      "qaSuggestLabel": "추천 질문",
+      "qaSourceFallback": "강의 자료",
+      "qaGenericFallback": "강의 자료에서 관련 내용을 찾아 답변드릴게요.",
+      "qaWelcome": "안녕하세요! 궁금한 부분을 자유롭게 물어보세요.",
+      "qaErrorAnswer": "답변 생성에 실패했습니다. 잠시 후 다시 시도해주세요.",
+      "qaOutOfScope": "이 질문은 강의 범위 밖이에요. ClassAuto는 학생이 학습에 집중하도록 설계되었습니다.",
+      "qaOutOfScopeForward": "교수님께 전달",
+      "qaOutOfScopeCancel": "취소",
+      "startAssess": "평가 시작",
+      "quiz": {
+        "badge": "잠깐 퀴즈",
+        "timer": "{sec}초",
+        "mascotSay1": "잠깐 생각해볼까요?",
+        "mascotSay2": "틀려도 괜찮아요.",
+        "close": "닫기",
+        "correctFeedback": "잘 이해하고 계세요!",
+        "wrongFeedback": "정답을 함께 확인해볼까요?"
+      },
+      "warning": {
+        "pausedKicker": "세션이 일시정지되었습니다",
+        "resume": "영상 재개하기",
+        "resumeHint": "ESC · Enter · Space 키로도 재개할 수 있어요",
+        "level1Title": "잠깐, 잘 따라오고 계신가요?",
+        "level1Desc": "5초 이상 반응이 없어 잠시 멈췄어요. 클릭하면 바로 이어집니다.",
+        "level2Title": "오늘은 좀 피곤하신가요?",
+        "level2Desc": "잠시 쉬어가도 좋아요. 준비되면 계속 볼게요를 눌러주세요.",
+        "level3Title": "출석이 인정되지 않을 수 있어요",
+        "level3Desc": "이 정도 무반응이 계속되면 시청으로 인정되지 않을 수 있습니다. 다시 집중해주세요.",
+        "level3OptRestart": "처음부터 다시 보기",
+        "level3OptQuiz": "짧은 퀴즈로 점검",
+        "level3OptLater": "5분 후 다시 시도",
+        "stageLabel": "{current} / 3 단계"
+      }
+    },
+    "expiredV2": {
+      "kicker": "시청 만료",
+      "title": "시청 기간이 만료되었습니다",
+      "description": "이 강의의 열람 가능 기간이 지났습니다. 담당 교수님께 문의해 주세요.",
+      "backToDashboard": "내 학습으로 돌아가기",
+      "browseLectures": "다른 강의 둘러보기"
+    },
+    "assessV2": {
+      "kicker": "형성평가",
+      "title": "이번 주차 평가",
+      "subtitle": "방금 본 영상을 잘 이해했는지 점검해볼게요.",
+      "progress": "{current} / {total}",
+      "questionLabel": "문항 {n}",
+      "answerPlaceholder": "답을 입력하세요",
+      "loadingQuestions": "평가 문제 불러오는 중...",
+      "noQuestionsTitle": "아직 준비된 문제가 없어요",
+      "noQuestionsDesc": "강의 영상을 시청하면 AI가 평가 문제를 생성합니다.",
+      "loadError": "문제를 불러오지 못했습니다.",
+      "submitError": "제출에 실패했습니다. 다시 시도해주세요.",
+      "submit": "제출하기",
+      "submitting": "채점 중...",
+      "previous": "이전",
+      "next": "다음",
+      "complete": "평가 완료!",
+      "completeDesc": "수고하셨습니다. 결과를 확인해보세요.",
+      "scoreFormat": "정답률 {pct}%",
+      "scoreDetail": "{correct} / {total} 정답",
+      "backToPlayer": "강의로 돌아가기"
+    }
   }
 }

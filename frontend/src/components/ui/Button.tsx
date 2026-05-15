@@ -15,6 +15,12 @@
  * outline·ghost 는 명도가 자동으로 뒤집힌다 (--text → --text-dark via wrapper).
  *
  * `transition-colors` 만 사용 (animations.md §1.3 60fps 원칙).
+ *
+ * 경계 메모 (후속 정리 ②): `/professor/*` 영역에는 별도의
+ * `professor/shell/PrimaryButton` 이 있고 의도적으로 통합하지 않는다 —
+ * 그쪽은 scoped 토큰 + inline-style 로 prototype 05 를 재현한다. 본
+ * ui/Button 은 전역 토큰 + Tailwind 클래스용이며 professor 도메인 밖에서
+ * 사용. (자세한 사유는 shell/PrimaryButton.tsx 헤더 참조.)
  */
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";

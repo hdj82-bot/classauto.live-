@@ -28,8 +28,6 @@ const mocks = vi.hoisted(() => {
     replace: vi.fn(),
     exchange: vi.fn(),
     login: vi.fn(),
-    hasIssued: vi.fn().mockReturnValue(false),
-    consume: vi.fn().mockReturnValue({ ok: true }),
     searchParams: new URLSearchParams(),
   };
 });
@@ -48,16 +46,11 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ login: mocks.login }),
 }));
 
+// 후속 정리 ④: lib/api.ts 의 frontend OAuth state 레이어(oauthState/
+// OAUTH_STATE_KEY)는 dead code 로 제거됐다. CallbackContent 는 원래부터
+// 이를 import 하지 않으므로 mock 에서도 oauthState 키를 드롭한다.
 vi.mock("@/lib/api", () => ({
   authApi: { exchange: mocks.exchange },
-  // oauthState 는 더 이상 CallbackContent 에서 import 되지 않지만, lib/api.ts
-  // 의 dead duplicate (패치 3 미적용) 호환을 위해 mock 자체는 남겨둔다.
-  // 회귀 테스트(마지막 케이스) 에서 hasIssued=true 잔재 케이스도 검증.
-  oauthState: {
-    hasIssued: mocks.hasIssued,
-    consume: mocks.consume,
-    issue: vi.fn(),
-  },
 }));
 
 import CallbackContent from "@/app/auth/callback/CallbackContent";
@@ -70,9 +63,8 @@ describe("CallbackContent", () => {
     mocks.replace.mockReset();
     mocks.exchange.mockReset();
     mocks.login.mockReset();
-    mocks.hasIssued.mockReset().mockReturnValue(false);
-    mocks.consume.mockReset().mockReturnValue({ ok: true });
     mocks.searchParams = new URLSearchParams();
+    window.sessionStorage.clear();
   });
 
   afterEach(() => {
@@ -99,9 +91,8 @@ describe("CallbackContent", () => {
     });
   });
 
-  it("trusts backend state validation when frontend never issued one", async () => {
+  it("trusts backend state validation (passes server state straight to exchange)", async () => {
     mocks.searchParams = new URLSearchParams("code=abc&state=server-issued");
-    mocks.hasIssued.mockReturnValue(false);
     mocks.exchange.mockResolvedValue({ data: { access_token: FAKE_JWT } });
     render(<CallbackContent />);
     await waitFor(() => {
@@ -109,21 +100,23 @@ describe("CallbackContent", () => {
     });
   });
 
-  it("ignores stale sessionStorage state and proceeds to exchange (v2 회귀)", async () => {
-    // 패치 1 적용 전 사용자에게 남아있을 수 있는 옛 ifl_oauth_state sessionStorage
-    // 잔재가 새 빌드에서 정상 흐름을 가로막지 않아야 한다. CallbackContent 는
-    // oauthState 를 더 이상 호출하지 않으므로 hasIssued 가 true 라도 exchange
-    // 로 곧장 진행되어야 한다.
+  it("ignores a stale ifl_oauth_state sessionStorage residue and proceeds (v2 회귀)", async () => {
+    // 후속 정리 ④ 회귀: frontend OAuth state 레이어 제거 전 사용자 세션에
+    // 남았을 수 있는 옛 `ifl_oauth_state` 잔재가 새 빌드의 정상 콜백 흐름을
+    // 가로막지 않아야 한다. 잔재를 실제로 심어두고도 CallbackContent 는
+    // 이를 읽지 않고 서버 state 로 곧장 exchange 해야 한다 (silent ignore).
+    window.sessionStorage.setItem("ifl_oauth_state", "legacy-stale-value");
     mocks.searchParams = new URLSearchParams("code=abc&state=server-issued");
-    mocks.hasIssued.mockReturnValue(true);
-    mocks.consume.mockReturnValue({ ok: false, reason: "missing" });
     mocks.exchange.mockResolvedValue({ data: { access_token: FAKE_JWT } });
     render(<CallbackContent />);
     await waitFor(() => {
       expect(mocks.exchange).toHaveBeenCalledWith("abc", "server-issued");
     });
-    expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.replace).not.toHaveBeenCalledWith("/auth/login?error=invalid_state");
+    // 잔재는 그대로 둔다 — 읽지도, 정리하지도 않는 silent ignore.
+    expect(window.sessionStorage.getItem("ifl_oauth_state")).toBe(
+      "legacy-stale-value",
+    );
   });
 
   it("redirects to /auth/login on exchange failure", async () => {
