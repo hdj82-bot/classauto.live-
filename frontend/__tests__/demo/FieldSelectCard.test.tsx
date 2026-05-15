@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import FieldSelectCard from "@/components/demo/FieldSelectCard";
 import { I18nProvider } from "@/contexts/I18nContext";
@@ -8,18 +8,28 @@ const renderWithI18n = (ui: ReactNode) =>
   render(<I18nProvider>{ui}</I18nProvider>);
 
 describe("FieldSelectCard", () => {
-  // v2 (2026-05-13): demo 필드 카드 시연 주제가 v2 에서 갱신됨
-  // ("현대중국사회의 이해" → "현대중국사회·특수상대성이론" 등). 후속 PR 에서 새 라벨 어서션 작성.
-  it.skip("renders the social-science card with Korean label (v1)", () => {
+  // v2 회귀 (후속 정리 ③): v1 카드의 한글 분야 라벨("사회과학"/"자연과학·공학")
+  // + v1 강의명은 v3 라이트 카드로 재작성되며 사라졌다. v3 는 분야 태그
+  // (A·Liberal Arts / B·Natural Science) + 강의 제목(중국어문법의 이해 /
+  // 광합성의 원리) 구조다. DEPLOYMENT_PROGRESS 의 분야 매핑(社會科學/把자문,
+  // 自然科學/광합성) 과 일치 — social=인문계열(중국어문법), natural=자연계열(광합성).
+  it("renders the humanities (social) card with its v2 lecture title + tag", () => {
     renderWithI18n(<FieldSelectCard field="social" onSelect={() => {}} />);
-    expect(screen.getByText("사회과학")).toBeTruthy();
-    expect(screen.getByText("현대중국사회의 이해")).toBeTruthy();
+    const card = screen.getByTestId("demo-field-social");
+    expect(card.getAttribute("data-field")).toBe("social");
+    expect(within(card).getByText("중국어문법의 이해")).toBeTruthy();
+    expect(within(card).getByText("A · Liberal Arts")).toBeTruthy();
+    // v1 라벨은 회귀하지 않아야 한다
+    expect(within(card).queryByText("사회과학")).toBeNull();
   });
 
-  it.skip("renders the natural-science card with Korean label (v1)", () => {
+  it("renders the natural-science card with its v2 lecture title + tag", () => {
     renderWithI18n(<FieldSelectCard field="natural" onSelect={() => {}} />);
-    expect(screen.getByText("자연과학·공학")).toBeTruthy();
-    expect(screen.getByText("특수상대성이론 입문")).toBeTruthy();
+    const card = screen.getByTestId("demo-field-natural");
+    expect(card.getAttribute("data-field")).toBe("natural");
+    expect(within(card).getByText("광합성의 원리")).toBeTruthy();
+    expect(within(card).getByText("B · Natural Science")).toBeTruthy();
+    expect(within(card).queryByText("자연과학·공학")).toBeNull();
   });
 
   it("invokes onSelect with the chosen field when clicked", () => {
