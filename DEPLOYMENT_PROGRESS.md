@@ -1,7 +1,7 @@
 # 배포 진행 상황 (Deployment Progress)
 
 > 이 문서는 [DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) 진행 체크포인트입니다.
-> 마지막 업데이트: **2026-05-13**
+> 마지막 업데이트: **2026-05-16**
 
 ---
 
@@ -19,10 +19,13 @@ Phase 4 ✅ 도메인 연결 (전 단계 완료)
   ├─ 4.4 ✅ Google OAuth Console redirect URI
   ├─ 4.5 ✅ HeyGen 웹훅 URL
   ├─ 4.6 ✅ OAuth invalid_state 버그 수정 (frontend state CSRF 레이어 폐기)
-  └─ 4.7 ✅ 디자인 시스템 v2 전환 (라이트 베이지 + 골드 dual-surface, 4-PR 병렬 머지)
-Phase 5 🔄 스모크 테스트 (다음 작업 — Google 로그인 ✅, PPT→Celery 미진행)
+  ├─ 4.7 ✅ 디자인 시스템 v2 전환 (라이트 베이지 + 골드 dual-surface, 4-PR 병렬 머지)
+  └─ 4.8 ✅ v2 후속 반응형 보강 (05-15, PR #143~146 — iframe 프로토타입 → 반응형 React)
+Phase 5 🔄 스모크 테스트 (핵심 미검증 — Google 로그인 ✅, PPT→Celery→Claude→HeyGen 파이프라인 미진행)
 Phase 6 ⏳ CI/CD & 운영 정착
 ```
+
+> **2026-05-16 상태 메모**: 05-13 이후 머지된 것은 v2 후속 반응형 작업(#143~146)뿐. **Phase 5의 핵심인 파이프라인 end-to-end 검증은 아직 1회도 수행되지 않음** — 이것이 베타 보급 가능 여부를 가르는 최우선 블로커. 동시에 4-레인 병렬 작업 착수(아래 §"2026-05-16 4-레인 병렬 워크플로" 참조).
 
 ---
 
@@ -183,6 +186,44 @@ Phase 4 전체와 v2 디자인 전환이 완료됐으므로, 다음 핵심은 **
 어디서 막히든 다음 두 줄만 알려주시면 진단됩니다:
 - Railway 로그 마지막 50줄
 - 브라우저 DevTools Console + Network 의 빨간 줄
+
+---
+
+## 2026-05-16 4-레인 병렬 워크플로
+
+v2 전환 때 검증된 "창당 파일 도메인 단독 소유" 정책(§6 참조)을 재적용. Phase 5 스모크 테스트(교수자가 브라우저에서 직접 수행하는 운영 작업)와 병행해 코드 작업을 4개 git worktree로 동시 진행. **작업 시점 의존성 0 — 4창 동시 출발 가능. 순서 의존성은 머지 시점에만 존재.**
+
+| 레인 | 브랜치 | 단독 소유 도메인 | 작업 |
+|---|---|---|---|
+| 창 1 | `chore/backend-deps` | `backend/**` + 루트 `DEPLOYMENT_PROGRESS.md` | 진행 문서 갱신(이 커밋) + Dependabot #108(anthropic 0.30→0.100)·#105~107·#109·#66(python 3.14) |
+| 창 2 | `fix/hydration-418` | `frontend/src/components/landing/StatCounter.tsx` + 해당 페이지만 | React #418 hydration mismatch v2 재검증·수정 |
+| 창 3 | `chore/v2-followup` | `messages/**`·`_patches/**`·`components/ui/**`·`components/professor/shell/**`·`components/landing/HanCharBadge.tsx`·`**/__tests__/**`·`lib/api.ts` | v2 후속 정리 4종(§"후속 정리 PR 4가지") |
+| 창 4 | `chore/frontend-deps` | `frontend/package.json`·`frontend/Dockerfile`·`.github/workflows/**`·`.trivyignore` | 프론트 의존성·CI bump 분류·통합 |
+
+**충돌 회피 규칙**
+- `DEPLOYMENT_PROGRESS.md`는 창 1 단독 소유. 창 2·3·4는 절대 수정 금지.
+- landing 폴더 안에서도 파일 단위 분리: `StatCounter.tsx`=창 2, `HanCharBadge.tsx`=창 3.
+- `components/ui/*`·i18n 메시지 본체는 창 3만 손댐.
+- 각 창은 자기 도메인 밖 파일을 절대 수정하지 않는다(다른 창 영역은 read-only).
+
+**머지 순서**: 창 1 → 창 2·창 4(저위험·기계적) → 창 3(최대 규모, rebase 마지막).
+
+**스모크 테스트 사전 점검**: 창 1의 anthropic 0.30→0.100은 메이저 점프라 백엔드 Claude 호출이 깨질 수 있음. 권장 순서 — ① 현재 프로덕션으로 베이스라인 스모크 테스트 1회 → ② 창 1 머지·재배포 → ③ 재테스트. 이렇게 해야 파이프라인 실패가 "기존 버그"인지 "SDK 업그레이드 탓"인지 분리됨.
+
+### 진행 현황 (2026-05-16 갱신)
+
+| 레인 | 상태 |
+|---|---|
+| 창 1 (`chore/backend-deps`, PR #148) | 🔄 lib floor bump(#105~109) + 진행 문서. anthropic 0.30→0.100 **코드 변경 불필요** 확인. CI 전부 그린. **python 3.14(#66)는 분리** — 아래 참조 |
+| 창 2 (`fix/statcounter-hydration-locale`, PR #147) | ✅ **머지 완료**. StatCounter `toLocaleString()` → locale 무관 결정적 함수로 교체 |
+| 창 3 (`chore/v2-followup`) | 🔄 진행 중. 항목 ② 전략 = "명확한 wrapper 분리" 채택 |
+| 창 4 (`chore/frontend-deps`) | 🔄 진행 중 |
+
+**머지 순서 메모**: 창 2가 창 1보다 먼저 머지됨. 도메인이 분리(backend ↔ frontend/landing)돼 충돌 0, PR #148 `mergeable_state: clean` 유지. 무해.
+
+**python 3.14(#66) 분리 사유**: `Docker Build & Push` 잡이 PR/draft에서 **skipped**, main push 시에만 실행. Backend Test도 Dockerfile이 아닌 CI 런너 파이썬으로 돌아 3.14를 검증하지 않음. #148에 포함하면 머지 후 main에서 도커 빌드가 처음 돌고 C-extension(psycopg2-binary/Pillow/asyncpg/pgvector) 휠 부재 시 **프로덕션 배포가 깨짐**. → #148에서는 revert로 제외, 별도 PR에서 `workflow_dispatch` 또는 main 머지 전 도커 빌드 실검증 후 진행. `backend/**` 소유라 창 1 후속 작업으로 남김.
+
+**미할당 갭 — React #418 진짜 원인 (창 2 분석)**: StatCounter는 #117(전체 섹션 제거) 이후 어떤 페이지에서도 렌더링되지 않는 고아 컴포넌트. 따라서 라이브 사이트에 #418이 아직 보인다면 원인은 StatCounter가 아니라 현재 `frontend/src/app/page.tsx`가 쓰는 demo-v3 컴포넌트군(`GradientDefs`/`HeroFlowStage` 등)일 가능성이 큼. **이 영역은 어느 레인에도 속하지 않음** — 라이브에서 #418 재현 여부 확인 후 새 레인 배정 필요(결정 대기).
 
 ---
 
