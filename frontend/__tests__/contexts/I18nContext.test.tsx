@@ -3,11 +3,12 @@ import { renderHook } from "@testing-library/react";
 import { I18nProvider, useI18n } from "@/contexts/I18nContext";
 
 /**
- * R2W1 통합: `_patches/demo.{ko,en}.json` 도 `_patches/student.*` 와 같은
- * 패턴으로 deep-merge 되는지 검증. 통합 후 demo 컴포넌트는 어댑터
- * (`useDemoI18n`) 또는 직접 `t("demo.<key>")` 둘 다 동일한 lookup 을 받는다.
+ * `demo.*` / `student.*` 네임스페이스가 `t()` 로 lookup 되는지 검증.
+ * 후속 정리 PR 에서 두 네임스페이스는 `_patches/*` → `messages/{ko,en}.json`
+ * 본체로 통합됐다. 어댑터(`useDemoI18n`) 든 직접 `t("demo.<key>")` 든 동일한
+ * lookup 을 받아야 한다 — 통합 전후 동작 회귀 방지.
  */
-describe("I18nContext (R2W1: demo patch deep-merge)", () => {
+describe("I18nContext (demo/student namespace lookup)", () => {
   it("demo namespace 키를 t() 로 lookup 한다 (어댑터 없이 직접)", () => {
     const { result } = renderHook(() => useI18n(), { wrapper: I18nProvider });
     const v = result.current.t("demo.hero.headline2");

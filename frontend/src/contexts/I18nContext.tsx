@@ -13,17 +13,17 @@ import en from "../../messages/en.json";
 // Patch files allow worktree-scoped string additions without editing the
 // canonical ko.json/en.json (those are owned by main and other worktrees may
 // be editing them in parallel). New keys live under their own top-level
-// namespace (e.g. "student", "demo") and are merged at module load — the
+// namespace (e.g. "studio", "inbox") and are merged at module load — the
 // canonical files keep nothing under those namespaces, so deep-merge is a
 // pure addition.
-import studentKo from "../../messages/_patches/student.ko.json";
-import studentEn from "../../messages/_patches/student.en.json";
-import demoKo from "../../messages/_patches/demo.ko.json";
-import demoEn from "../../messages/_patches/demo.en.json";
+//
+// Once a worktree's strings have landed and parallel editing of the canonical
+// files is no longer a risk, the patch is folded into ko.json/en.json directly
+// and dropped from here (single source of truth for key search). The W2 demo /
+// landingHub / marketing and W4 student namespaces were integrated this way —
+// they now live in ko.json/en.json bodies, not in _patches.
 import professorKo from "../../messages/_patches/professor.ko.json";
 import professorEn from "../../messages/_patches/professor.en.json";
-import marketingKo from "../../messages/_patches/marketing.ko.json";
-import marketingEn from "../../messages/_patches/marketing.en.json";
 // ── W1–W4 통합 (2026-05-07): 영상 제작 마법사 / Q&A 인박스 / 분석 / 학습자 ──
 import studioKo from "../../messages/_patches/studio.ko.json";
 import studioEn from "../../messages/_patches/studio.en.json";
@@ -35,11 +35,10 @@ import analyticsKo from "../../messages/_patches/analytics.ko.json";
 import analyticsEn from "../../messages/_patches/analytics.en.json";
 import learnersKo from "../../messages/_patches/learners.ko.json";
 import learnersEn from "../../messages/_patches/learners.en.json";
-// ── R4 통합 (2026-05-07): 랜딩 동적 요소 / features 신규 / dashboard 통계 / pricing 신규 ──
-// 모두 *Hub 접미사 namespace — 기존 ko.json 의 landing.* / dashboard.* /
-// (features / pricing 미존재) 와 의미 혼선·충돌 회피. R3 의 analyticsHub 와 같은 패턴.
-import landingHubKo from "../../messages/_patches/landingHub.ko.json";
-import landingHubEn from "../../messages/_patches/landingHub.en.json";
+// ── R4 통합 (2026-05-07): features 신규 / dashboard 통계 / pricing 신규 ──
+// 모두 *Hub 접미사 namespace — 기존 ko.json 의 dashboard.* / (features /
+// pricing 미존재) 와 의미 혼선·충돌 회피. R3 의 analyticsHub 와 같은 패턴.
+// (landingHub 는 ko.json/en.json 본체로 통합 완료 — 위 주석 참조.)
 import featuresHubKo from "../../messages/_patches/featuresHub.ko.json";
 import featuresHubEn from "../../messages/_patches/featuresHub.en.json";
 import dashboardHubKo from "../../messages/_patches/dashboardHub.ko.json";
@@ -85,21 +84,17 @@ function mergePatch<T extends Messages>(base: T, patch: Messages): T {
   return out as T;
 }
 
-// 패치는 누적 적용 — student → demo → professor → marketing → studio →
-// inbox → analyticsHub → learners → landingHub → featuresHub → dashboardHub
-// → pricingHub → legalHub → helpHub → changelogHub → profileHub
-// (+ accessibilityHub) 순. 모두 서로 다른 top-level namespace 라 충돌 없음.
-// 추후 새 patch 는 배열에 추가.
+// 패치는 누적 적용 — professor → studio → inbox → analyticsHub → learners
+// → featuresHub → dashboardHub → pricingHub → legalHub → helpHub →
+// changelogHub → profileHub (+ accessibilityHub) 순. 모두 서로 다른
+// top-level namespace 라 충돌 없음. 추후 새 patch 는 배열에 추가.
+// (student / demo / marketing / landingHub 는 ko.json/en.json 본체로 통합 완료.)
 const koPatches: Messages[] = [
-  studentKo as Messages,
-  demoKo as Messages,
   professorKo as Messages,
-  marketingKo as Messages,
   studioKo as Messages,
   inboxKo as Messages,
   analyticsKo as Messages,
   learnersKo as Messages,
-  landingHubKo as Messages,
   featuresHubKo as Messages,
   dashboardHubKo as Messages,
   pricingHubKo as Messages,
@@ -109,15 +104,11 @@ const koPatches: Messages[] = [
   profileHubKo as Messages,
 ];
 const enPatches: Messages[] = [
-  studentEn as Messages,
-  demoEn as Messages,
   professorEn as Messages,
-  marketingEn as Messages,
   studioEn as Messages,
   inboxEn as Messages,
   analyticsEn as Messages,
   learnersEn as Messages,
-  landingHubEn as Messages,
   featuresHubEn as Messages,
   dashboardHubEn as Messages,
   pricingHubEn as Messages,
