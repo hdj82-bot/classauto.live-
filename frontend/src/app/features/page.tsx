@@ -1,20 +1,19 @@
 import type { Metadata } from "next";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
+import LectureCreationPrototype from "@/components/features/lectureCreationPrototype/LectureCreationPrototype";
 
 /**
- * `/features` — 강의 제작 프로토타입 전면 교체 (2026-05-15).
+ * `/features` — 강의 제작 프로토타입 React 재구현 (2026-05-15).
  *
- * 사용자 결정: 기존 FeaturesContent (9개 카드 + 동적 섹션) 을 폐기하고
- * `docs/prototypes/05-Lecture Creation.html` 디자인 프로토타입을 그대로 노출.
- * `/analytics-example` 와 동일한 iframe 임베드 패턴 (정적 자원 + 마케팅 chrome).
+ * 기존 iframe (`/prototypes/05-lecture-creation.html`, 3.7MB 번들) 임베드를
+ * `docs/prototypes/05-lecture-creation.extracted.html` 디자인을 충실히 옮긴
+ * 모바일 반응형 React 컴포넌트로 교체. iframe·정적 자원 파일은 그대로 보존
+ * (이 페이지에서 더 이상 사용하지 않음).
  *
- * - 정적 자원: `frontend/public/prototypes/05-lecture-creation.html`
- *   (원본은 `docs/prototypes/05-Lecture Creation.html`. 공백 제거 + 소문자화로
- *    URL 인코딩 회피.)
- * - FeaturesContent / featuresStyles 컴포넌트는 import 만 해제. 다른 곳에서
- *   참조되지 않는 orphan 이지만 추후 재사용 가능성을 고려해 삭제하지 않음.
- *
- * 메타데이터는 server component 로 유지하여 SEO·OG 카드를 보존한다.
+ * - 클라이언트 컴포넌트: `LectureCreationPrototype`
+ *   (CSS 전부 `.lc-root` 네임스페이스 — demo-v3.css 의 .ca-* 패턴과 동일).
+ * - 이 페이지는 server component 로 남겨 metadata(SEO·OG)를 보존한다.
+ * - localStorage 미사용 (CLAUDE.md 준수).
  */
 export const metadata: Metadata = {
   title: "기능 — ClassAuto",
@@ -32,16 +31,7 @@ export const metadata: Metadata = {
 export default function FeaturesPage() {
   return (
     <LightMarketingShell>
-      {/* iframe 은 마케팅 헤더(56px = LightMarketingShell h-14) 아래 뷰포트를
-          전부 채운다. 프로토타입 자체에 여백·헤더가 있어 wrapping padding 불필요.
-          2026-05-15: 64px→56px (실제 헤더 높이) + 100vh→100dvh (모바일 주소창
-          토글 시 하단 잘림·이중 스크롤 방지). */}
-      <iframe
-        src="/prototypes/05-lecture-creation.html"
-        title="ClassAuto · 강의 제작"
-        className="block w-full border-0"
-        style={{ height: "calc(100dvh - 56px)" }}
-      />
+      <LectureCreationPrototype />
     </LightMarketingShell>
   );
 }
