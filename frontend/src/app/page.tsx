@@ -203,7 +203,7 @@ export default function LandingPage() {
             </div>
 
            <video
-  src="/hero-preview.mp4"
+  src="/hero-preview.mp4.mp4"
   autoPlay
   muted
   loop
