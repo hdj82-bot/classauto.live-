@@ -55,6 +55,7 @@
     },
     "marketingHeader": {
       "navFeatures": "Features",
+      "navAnalytics": "Analytics example",
       "navUseCases": "Use cases",
       "navPricing": "Pricing",
       "livePill": "Live Demo",
