@@ -105,6 +105,9 @@ export default function LightMarketingShell({
             <Link href="/features" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
               {t("common.navFeatures")}
             </Link>
+            <Link href="/student-guide" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
+              {t("common.navStudentGuide")}
+            </Link>
             <Link href="/analytics-example" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
               {t("common.navAnalytics")}
             </Link>
