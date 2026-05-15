@@ -55,6 +55,7 @@
     },
     "marketingHeader": {
       "navFeatures": "Features",
+      "navStudentGuide": "Student guide",
       "navAnalytics": "Analytics example",
       "navUseCases": "Use cases",
       "navPricing": "Pricing",
