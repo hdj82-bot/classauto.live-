@@ -25,6 +25,11 @@
       "limitTransparencyTitle": "Limit transparency",
       "limitTransparencyDesc": "ClassAuto runs on a flat subscription — we never show you dollar costs. Every screen surfaces this month's video count and active-learner count against your plan's limits."
     },
+    "analyticsExample": {
+      "previewBadge": "PREVIEW",
+      "previewBody": "This is a static preview of one screen from the analytics report. The left sidebar and other console menus are not clickable here — they become functional inside the real console once your beta account is approved.",
+      "previewCta": "Apply for beta"
+    },
     "useCases": {
       "meta": {
         "title": "Use cases — ClassAuto",
