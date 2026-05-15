@@ -1,36 +1,29 @@
 "use client";
 
 import Link from "next/link";
+import AnalyticsPrototype from "@/components/analyticsExample/analyticsPrototype/AnalyticsPrototype";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
 import { useMarketingI18n } from "@/components/marketing/useMarketingI18n";
 
 /**
  * `/analytics-example` — 학습 분석 화면 미리보기 (2026-05-15).
  *
- * 디자인 프로토타입(`docs/prototypes/07-analytics.html.html`) 을 그대로 보여주는
- * 페이지. 프로토타입은 4.8MB 자기완결형 HTML(자체 CSS·JS 번들) 이라 JSX 로 옮기지
- * 않고 `frontend/public/prototypes/07-analytics.html` 에 정적 자원으로 두고 iframe
- * 으로 임베드. 마케팅 chrome(header + footer) 은 그대로 두고 iframe 이 main 영역을
- * 채운다.
+ * 디자인 프로토타입(`docs/prototypes/07-analytics.extracted.html`) 을 충실히
+ * 재구현한 React 컴포넌트(`AnalyticsPrototype`) 를 보여주는 페이지. 마케팅
+ * chrome(header + footer) 은 그대로 두고 컴포넌트가 main 영역을 채운다.
  *
  * 정책 근거:
  *   - 사용자 결정 2026-05-15 AM: 상단 메뉴에서 "데모" 제거 후 "기능" 옆에 "분석 예시"
- *     추가. 페이지 본문은 07-analytics.html 그대로 사용.
- *   - 사용자 보고 2026-05-15 PM: 좌측 사이드바("대시보드"·"강의 영상" 등) 가 클릭해도
- *     이동이 안 됨. 원인은 prototype 이 React SPA 번들로 사이드바 항목이 `<a href>`
- *     가 아니라 내부 state 토글 버튼이고, 설사 링크였더라도 iframe 안이라 부모
- *     라우터에 닿지 않음. 마케팅 방문자에게 해당 메뉴는 시각적 chrome 일 뿐이므로,
- *     "분석 리포트 한 화면 미리보기" 라는 사실을 명시하는 sticky 안내 배너를 iframe
- *     위에 띄워 혼란을 차단한다.
+ *     추가. 페이지 본문은 07-analytics 프로토타입 사용.
+ *   - 사용자 보고 2026-05-15 PM: 좌측 사이드바 등이 클릭해도 이동이 안 됨 — 이는
+ *     prototype 의 사이드바가 라우팅이 아니라 토스트만 띄우는 시각적 chrome 이기
+ *     때문. "분석 리포트 한 화면 미리보기" 라는 사실을 명시하는 sticky 안내 배너를
+ *     본문 위에 띄워 혼란을 차단한다.
+ *   - 2026-05-15: 4.8MB 자기완결형 iframe → 반응형 React 재구현으로 교체.
+ *     모바일 가로 오버플로우/이중 스크롤 제거, 마케팅 번들과 폰트·토큰 일원화.
  */
 export default function AnalyticsExamplePage() {
   const { t } = useMarketingI18n();
-
-  // 마케팅 헤더 56px (LightMarketingShell h-14) + 안내 배너 56px (h-14) = 112px.
-  // 2026-05-15: 100vh → 100dvh. 모바일 브라우저는 주소창 표시 여부에 따라
-  // 100vh 가 실제 보이는 영역보다 커서 iframe 하단이 잘리고 이중 스크롤이
-  // 생긴다. dvh(dynamic viewport height) 는 실제 가시 영역에 맞춰진다.
-  const iframeHeight = "calc(100dvh - 112px)";
 
   return (
     <LightMarketingShell>
@@ -78,13 +71,8 @@ export default function AnalyticsExamplePage() {
         </div>
       </div>
 
-      {/* iframe 은 헤더 56 + 배너 56 = 112px 아래 뷰포트를 채운다. */}
-      <iframe
-        src="/prototypes/07-analytics.html"
-        title="ClassAuto · 학습 분석 예시"
-        className="block w-full border-0"
-        style={{ height: iframeHeight }}
-      />
+      {/* 프로토타입 컴포넌트가 자체 min-height 로 흐른다 (고정 높이 제거). */}
+      <AnalyticsPrototype />
     </LightMarketingShell>
   );
 }
