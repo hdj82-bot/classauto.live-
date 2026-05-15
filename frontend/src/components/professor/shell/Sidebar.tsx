@@ -14,6 +14,10 @@ import type { CSSProperties, ReactNode } from "react";
  *
  * docs/prototypes/05-studio-flow.extracted.html 의 좌측 slide-panel 카드 톤을
  * nav-item 패턴으로 옮긴 것.
+ *
+ * 후속 정리 ② 메모: 본 컴포넌트는 ui/* 와 중복이 아니라 순수 교수자 layout
+ * 전용(220px nav 골격)이다. DEPLOYMENT_PROGRESS 가 shell 묶음으로 언급했으나
+ * brand-dot/버튼/카드 같은 ui/* 표면이 없어 흡수 대상이 아님 — 그대로 유지.
  */
 
 interface NavItem {

@@ -7,6 +7,10 @@
  *
  * 다크 표면에서 사용 시 `.surface-dark` wrapper 안에 두면 자동으로 다크 카드
  * 토큰을 쓸 수 있도록 `dark` prop 으로 명시 전환.
+ *
+ * 경계 메모 (후속 정리 ②): `/professor/*` 영역에는 scoped 토큰 + inline-style
+ * 기반 `professor/shell/Card` 가 별도로 있고 의도적으로 분리 유지한다. 본
+ * ui/Card 는 professor 도메인 밖 전용. (사유는 shell/Card.tsx 헤더 참조.)
  */
 
 import type { HTMLAttributes, ReactNode } from "react";

@@ -9,6 +9,19 @@ import type { ButtonHTMLAttributes, CSSProperties } from "react";
  * `.btn.ghost` 패턴.
  *
  * CTA 채움은 페이지당 1~2개로 제한 (colors.md §3-1).
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * ui/Button 과의 경계 (후속 정리 ② — 의도적 분리 유지)
+ *
+ * ui/Button(전역 토큰 + Tailwind arbitrary 클래스, variant filled|outline|
+ * ghost)과 표면적으로 겹치지만 통합하지 않는다. 본 컴포넌트는 `/professor/*`
+ * 영역 전용으로, shell/tokens.ts 가 wrapper 에 주입하는 scoped CSS 변수와
+ * inline-style 위에서만 정확히 렌더되도록 prototype 05 의 `.btn` 수치를
+ * 그대로 옮긴 것이다. 전역 globals.css / tailwind.config 는 창1 소유라
+ * 직접 못 건드리고, 일부 토큰(예: --ease-out 곡선)도 ui/* 와 값이 달라
+ * ui/Button 으로 바꾸면 교수자 전 페이지 렌더가 미묘하게 틀어진다.
+ * → professor 도메인 밖에서는 ui/Button 을, 안에서는 본 컴포넌트를 쓴다.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 export interface ProfessorButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement> {

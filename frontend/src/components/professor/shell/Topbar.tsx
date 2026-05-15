@@ -3,14 +3,23 @@
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useI18n } from "@/contexts/I18nContext";
-import type { CSSProperties, ReactNode } from "react";
+import { BrandDot } from "@/components/ui";
+import type { ReactNode } from "react";
 
 /**
  * Professor v2 Topbar — 56px, light surface.
  *
+ * **ui/* 와의 경계 (후속 정리 ②)**: 본 컴포넌트는 교수자 layout 전용
+ * wrapper 다 — professor 영역 scoped 토큰(shell/tokens.ts, inline style)
+ * 위에서만 렌더되며 ui/* 의 전역-토큰 + Tailwind 클래스 메커니즘과는
+ * 의도적으로 분리 유지된다. 단 브랜드 마크는 canonical 단일화 대상이라
+ * 손수 그리던 brand-dot 을 ui/BrandDot 으로 흡수했다 — professor 토큰의
+ * --gold-bright/-deep 가 BrandDot 의 동명 변수와 동일값이라 그라데이션은
+ * 그대로, glow 만 BrandDot 표준값(부드러움)으로 정규화된다.
+ *
  * docs/prototypes/05-studio-flow.extracted.html §SCREEN 1~2 header 의
- * 시각 패턴을 정확히 옮긴 것:
- * - brand-dot (gradient gold) + ClassAuto wordmark
+ * 시각 패턴을 옮긴 것:
+ * - BrandDot (canonical gold 마크) + ClassAuto wordmark
  * - crumb-back (router.back, dashboard 에서는 숨김)
  * - 중앙: 페이지 제목 (또는 children 으로 title-input 등 커스터마이즈)
  * - 우측: saved chip (선택) + avatar-pill (initials + name)
@@ -34,15 +43,6 @@ export interface ProfessorTopbarProps {
   /** crumb-back 클릭 핸들러. 미지정 시 router.back(). */
   onBack?: () => void;
 }
-
-const brandDotStyle: CSSProperties = {
-  width: 20,
-  height: 20,
-  borderRadius: 6,
-  background: "linear-gradient(135deg, #FFB627, #E89E0E)",
-  boxShadow: "0 2px 6px rgba(255, 182, 39, 0.40)",
-  flexShrink: 0,
-};
 
 export default function ProfessorTopbar({
   title,
@@ -89,7 +89,7 @@ export default function ProfessorTopbar({
             textDecoration: "none",
           }}
         >
-          <span style={brandDotStyle} aria-hidden="true" />
+          <BrandDot size={20} />
           ClassAuto
         </a>
         {showBack && (

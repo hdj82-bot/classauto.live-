@@ -10,6 +10,18 @@ import type { CSSProperties, ReactNode, HTMLAttributes } from "react";
  * 14px` + `shadow-sm` 기본, hover 시 `shadow-md`.
  *
  * `interactive` true 일 때 hover transform + shadow 변경 (대시보드 카드 등).
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * ui/Card 와의 경계 (후속 정리 ② — 의도적 분리 유지)
+ *
+ * ui/Card(Tailwind 클래스 + 전역 토큰, `dark` prop)와 역할이 겹치지만
+ * 통합하지 않는다. 본 Card 는 `/professor/*` wrapper 의 scoped 토큰 위
+ * inline-style 로 prototype 05 카드 수치(radius 14·shadow·hover transform)를
+ * 픽셀 그대로 재현하며, padding/radius 를 prop 으로 노출해 교수자 화면의
+ * dense list ↔ spacious detail 을 한 컴포넌트로 커버한다. ui/Card 로
+ * 치환하면 메커니즘(class vs inline)·토큰 스코프가 달라 교수자 전 페이지
+ * 회귀 위험이 있어 분리 유지. professor 도메인 안에서만 사용.
+ * ─────────────────────────────────────────────────────────────────────────
  */
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;
