@@ -82,6 +82,7 @@
     "limitsTable": {
       "title": "Student-side usage limits",
       "subtitle": "Student interaction guardrails apply to every plan (Guardrail system §5).",
+      "scrollHint": "← Swipe to see all plans →",
       "linkLabel": "Read the guardrail system",
       "linkHref": "/security",
       "headerCategory": "Item",

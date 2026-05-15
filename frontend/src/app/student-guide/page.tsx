@@ -25,13 +25,15 @@ import LightMarketingShell from "@/components/marketing/LightMarketingShell";
 export default function StudentGuidePage() {
   return (
     <LightMarketingShell>
-      {/* iframe 은 마케팅 헤더(64px) 아래 뷰포트를 전부 채운다. 프로토타입 자체에
-          여백·헤더가 있으므로 wrapping padding 은 불필요. */}
+      {/* iframe 은 마케팅 헤더(56px = LightMarketingShell h-14) 아래 뷰포트를
+          전부 채운다. 프로토타입 자체에 여백·헤더가 있어 wrapping padding 불필요.
+          2026-05-15: 64px→56px (실제 헤더 높이) + 100vh→100dvh (모바일 주소창
+          토글 시 하단 잘림·이중 스크롤 방지). */}
       <iframe
         src="/prototypes/06-student-flow.html"
         title="ClassAuto · 학습자 가이드"
         className="block w-full border-0"
-        style={{ height: "calc(100vh - 64px)" }}
+        style={{ height: "calc(100dvh - 56px)" }}
       />
     </LightMarketingShell>
   );

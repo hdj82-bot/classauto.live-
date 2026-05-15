@@ -189,8 +189,36 @@ function DemoPageBody() {
  * 라이트 톤 상단 바 — standalone 디자인의 header 그대로 변환.
  * 방패+체크 brand mark, 4-link nav (Live Demo pill 포함), outline 베타 신청 CTA.
  */
+const DEMO_NAV_LINKS = [
+  { href: "/features", key: "marketingHeader.navFeatures" },
+  { href: "/student-guide", key: "marketingHeader.navStudentGuide" },
+  { href: "/analytics-example", key: "marketingHeader.navAnalytics" },
+  { href: "/pricing", key: "marketingHeader.navPricing" },
+  { href: "/use-cases", key: "marketingHeader.navUseCases" },
+] as const;
+
 function DemoTopBar() {
   const { t } = useDemoI18n();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Escape 로 닫기 + 데스크탑 폭으로 넓어지면 자동 닫기 (LightMarketingShell 과 동일).
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = () => {
+      if (mq.matches) setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    mq.addEventListener("change", onChange);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      mq.removeEventListener("change", onChange);
+    };
+  }, [menuOpen]);
+
   return (
     <header className="ca-header">
       <div className="ca-header-inner">
@@ -212,18 +240,62 @@ function DemoTopBar() {
         </Link>
 
         <nav className="ca-header-nav" aria-label="Primary">
-          <Link href="/features">{t("marketingHeader.navFeatures")}</Link>
-          <Link href="/student-guide">{t("marketingHeader.navStudentGuide")}</Link>
-          <Link href="/analytics-example">{t("marketingHeader.navAnalytics")}</Link>
-          <Link href="/pricing">{t("marketingHeader.navPricing")}</Link>
-          <Link href="/use-cases">{t("marketingHeader.navUseCases")}</Link>
+          {DEMO_NAV_LINKS.map((link) => (
+            <Link key={link.href} href={link.href}>
+              {t(link.key)}
+            </Link>
+          ))}
           <span className="ca-demo-pill">{t("marketingHeader.livePill")}</span>
         </nav>
 
-        <Link href="/beta-apply" className="ca-header-cta">
-          {t("marketingHeader.cta")}
-        </Link>
+        <div className="ca-header-actions">
+          <Link href="/beta-apply" className="ca-header-cta">
+            {t("marketingHeader.cta")}
+          </Link>
+
+          {/* 모바일 햄버거 — demo-v3.css 에서 768px 미만일 때만 노출. */}
+          <button
+            type="button"
+            className="ca-header-burger"
+            aria-label="Primary"
+            aria-expanded={menuOpen}
+            aria-controls="demo-mobile-nav"
+            onClick={() => setMenuOpen((v) => !v)}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              width="22"
+              height="22"
+              aria-hidden="true"
+            >
+              {menuOpen ? (
+                <path d="M6 6l12 12M18 6L6 18" />
+              ) : (
+                <path d="M3 6h18M3 12h18M3 18h18" />
+              )}
+            </svg>
+          </button>
+        </div>
       </div>
+
+      {menuOpen && (
+        <nav id="demo-mobile-nav" className="ca-mobile-nav" aria-label="Primary">
+          {DEMO_NAV_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setMenuOpen(false)}
+            >
+              {t(link.key)}
+            </Link>
+          ))}
+        </nav>
+      )}
     </header>
   );
 }

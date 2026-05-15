@@ -97,6 +97,33 @@
   border-color: var(--ca-gold);
   color: var(--ca-gold);
 }
+/* 모바일 메뉴 (2026-05-15): 데스크탑에서는 햄버거·드롭다운 모두 숨김.
+   768px 미만에서 .ca-header-nav 가 사라지는 대신 햄버거가 나타난다. */
+.ca-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ca-header-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--ca-line-strong);
+  border-radius: 10px;
+  background: #FFFFFF;
+  color: var(--ca-text);
+  cursor: pointer;
+  transition: border-color 200ms, color 200ms;
+}
+.ca-header-burger:hover {
+  border-color: var(--ca-gold);
+  color: var(--ca-gold);
+}
+.ca-mobile-nav {
+  display: none;
+}
 .ca-demo-pill {
   display: inline-flex;
   align-items: center;
@@ -766,6 +793,26 @@
 @media (max-width: 768px) {
   .ca-field-grid { grid-template-columns: 1fr; }
   .ca-header-nav { display: none; }
+  /* 데스크탑 nav 가 숨겨지는 대신 햄버거 노출 + 드롭다운 패널 활성화 */
+  .ca-header-burger { display: inline-flex; }
+  .ca-mobile-nav {
+    display: flex;
+    flex-direction: column;
+    padding: 4px clamp(16px, 4vw, 32px) 8px;
+    background: rgba(255, 255, 255, 0.96);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border-top: 1px solid var(--ca-line);
+  }
+  .ca-mobile-nav a {
+    padding: 12px 4px;
+    font-size: 15px;
+    color: var(--ca-text-muted);
+    border-bottom: 1px solid rgba(10, 10, 10, 0.06);
+    transition: color 200ms;
+  }
+  .ca-mobile-nav a:last-child { border-bottom: 0; }
+  .ca-mobile-nav a:hover { color: var(--ca-text); }
   .ca-trust-grid { grid-template-columns: repeat(2, 1fr); }
   .ca-header-inner { height: 56px; }
   .ca-brand { font-size: 17px; }

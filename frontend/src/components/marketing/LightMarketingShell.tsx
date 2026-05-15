@@ -1,8 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useI18n, type Locale } from "@/contexts/I18nContext";
 import { useMarketingI18n } from "./useMarketingI18n";
+
+/**
+ * 상단 1차 내비게이션 링크. 데스크탑 nav 와 모바일 드롭다운이 동일 배열을
+ * 공유하여 항목이 어긋나지 않게 한다. 라벨은 marketing.common.* i18n 키.
+ */
+const NAV_LINKS = [
+  { href: "/features", key: "common.navFeatures" },
+  { href: "/student-guide", key: "common.navStudentGuide" },
+  { href: "/analytics-example", key: "common.navAnalytics" },
+  { href: "/pricing", key: "common.navPricing" },
+  { href: "/use-cases", key: "common.navUseCases" },
+] as const;
 
 /**
  * v2 라이트 마케팅 셸 — 라이트 베이지(#FAFAF7) + 골드(#FFB627) dual surface
@@ -37,9 +50,29 @@ export default function LightMarketingShell({
 }) {
   const { t } = useMarketingI18n();
   const { locale, setLocale } = useI18n();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const finalCta =
     topCta ?? { href: "/beta-apply", label: t("common.ctaApplyBeta") };
+
+  // 모바일 메뉴: Escape 로 닫기 + 데스크탑(>=768px) 으로 넓어지면 자동으로 닫아
+  // 리사이즈 시 패널이 떠 있는 상태가 남지 않게 한다.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    const mq = window.matchMedia("(min-width: 768px)");
+    const onChange = () => {
+      if (mq.matches) setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    mq.addEventListener("change", onChange);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      mq.removeEventListener("change", onChange);
+    };
+  }, [menuOpen]);
 
   return (
     <div
@@ -102,21 +135,15 @@ export default function LightMarketingShell({
             className="hidden md:flex items-center gap-1 text-sm text-[rgba(10,10,10,0.62)]"
             aria-label={t("common.primaryNavLabel")}
           >
-            <Link href="/features" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
-              {t("common.navFeatures")}
-            </Link>
-            <Link href="/student-guide" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
-              {t("common.navStudentGuide")}
-            </Link>
-            <Link href="/analytics-example" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
-              {t("common.navAnalytics")}
-            </Link>
-            <Link href="/pricing" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
-              {t("common.navPricing")}
-            </Link>
-            <Link href="/use-cases" className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none">
-              {t("common.navUseCases")}
-            </Link>
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="px-3 py-1.5 rounded-lg hover:text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none"
+              >
+                {t(link.key)}
+              </Link>
+            ))}
           </nav>
 
           <div className="flex items-center gap-2">
@@ -150,8 +177,59 @@ export default function LightMarketingShell({
             >
               {finalCta.label}
             </Link>
+
+            {/* 모바일 햄버거 — md 미만에서만 노출. 데스크탑은 위 <nav> 가 보임. */}
+            <button
+              type="button"
+              className="md:hidden inline-flex items-center justify-center w-9 h-9 -mr-1 rounded-lg text-[#0A0A0A] hover:bg-black/5 transition motion-reduce:transition-none"
+              aria-label={t("common.primaryNavLabel")}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-primary-nav"
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                width="22"
+                height="22"
+                aria-hidden="true"
+              >
+                {menuOpen ? (
+                  <path d="M6 6l12 12M18 6L6 18" />
+                ) : (
+                  <path d="M3 6h18M3 12h18M3 18h18" />
+                )}
+              </svg>
+            </button>
           </div>
         </div>
+
+        {/* 모바일 1차 내비게이션 드롭다운 — sticky 헤더 바로 아래에 펼쳐진다.
+            데스크탑(md+) 에서는 위 <nav> 가 담당하므로 md:hidden. */}
+        {menuOpen && (
+          <nav
+            id="mobile-primary-nav"
+            className="md:hidden border-t border-[rgba(10,10,10,0.08)] bg-[#FAFAF7]/95 backdrop-blur-md"
+            aria-label={t("common.primaryNavLabel")}
+          >
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-2 flex flex-col">
+              {NAV_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="px-2 py-3 text-sm text-[rgba(10,10,10,0.72)] border-b border-[rgba(10,10,10,0.06)] last:border-b-0 hover:text-[#0A0A0A] transition motion-reduce:transition-none"
+                >
+                  {t(link.key)}
+                </Link>
+              ))}
+            </div>
+          </nav>
+        )}
       </header>
 
       <main>{children}</main>
