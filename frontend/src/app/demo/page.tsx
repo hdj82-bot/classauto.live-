@@ -213,8 +213,9 @@ function DemoTopBar() {
 
         <nav className="ca-header-nav" aria-label="Primary">
           <Link href="/features">{t("marketingHeader.navFeatures")}</Link>
-          <Link href="/use-cases">{t("marketingHeader.navUseCases")}</Link>
+          <Link href="/analytics-example">{t("marketingHeader.navAnalytics")}</Link>
           <Link href="/pricing">{t("marketingHeader.navPricing")}</Link>
+          <Link href="/use-cases">{t("marketingHeader.navUseCases")}</Link>
           <span className="ca-demo-pill">{t("marketingHeader.livePill")}</span>
         </nav>
 
