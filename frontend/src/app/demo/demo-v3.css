@@ -169,6 +169,13 @@
   object-position: center;
   z-index: 0;
   pointer-events: none;
+  /* 2026-05-15: 3개 영상 크로스페이드용. 두 슬롯이 겹쳐 있고 opacity 만
+     전환하므로 poster 플래시·재로딩 끊김이 사라진다. */
+  opacity: 0;
+  transition: opacity 700ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ca-hero-video.is-active {
+  opacity: 1;
 }
 .ca-hero-overlay {
   position: absolute;

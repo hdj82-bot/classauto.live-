@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import IconDefs from "@/components/landing/IconDefs";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
 import { useLandingI18n } from "@/components/landing/useLandingI18n";
@@ -60,12 +60,55 @@ export default function LandingPage() {
     [router],
   );
 
-  // Hero 영상 순환: onEnded 마다 (i+1) % 3. 아래 <video> 의 key={heroVideoIdx} 가
-  // React 에 요소 재마운트를 강제하여 autoPlay 속성이 새 src 에 대해 다시 적용된다.
-  const [heroVideoIdx, setHeroVideoIdx] = useState(0);
-  const handleHeroVideoEnded = useCallback(() => {
-    setHeroVideoIdx((i) => (i + 1) % HERO_VIDEOS.length);
+  // Hero 영상 크로스페이드 (2026-05-15 개선).
+  //
+  // 단일 <video> + onEnded 로 src 를 갈아끼우던 방식은 전환 시점에 browser 가
+  // 새 파일을 로드하느라 poster 가 잠깐 노출되어 "끊김" 으로 보였다.
+  // 두 개의 <video> 슬롯을 겹쳐 놓고 opacity 만 토글하면, 다음 영상이 미리
+  // preload 되어 있어 페이드가 자연스럽다.
+  //
+  // 흐름:
+  //   초기  → A=video[0] active 재생 · B=video[1] inactive 로 사전 로드
+  //   A end → B active (페이드 인 + 재생) · A 슬롯에 video[2] 로드
+  //   B end → A active (이미 video[2] 가 로드되어 있어 즉시 재생) · B 슬롯에 video[0]
+  //   ... 반복
+  const slotARef = useRef<HTMLVideoElement | null>(null);
+  const slotBRef = useRef<HTMLVideoElement | null>(null);
+  const [activeSlot, setActiveSlot] = useState<"A" | "B">("A");
+  const [srcA, setSrcA] = useState<string>(HERO_VIDEOS[0]);
+  const [srcB, setSrcB] = useState<string>(HERO_VIDEOS[1]);
+  // 비활성 슬롯에 다음으로 채워 넣을 영상의 인덱스를 추적.
+  const playlistCursorRef = useRef<number>(1);
+
+  const handleHeroVideoEnded = useCallback((endedSlot: "A" | "B") => {
+    setActiveSlot((current: "A" | "B") =>
+      current === endedSlot ? (endedSlot === "A" ? "B" : "A") : current,
+    );
+    // 방금 끝난 슬롯(=곧 비활성) 에 다음 영상을 큐잉. 다음 사이클 때 이미 로드됨.
+    playlistCursorRef.current = (playlistCursorRef.current + 1) % HERO_VIDEOS.length;
+    const nextSrc = HERO_VIDEOS[playlistCursorRef.current];
+    if (endedSlot === "A") {
+      setSrcA(nextSrc);
+    } else {
+      setSrcB(nextSrc);
+    }
   }, []);
+
+  // 활성 슬롯이 바뀌면 그 영상을 0초부터 재생. 비활성 슬롯은 자연스레 멈춤.
+  useEffect(() => {
+    const v = (activeSlot === "A" ? slotARef : slotBRef).current;
+    if (!v) return;
+    v.currentTime = 0;
+    void v.play().catch(() => {});
+  }, [activeSlot]);
+
+  // 슬롯의 src 가 바뀌면 load() 로 0:00 으로 리셋 (다음 활성화 때 즉시 0 부터 재생).
+  useEffect(() => {
+    slotARef.current?.load();
+  }, [srcA]);
+  useEffect(() => {
+    slotBRef.current?.load();
+  }, [srcB]);
 
   // standalone /demo hero 와 동일 컴포넌트를 / 에서도 재사용 — 텍스트만 landingHub
   // i18n 에서 주입한다 (의미상 marketing 도메인 i18n 분리 유지).
@@ -93,16 +136,31 @@ export default function LandingPage() {
               모바일(iOS Safari) 자동재생의 필수 3종. preload=metadata 로 LCP 보호.
               prefers-reduced-motion 시엔 demo-v3.css 에서 display:none 처리됨.
               2026-05-15: 3개 mp4 순차 반복 — loop 속성 대신 onEnded 로 다음 src 전환. */}
+          {/* 두 슬롯 모두 absolute 풀스크린(.ca-hero-video) 으로 겹쳐 있고,
+              .is-active 가 붙은 쪽만 opacity:1 로 보인다. autoPlay 는 슬롯 A 의
+              초기 재생용 — 슬롯 전환 시에는 위의 useEffect 가 play() 를 호출한다.
+              preload="auto" 로 두 영상 모두 즉시 버퍼링 시작 → 첫 전환 끊김 제거. */}
           <video
-            key={heroVideoIdx}
-            className="ca-hero-video"
-            src={HERO_VIDEOS[heroVideoIdx]}
+            ref={slotARef}
+            className={`ca-hero-video${activeSlot === "A" ? " is-active" : ""}`}
+            src={srcA}
             poster="/hero-bg-poster.jpg"
             autoPlay
             muted
             playsInline
-            preload="metadata"
-            onEnded={handleHeroVideoEnded}
+            preload="auto"
+            onEnded={() => handleHeroVideoEnded("A")}
+            aria-hidden="true"
+          />
+          <video
+            ref={slotBRef}
+            className={`ca-hero-video${activeSlot === "B" ? " is-active" : ""}`}
+            src={srcB}
+            poster="/hero-bg-poster.jpg"
+            muted
+            playsInline
+            preload="auto"
+            onEnded={() => handleHeroVideoEnded("B")}
             aria-hidden="true"
           />
           <div className="ca-aurora" aria-hidden="true" />
