@@ -116,52 +116,20 @@ export function isStripeCheckoutUrl(raw: unknown): raw is string {
   return url.protocol === "https:" && url.hostname === "checkout.stripe.com";
 }
 
-// ── OAuth state (CSRF 방어) ────────────────────────────────────────────────
-// 백엔드 자체 state 검증을 100% 신뢰하지 못하는 상황에서 프론트가 1회용
-// state 를 sessionStorage 에 발급해 콜백에서 일치 확인.
-const OAUTH_STATE_KEY = "ifl_oauth_state";
-
-function randomState(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  // jsdom 등 fallback
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-export const oauthState = {
-  // 로그인 시작 시 발급. redirect URL 의 state 쿼리에 동봉.
-  issue(): string {
-    const state = randomState();
-    if (typeof window !== "undefined") {
-      window.sessionStorage.setItem(OAUTH_STATE_KEY, state);
-    }
-    return state;
-  },
-  // 콜백에서 1회 검증. 검증 후 즉시 무효화 (재사용 방지).
-  consume(received: string | null): { ok: boolean; reason?: "missing" | "mismatch" | "absent" } {
-    if (typeof window === "undefined") return { ok: false, reason: "absent" };
-    const expected = window.sessionStorage.getItem(OAUTH_STATE_KEY);
-    if (!expected) return { ok: false, reason: "absent" };
-    window.sessionStorage.removeItem(OAUTH_STATE_KEY);
-    if (!received) return { ok: false, reason: "missing" };
-    if (received !== expected) return { ok: false, reason: "mismatch" };
-    return { ok: true };
-  },
-  // 진입 시 sessionStorage 에 state 가 없는 경우 (백엔드만 검증) 도
-  // 알 수 있도록 별도 helper. 호출자가 신뢰 정책을 결정한다.
-  hasIssued(): boolean {
-    if (typeof window === "undefined") return false;
-    return window.sessionStorage.getItem(OAUTH_STATE_KEY) !== null;
-  },
-};
-
-// 로그인 페이지에서 import. state 발급 후 백엔드 OAuth 시작 URL 로 redirect.
+// ── Google OAuth 시작 ──────────────────────────────────────────────────────
+// CSRF state 는 백엔드가 Redis 로 단독 발급·검증한다 (2026-05-12 OAuth
+// invalid_state 수정 — frontend state 레이어 제거, 백엔드 단일 검증 일원화).
+// 따라서 프론트는 1회용 state 를 발급하지 않고, role 만 붙여 백엔드 시작
+// 엔드포인트로 redirect 한다 (backend/app/api/v1/auth.py `google_login` 은
+// state 쿼리를 받지 않고 자체 uuid 를 Redis 에 저장한다).
+//
+// 과거 세션이 sessionStorage 에 남긴 `ifl_oauth_state` 잔재는 이제 읽는
+// 코드가 없어 자연히 무시되며(탭 종료 시 sessionStorage 와 함께 소멸),
+// 별도 정리(removeItem) 코드를 두지 않는다 — careful drop: 정리 코드를
+// 추가하면 도리어 죽은 키를 다시 참조하는 셈이라 silent ignore 가 정답.
 export function startGoogleLogin(role: "professor" | "student"): void {
-  const state = oauthState.issue();
   const url = new URL(`${API_URL}/api/auth/google`);
   url.searchParams.set("role", role);
-  url.searchParams.set("state", state);
   window.location.href = url.toString();
 }
 
