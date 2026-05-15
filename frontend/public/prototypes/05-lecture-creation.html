@@ -42,15 +42,16 @@ document.addEventListener('DOMContentLoaded', async function() {
   const loading = document.getElementById('__bundler_loading');
   function setStatus(msg) { if (loading) loading.textContent = msg; }
 
-  // Error sink persists across replaceWith since it's on window, not the DOM.
+  // 2026-05-15: 프로덕션 (classauto.live/features) 에서는 번들된 프로토타입의
+  // 런타임 에러가 발생해도 사용자에게 빨간 배너로 노출되지 않도록 console.error
+  // 로만 보낸다. 프로토타입의 React 코드는 자체 번들 (3.7MB) 이라 근본 수정이
+  // 어렵고, 시각적으로는 정상 렌더되므로 배너만 억제. iframe 안에서만 쓰이는
+  // 디자인 프로토타입이라 페이지 동작 영향 없음.
   window.addEventListener('error', function(e) {
-    var p = document.body || document.documentElement;
-    var d = document.getElementById('__bundler_err') || p.appendChild(document.createElement('div'));
-    d.id = '__bundler_err';
-    d.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;font:12px/1.4 ui-monospace,monospace;background:#2a1215;color:#ff8a80;padding:10px 14px;border-radius:8px;border:1px solid #5c2b2e;z-index:99999;white-space:pre-wrap;max-height:40vh;overflow:auto';
-    d.textContent = (d.textContent ? d.textContent + String.fromCharCode(10) : '') +
-      '[bundle] ' + (e.message || e.type) +
-      (e.filename ? ' (' + e.filename.slice(0, 60) + ':' + e.lineno + ')' : '');
+    if (typeof console !== 'undefined' && console.error) {
+      console.error('[bundle]', e.message || e.type,
+        e.filename ? '(' + e.filename + ':' + e.lineno + ')' : '');
+    }
   }, true);
 
   try {
