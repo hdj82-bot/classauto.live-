@@ -202,7 +202,25 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <HeroFlowStage labels={heroFlowLabels} />
+           <video
+  src="/hero-preview.mp4"
+  autoPlay
+  muted
+  loop
+  playsInline
+  preload="auto"
+  aria-label="ClassAuto 데모 미리보기"
+  style={{
+    width: "100%",
+    maxWidth: "560px",
+    aspectRatio: "16 / 9",
+    borderRadius: "24px",
+    objectFit: "cover",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.18)",
+    background: "#000",
+  }}
+/>
+
           </div>
         </section>
 
