@@ -82,6 +82,7 @@
     "limitsTable": {
       "title": "학생 측 사용 한도 비교",
       "subtitle": "학생 인터랙션 비용 가드레일은 모든 플랜에 적용됩니다 (가드레일 시스템 §5).",
+      "scrollHint": "← 좌우로 밀어 모든 플랜 보기 →",
       "linkLabel": "가드레일 시스템 자세히",
       "linkHref": "/security",
       "headerCategory": "항목",

@@ -27,7 +27,10 @@ export default function AnalyticsExamplePage() {
   const { t } = useMarketingI18n();
 
   // 마케팅 헤더 56px (LightMarketingShell h-14) + 안내 배너 56px (h-14) = 112px.
-  const iframeHeight = "calc(100vh - 112px)";
+  // 2026-05-15: 100vh → 100dvh. 모바일 브라우저는 주소창 표시 여부에 따라
+  // 100vh 가 실제 보이는 영역보다 커서 iframe 하단이 잘리고 이중 스크롤이
+  // 생긴다. dvh(dynamic viewport height) 는 실제 가시 영역에 맞춰진다.
+  const iframeHeight = "calc(100dvh - 112px)";
 
   return (
     <LightMarketingShell>

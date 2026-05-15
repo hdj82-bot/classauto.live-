@@ -59,7 +59,16 @@ export default function LimitsTable() {
         </Link>
       </header>
 
-      <div className="overflow-x-auto -mx-2 px-2">
+      {/* 모바일 전용 스크롤 안내 — 표가 min-w-[520px] 라 좁은 폰에서 가로
+          스크롤이 필요하다는 걸 명시 (2026-05-15 반응형 보강). */}
+      <p
+        className="sm:hidden text-xs text-[rgba(10,10,10,0.45)] mb-2 text-center"
+        aria-hidden="true"
+      >
+        {t("limitsTable.scrollHint")}
+      </p>
+
+      <div className="overflow-x-auto overscroll-x-contain -mx-2 px-2">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
             <tr className="text-left text-[rgba(10,10,10,0.45)] text-xs uppercase tracking-wider">
