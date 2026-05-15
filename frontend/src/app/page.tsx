@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import IconDefs from "@/components/landing/IconDefs";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
 import { useLandingI18n } from "@/components/landing/useLandingI18n";
@@ -39,14 +39,6 @@ import "./demo/demo-v3.css";
  *   - docs/planning/04-demo-page.md — /demo 스펙 (히어로 카피 정합)
  *   - docs/design-system/colors.md §1 — light beige + gold dual-surface
  */
-/**
- * Hero 배경 영상 플레이리스트 (2026-05-15 추가).
- * 3개 mp4 가 순차 재생되며, 마지막이 끝나면 첫 번째로 돌아가 무한 순환.
- * 파일은 `frontend/public/` 직속에 배치. 화질·밝기·색온도는 일관성 유지를
- * 위해 동일 인코딩 프리셋으로 준비할 것 (hero-bg.mp4 기준 ~4.4MB, 라이트톤).
- */
-const HERO_VIDEOS = ["/hero-bg.mp4", "/hero-bg-2.mp4", "/hero-bg-3.mp4"] as const;
-
 export default function LandingPage() {
   const { t: tHub } = useLandingI18n();
   const { t: tCommon } = useMarketingI18n();
@@ -59,13 +51,6 @@ export default function LandingPage() {
     },
     [router],
   );
-
-  // Hero 영상 순환: onEnded 마다 (i+1) % 3. 아래 <video> 의 key={heroVideoIdx} 가
-  // React 에 요소 재마운트를 강제하여 autoPlay 속성이 새 src 에 대해 다시 적용된다.
-  const [heroVideoIdx, setHeroVideoIdx] = useState(0);
-  const handleHeroVideoEnded = useCallback(() => {
-    setHeroVideoIdx((i) => (i + 1) % HERO_VIDEOS.length);
-  }, []);
 
   // standalone /demo hero 와 동일 컴포넌트를 / 에서도 재사용 — 텍스트만 landingHub
   // i18n 에서 주입한다 (의미상 marketing 도메인 i18n 분리 유지).
@@ -91,18 +76,16 @@ export default function LandingPage() {
           {/* 배경 영상 (z:0) → 오로라 메쉬 (z:0, 위) → 베이지 오버레이 (z:0, 위)
               → .ca-hero-inner (z:1) 순으로 쌓인다. muted+playsInline+autoPlay 는
               모바일(iOS Safari) 자동재생의 필수 3종. preload=metadata 로 LCP 보호.
-              prefers-reduced-motion 시엔 demo-v3.css 에서 display:none 처리됨.
-              2026-05-15: 3개 mp4 순차 반복 — loop 속성 대신 onEnded 로 다음 src 전환. */}
+              prefers-reduced-motion 시엔 demo-v3.css 에서 display:none 처리됨. */}
           <video
-            key={heroVideoIdx}
             className="ca-hero-video"
-            src={HERO_VIDEOS[heroVideoIdx]}
+            src="/hero-bg.mp4"
             poster="/hero-bg-poster.jpg"
             autoPlay
             muted
+            loop
             playsInline
             preload="metadata"
-            onEnded={handleHeroVideoEnded}
             aria-hidden="true"
           />
           <div className="ca-aurora" aria-hidden="true" />
