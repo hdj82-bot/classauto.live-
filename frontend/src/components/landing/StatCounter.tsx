@@ -17,12 +17,32 @@ interface StatCounterProps {
 }
 
 /**
+ * 정수에 천 단위 구분(쉼표)을 넣는다 — locale 무관 결정적 포매터.
+ *
+ * `Number.prototype.toLocaleString()` 은 런타임의 기본 locale·ICU 데이터에
+ * 의존한다. 서버(Node)와 브라우저의 기본 locale 이 다르면 `12,000` / `12.000`
+ * / `12 000` 으로 갈려 React #418 (hydration text mismatch) 의 잠재 원인이
+ * 된다. 디자인 스펙(천 단위 = `12,000`, 쉼표)은 고정이므로 locale 분기 없이
+ * 직접 그룹핑하여 SSR === client 출력을 보장한다.
+ */
+function groupThousands(n: number): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+/**
  * 카운트업 카운터 — docs/design-system/animations.md §2.2.
  *
  * IntersectionObserver 로 진입 시 1회만 실행. easeOutCubic 적용.
  * `prefers-reduced-motion` 일 때는 즉시 target 표시 (불연속 X — 그냥 스킵).
  *
  * 숫자는 Pretendard tabular-nums (typography.md §1) 로 칼럼 정렬.
+ *
+ * Hydration 안전성:
+ *   - 초기 표시값은 `immediate ? target : 0` — prop 으로만 결정되므로 SSR 과
+ *     client 첫 렌더가 동일. 카운트업은 client 전용 effect(IntersectionObserver
+ *     /rAF) 안에서만 진행되어 hydration 시점엔 양쪽 모두 동일 값.
+ *   - 표시 문자열은 `groupThousands`(locale 무관)로 생성 — toLocaleString 의
+ *     서버/클라이언트 locale 차이로 인한 #418 제거.
  */
 export default function StatCounter({
   target,
@@ -86,7 +106,7 @@ export default function StatCounter({
     return () => observer.disconnect();
   }, [target, durationMs, immediate, reduced]);
 
-  const display = groupDigits ? value.toLocaleString() : String(value);
+  const display = groupDigits ? groupThousands(value) : String(value);
 
   return (
     <div ref={ref} className="text-center">
