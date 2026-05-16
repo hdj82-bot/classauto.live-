@@ -25,6 +25,14 @@ _SENSITIVE_KEYS = (
     "jwt",
     "x-heygen-signature",
     "stripe-signature",
+    # 학생 데이터 보호 — defense-in-depth. info 레벨 실위반은 없으나
+    # (auth.py 는 role·locale 만 로깅) 향후 회귀 대비 KV 패턴 차단.
+    # 주: 'name' 은 KV 정규식에 좌측 경계가 없어 task_name=·file_name=
+    # 같은 정상 키를 오손상시키므로 의도적으로 제외(Sentry _SENSITIVE_KEYS
+    # 와 비대칭 — Sentry 는 exact-match 라 안전, 여기는 부분 매칭이라 위험).
+    "email",
+    "student[_-]?number",
+    "student[_-]?id",
 )
 
 # 1) "Bearer <token>" — KV 매칭이 'Bearer' 자체를 값으로 삼아버리지 않게
