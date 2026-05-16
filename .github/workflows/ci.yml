@@ -123,6 +123,40 @@ jobs:
       - run: cd frontend && npm ci
       - run: cd frontend && npm run build
 
+  # ── Dockerfile ↔ Dockerfile.prod 베이스 이미지 패리티 가드 ────────────────
+  # Dependabot docker 업데이터는 `Dockerfile`(정확히 그 이름)만 스캔하고
+  # `Dockerfile.prod`(= CI/프로덕션 실제 빌드 파일)는 못 본다. 그래서 베이스
+  # 이미지 bump PR(#66 python3.14, #69→#151 node24)이 dev `Dockerfile` 만
+  # 바꿔 머지돼도 prod 에 무효였다. 두 파일의 베이스 이미지가 어긋나면
+  # 여기서 CI 를 red 로 만들어 .prod 동기화를 강제한다(드리프트 영구 차단).
+  dockerfile-parity:
+    name: Dockerfile Parity (dev ↔ prod)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert base images match
+        run: |
+          set -euo pipefail
+          # FROM 줄에서 이미지 ref(태그 포함)만 추출, `AS <stage>` 제거 후 유니크.
+          bases() { grep -iE '^[[:space:]]*FROM[[:space:]]' "$1" \
+            | sed -E 's/^[[:space:]]*[Ff][Rr][Oo][Mm][[:space:]]+//; s/[[:space:]]+[Aa][Ss][[:space:]]+.*$//' \
+            | awk '{print $1}' | sort -u; }
+          fail=0
+          for svc in backend frontend; do
+            dev="$svc/Dockerfile"; prod="$svc/Dockerfile.prod"
+            [ -f "$dev" ] && [ -f "$prod" ] || { echo "skip $svc (파일 없음)"; continue; }
+            dev_b="$(bases "$dev")"
+            prod_b="$(bases "$prod")"
+            # dev 의 베이스(보통 1종)가 prod 의 모든 스테이지 베이스와 동일해야 함.
+            if [ "$(echo "$prod_b" | sort -u)" != "$dev_b" ]; then
+              echo "::error file=$prod::[$svc] 베이스 이미지 불일치 — dev=[$dev_b] vs prod=[$(echo "$prod_b" | paste -sd, -)]. Dockerfile.prod 를 동기화하세요."
+              fail=1
+            else
+              echo "[$svc] OK — $dev_b"
+            fi
+          done
+          exit $fail
+
   # ── Docker Build & Push to GHCR ───────────────────────────────────────
   # main 또는 임의 브랜치에 push 되면 backend / frontend 이미지를 빌드해
   # ghcr.io/hdj82-bot/ifl-{backend,frontend} 로 push.
@@ -132,7 +166,7 @@ jobs:
   docker-build-push:
     name: Docker Build & Push (${{ matrix.name }})
     runs-on: ubuntu-latest
-    needs: [backend-test, frontend-test, frontend-build]
+    needs: [backend-test, frontend-test, frontend-build, dockerfile-parity]
     if: github.event_name == 'push'
     permissions:
       contents: read
