@@ -155,7 +155,18 @@ function subscribeLocale(callback: () => void) {
   };
 }
 
+// Hydration gate. useSyncExternalStore requires the client's initial snapshot
+// to equal the server snapshot ("ko"); otherwise React logs a recoverable
+// hydration error (minified #418 in prod) and re-renders the tree client-side.
+// The persisted preference in localStorage can be "en", so reflecting it on
+// the very first client render would mismatch the SSR HTML. We therefore keep
+// the snapshot pinned to the server value until the first client mount
+// completes (see I18nProvider effect), then flip and notify subscribers so the
+// stored locale is applied via a normal client update — not a hydration pass.
+let didHydrate = false;
+
 function getLocaleSnapshot(): Locale {
+  if (!didHydrate) return "ko"; // match getServerLocaleSnapshot until mounted
   if (typeof window === "undefined") return "ko";
   const saved = window.localStorage.getItem(LOCALE_STORAGE_KEY);
   if (saved === "ko" || saved === "en") return saved;
@@ -172,6 +183,17 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     getLocaleSnapshot,
     getServerLocaleSnapshot,
   );
+
+  // Runs once, after hydration has committed. Opening the gate here guarantees
+  // the hydration render used the server value ("ko"); notifying subscribers
+  // now makes useSyncExternalStore re-read getLocaleSnapshot and apply the
+  // persisted locale through an ordinary client re-render.
+  useEffect(() => {
+    if (!didHydrate) {
+      didHydrate = true;
+      localeListeners.forEach((cb) => cb());
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof document !== "undefined") {
