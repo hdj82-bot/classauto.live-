@@ -30,6 +30,13 @@ _SENSITIVE_KEYS = frozenset({
     "x-heygen-signature",
     "x_heygen_signature",
     "heygen_signature",
+    # 학생 데이터 보호 — User 모델 식별 필드. complete-profile 요청 본문 등이
+    # Sentry 로 갈 때 학번·실명·OAuth ID 가 평문 전송될 수 있어 차단.
+    # exact 매칭이라 sdk.name 같은 무해 키도 [Filtered] 되는 비용이 있으나,
+    # 학번·실명·OAuth ID 유출 0 보장을 우선한다.
+    "student_number",
+    "name",
+    "google_sub",
 })
 
 _FILTERED = "[Filtered]"
