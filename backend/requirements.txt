@@ -33,7 +33,7 @@ openai>=1.58.0,<2.0.0
 
 # Pipeline
 python-pptx>=1.0.2,<2.0.0
-Pillow>=11.0.0,<12.0.0
+Pillow>=12.2.0,<13.0.0
 deepl>=1.30.0,<2.0.0
 google-cloud-translate>=3.18.0,<4.0.0
 google-cloud-texttospeech>=2.36.0,<3.0.0
