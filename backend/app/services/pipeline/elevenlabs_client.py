@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.metrics import track_external_api
 from app.core.retry import (
     DEFAULT_MAX_ATTEMPTS,
     RetryableHTTPError,
@@ -135,6 +136,7 @@ async def synthesize(
         ) from exc
 
 
+@track_external_api("elevenlabs")
 @retry_external(label="elevenlabs.synthesize")
 async def _synthesize_with_retry(
     *,
@@ -234,6 +236,7 @@ async def clone_voice(
         ) from exc
 
 
+@track_external_api("elevenlabs")
 @retry_external(label="elevenlabs.clone_voice")
 async def _clone_voice_with_retry(
     *,

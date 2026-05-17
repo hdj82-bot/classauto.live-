@@ -8,6 +8,7 @@ import anthropic
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.metrics import track_external_api
 from app.core.retry import retry_external
 from app.services.pipeline.retriever import RetrievalResult, is_in_scope, search_similar_slides
 
@@ -21,6 +22,7 @@ _CLAUDE_RETRY_ON = (
 )
 
 
+@track_external_api("claude")
 @retry_external(label="claude.qa.create", extra_retry_on=_CLAUDE_RETRY_ON)
 def _claude_qa_call(client, user_content: str):
     return client.messages.create(
