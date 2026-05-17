@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.metrics import track_external_api
 from app.core.retry import RetryableHTTPError, request_with_retry
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ def _headers() -> dict[str, str]:
     }
 
 
+@track_external_api("heygen")
 async def _request_with_retry(
     method: str,
     url: str,

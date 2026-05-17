@@ -1,4 +1,6 @@
 """Prometheus 메트릭 수집."""
+import asyncio
+import functools
 import time
 
 from prometheus_client import Counter, Histogram, Gauge, Info, generate_latest, CONTENT_TYPE_LATEST
@@ -52,6 +54,63 @@ EXTERNAL_API_DURATION = Histogram(
 def init_app_info(version: str, environment: str) -> None:
     """애플리케이션 정보 메트릭 초기화."""
     APP_INFO.info({"version": version, "environment": environment})
+
+
+# ── 외부 API 호출 계측 데코레이터 ────────────────────────────────────────────
+
+
+def track_external_api(service: str):
+    """외부 API 호출 1건(논리적 호출)을 Prometheus 로 계측하는 데코레이터.
+
+    - ``EXTERNAL_API_CALLS{service,status}``: 예외 발생 시 ``status="error"``,
+      정상 반환 시 ``"success"``.
+    - ``EXTERNAL_API_DURATION{service}``: 호출 구간 소요 시간(초).
+
+    ``@retry_external`` 위에 얹으면 재시도·백오프를 포함한 end-to-end 1건으로
+    집계된다(파이프라인이 체감하는 외부 의존성 비용을 그대로 반영). 재시도가
+    없는 직접 SDK 호출(openai/google-tts/deepl 등)에는 단독으로 부착한다.
+    sync/async 함수를 자동 감지한다 — ``retry_external`` 과 동일한 방식.
+    """
+
+    def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def awrapper(*args, **kwargs):
+                start = time.perf_counter()
+                status = "success"
+                try:
+                    return await func(*args, **kwargs)
+                except BaseException:
+                    status = "error"
+                    raise
+                finally:
+                    EXTERNAL_API_DURATION.labels(service=service).observe(
+                        time.perf_counter() - start
+                    )
+                    EXTERNAL_API_CALLS.labels(
+                        service=service, status=status
+                    ).inc()
+
+            return awrapper
+
+        @functools.wraps(func)
+        def swrapper(*args, **kwargs):
+            start = time.perf_counter()
+            status = "success"
+            try:
+                return func(*args, **kwargs)
+            except BaseException:
+                status = "error"
+                raise
+            finally:
+                EXTERNAL_API_DURATION.labels(service=service).observe(
+                    time.perf_counter() - start
+                )
+                EXTERNAL_API_CALLS.labels(service=service, status=status).inc()
+
+        return swrapper
+
+    return decorator
 
 
 # ── 경로 정규화 ──────────────────────────────────────────────────────────────

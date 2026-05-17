@@ -12,6 +12,7 @@ import json
 import logging
 
 from app.core.config import settings
+from app.core.metrics import track_external_api
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ def _build_client():
     return texttospeech.TextToSpeechClient()
 
 
+@track_external_api("google_tts")
 def synthesize(
     text: str,
     *,

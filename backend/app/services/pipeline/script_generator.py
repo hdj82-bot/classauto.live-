@@ -8,6 +8,7 @@ from pathlib import Path
 import anthropic
 
 from app.core.config import settings
+from app.core.metrics import track_external_api
 from app.core.retry import retry_external
 from app.services.pipeline.parser import encode_image_base64
 from app.services.pipeline.schemas import SlideContent, SlideScript
@@ -54,6 +55,7 @@ def generate_scripts(slides: list[SlideContent]) -> list[SlideScript]:
     return scripts
 
 
+@track_external_api("claude")
 @retry_external(label="claude.messages.create", extra_retry_on=_RETRY_ON)
 def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) -> str:
     content_blocks: list[dict] = []

@@ -7,6 +7,7 @@ import openai
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.metrics import track_external_api
 from app.models.embedding import SlideEmbedding
 from app.services.pipeline.schemas import SlideContent
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 MAX_BATCH_SIZE = 100  # OpenAI 임베딩 배치 제한
 
 
+@track_external_api("openai")
 def get_embeddings(texts: list[str]) -> list[list[float]]:
     """OpenAI text-embedding-3-small로 텍스트 목록을 벡터화."""
     if not texts:

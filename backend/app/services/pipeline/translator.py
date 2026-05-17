@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 
 from app.core.config import settings
+from app.core.metrics import track_external_api
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,7 @@ def translate_batch(texts: list[str], target_lang: str, source_lang: str = "ko")
     return [_translate_google(t, target_lang, source_lang) for t in texts]
 
 
+@track_external_api("deepl")
 def _translate_deepl(text: str, target_lang: str, source_lang: str) -> TranslationResult:
     import deepl
     logger.info("DeepL 번역 요청: %s→%s, text_length=%d", source_lang, target_lang, len(text))
@@ -59,6 +61,7 @@ def _translate_deepl(text: str, target_lang: str, source_lang: str) -> Translati
     return TranslationResult(text=result.text, source_lang=source_lang, target_lang=target_lang, provider="deepl")
 
 
+@track_external_api("deepl")
 def _translate_deepl_batch(texts: list[str], target_lang: str, source_lang: str) -> list[TranslationResult]:
     import deepl
     translator = deepl.Translator(settings.DEEPL_API_KEY)
@@ -66,6 +69,7 @@ def _translate_deepl_batch(texts: list[str], target_lang: str, source_lang: str)
     return [TranslationResult(text=r.text, source_lang=source_lang, target_lang=target_lang, provider="deepl") for r in results]
 
 
+@track_external_api("google_translate")
 def _translate_google(text: str, target_lang: str, source_lang: str) -> TranslationResult:
     from google.cloud import translate_v2 as google_translate
     logger.info("Google Translate 요청: %s→%s, text_length=%d", source_lang, target_lang, len(text))

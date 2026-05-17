@@ -1,8 +1,10 @@
 """Celery 인스턴스 설정."""
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import task_failure, task_retry, task_success
 
 from app.core.config import settings
+from app.core.metrics import CELERY_TASK_COUNT
 
 celery = Celery(
     "ifl_platform",
@@ -46,3 +48,27 @@ celery.conf.beat_schedule = {
 }
 
 # autodiscover_tasks 제거됨 — 위 include= 로 대체 (Django 스타일 tasks.py 탐색 회피)
+
+
+# ── Prometheus: 태스크 결과 계측 ─────────────────────────────────────────────
+# @task 데코레이터를 건드리지 않고 Celery 시그널 한 곳에서 전 태스크를 균일하게
+# 집계한다(중복 0). sender 는 태스크 객체이므로 sender.name = 등록된 태스크명
+# (예: "app.tasks.polling.poll_pending_renders") — 카디널리티가 태스크 수로 고정.
+
+
+@task_success.connect
+def _metrics_on_task_success(sender=None, **_kwargs) -> None:
+    if sender is not None:
+        CELERY_TASK_COUNT.labels(task_name=sender.name, status="success").inc()
+
+
+@task_failure.connect
+def _metrics_on_task_failure(sender=None, **_kwargs) -> None:
+    if sender is not None:
+        CELERY_TASK_COUNT.labels(task_name=sender.name, status="failure").inc()
+
+
+@task_retry.connect
+def _metrics_on_task_retry(sender=None, **_kwargs) -> None:
+    if sender is not None:
+        CELERY_TASK_COUNT.labels(task_name=sender.name, status="retry").inc()
