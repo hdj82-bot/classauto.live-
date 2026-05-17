@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
+import { act, createElement, type ReactNode } from "react";
+import { renderToString } from "react-dom/server";
+import { hydrateRoot } from "react-dom/client";
 import { I18nProvider, useI18n } from "@/contexts/I18nContext";
 
 /**
@@ -54,5 +57,110 @@ describe("I18nContext (demo/student namespace lookup)", () => {
     expect(v).not.toContain("{max}");
     expect(v).toMatch(/2/);
     expect(v).toMatch(/3/);
+  });
+});
+
+/**
+ * I18nProvider 하이드레이션 안전성 가드 (React #418 회귀 방지).
+ *
+ * ── 검증으로 밝혀진 사실 (커밋 56b71a1 평가) ─────────────────────────
+ * DEPLOYMENT_PROGRESS.md 의 가설: "`getServerLocaleSnapshot()`=ko 인데
+ * 수정 전 `getLocaleSnapshot()` 이 첫 client 렌더에서 localStorage 의
+ * 'en' 을 읽어 SSR(ko)≠첫 CSR(en) → React #418" — **재현으로 반증됨**.
+ *
+ * `useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)` 는
+ * 하이드레이션 첫 client 렌더에 **세 번째 인자(getServerSnapshot)** 를
+ * 사용하도록 React 가 보장한다. 따라서 `getLocaleSnapshot` 이 'en' 을
+ * 반환하더라도 하이드레이션 렌더 값은 server 값 'ko' 로 SSR 과 일치하며,
+ * 이후 store consistency 검사가 '일반 client 업데이트'로 'en' 전환을
+ * 처리한다 — recoverable 에러(#418) 없음. 모듈 게이트 `didHydrate`(56b71a1)
+ * 를 제거해도 이 동작은 불변(아래 테스트 + 별도 재현 실험으로 확인).
+ *
+ * 결론: 56b71a1 은 이 경로의 #418 에 대해 **무해하지만 no-op** 이다.
+ * 프로덕션 #418 의 실제 원인은 I18nContext 로케일 스냅샷이 아니며 별도
+ * 조사가 필요하다. 따라서 이 테스트는 "수정 효과 검증"이 아니라,
+ * I18nProvider 가 (게이트 유무와 무관하게) SSR/CSR 로케일 스냅샷 일치를
+ * 유지함을 못박는 **하이드레이션 안전성 회귀 가드**다 — 향후 getServerSnapshot
+ * 인자 제거·로케일 스냅샷 직접 노출 같은 변경이 #418 을 재유입시키면 실패한다.
+ *
+ * 게이트는 모듈 스코프 상태이므로 케이스마다 `vi.resetModules()` +
+ * 동적 import 로 새 모듈 인스턴스(didHydrate=false)를 받아 격리한다.
+ */
+describe("I18nContext — 하이드레이션 SSR/CSR 로케일 스냅샷 안전성 가드", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    vi.resetModules();
+  });
+
+  async function loadFresh() {
+    // 동적 import — resetModules 후라 모듈 게이트가 초기화된 새 인스턴스
+    return import("@/contexts/I18nContext");
+  }
+
+  async function ssrThenHydrate(Mod: {
+    I18nProvider: (p: { children: ReactNode }) => ReactNode;
+    useI18n: () => { locale: string };
+  }) {
+    function LocaleProbe() {
+      const { locale } = Mod.useI18n();
+      return createElement("span", { id: "loc" }, locale);
+    }
+    const tree = createElement(
+      Mod.I18nProvider as never,
+      null,
+      createElement(LocaleProbe),
+    );
+
+    // SSR: useSyncExternalStore 는 server snapshot 사용 → 항상 "ko"
+    const html = renderToString(tree);
+
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    const recoverableErrors: unknown[] = [];
+    await act(async () => {
+      hydrateRoot(container, tree, {
+        onRecoverableError: (e) => recoverableErrors.push(e),
+      });
+    });
+
+    const finalLocale = container.querySelector("#loc")?.textContent;
+    document.body.removeChild(container);
+    return { html, recoverableErrors, finalLocale };
+  }
+
+  it("localStorage='en' 이어도 SSR/첫 CSR 스냅샷이 모두 'ko' → 하이드레이션 mismatch 없음", async () => {
+    window.localStorage.setItem("ifl-locale", "en");
+    const Mod = await loadFresh();
+
+    const { html, recoverableErrors, finalLocale } = await ssrThenHydrate(Mod);
+
+    // SSR 출력은 server snapshot("ko") — useSyncExternalStore 가 보장
+    expect(html).toContain(">ko<");
+    // 하이드레이션 첫 client 렌더도 server snapshot 사용 → recoverable 에러 0건
+    expect(recoverableErrors).toHaveLength(0);
+    // 하이드레이션 후 store consistency 검사가 저장된 'en' 으로 정상 전환
+    expect(finalLocale).toBe("en");
+  });
+
+  it("localStorage 미설정 시 SSR/CSR 모두 'ko' 로 일치", async () => {
+    const Mod = await loadFresh();
+
+    const { html, recoverableErrors, finalLocale } = await ssrThenHydrate(Mod);
+
+    expect(html).toContain(">ko<");
+    expect(recoverableErrors).toHaveLength(0);
+    expect(finalLocale).toBe("ko");
+  });
+
+  it("localStorage='ko' 면 전환 없이 'ko' 로 안정 (mismatch 없음)", async () => {
+    window.localStorage.setItem("ifl-locale", "ko");
+    const Mod = await loadFresh();
+
+    const { recoverableErrors, finalLocale } = await ssrThenHydrate(Mod);
+
+    expect(recoverableErrors).toHaveLength(0);
+    expect(finalLocale).toBe("ko");
   });
 });
