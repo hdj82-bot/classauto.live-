@@ -80,7 +80,6 @@ export default function LandingPage() {
           <video
             className="ca-hero-video"
             src="/hero-bg.mp4"
-            poster="/hero-bg-poster.jpg"
             autoPlay
             muted
             loop

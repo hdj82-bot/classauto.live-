@@ -214,7 +214,9 @@
   );
 }
 @media (prefers-reduced-motion: reduce) {
-  /* 모션 민감 사용자에겐 영상 대신 poster 만 보이도록. */
+  /* 모션 민감 사용자에겐 영상을 숨기고 정적 hero(베이지 배경 + .ca-aurora
+     + .ca-hero-overlay)만 노출. (poster 속성은 제거됨 — display:none 이
+     poster 까지 가려 무의미했고 에셋도 부재해 404 였다.) */
   .ca-hero-video { display: none; }
 }
 
