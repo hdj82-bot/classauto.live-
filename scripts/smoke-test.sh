@@ -31,9 +31,9 @@ fi
 
 # ── 색상 (TTY 일 때만) ──────────────────────────────────────────────────────
 if [ -t 1 ]; then
-    _G='\033[0;32m'; _R='\033[0;31m'; _Y='\033[1;33m'; _N='\033[0m'
+    _G='\033[0;32m'; _R='\033[0;31m'; _Y='\033[1;33m'; _C='\033[0;36m'; _N='\033[0m'
 else
-    _G=''; _R=''; _Y=''; _N=''
+    _G=''; _R=''; _Y=''; _C=''; _N=''
 fi
 
 FAIL=0
@@ -43,6 +43,9 @@ FRONT="https://${DOMAIN}"
 pass() { printf "${_G}[PASS]${_N} %s\n" "$1"; }
 fail() { printf "${_R}[FAIL]${_N} %s\n" "$1"; FAIL=$((FAIL + 1)); }
 info() { printf "${_Y}[....]${_N} %s\n" "$1"; }
+# skip(): 비용 발생·로그인 필요 등 외부 무인 검증이 불가능한 항목을 명시적으로
+# 남긴다. FAIL 을 증가시키지 않으므로 "종료 코드 = 실패 개수" 규약을 깨지 않는다.
+skip() { printf "${_C}[SKIP]${_N} %s\n" "$1"; }
 
 printf "\n=== IFL Platform 스모크 테스트: %s ===\n\n" "$DOMAIN"
 
@@ -145,8 +148,9 @@ case "$code" in
         ;;
 esac
 
-# ── 5. /docs, /openapi.json 프로덕션 비노출 ──────────────────────────────────
-for path in /docs /openapi.json; do
+# ── 5. /docs, /redoc, /openapi.json 프로덕션 비노출 ──────────────────────────
+# main.py: ENVIRONMENT == "production" 이면 셋 다 None 으로 비활성 → 404 기대.
+for path in /docs /redoc /openapi.json; do
     code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$API$path")
     if [ "$code" = "404" ]; then
         pass "$path 프로덕션 404"
@@ -216,6 +220,88 @@ if [ "$webhook_429" -eq 0 ]; then
 else
     fail "/api/v1/payment/webhook 100회 POST 중 429 $webhook_429 회 발생 — rate-limit 제외 누락"
 fi
+
+# ── 10. HTTP(80) → HTTPS 강제 리다이렉트 ────────────────────────────────────
+# nginx.conf: listen 80 에서 `return 301 https://$host$request_uri`.
+# follow 끄고 첫 응답의 코드 + Location 스킴만 본다.
+http_hdr=$(curl -sSI --max-time 10 "http://${DOMAIN}/" 2>/dev/null)
+http_code=$(echo "$http_hdr" | head -1 | tr -d '\r' | grep -Eo '[0-9]{3}' | head -1)
+http_loc=$(echo "$http_hdr" | awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]*: */,""); print; exit}' | tr -d '\r')
+if echo "$http_code" | grep -qE '^30[178]$' && [ "${http_loc#https://}" != "$http_loc" ]; then
+    pass "HTTP→HTTPS 리다이렉트: $http_code → $http_loc"
+else
+    fail "HTTP→HTTPS 리다이렉트 비정상: code='$http_code' Location='$http_loc' (30x + https:// 여야 함)"
+fi
+
+# ── 11. 추가 보안 헤더 (Referrer-Policy / Permissions-Policy / X-XSS) ────────
+# §2 는 HSTS/CSP/XFO/XCTO 만 검사. nginx.conf 가 함께 내려주는 나머지 3종 검증.
+hdr11=$(curl -sSI --max-time 10 "$FRONT/" 2>/dev/null)
+if [ -z "$hdr11" ]; then
+    fail "추가 보안 헤더: $FRONT / 응답 없음"
+else
+    refpol=$(echo "$hdr11"  | awk 'BEGIN{IGNORECASE=1} /^referrer-policy:/    {sub(/^[^:]*: */,""); print; exit}' | tr -d '\r')
+    permpol=$(echo "$hdr11" | awk 'BEGIN{IGNORECASE=1} /^permissions-policy:/ {sub(/^[^:]*: */,""); print; exit}' | tr -d '\r')
+    xxss=$(echo "$hdr11"    | awk 'BEGIN{IGNORECASE=1} /^x-xss-protection:/   {sub(/^[^:]*: */,""); print; exit}' | tr -d '\r')
+    [ -n "$refpol" ]  && pass "Referrer-Policy: $refpol"        || fail "Referrer-Policy 헤더 없음"
+    [ -n "$permpol" ] && pass "Permissions-Policy: $permpol"    || fail "Permissions-Policy 헤더 없음"
+    [ -n "$xxss" ]    && pass "X-XSS-Protection: $xxss"         || fail "X-XSS-Protection 헤더 없음"
+fi
+
+# ── 12. Server 토큰 비노출 (server_tokens off) ──────────────────────────────
+# nginx.conf 최상단 `server_tokens off;` → Server 헤더에 버전이 없어야 함.
+srv=$(echo "$hdr11" | awk 'BEGIN{IGNORECASE=1} /^server:/ {sub(/^[^:]*: */,""); print; exit}' | tr -d '\r')
+if [ -z "$srv" ]; then
+    pass "Server 헤더 미노출"
+elif echo "$srv" | grep -Eq '[0-9]+\.[0-9]+'; then
+    fail "Server 헤더에 버전 노출됨: '$srv' (server_tokens off 미적용 의심)"
+else
+    pass "Server 헤더 버전 비노출: '$srv'"
+fi
+
+# ── 13. CORS 프리플라이트 (허용 origin echo + 미허용 origin 거부) ────────────
+# main.py CORSMiddleware: allow_origins=[FRONTEND_URL]=프론트 도메인, credentials=on.
+# 허용 origin → ACAO 가 그 origin 으로 echo. 미허용 origin → ACAO 가 그 값이면 안 됨.
+allow_origin="$FRONT"
+cors_ok=$(curl -sSI --max-time 10 -X OPTIONS "$API/api/courses" \
+          -H "Origin: $allow_origin" \
+          -H "Access-Control-Request-Method: GET" 2>/dev/null \
+          | awk 'BEGIN{IGNORECASE=1} /^access-control-allow-origin:/ {sub(/^[^:]*: */,""); print; exit}' | tr -d '\r')
+if [ "$cors_ok" = "$allow_origin" ] || [ "$cors_ok" = "*" ]; then
+    pass "CORS 프리플라이트 허용 origin echo: ACAO='$cors_ok'"
+else
+    fail "CORS 프리플라이트 허용 origin 미반영: ACAO='$cors_ok' ('$allow_origin' 기대)"
+fi
+evil_origin="https://cors-probe.invalid"
+cors_evil=$(curl -sSI --max-time 10 -X OPTIONS "$API/api/courses" \
+            -H "Origin: $evil_origin" \
+            -H "Access-Control-Request-Method: GET" 2>/dev/null \
+            | awk 'BEGIN{IGNORECASE=1} /^access-control-allow-origin:/ {sub(/^[^:]*: */,""); print; exit}' | tr -d '\r')
+if [ "$cors_evil" = "$evil_origin" ] || [ "$cors_evil" = "*" ]; then
+    fail "CORS 미허용 origin 이 통과됨: ACAO='$cors_evil' (와일드카드/오설정 의심)"
+else
+    pass "CORS 미허용 origin 거부: ACAO='${cors_evil:-(없음)}'"
+fi
+
+# ── 14. 인증 필요 엔드포인트는 토큰 없이 401 ────────────────────────────────
+# deps.py get_current_user: credentials 없으면 HTTP_401_UNAUTHORIZED.
+# GET /api/courses 는 Depends(get_current_user) → 비인증 호출 시 401 기대.
+code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$API/api/courses")
+if [ "$code" = "401" ]; then
+    pass "/api/courses 비인증 GET → 401 (인증 게이트 동작)"
+else
+    fail "/api/courses 비인증 GET → $code (401 여야 함)"
+fi
+
+# ── 15. 무인 자동화 제외 항목 ([SKIP] — 비용 발생·로그인·콘솔 수동 확인) ──────
+# Phase 5 시나리오 중 외부에서 키/계정 없이 검증 불가한 항목은 자동화하지 않고
+# 누락이 아님을 명시적으로 남긴다. (skip() 은 FAIL 을 올리지 않음)
+skip "Phase 5.1 Google OAuth 전체 로그인→콜백→JWT→세션 유지 (로그인 계정 필요)"
+skip "Phase 5.2 강좌/강의/PPT/스크립트 생성 (로그인 + Claude/임베딩 API 비용 발생)"
+skip "Phase 5.2 TTS/HeyGen 렌더 (편당 과금 — 수동 1회 테스트 권장)"
+skip "Phase 5.3 학생 시청·형성평가·집중도 하트비트 (테스트 학생 계정 로그인 필요)"
+skip "Phase 5.4 Railway 로그 ERROR 0건·Sentry 대시보드 (외부 콘솔 수동 확인)"
+skip "robots.txt / sitemap.xml: frontend 에 robots.ts·sitemap.ts 미구현(manifest.ts만) — 구현 후 자동 체크 추가 대상"
+skip "www→apex 308: nginx.conf 에 www vhost 없음(미설정 host→444) — 배포 회귀 아님, 라우팅 정책 확정 후 추가 대상"
 
 # ── 결과 ─────────────────────────────────────────────────────────────────────
 printf "\n=== 결과: 실패 %d 건 ===\n" "$FAIL"
