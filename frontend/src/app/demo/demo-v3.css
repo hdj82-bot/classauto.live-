@@ -213,12 +213,13 @@
     rgba(250, 250, 247, 0.32) 100%
   );
 }
-@media (prefers-reduced-motion: reduce) {
-  /* 모션 민감 사용자에겐 영상을 숨기고 정적 hero(베이지 배경 + .ca-aurora
-     + .ca-hero-overlay)만 노출. (poster 속성은 제거됨 — display:none 이
-     poster 까지 가려 무의미했고 에셋도 부재해 404 였다.) */
-  .ca-hero-video { display: none; }
-}
+/* 2026-05-18 사용자 결정: hero 배경 영상은 prefers-reduced-motion 여부와
+   무관하게 **항상 재생**한다. 이전에는 모션 민감 사용자에게
+   `@media (prefers-reduced-motion: reduce) { .ca-hero-video { display:none } }`
+   로 영상을 숨겼으나(CLAUDE.md "prefers-reduced-motion 반드시 지원" 정책),
+   사용자가 "무조건 재생"을 명시적으로 선택하여 해당 hide 규칙을 제거한다.
+   이는 그 element 한정의 의도적 접근성 정책 변경이며 오류·누락이 아니다 —
+   재도입 금지. (그 외 reduced-motion 모션 억제 블록은 그대로 유지.) */
 
 /* 영상 배경 hero (랜딩 전용) 위 본문·메타칩 가독성 보강 (2026-05-14).
    :has(.ca-hero-video) 로 영상이 실제로 깔린 hero 에만 적용 → /demo 페이지

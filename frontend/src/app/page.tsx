@@ -76,7 +76,8 @@ export default function LandingPage() {
           {/* 배경 영상 (z:0) → 오로라 메쉬 (z:0, 위) → 베이지 오버레이 (z:0, 위)
               → .ca-hero-inner (z:1) 순으로 쌓인다. muted+playsInline+autoPlay 는
               모바일(iOS Safari) 자동재생의 필수 3종. preload=metadata 로 LCP 보호.
-              prefers-reduced-motion 시엔 demo-v3.css 에서 display:none 처리됨. */}
+              2026-05-18 사용자 결정: prefers-reduced-motion 여부와 무관하게
+              항상 재생(demo-v3.css 의 .ca-hero-video display:none 규칙 제거). */}
           <video
             className="ca-hero-video"
             src="/hero-bg.mp4"
