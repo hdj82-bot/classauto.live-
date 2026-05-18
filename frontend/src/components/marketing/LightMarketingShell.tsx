@@ -178,6 +178,18 @@ export default function LightMarketingShell({
               {finalCta.label}
             </Link>
 
+            {/* 사용자 결정 2026-05-18 (01-pricing-policy.md §5.3): 베타 기간
+                공개 회원가입은 막되, 베타 승인 교수자가 들어올 로그인 진입점은
+                대문 상단에 노출. 순서 = 언어 · 베타 신청 · 로그인. 베타 신청이
+                1차 CTA(골드 솔리드)이므로 로그인은 ghost(보더) 로 위계 분리.
+                좁은 화면에서는 햄버거 메뉴 안으로 흡수 (sm 미만 hidden). */}
+            <Link
+              href="/auth/login"
+              className="hidden sm:inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 border border-[rgba(10,10,10,0.16)] text-[rgba(10,10,10,0.72)] hover:text-[#0A0A0A] hover:border-[#B88308] hover:bg-black/[0.03] transition motion-reduce:transition-none"
+            >
+              {t("common.navLogin")}
+            </Link>
+
             {/* 모바일 햄버거 — md 미만에서만 노출. 데스크탑은 위 <nav> 가 보임. */}
             <button
               type="button"
@@ -227,6 +239,14 @@ export default function LightMarketingShell({
                   {t(link.key)}
                 </Link>
               ))}
+              {/* 좁은 화면에선 헤더 우측 로그인 버튼이 숨겨지므로 메뉴 안에 둔다. */}
+              <Link
+                href="/auth/login"
+                onClick={() => setMenuOpen(false)}
+                className="px-2 py-3 text-sm font-semibold text-[#0A0A0A] hover:text-[#B88308] transition motion-reduce:transition-none"
+              >
+                {t("common.navLogin")}
+              </Link>
             </div>
           </nav>
         )}
