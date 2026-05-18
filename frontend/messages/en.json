@@ -54,7 +54,7 @@
     "copyright": "© 2025 IFL Platform — Interactive Flipped Learning. All rights reserved."
   },
   "auth": {
-    "loginTitle": "Interactive Flipped Learning",
+    "loginTitle": "Welcome back",
     "loginSubtitle": "Sign in with your school Google account",
     "accountType": "Select Account Type",
     "studentLabel": "Student",
@@ -728,6 +728,7 @@
       "footerCopyright": "© 2026 ClassAuto · Interactive Flipped Learning",
       "footerTagline": "A flipped-learning tool built by scholars, for scholars.",
       "ctaApplyBeta": "Apply for beta",
+      "navLogin": "Log in",
       "ctaContactSales": "Contact sales",
       "primaryNavLabel": "Main navigation",
       "footerNavLabel": "Footer navigation",

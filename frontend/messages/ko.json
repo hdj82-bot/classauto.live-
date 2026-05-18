@@ -54,7 +54,7 @@
     "copyright": "© 2025 IFL Platform — Interactive Flipped Learning. All rights reserved."
   },
   "auth": {
-    "loginTitle": "Interactive Flipped Learning",
+    "loginTitle": "다시 오신 걸 환영합니다",
     "loginSubtitle": "학교 Google 계정으로 로그인하세요",
     "accountType": "계정 유형 선택",
     "studentLabel": "학습자",
@@ -728,6 +728,7 @@
       "footerCopyright": "© 2026 ClassAuto · Interactive Flipped Learning",
       "footerTagline": "학자가 학자를 위해 만든 플립러닝 도구",
       "ctaApplyBeta": "베타 신청하기",
+      "navLogin": "로그인",
       "ctaContactSales": "기관 문의하기",
       "primaryNavLabel": "주 메뉴",
       "footerNavLabel": "푸터 메뉴",
