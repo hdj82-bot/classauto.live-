@@ -44,7 +44,9 @@ describe("LandingPage 통합", () => {
 
   // v2 회귀 (후속 정리 ③): v1 의 hero CTA 2개가 /auth/login 으로 가던 구조는
   // 폐기됐다. v3.1 hero 의 primary 는 /demo?field=social (학생 화면 미리보기),
-  // secondary 는 /features 다. /auth/login 회귀가 없는지도 함께 가드.
+  // secondary 는 /features.
+  // 정책 변경 2026-05-18 (01-pricing-policy.md §5.3): 헤더에 로그인 진입점을
+  // 노출하므로 /auth/login 링크는 hero 가 아니라 헤더에 1개 이상 존재한다.
   it("v2 hero CTA — primary=/demo?field=social, secondary=/features", () => {
     renderPage(<LandingPage />);
     const primary = screen.getByTestId("landing-hero-start");
@@ -53,10 +55,13 @@ describe("LandingPage 통합", () => {
       .getAllByRole("link")
       .filter((el) => el.getAttribute("href") === "/features");
     expect(featureLinks.length).toBeGreaterThanOrEqual(1);
+    // hero 자체는 /auth/login 으로 가지 않는다 (primary=/demo).
+    expect(primary.getAttribute("href")).not.toBe("/auth/login");
+    // 헤더(LightMarketingShell)에는 로그인 진입점이 존재한다 (§5.3).
     const loginLinks = screen
       .getAllByRole("link")
       .filter((el) => el.getAttribute("href") === "/auth/login");
-    expect(loginLinks.length).toBe(0);
+    expect(loginLinks.length).toBeGreaterThan(0);
   });
 
   it("IconDefs 가 마운트되어 그라데이션 6종 defs 존재 (DOM 안에)", () => {

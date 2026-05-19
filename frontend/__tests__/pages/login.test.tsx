@@ -18,7 +18,8 @@ const renderWithI18n = (ui: ReactNode) => render(<I18nProvider>{ui}</I18nProvide
 describe("LoginContent", () => {
   it("renders login page title", () => {
     renderWithI18n(<LoginContent />);
-    expect(screen.getByText("Interactive Flipped Learning")).toBeTruthy();
+    // v2: IFL 정체성 폐기 → ClassAuto 환영 카피 (2026-05-18).
+    expect(screen.getByText("다시 오신 걸 환영합니다")).toBeTruthy();
   });
 
   it("renders role selection buttons", () => {
@@ -27,16 +28,19 @@ describe("LoginContent", () => {
     expect(screen.getByText("교수자")).toBeTruthy();
   });
 
+  // v2 (2026-05-19): Google 버튼 문구에서 역할 고정 제거 ("Google 로그인").
+  // 선택 역할은 RoleButton 의 aria-pressed 로만 드러난다.
   it("defaults to student role", () => {
     renderWithI18n(<LoginContent />);
-    const googleBtn = screen.getByText(/학습자로 Google 로그인/);
-    expect(googleBtn).toBeTruthy();
+    const studentBtn = screen.getByText("학습자").closest("button");
+    expect(studentBtn?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("switches to professor role on click", () => {
     renderWithI18n(<LoginContent />);
     fireEvent.click(screen.getByText("교수자"));
-    expect(screen.getByText(/교수자로 Google 로그인/)).toBeTruthy();
+    const professorBtn = screen.getByText("교수자").closest("button");
+    expect(professorBtn?.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("renders Google login button", () => {
