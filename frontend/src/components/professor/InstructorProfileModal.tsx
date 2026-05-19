@@ -51,7 +51,13 @@ export default function InstructorProfileModal({
 }: Props) {
   const { t } = useProfessorI18n();
   return (
-    <Modal open={open} onClose={onClose} closable title={t("modalTitle")}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      closable
+      dismissOnBackdrop={false}
+      title={t("modalTitle")}
+    >
       {/* Form 을 별도 컴포넌트로 분리해 모달이 매번 열릴 때 fresh-mount 되도록 한다.
          이렇게 두면 setState-in-effect 로 동기화하지 않고도 initial 이 props 그대로
          초기 상태에 들어가며, react-hooks/set-state-in-effect 규칙도 회피된다. */}

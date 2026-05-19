@@ -43,8 +43,13 @@ describe("LandingPage (v2 — 짧은 게이트웨이)", () => {
     expect(footer!.querySelector('a[href="/beta-apply"]')).toBeTruthy();
   });
 
-  it("no longer links to the v1 /auth/login from the landing page", () => {
+  // 정책 변경 2026-05-18 (01-pricing-policy.md §5.3): 베타 기간에도 헤더에
+  // 로그인 진입점을 노출한다. 과거의 "링크 0개" 가드는 폐기하고, 로그인
+  // 진입점이 실제로 존재하는지를 가드한다 (LightMarketingShell 헤더).
+  it("exposes a /auth/login entry from the landing header (§5.3)", () => {
     renderWithI18n(<LandingPage />);
-    expect(document.querySelectorAll('a[href="/auth/login"]').length).toBe(0);
+    expect(
+      document.querySelectorAll('a[href="/auth/login"]').length,
+    ).toBeGreaterThan(0);
   });
 });

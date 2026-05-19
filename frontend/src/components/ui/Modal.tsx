@@ -7,11 +7,24 @@ interface Props {
   open: boolean;
   onClose?: () => void;
   closable?: boolean;
+  /**
+   * 배경 클릭·ESC 같은 "실수성 닫힘"을 허용할지. 기본 true (기존 동작 보존).
+   * false 면 X 버튼(closable)으로만 명시적으로 닫을 수 있다 — 온보딩처럼
+   * 입력 도중 우발적으로 닫혀 단계가 건너뛰어지는 걸 막아야 할 때 사용.
+   */
+  dismissOnBackdrop?: boolean;
   children: React.ReactNode;
   title?: string;
 }
 
-export default function Modal({ open, onClose, closable = true, children, title }: Props) {
+export default function Modal({
+  open,
+  onClose,
+  closable = true,
+  dismissOnBackdrop = true,
+  children,
+  title,
+}: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
 
@@ -25,7 +38,7 @@ export default function Modal({ open, onClose, closable = true, children, title 
   // ESC key to close
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape" && closable && onClose) onClose();
+      if (e.key === "Escape" && closable && dismissOnBackdrop && onClose) onClose();
 
       // Focus trap
       if (e.key === "Tab" && panelRef.current) {
@@ -42,7 +55,7 @@ export default function Modal({ open, onClose, closable = true, children, title 
         }
       }
     },
-    [closable, onClose],
+    [closable, dismissOnBackdrop, onClose],
   );
 
   useEffect(() => {
@@ -60,7 +73,7 @@ export default function Modal({ open, onClose, closable = true, children, title 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby={title ? "modal-title" : undefined}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={closable ? onClose : undefined} aria-hidden="true" />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-fade-in" onClick={closable && dismissOnBackdrop ? onClose : undefined} aria-hidden="true" />
       <div
         ref={panelRef}
         tabIndex={-1}

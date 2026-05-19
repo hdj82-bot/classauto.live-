@@ -31,7 +31,8 @@ describe("LoginContent — startGoogleLogin helper integration", () => {
   it("calls startGoogleLogin('professor') after switching role", () => {
     render(wrap(<LoginContent />));
     fireEvent.click(screen.getByText("교수자"));
-    fireEvent.click(screen.getByText(/교수자로 Google 로그인/));
+    // v2 (2026-05-19): 버튼 문구는 역할 무관 "Google 로그인" 고정.
+    fireEvent.click(screen.getByText(/Google 로그인/));
     expect(mocks.startGoogleLogin).toHaveBeenCalledWith("professor");
   });
 });

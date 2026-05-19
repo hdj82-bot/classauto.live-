@@ -7,17 +7,21 @@ import { useI18n } from "@/contexts/I18nContext";
 import { startGoogleLogin } from "@/lib/auth";
 
 /**
- * 로그인 페이지 — v2 디자인 (라이트 베이지 #FAFAF7 + 골드).
+ * 로그인 페이지 — v2 디자인 (라이트 베이지 #FAFAF7 + 골드 brand mark).
  *
  * 사용자 결정 2026-05-18:
  *   - v1 IFL 로고/`Interactive Flipped Learning` 헤더 블록 폐기.
- *     사이트 정체성은 ClassAuto. 상단은 골드 방패 brand mark 로 통일
- *     (LightMarketingShell 헤더와 동일 규격).
- *   - 계정 유형 카드의 이모지(🎓/📚) 제거 → 그라데이션 SVG 라인 아이콘.
- *   - 카드에 입체감(레이어드 섀도 + 그라데이션 표면 + 선택 시 골드 글로우).
+ *   - 계정 유형 카드 이모지 제거 → SVG 라인 아이콘.
  *
- * 디자인 토큰: globals.css 의 --gold(#FFB627) / --gold-on-light(#B88308) /
- * --font-display(Paperlogy) / --ease-spring. 직접 폰트명·임의 색 박지 않음.
+ * 사용자 결정 2026-05-19:
+ *   - 역할 카드를 베이지 배경과 구분되도록 컬러 분리:
+ *     교수자 = 스카이 블루, 학습자 = 에메랄드. (기존 골드 단일톤은 배경과
+ *     채도가 비슷해 선택 상태가 잘 안 보였음.)
+ *   - 토글에 hover 시 솟아오르는 볼륨감(translateY + 섀도 강화, spring).
+ *   - 아이콘 교체: 학습자 = 모니터, 교수자 = 학사모.
+ *   - Google 버튼 문구에서 역할 고정 제거 → 단순 "Google 로그인".
+ *
+ * 디자인 토큰: globals.css 의 --gold / --font-display / --ease-spring.
  */
 export default function LoginContent() {
   const searchParams = useSearchParams();
@@ -50,19 +54,8 @@ export default function LoginContent() {
         color: "#0A0A0A",
       }}
     >
-      {/* 그라데이션 SVG 아이콘이 공유하는 stroke 그라데이션 정의 (한 번만 렌더) */}
-      <svg width="0" height="0" aria-hidden="true" className="absolute">
-        <defs>
-          <linearGradient id="login-gold" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#FFC74D" />
-            <stop offset="100%" stopColor="#B88308" />
-          </linearGradient>
-        </defs>
-      </svg>
-
       <div className="w-full max-w-md animate-fade-in-up">
-        {/* Brand mark — LightMarketingShell 헤더와 동일한 28px 골드 방패 규격을
-            로그인 페이지용으로 44px 로 키운 버전. IFL 잔재 완전 제거. */}
+        {/* Brand mark — LightMarketingShell 헤더와 동일한 골드 방패. */}
         <div className="text-center mb-9">
           <span
             aria-hidden="true"
@@ -114,7 +107,7 @@ export default function LoginContent() {
           </div>
         )}
 
-        {/* Card — 입체감: 베이지 위 흰 표면 + 레이어드 섀도 + 미세 상단 하이라이트 */}
+        {/* Card — 입체감: 베이지 위 흰 표면 + 레이어드 섀도 + 상단 하이라이트 */}
         <div
           className="rounded-3xl p-6 sm:p-8 space-y-7"
           style={{
@@ -124,23 +117,25 @@ export default function LoginContent() {
               "0 1px 2px rgba(10,10,10,0.04), 0 18px 40px -22px rgba(10,10,10,0.20), inset 0 1px 0 rgba(255,255,255,0.7)",
           }}
         >
-          {/* Role selection — 이모지 제거, 그라데이션 라인 아이콘 + 입체 카드 */}
+          {/* Role selection — 교수자=스카이, 학습자=에메랄드. hover 볼륨감. */}
           <fieldset>
             <legend className="text-sm font-semibold text-[rgba(10,10,10,0.7)] mb-3">
               {t("auth.accountType")}
             </legend>
             <div className="grid grid-cols-2 gap-3">
               <RoleButton
+                tone="emerald"
                 label={t("auth.studentLabel")}
                 description={t("auth.studentDesc")}
-                icon={<StudentIcon />}
+                icon={<MonitorIcon />}
                 selected={role === "student"}
                 onClick={() => setRole("student")}
               />
               <RoleButton
+                tone="sky"
                 label={t("auth.professorLabel")}
                 description={t("auth.professorDesc")}
-                icon={<ProfessorIcon />}
+                icon={<MortarboardIcon />}
                 selected={role === "professor"}
                 onClick={() => setRole("professor")}
               />
@@ -157,26 +152,17 @@ export default function LoginContent() {
             </div>
           </div>
 
-          {/* Google login button */}
+          {/* Google login button — 역할 고정 문구 제거, 단순 "Google 로그인" */}
           <button
             onClick={handleGoogleLogin}
             disabled={isRedirecting}
-            className="w-full flex items-center justify-center gap-3 rounded-2xl border border-[rgba(10,10,10,0.14)] bg-white px-4 py-3.5 text-sm font-semibold text-[rgba(10,10,10,0.78)] transition-[transform,box-shadow,border-color] duration-200 hover:border-[rgba(184,131,8,0.5)] hover:shadow-[0_8px_20px_-12px_rgba(184,131,8,0.4)] active:scale-[0.985] disabled:opacity-60 disabled:cursor-not-allowed motion-reduce:transition-none motion-reduce:active:scale-100"
-            style={{
-              boxShadow:
-                "0 1px 2px rgba(10,10,10,0.05), inset 0 1px 0 rgba(255,255,255,0.6)",
-            }}
+            className="w-full flex items-center justify-center gap-3 rounded-2xl border border-[rgba(10,10,10,0.14)] bg-white px-4 py-3.5 text-sm font-semibold text-[rgba(10,10,10,0.78)] shadow-[0_1px_2px_rgba(10,10,10,0.05),inset_0_1px_0_rgba(255,255,255,0.6)] transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-[rgba(184,131,8,0.5)] hover:shadow-[0_10px_22px_-12px_rgba(184,131,8,0.45)] active:translate-y-0 active:scale-[0.985] disabled:opacity-60 disabled:cursor-not-allowed motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:active:scale-100"
           >
             {isRedirecting ? <Spinner /> : <GoogleIcon />}
             <span>
               {isRedirecting
                 ? t("auth.googleRedirecting")
-                : t("auth.loginAs", {
-                    role:
-                      role === "professor"
-                        ? t("common.professor")
-                        : t("common.student"),
-                  })}
+                : t("auth.googleLogin")}
             </span>
           </button>
 
@@ -197,65 +183,73 @@ export default function LoginContent() {
   );
 }
 
+type Tone = "sky" | "emerald";
+
+/** 역할별 컬러 세트 — 선택 표면/링/칩/라벨. 모두 Tailwind 클래스라
+ *  hover 변형(translate/shadow)과 충돌하지 않는다. */
+const TONE: Record<
+  Tone,
+  { selWrap: string; selChip: string; selLabel: string; idleChip: string }
+> = {
+  sky: {
+    selWrap:
+      "border-sky-400/70 bg-gradient-to-b from-sky-50 to-sky-100 ring-2 ring-sky-300/40 shadow-[0_14px_30px_-16px_rgba(2,132,199,0.55)]",
+    selChip:
+      "bg-gradient-to-br from-sky-400 to-sky-600 text-white shadow-[0_6px_14px_-7px_rgba(2,132,199,0.7),inset_0_1px_0_rgba(255,255,255,0.4)]",
+    selLabel: "text-sky-800",
+    idleChip:
+      "bg-sky-500/10 text-sky-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]",
+  },
+  emerald: {
+    selWrap:
+      "border-emerald-400/70 bg-gradient-to-b from-emerald-50 to-emerald-100 ring-2 ring-emerald-300/40 shadow-[0_14px_30px_-16px_rgba(5,150,105,0.55)]",
+    selChip:
+      "bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-[0_6px_14px_-7px_rgba(5,150,105,0.7),inset_0_1px_0_rgba(255,255,255,0.4)]",
+    selLabel: "text-emerald-800",
+    idleChip:
+      "bg-emerald-500/10 text-emerald-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]",
+  },
+};
+
 function RoleButton({
+  tone,
   label,
   description,
   icon,
   selected,
   onClick,
 }: {
+  tone: Tone;
   label: string;
   description: string;
   icon: ReactNode;
   selected: boolean;
   onClick: () => void;
 }) {
+  const c = TONE[tone];
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className="group relative flex flex-col items-start gap-2.5 rounded-2xl p-4 text-left transition-[transform,box-shadow,border-color,background] duration-200 ease-[var(--ease-spring,cubic-bezier(0.34,1.56,0.64,1))] motion-reduce:transition-none"
-      style={
+      className={`group relative flex flex-col items-start gap-2.5 rounded-2xl border p-4 text-left will-change-transform transition-[transform,box-shadow,border-color,background-color] duration-200 ease-[var(--ease-spring,cubic-bezier(0.34,1.56,0.64,1))] hover:-translate-y-1 active:translate-y-0 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${
         selected
-          ? {
-              background:
-                "linear-gradient(180deg, #FFFDF4 0%, #FDF1D4 100%)",
-              border: "1px solid rgba(184,131,8,0.55)",
-              boxShadow:
-                "0 0 0 3px rgba(255,182,39,0.18), 0 12px 26px -14px rgba(184,131,8,0.5), inset 0 1px 0 rgba(255,255,255,0.7)",
-              transform: "translateY(-1px)",
-            }
-          : {
-              background:
-                "linear-gradient(180deg, #FFFFFF 0%, #FAF8F2 100%)",
-              border: "1px solid rgba(10,10,10,0.08)",
-              boxShadow:
-                "0 1px 2px rgba(10,10,10,0.04), inset 0 1px 0 rgba(255,255,255,0.6)",
-            }
-      }
+          ? `-translate-y-0.5 ${c.selWrap}`
+          : "border-black/10 bg-white shadow-[0_1px_2px_rgba(10,10,10,0.04),inset_0_1px_0_rgba(255,255,255,0.6)] hover:border-black/20 hover:shadow-[0_12px_26px_-16px_rgba(10,10,10,0.4)]"
+      }`}
     >
       <span
         aria-hidden="true"
-        className="flex items-center justify-center transition-transform duration-200 group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-        style={{
-          width: "38px",
-          height: "38px",
-          borderRadius: "11px",
-          background: selected
-            ? "linear-gradient(135deg, #FFC74D, #E89E0E)"
-            : "rgba(255,182,39,0.12)",
-          boxShadow: selected
-            ? "0 6px 14px -7px rgba(184,131,8,0.6), inset 0 1px 0 rgba(255,255,255,0.4)"
-            : "inset 0 1px 0 rgba(255,255,255,0.5)",
-          color: selected ? "#FFFFFF" : "#B88308",
-        }}
+        className={`flex items-center justify-center w-[38px] h-[38px] rounded-[11px] transition-transform duration-200 group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100 ${
+          selected ? c.selChip : c.idleChip
+        }`}
       >
         {icon}
       </span>
       <span
-        className="text-sm font-bold"
-        style={{ color: selected ? "#7A5705" : "rgba(10,10,10,0.82)" }}
+        className={`text-sm font-bold ${
+          selected ? c.selLabel : "text-black/80"
+        }`}
       >
         {label}
       </span>
@@ -264,8 +258,28 @@ function RoleButton({
   );
 }
 
-/* 학습자 — mortarboard(학사모) 라인 아이콘. selected 시 흰색, 평시 골드. */
-function StudentIcon() {
+/* 학습자 — 모니터(디스플레이) 라인 아이콘. */
+function MonitorIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M9 20h6M12 16v4" />
+    </svg>
+  );
+}
+
+/* 교수자 — 학사모(mortarboard) 라인 아이콘. */
+function MortarboardIcon() {
   return (
     <svg
       width="20"
@@ -281,27 +295,6 @@ function StudentIcon() {
       <path d="M2.5 9 12 4.5 21.5 9 12 13.5 2.5 9z" />
       <path d="M6.5 11v4.2c0 .9 2.5 2.3 5.5 2.3s5.5-1.4 5.5-2.3V11" />
       <path d="M21.5 9v4.5" />
-    </svg>
-  );
-}
-
-/* 교수자 — 강의/발표 보드 라인 아이콘. */
-function ProfessorIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="3" y="3.5" width="18" height="12.5" rx="2" />
-      <path d="M7 8h7M7 11.5h5" />
-      <path d="M12 16v4M8.5 21h7" />
     </svg>
   );
 }
