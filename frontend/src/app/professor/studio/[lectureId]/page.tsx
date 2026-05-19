@@ -193,19 +193,12 @@ export default function StudioWizardPage() {
     }
     const indices = Array.from(grouped.keys()).sort((a, b) => a - b);
 
-    // 데이터 부재 시 prototype 把자문 8슬라이드 시연 데이터 (planning/05 §5.3.3)
+    // 스크립트 미생성 시 빈 목록 — WorkArea 가 scriptLoading 기준으로
+    // "AI 가 PPT 노트를 추출하고 있어요…" 정직한 진행 상태를 표시한다.
+    // (종전: prototype 把자문 8슬라이드 시연 데이터를 모든 강의에 노출해
+    //  실제 PPT 와 무관한 동일 화면이 나오던 버그 — 데모 폴백 제거)
     if (indices.length === 0) {
-      const hanChar = "把";
-      return [
-        { index: 0, title: "把자문 도입", thumbChar: hanChar, status: "warn" },
-        { index: 1, title: "把자문의 의미", thumbChar: hanChar, status: "adopted" },
-        { index: 2, title: "어순 비교 — SVO vs 把자문", thumbChar: hanChar, status: "adopted" },
-        { index: 3, title: "把의 문법적 기능", thumbChar: hanChar, status: "warn" },
-        { index: 4, title: "把자문 예시", thumbChar: hanChar, status: "adopted" },
-        { index: 5, title: "사용 조건", thumbChar: hanChar, status: "adopted" },
-        { index: 6, title: "흔한 오류", thumbChar: hanChar, status: "warn" },
-        { index: 7, title: "마무리", thumbChar: hanChar, status: "adopted" },
-      ];
+      return [];
     }
 
     return indices.map((idx) => {
