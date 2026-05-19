@@ -90,6 +90,8 @@
       "openLecture": "강의 열기",
       "openAnalytics": "분석 보기",
       "edit": "스크립트 편집",
+      "resume": "이어서 제작",
+      "inProgress": "제작 중",
       "more": "+{count}개 더보기",
       "empty": "아직 강의가 없습니다."
     },
