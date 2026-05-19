@@ -60,6 +60,23 @@ async function refreshAccessToken(): Promise<string> {
   return refreshPromise;
 }
 
+// 앱 부팅 시 1회 호출. access 토큰은 메모리 전용(tokens.ts)이라 풀 페이지
+// 로드·재방문·직접 URL 진입 때마다 휘발된다. 이때 httpOnly refresh 쿠키로
+// access 를 선제 복원해야 ProtectedRoute 가 user=null 로 오판해 곧장
+// /auth/login 으로 튕기는 일을 막을 수 있다. 401 인터셉터는 "API 호출이
+// 일어난 뒤"에만 동작하므로 가드가 먼저 이탈시키는 경로를 못 막는다.
+// 성공/실패 모두 resolve — 실패(쿠키 없음·만료)는 그냥 비로그인 상태로 진행.
+export async function bootstrapAuth(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (tokens.getAccess()) return true;
+  try {
+    await refreshAccessToken();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 type RetriableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
 
 // 응답 인터셉터: 401 시 refresh 쿠키로 재발급 시도
