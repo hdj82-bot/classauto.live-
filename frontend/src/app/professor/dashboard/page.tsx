@@ -525,7 +525,17 @@ function DashboardHomeView({
               padding={20}
               radius={14}
               interactive
-              role="article"
+              role="button"
+              tabIndex={0}
+              aria-label={`${lec.title} — ${th("lectureGrid.openProduction")}`}
+              onClick={() => onResumeStudio(lec.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onResumeStudio(lec.id);
+                }
+              }}
+              style={{ cursor: "pointer" }}
             >
               <LectureTitle title={lec.title} />
               <span
@@ -565,7 +575,10 @@ function DashboardHomeView({
               <div className="mt-4 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => onEditLecture(lec.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditLecture(lec.id);
+                  }}
                   className="flex-1 rounded-lg motion-safe:transition"
                   style={{
                     padding: "8px 12px",
@@ -581,11 +594,11 @@ function DashboardHomeView({
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    inProgress
-                      ? onResumeStudio(lec.id)
-                      : onOpenLectureAnalytics(lec.id)
-                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (inProgress) onResumeStudio(lec.id);
+                    else onOpenLectureAnalytics(lec.id);
+                  }}
                   className="flex-1 rounded-lg motion-safe:transition"
                   style={{
                     padding: "8px 12px",

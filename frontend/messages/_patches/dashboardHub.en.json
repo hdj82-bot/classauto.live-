@@ -92,6 +92,7 @@
       "edit": "Edit script",
       "resume": "Resume in Studio",
       "inProgress": "In progress",
+      "openProduction": "Open production dashboard",
       "more": "+{count} more",
       "empty": "No lectures yet."
     },
