@@ -172,12 +172,113 @@ def step3_generate_scripts(self, prev_result: dict) -> dict:
     return {**prev_result, "scripts": scripts_data}
 
 
-@celery.task(base=PipelineTask, bind=True)
+def _estimate_segments(scripts: list[dict]) -> list[dict]:
+    """step3 scripts([{slide_number, script}]) → VideoScript.segments(JSONB).
+
+    script_generator 는 발화 텍스트만 만들고 슬라이드 길이를 산출하지 않으므로,
+    한국어 발화 ≈ 5자/초(분당 ~300자) 기준으로 슬라이드별 길이를 추정해 누적
+    start/end 초를 채운다. 슬라이드 최소 5초. 교수자가 스크립트 편집기에서
+    조정 가능 (사용자 결정 2026-05-19: 텍스트 길이 추정).
+
+    slide_index 는 0-based — 파서 slide_number 가 1-based(enumerate start=1)라
+    slide_number - 1 로 매핑한다.
+    """
+    chars_per_sec = 5
+    min_sec = 5
+    segments: list[dict] = []
+    cursor = 0
+    for s in sorted(scripts, key=lambda x: x["slide_number"]):
+        text = (s.get("script") or "").strip()
+        slide_number = int(s["slide_number"])
+        duration = max(min_sec, round(len(text) / chars_per_sec))
+        start = cursor
+        end = cursor + duration
+        cursor = end
+        segments.append(
+            {
+                "slide_index": max(0, slide_number - 1),
+                "text": text,
+                "start_seconds": start,
+                "end_seconds": end,
+                "tone": "normal",
+                "question_pin_seconds": None,
+            }
+        )
+    return segments
+
+
+@celery.task(base=PipelineTask, bind=True, max_retries=2, default_retry_delay=30)
 def step4_mark_pending_review(self, prev_result: dict) -> dict:
-    """Step 4: PENDING_REVIEW 상태로 마킹."""
+    """Step 4: 생성된 스크립트를 Video+VideoScript 로 영속화 → PENDING_REVIEW.
+
+    종전 구현은 in-memory dict 만 갱신해 DB 에 아무것도 쓰지 않았다. 그 결과
+    videos / video_scripts row 가 절대 생성되지 않아 studio 페이지가 모든
+    강의에서 빈 스크립트(把자문 데모 폴백)를 보였다. 본 단계에서 lecture 당
+    Video 1개를 get-or-create 하고 segments/ai_segments 를 채운다.
+    Celery 재시도 멱등 — 이미 있으면 덮어쓴다.
+    """
+    from sqlalchemy import select
+
+    from app.models.video import Video, VideoScript, VideoStatus
+
     task_id = prev_result["task_id"]
-    logger.info("Step4 완료: task_id=%s → PENDING_REVIEW", task_id)
-    return {**prev_result, "status": "PENDING_REVIEW"}
+    lecture_id = prev_result.get("lecture_id")
+    scripts = prev_result.get("scripts") or []
+
+    if not lecture_id:
+        logger.error("Step4: lecture_id 누락 — 영속화 불가: task_id=%s", task_id)
+        raise RuntimeError(f"Step4 lecture_id 누락: task_id={task_id}")
+
+    segments = _estimate_segments(scripts)
+    lecture_uuid = uuid.UUID(lecture_id)
+
+    db = SyncSessionLocal()
+    try:
+        video = (
+            db.execute(select(Video).where(Video.lecture_id == lecture_uuid))
+            .scalars()
+            .first()
+        )
+        if video is None:
+            video = Video(
+                lecture_id=lecture_uuid, status=VideoStatus.pending_review
+            )
+            db.add(video)
+            db.flush()  # video.id 확보 (VideoScript FK)
+        else:
+            video.status = VideoStatus.pending_review
+
+        script_row = (
+            db.execute(select(VideoScript).where(VideoScript.video_id == video.id))
+            .scalars()
+            .first()
+        )
+        if script_row is None:
+            script_row = VideoScript(
+                video_id=video.id, segments=segments, ai_segments=segments
+            )
+            db.add(script_row)
+        else:
+            # 재시도/재생성 — 최종본과 AI 원본 모두 갱신
+            script_row.segments = segments
+            script_row.ai_segments = segments
+
+        video_id = str(video.id)
+        db.commit()
+        logger.info(
+            "Step4 완료: task_id=%s, video_id=%s, %d segment 영속화 → PENDING_REVIEW",
+            task_id,
+            video_id,
+            len(segments),
+        )
+    except Exception as exc:
+        db.rollback()
+        logger.error("Step4 영속화 실패: task_id=%s, error=%s", task_id, exc)
+        raise self.retry(exc=exc)
+    finally:
+        db.close()
+
+    return {**prev_result, "status": "PENDING_REVIEW", "video_id": video_id}
 
 
 @celery.task(base=PipelineTask, bind=True)
