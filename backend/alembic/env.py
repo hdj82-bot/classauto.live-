@@ -63,10 +63,16 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """온라인 모드: 실제 DB에 연결하여 마이그레이션 실행."""
+    # search_path 강제 — Supabase 풀러 role(``postgres.<projectref>``)은 기본
+    # search_path("$user")가 없는 스키마를 가리켜 ``public`` 을 못 본다. 이게
+    # 빠지면 ``CREATE TABLE alembic_version`` 이 ``InvalidSchemaName: no schema
+    # has been selected to create in`` 으로 죽는다 (psycopg2 ``options`` 로 접속
+    # 시점에 설정 — 직접 연결에도 무해).
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"options": "-c search_path=public"},
     )
     with connectable.connect() as connection:
         context.configure(
