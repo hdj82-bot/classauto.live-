@@ -52,13 +52,26 @@ _optional_bearer = HTTPBearer(auto_error=False)
 
 
 # ── Refresh Token Cookie ──────────────────────────────────────────────────────
-# httpOnly + Secure(prod) + SameSite=Lax 쿠키로 refresh_token 을 내려보낸다.
-# Path=/api/auth 로 한정하여 다른 API 경로 요청에 동봉되지 않게 한다.
-# example.com / api.example.com 구조에서 Lax 는 same-site 로 인식되어
-# axios 의 same-site XHR 에 자동 첨부된다.
+# httpOnly refresh 쿠키를 Path=/api/auth 로 한정해 내려보낸다.
+#
+# SameSite 정책 (사용자 결정 2026-05-19, 실측 근거):
+#   프런트(classauto.live)와 API(api.classauto.live)는 별도 오리진이라
+#   /api/auth/exchange · /api/auth/refresh 는 모두 "cross-origin credentialed
+#   XHR" 다. SameSite=Lax 로 내려보내면 Chrome 이 이 응답의 Set-Cookie 를
+#   저장하지 않아(브라우저에 api.classauto.live 쿠키가 0개로 확인됨) 15분 뒤
+#   access 만료 시 refresh 가 쿠키 없이 401 → 강제 로그아웃되는 버그가 있었다.
+#   교차 출처 credentialed 요청에서 안정적으로 저장·전송되려면
+#   SameSite=None + Secure 가 필요하다(SameSite=None 은 Secure 필수). CORS 는
+#   이미 allow_credentials=True + 정확한 origin 이라 호환된다.
+#   로컬 dev(http://localhost)에서는 Secure 쿠키가 안 박히므로 Lax 로 둔다.
 
 REFRESH_COOKIE_NAME = "ifl_refresh"
 REFRESH_COOKIE_PATH = "/api/auth"
+
+_IS_PROD = settings.ENVIRONMENT == "production"
+# 프로덕션: 교차 출처 XHR 저장 보장 위해 None+Secure. dev: localhost http 대응 Lax.
+_REFRESH_COOKIE_SAMESITE = "none" if _IS_PROD else "lax"
+_REFRESH_COOKIE_SECURE = _IS_PROD  # SameSite=None 은 Secure 필수
 
 
 def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
@@ -68,8 +81,8 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
         path=REFRESH_COOKIE_PATH,
         httponly=True,
-        secure=settings.ENVIRONMENT == "production",
-        samesite="lax",
+        secure=_REFRESH_COOKIE_SECURE,
+        samesite=_REFRESH_COOKIE_SAMESITE,
     )
 
 
@@ -78,8 +91,8 @@ def _clear_refresh_cookie(response: Response) -> None:
         key=REFRESH_COOKIE_NAME,
         path=REFRESH_COOKIE_PATH,
         httponly=True,
-        secure=settings.ENVIRONMENT == "production",
-        samesite="lax",
+        secure=_REFRESH_COOKIE_SECURE,
+        samesite=_REFRESH_COOKIE_SAMESITE,
     )
 
 
