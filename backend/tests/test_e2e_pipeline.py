@@ -165,13 +165,72 @@ def test_e2e_step3_generate_scripts():
 # 5. Step4 + Step5: 상태 마킹 + 알림
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_e2e_step4_mark_pending_review():
+def test_e2e_step4_persists_video_and_script():
+    """step4 가 생성된 스크립트를 Video+VideoScript 로 영속화하고
+    PENDING_REVIEW 로 마킹하는지 검증.
+
+    종전 step4 는 DB 무작업이라 videos/video_scripts row 가 생성되지
+    않아 studio 가 모든 강의에서 빈 스크립트(데모 폴백)를 보였다.
+    """
     from app.tasks.pipeline import step4_mark_pending_review
 
-    prev_result = {"task_id": "test-task-001", "slides": [], "scripts": []}
-    result = step4_mark_pending_review.run(prev_result)
+    lecture_id = str(uuid.uuid4())
+    prev_result = {
+        "task_id": "test-task-001",
+        "slides": [],
+        "lecture_id": lecture_id,
+        "scripts": [
+            {"slide_number": 1, "script": "첫 번째 슬라이드 발화입니다."},
+            {"slide_number": 2, "script": "두 번째 슬라이드 발화입니다."},
+        ],
+    }
+
+    with patch("app.tasks.pipeline.SyncSessionLocal") as mock_session_cls:
+        mock_db = MagicMock()
+        mock_session_cls.return_value = mock_db
+        # Video / VideoScript 둘 다 미존재 → 생성 경로
+        mock_db.execute.return_value.scalars.return_value.first.return_value = None
+
+        result = step4_mark_pending_review.run(prev_result)
 
     assert result["status"] == "PENDING_REVIEW"
+    assert "video_id" in result
+    # Video + VideoScript 두 row add, 단일 트랜잭션 commit
+    assert mock_db.add.call_count == 2
+    mock_db.commit.assert_called_once()
+
+
+def test_e2e_step4_missing_lecture_id_raises():
+    """lecture_id 누락 시 조용히 통과하지 않고 실패해야 한다
+    (종전엔 DB 무작업이라 누락이어도 통과 — 영속화 누락 은폐)."""
+    from app.tasks.pipeline import step4_mark_pending_review
+
+    with pytest.raises(RuntimeError, match="lecture_id"):
+        step4_mark_pending_review.run(
+            {"task_id": "t", "slides": [], "scripts": []}
+        )
+
+
+def test_estimate_segments_timing_and_shape():
+    """_estimate_segments: 텍스트 길이 기반 누적 타이밍 + 0-based
+    slide_index + 필수 필드(ScriptSegment 호환) 검증."""
+    from app.tasks.pipeline import _estimate_segments
+
+    scripts = [
+        {"slide_number": 2, "script": "가" * 50},   # 50/5=10초
+        {"slide_number": 1, "script": "나" * 3},    # min 5초
+    ]
+    segs = _estimate_segments(scripts)
+
+    # slide_number 정렬 → slide_index 0-based
+    assert [s["slide_index"] for s in segs] == [0, 1]
+    # 슬라이드1: 0~5(min), 슬라이드2: 5~15(누적)
+    assert (segs[0]["start_seconds"], segs[0]["end_seconds"]) == (0, 5)
+    assert (segs[1]["start_seconds"], segs[1]["end_seconds"]) == (5, 15)
+    for s in segs:
+        assert s["tone"] == "normal"
+        assert s["question_pin_seconds"] is None
+        assert s["text"]
 
 
 def test_e2e_step5_notify():
