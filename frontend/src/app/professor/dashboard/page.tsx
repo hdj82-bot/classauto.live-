@@ -283,6 +283,7 @@ export default function ProfessorDashboardPage() {
       onJumpToInbox={() => router.push("/professor/inbox")}
       onOpenLectureAnalytics={(id) => router.push(`/professor/analytics/${id}`)}
       onEditLecture={(id) => router.push(`/professor/lecture/${id}`)}
+      onResumeStudio={(id) => router.push(`/professor/studio/${id}`)}
       profileModalOpen={profileModalOpen}
       onCloseProfileModal={() => setProfileModalOpen(false)}
       onProfileSaved={handleProfileSaved}
@@ -306,6 +307,7 @@ function DashboardHomeView({
   onJumpToInbox,
   onOpenLectureAnalytics,
   onEditLecture,
+  onResumeStudio,
   profileModalOpen,
   onCloseProfileModal,
   onProfileSaved,
@@ -319,6 +321,7 @@ function DashboardHomeView({
   onJumpToInbox: () => void;
   onOpenLectureAnalytics: (id: string) => void;
   onEditLecture: (id: string) => void;
+  onResumeStudio: (id: string) => void;
   profileModalOpen: boolean;
   onCloseProfileModal: () => void;
   onProfileSaved: (profile: InstructorProfileDraft) => void;
@@ -506,7 +509,17 @@ function DashboardHomeView({
           )}
         </header>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {lectures.slice(0, 4).map((lec) => (
+          {lectures.slice(0, 4).map((lec) => {
+            // 발행 안 됐고 렌더된 영상도 없으면 = 제작이 중단/미완 상태.
+            // 이런 강의는 스크립트 편집기(영상 없음 막다른 화면)가 아니라
+            // Studio 마법사로 "이어서 제작" 진입해야 한다.
+            const inProgress = !lec.is_published && !lec.video_url;
+            const statusColor = lec.is_published
+              ? "var(--success)"
+              : inProgress
+                ? "var(--gold)"
+                : "var(--text-subtle)";
+            return (
             <Card
               key={lec.id}
               padding={20}
@@ -522,10 +535,12 @@ function DashboardHomeView({
                   padding: "3px 9px",
                   fontSize: 11,
                   fontWeight: 600,
-                  color: lec.is_published ? "var(--success)" : "var(--text-subtle)",
+                  color: statusColor,
                   background: lec.is_published
                     ? "rgba(16, 185, 129, 0.10)"
-                    : "var(--bg-subtle)",
+                    : inProgress
+                      ? "var(--gold-soft)"
+                      : "var(--bg-subtle)",
                 }}
               >
                 <span
@@ -536,12 +551,16 @@ function DashboardHomeView({
                     borderRadius: 999,
                     background: lec.is_published
                       ? "var(--success)"
-                      : "var(--text-faint)",
+                      : inProgress
+                        ? "var(--gold)"
+                        : "var(--text-faint)",
                   }}
                 />
                 {lec.is_published
                   ? t("common.published")
-                  : t("common.unpublished")}
+                  : inProgress
+                    ? th("lectureGrid.inProgress")
+                    : t("common.unpublished")}
               </span>
               <div className="mt-4 flex gap-2">
                 <button
@@ -562,7 +581,11 @@ function DashboardHomeView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onOpenLectureAnalytics(lec.id)}
+                  onClick={() =>
+                    inProgress
+                      ? onResumeStudio(lec.id)
+                      : onOpenLectureAnalytics(lec.id)
+                  }
                   className="flex-1 rounded-lg motion-safe:transition"
                   style={{
                     padding: "8px 12px",
@@ -574,11 +597,14 @@ function DashboardHomeView({
                     cursor: "pointer",
                   }}
                 >
-                  {th("lectureGrid.openAnalytics")}
+                  {inProgress
+                    ? th("lectureGrid.resume")
+                    : th("lectureGrid.openAnalytics")}
                 </button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       </section>
 

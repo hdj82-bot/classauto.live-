@@ -90,6 +90,8 @@
       "openLecture": "Open lecture",
       "openAnalytics": "Open analytics",
       "edit": "Edit script",
+      "resume": "Resume in Studio",
+      "inProgress": "In progress",
       "more": "+{count} more",
       "empty": "No lectures yet."
     },
