@@ -52,15 +52,17 @@ export default function LearnersIndexPage() {
         const { data: cs } = await api.get<Course[]>("/api/courses");
         if (cancelled) return;
         setCourses(cs);
-        const all: Lecture[] = [];
-        for (const c of cs) {
-          const { data: lecs } = await api.get<Lecture[]>(
-            `/api/courses/${c.id}/lectures`,
-          );
-          for (const l of lecs) all.push({ ...l, course_id: c.id });
-        }
+        // 강좌별 강의 fan-out 병렬화 — 강좌 수만큼 RTT 직렬 누적 차단
+        // (메뉴 진입 체감 지연 최대 원인).
+        const lecsByCourse = await Promise.all(
+          cs.map((c) =>
+            api
+              .get<Lecture[]>(`/api/courses/${c.id}/lectures`)
+              .then((r) => r.data.map((l) => ({ ...l, course_id: c.id }))),
+          ),
+        );
         if (cancelled) return;
-        setLectures(all);
+        setLectures(lecsByCourse.flat());
       } catch {
         if (!cancelled) setError(true);
       } finally {
