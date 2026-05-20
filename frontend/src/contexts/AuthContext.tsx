@@ -137,3 +137,19 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
+
+/**
+ * Provider 없이 호출돼도 throw 하지 않고 null 을 반환하는 변형. 마케팅
+ * 셸처럼 인증 상태가 "있으면 활용, 없으면 비로그인 UI" 인 부드러운 분기에
+ * 쓴다. ProtectedRoute 처럼 인증이 필수인 곳에서는 그대로 `useAuth` 사용.
+ *
+ * 도입 배경 (2026-05-21, PR #196): LightMarketingShell 이 `/` 헤더의
+ * "로그인 / 로그아웃" 분기를 위해 인증 상태를 읽게 되면서, `<AuthProvider>`
+ * 를 wrap 하지 않는 기존 marketing 페이지 vitest 들(landing/features/
+ * pricing/legal/marketing 등 8개 파일, 67개 테스트)이 "useAuth must be used
+ * within AuthProvider" 로 일괄 실패했다. 테스트 setup 을 일일이 손대는 대신
+ * 컴포넌트 측에 폴백 경로를 제공한다.
+ */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext);
+}
