@@ -88,15 +88,17 @@ export default function ProfessorDashboardPage() {
         if (cancelled) return;
         setCourses(cs);
 
-        const allLectures: Lecture[] = [];
-        for (const c of cs) {
-          const { data: lecs } = await api.get<Lecture[]>(
-            `/api/courses/${c.id}/lectures`,
-          );
-          allLectures.push(...lecs);
-        }
+        // 강좌별 강의 fan-out 은 순차 await 로 묶으면 강좌 수만큼 RTT 가 직렬로
+        // 누적된다. 메뉴 진입 체감 지연의 가장 큰 원인이라 Promise.all 로 병렬화.
+        const lecsByCourse = await Promise.all(
+          cs.map((c) =>
+            api
+              .get<Lecture[]>(`/api/courses/${c.id}/lectures`)
+              .then((r) => r.data),
+          ),
+        );
         if (cancelled) return;
-        setLectures(allLectures);
+        setLectures(lecsByCourse.flat());
       } catch {
         if (!cancelled) setError(t("professor.loadError"));
       } finally {
