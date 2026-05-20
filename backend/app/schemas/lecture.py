@@ -39,6 +39,7 @@ class LectureResponse(BaseModel):
 
     id: uuid.UUID
     course_id: uuid.UUID
+    folder_id: uuid.UUID | None = None
     title: str
     description: str | None
     video_url: str | None
