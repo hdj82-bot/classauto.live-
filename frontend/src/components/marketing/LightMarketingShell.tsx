@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useOptionalAuth } from "@/contexts/AuthContext";
 import { useI18n, type Locale } from "@/contexts/I18nContext";
 import { useMarketingI18n } from "./useMarketingI18n";
 
@@ -53,7 +53,12 @@ export default function LightMarketingShell({
   // marketing t() 는 `marketing.*` subtree 만 본다. `nav.dashboard` /
   // `common.logout` 같은 본체 top-level 키는 useI18n().t 로 직접 조회.
   const { locale, setLocale, t: tRoot } = useI18n();
-  const { user, logout } = useAuth();
+  // 마케팅 셸은 `<AuthProvider>` 가 없는 vitest 환경에서도 그대로 렌더되어야
+  // 하므로 `useOptionalAuth` 를 쓴다 — Provider 가 없으면 ctx === null, 비로그인
+  // 분기로 자연스럽게 떨어진다.
+  const auth = useOptionalAuth();
+  const user = auth?.user ?? null;
+  const logout = auth?.logout ?? null;
   const [menuOpen, setMenuOpen] = useState(false);
 
   const finalCta =
@@ -201,7 +206,7 @@ export default function LightMarketingShell({
                 <button
                   type="button"
                   onClick={() => {
-                    void logout();
+                    void logout?.();
                   }}
                   className="hidden sm:inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 border border-[rgba(10,10,10,0.16)] text-[rgba(10,10,10,0.72)] hover:text-[#0A0A0A] hover:border-[#B88308] hover:bg-black/[0.03] transition motion-reduce:transition-none"
                 >
@@ -299,7 +304,7 @@ export default function LightMarketingShell({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
-                    void logout();
+                    void logout?.();
                   }}
                   className="px-2 py-3 text-sm font-semibold text-[#0A0A0A] hover:text-[#B88308] transition motion-reduce:transition-none text-left"
                 >
