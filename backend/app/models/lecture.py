@@ -53,6 +53,11 @@ class Lecture(Base):
         server_default=VoiceGender.male.value,
     )
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 교수자가 만든 컬렉션(Folder)으로 강의를 묶기 위한 옵션 외래키.
+    # NULL = 미분류. 폴더 삭제 시 ondelete=SET NULL 로 자동 해제(강의 자체는 보존).
+    folder_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("folders.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -61,6 +66,7 @@ class Lecture(Base):
     )
 
     course = relationship("Course", back_populates="lectures")
+    folder = relationship("Folder", back_populates="lectures")
     # T7: ORM 레벨 cascade — DB FK 의 ondelete=CASCADE 와 함께, 세션이 child 를 로드한
     # 상태에서 lecture 가 삭제될 때 child rows 도 일관되게 정리되도록 명시.
     sessions = relationship(

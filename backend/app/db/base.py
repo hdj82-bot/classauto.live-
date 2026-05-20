@@ -9,5 +9,5 @@ class Base(DeclarativeBase):
 from app.models import (  # noqa: F401, E402
     user, course, lecture, session, question, response, video,
     video_render, embedding, qa_log, cost_log, subscription,
-    translation, assessment_result,
+    translation, assessment_result, folder,
 )
