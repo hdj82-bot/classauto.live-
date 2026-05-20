@@ -68,25 +68,6 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    href: "/professor/lecture/new",
-    labelKey: "nav.newLecture",
-    iconId: "ic-newlecture",
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="url(#nav-grad-electric)"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <rect x="3" y="6" width="15" height="12" rx="2" />
-        <polygon points="18 10 22 7 22 17 18 14" />
-      </svg>
-    ),
-  },
-  {
     href: "/professor/lectures",
     labelKey: "nav.library",
     iconId: "ic-library",
@@ -162,25 +143,6 @@ const navItems: NavItem[] = [
         <circle cx="9" cy="7" r="4" />
         <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
         <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-      </svg>
-    ),
-  },
-  {
-    href: "/professor/subscription",
-    labelKey: "nav.subscription",
-    iconId: "ic-subscription",
-    icon: (
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="url(#nav-grad-electric)"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        <rect x="2" y="6" width="20" height="12" rx="2" />
-        <line x1="2" y1="11" x2="22" y2="11" />
       </svg>
     ),
   },
