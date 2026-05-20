@@ -9,6 +9,7 @@ import {
   type InboxBulkConfirmResult,
   type InboxItem,
   type InboxListResult,
+  type InboxReportScope,
   type InboxStatus,
 } from "./inboxTypes";
 import { MOCK_INBOX_SEEDS, computeMockStats, type MockInboxSeed } from "./inboxMock";
@@ -371,6 +372,41 @@ export const inboxApi = {
         deferred: true,
       };
     }
+  },
+
+  /**
+   * 종합 리포트 다운로드 — `/api/v1/qa/export?format=csv[&course_id=...]`.
+   *
+   * 백엔드가 도달하면 CSV blob 을 그대로 받아 브라우저 다운로드 트리거.
+   * `lecture_id` 단위 다운로드도 지원하지만 현재 UI 는 강의(course) 단위와
+   * 전체만 노출합니다. SSR / 테스트 환경 (window 없음) 에서는 no-op.
+   */
+  async downloadReport(scope: InboxReportScope): Promise<void> {
+    const params = new URLSearchParams({ format: "csv" });
+    if (scope !== "all") {
+      params.set("course_id", scope.courseId);
+    }
+    const { data } = await api.get<Blob>(`/api/v1/qa/export?${params.toString()}`, {
+      responseType: "blob",
+    });
+    if (typeof window === "undefined") return;
+    const blob =
+      data instanceof Blob
+        ? data
+        : new Blob([data as unknown as BlobPart], {
+            type: "text/csv;charset=utf-8",
+          });
+    const url = window.URL.createObjectURL(blob);
+    const a = window.document.createElement("a");
+    a.href = url;
+    a.download =
+      scope === "all"
+        ? "qa_report_all.csv"
+        : `qa_report_course_${scope.courseId}.csv`;
+    window.document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
   },
 
   /** 테스트 / 개발용 — 로컬 override 초기화. */

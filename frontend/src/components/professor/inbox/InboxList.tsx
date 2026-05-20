@@ -1,52 +1,24 @@
 "use client";
 
-import { useMemo } from "react";
 import { useInboxI18n } from "./useInboxI18n";
-import type { InboxItem, InboxStatus } from "./inboxTypes";
+import { groupByLecture } from "./inboxFilters";
+import type { InboxItem } from "./inboxTypes";
 
 interface Props {
   items: InboxItem[];
-  selectedId: string | null;
-  selectedIds: Set<string>;
-  onSelectItem: (id: string) => void;
-  onToggleCheck: (id: string, checked: boolean) => void;
-  onToggleSelectAll: (checked: boolean) => void;
 }
 
-const STATUS_TAG_KEY: Record<InboxStatus, string> = {
-  auto_answered: "list.respondedTag",
-  needs_professor: "list.needsReviewTag",
-  off_topic_forwarded: "list.offTopicTag",
-};
-
-const STATUS_TAG_TONE: Record<InboxStatus, string> = {
-  auto_answered: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  needs_professor: "bg-rose-50 text-rose-700 ring-rose-200",
-  off_topic_forwarded: "bg-gray-100 text-gray-600 ring-gray-200",
-};
-
 /**
- * 인박스 중앙 리스트 — Gmail 스타일.
+ * 강의 영상(lecture) 단위로 그루핑된 Q&A 목록.
  *
- * - 항목 좌측에 `<input type="checkbox">` 로 일괄 선택 (BulkAnswerBar 와 연동).
- * - 카드 클릭 시 우측 패널에 상세 (`onSelectItem`).
- * - 시각: 라이트 베이스 + 골드 active outline. 미답변 액션 컬러는 rose (의미적).
- * - tabular-nums 로 시각·카운트 정렬.
+ * 한 행 = 질문 1건. 행마다 학생 이름/익명·질문 텍스트·RAG 유사도(%)·챗봇 답변
+ * 본문·시각을 노출합니다. status 배지("응답 필요" 등) 와 선택 체크박스는 폐기
+ * (교수자가 영상에서 답변할 필요 없음 — 대면 수업에서 액션). 데이터 정리/시각화는
+ * `/professor/analytics` 페이지로 분리.
  */
-export default function InboxList({
-  items,
-  selectedId,
-  selectedIds,
-  onSelectItem,
-  onToggleCheck,
-  onToggleSelectAll,
-}: Props) {
+export default function InboxList({ items }: Props) {
   const { t, locale } = useInboxI18n();
-
-  const allChecked = useMemo(
-    () => items.length > 0 && items.every((it) => selectedIds.has(it.id)),
-    [items, selectedIds],
-  );
+  const groups = groupByLecture(items);
 
   if (items.length === 0) {
     return (
@@ -64,166 +36,86 @@ export default function InboxList({
     <section
       data-testid="inbox-list"
       aria-label={t("list.ariaLabel")}
-      className="bg-white border border-gray-200 rounded-2xl"
+      className="flex flex-col gap-4"
     >
-      {/* 전체 선택 */}
-      <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-100">
-        <label className="inline-flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-          <input
-            type="checkbox"
-            data-testid="inbox-select-all"
-            checked={allChecked}
-            onChange={(e) => onToggleSelectAll(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500/30 accent-amber-500"
-            aria-label={
-              allChecked ? t("filter.deselectAll") : t("filter.selectAll")
-            }
-          />
-          <span>
-            {selectedIds.size > 0
-              ? t("filter.selectedCount", { count: selectedIds.size })
-              : t("filter.selectAll")}
-          </span>
-        </label>
-        <span className="text-[11px] tabular-nums text-gray-400">
-          {items.length}
-        </span>
-      </header>
+      {groups.map((g) => (
+        <div
+          key={g.lectureId}
+          data-testid={`inbox-group-${g.lectureId}`}
+          className="bg-white border border-gray-200 rounded-2xl overflow-hidden"
+        >
+          <header className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 bg-gray-50/60">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-gray-400 font-semibold">
+                {g.courseTitle}
+              </p>
+              <h3 className="text-sm font-semibold text-gray-900 truncate">
+                {g.lectureTitle}
+              </h3>
+            </div>
+            <span className="shrink-0 text-[11px] tabular-nums text-gray-500 font-medium">
+              {t("list.lectureGroupTotal", { n: g.items.length })}
+            </span>
+          </header>
 
-      <ul className="divide-y divide-gray-100">
-        {items.map((it) => (
-          <li key={it.id}>
-            <Row
-              item={it}
-              isSelected={selectedId === it.id}
-              isChecked={selectedIds.has(it.id)}
-              onSelect={() => onSelectItem(it.id)}
-              onCheck={(checked) => onToggleCheck(it.id, checked)}
-              t={t}
-              locale={locale}
-            />
-          </li>
-        ))}
-      </ul>
+          <ul className="divide-y divide-gray-100">
+            {g.items.map((it) => (
+              <li key={it.id} data-testid={`inbox-row-${it.id}`} className="p-4">
+                <div className="flex items-start justify-between gap-3 mb-1.5">
+                  <p className="text-xs font-medium text-gray-700 truncate">
+                    {it.student.name ?? t("list.studentAnonymous")}
+                    {it.student.studentNumber && (
+                      <span className="text-gray-400 ml-1.5 tabular-nums">
+                        ({it.student.studentNumber})
+                      </span>
+                    )}
+                  </p>
+                  <div className="shrink-0 flex items-center gap-2 whitespace-nowrap">
+                    {it.rag.topSimilarity !== null && (
+                      <span
+                        className="text-[11px] tabular-nums text-gray-500 font-medium"
+                        data-testid={`inbox-row-similarity-${it.id}`}
+                        title={t("list.similarityTitle")}
+                      >
+                        {t("list.similarityLabel", {
+                          value: Math.round(it.rag.topSimilarity * 100),
+                        })}
+                      </span>
+                    )}
+                    <span
+                      className="text-[11px] tabular-nums text-gray-400"
+                      title={it.createdAt}
+                    >
+                      {formatRelative(it.createdAt, locale, t)}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-sm font-semibold text-gray-900 leading-snug whitespace-pre-wrap">
+                  {it.question}
+                </p>
+                <div className="mt-2 pl-3 border-l-2 border-amber-200">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-amber-700 font-semibold mb-0.5">
+                    {t("list.answerLabel")}
+                  </p>
+                  {it.aiDraft ? (
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {it.aiDraft}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic">
+                      {t("list.noAnswer")}
+                    </p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </section>
   );
 }
 
-interface RowProps {
-  item: InboxItem;
-  isSelected: boolean;
-  isChecked: boolean;
-  onSelect: () => void;
-  onCheck: (checked: boolean) => void;
-  t: (key: string, params?: Record<string, string | number>) => string;
-  locale: "ko" | "en";
-}
-
-function Row({ item, isSelected, isChecked, onSelect, onCheck, t, locale }: RowProps) {
-  const tagToneCls = STATUS_TAG_TONE[item.status];
-  const studentName = item.student.name ?? t("list.studentAnonymous");
-  const slidesLabel =
-    item.rag.topSlideNumbers.length > 0
-      ? t("list.slideRef", {
-          slides: item.rag.topSlideNumbers.join(", "),
-        })
-      : null;
-
-  return (
-    <div
-      data-testid={`inbox-row-${item.id}`}
-      data-selected={isSelected}
-      data-checked={isChecked}
-      className={[
-        "flex items-start gap-3 px-3 py-3 transition motion-reduce:transition-none",
-        isSelected
-          ? "bg-amber-50/70 ring-1 ring-inset ring-amber-200"
-          : "hover:bg-gray-50",
-      ].join(" ")}
-    >
-      <input
-        type="checkbox"
-        data-testid={`inbox-row-check-${item.id}`}
-        checked={isChecked}
-        onChange={(e) => {
-          e.stopPropagation();
-          onCheck(e.target.checked);
-        }}
-        onClick={(e) => e.stopPropagation()}
-        aria-label={t("list.selectItem")}
-        className="mt-1 h-4 w-4 rounded border-gray-300 text-amber-500 focus:ring-amber-500/30 accent-amber-500"
-      />
-      <button
-        type="button"
-        data-testid={`inbox-row-open-${item.id}`}
-        onClick={onSelect}
-        aria-label={t("list.openItem")}
-        className="flex-1 min-w-0 text-left"
-      >
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span
-            className={[
-              "text-[10px] uppercase tracking-[0.14em] font-semibold rounded-full px-2 py-0.5 ring-1 ring-inset",
-              tagToneCls,
-            ].join(" ")}
-          >
-            {t(STATUS_TAG_KEY[item.status])}
-          </span>
-          {item.professorAnswered && (
-            <span
-              className="text-[10px] uppercase tracking-[0.14em] font-semibold rounded-full px-2 py-0.5 ring-1 ring-inset bg-amber-50 text-amber-800 ring-amber-200"
-              data-testid={`inbox-row-confirmed-${item.id}`}
-            >
-              {t("list.professorAnsweredTag")}
-            </span>
-          )}
-          {item.rag.topSimilarity !== null && (
-            <span className="text-[10px] tabular-nums text-gray-400 font-medium">
-              {t("list.similarityLabel", {
-                value: Math.round(item.rag.topSimilarity * 100),
-              })}
-            </span>
-          )}
-        </div>
-
-        <p className="text-sm font-semibold text-gray-900 truncate">
-          {item.question}
-        </p>
-        <p className="text-xs text-gray-500 mt-1 truncate">
-          {studentName}
-          <span className="text-gray-300 mx-1.5" aria-hidden="true">
-            ·
-          </span>
-          {item.lecture.courseTitle}
-          <span className="text-gray-300 mx-1.5" aria-hidden="true">
-            ·
-          </span>
-          {item.lecture.lectureTitle}
-          {slidesLabel && (
-            <>
-              <span className="text-gray-300 mx-1.5" aria-hidden="true">
-                ·
-              </span>
-              {slidesLabel}
-            </>
-          )}
-        </p>
-      </button>
-
-      <span
-        className="shrink-0 text-[11px] text-gray-400 tabular-nums whitespace-nowrap mt-1"
-        title={item.createdAt}
-      >
-        {formatRelative(item.createdAt, locale, t)}
-      </span>
-    </div>
-  );
-}
-
-/**
- * 간단한 상대 시간 포매터. Intl.RelativeTimeFormat 가 jsdom 에서도 동작하지만
- * 일관된 i18n 통제를 위해 직접 분기.
- */
 function formatRelative(
   iso: string,
   _locale: "ko" | "en",

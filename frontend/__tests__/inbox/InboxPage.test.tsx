@@ -47,7 +47,7 @@ function mockEmptyBackend() {
   });
 }
 
-describe("ProfessorInboxPage", () => {
+describe("ProfessorInboxPage (redesigned report view)", () => {
   it("renders the deferred banner when backend is missing", async () => {
     mockEmptyBackend();
     renderPage(<ProfessorInboxPage />);
@@ -57,33 +57,41 @@ describe("ProfessorInboxPage", () => {
     expect(screen.getByTestId("inbox-deferred-banner")).toBeTruthy();
   });
 
-  it("opens on the needs_professor tab and lists action items", async () => {
+  it("renders the grouped lecture list with all mock items (no status tabs)", async () => {
     mockEmptyBackend();
     renderPage(<ProfessorInboxPage />);
 
     await waitFor(() =>
       expect(screen.getByTestId("inbox-list")).toBeTruthy(),
     );
-    // needs_professor 탭이 활성화되어야 함
-    const needsTab = screen.getByTestId("inbox-tab-needs_professor");
-    expect(needsTab.getAttribute("aria-selected")).toBe("true");
-    // mock 시드에는 needs_professor 가 3건
+    // 신규 뷰는 모든 status 의 mock 시드(8건) 를 한 번에 보여준다.
     expect(screen.getByTestId("inbox-row-qa-needs-1")).toBeTruthy();
-    expect(screen.getByTestId("inbox-row-qa-needs-2")).toBeTruthy();
+    expect(screen.getByTestId("inbox-row-qa-auto-1")).toBeTruthy();
+    expect(screen.getByTestId("inbox-row-qa-off-1")).toBeTruthy();
+    // status 탭 / 미답변 토글은 사라져야 한다.
+    expect(screen.queryByTestId("inbox-tab-needs_professor")).toBeNull();
+    expect(screen.queryByTestId("inbox-tab-auto_answered")).toBeNull();
+    expect(screen.queryByTestId("inbox-unanswered-only")).toBeNull();
   });
 
-  it("switches tab to auto_answered and shows AI replies", async () => {
+  it("groups items by lecture (lecture header per group)", async () => {
     mockEmptyBackend();
     renderPage(<ProfessorInboxPage />);
 
     await waitFor(() => screen.getByTestId("inbox-list"));
-    fireEvent.click(screen.getByTestId("inbox-tab-auto_answered"));
+    // mock 시드의 lectureId 가 그대로 그룹 testid 로 노출.
+    expect(screen.getByTestId("inbox-group-lec-ccs-1")).toBeTruthy();
+    expect(screen.getByTestId("inbox-group-lec-corpus-1")).toBeTruthy();
+  });
 
-    await waitFor(() =>
-      expect(screen.getByTestId("inbox-row-qa-auto-1")).toBeTruthy(),
-    );
-    // off_topic 탭에 해당하는 행은 사라져야 한다
-    expect(screen.queryByTestId("inbox-row-qa-off-1")).toBeNull();
+  it("shows RAG similarity (%) on each row when available", async () => {
+    mockEmptyBackend();
+    renderPage(<ProfessorInboxPage />);
+
+    await waitFor(() => screen.getByTestId("inbox-list"));
+    // qa-needs-1 의 시드는 topSimilarity 0.78 → 78%
+    const sim = screen.getByTestId("inbox-row-similarity-qa-needs-1");
+    expect(sim.textContent).toContain("78");
   });
 
   it("filters by course when a sidebar item is clicked", async () => {
@@ -91,143 +99,136 @@ describe("ProfessorInboxPage", () => {
     renderPage(<ProfessorInboxPage />);
 
     await waitFor(() => screen.getByTestId("inbox-list"));
-    // 코퍼스 강좌만 필터 — 시드상 needs_professor 1건만 (qa-needs-3)
     fireEvent.click(screen.getByTestId("inbox-course-course-corpus"));
 
     await waitFor(() =>
       expect(screen.getByTestId("inbox-row-qa-needs-3")).toBeTruthy(),
     );
+    // 다른 강의의 행은 안 보여야 한다.
+    expect(screen.queryByTestId("inbox-row-qa-needs-1")).toBeNull();
+    expect(screen.queryByTestId("inbox-row-qa-auto-1")).toBeNull();
+  });
+
+  it("filters by question / answer text via the search input", async () => {
+    mockEmptyBackend();
+    renderPage(<ProfessorInboxPage />);
+
+    await waitFor(() => screen.getByTestId("inbox-list"));
+
+    const input = screen.getByTestId("inbox-search") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "시험" } });
+
+    // mock 시드 q8 ("이번 시험 범위가...") 만 남아야 한다.
+    await waitFor(() =>
+      expect(screen.getByTestId("inbox-row-qa-off-3")).toBeTruthy(),
+    );
     expect(screen.queryByTestId("inbox-row-qa-needs-1")).toBeNull();
   });
 
-  it("opens the right-pane thread when a row is selected and shows the AI draft", async () => {
+  it("shows the report download card with the all-courses hint by default", async () => {
     mockEmptyBackend();
     renderPage(<ProfessorInboxPage />);
 
-    await waitFor(() => screen.getByTestId("inbox-list"));
-    // qa-needs-2 는 aiDraft 가 있는 needs_professor 항목
-    fireEvent.click(screen.getByTestId("inbox-row-open-qa-needs-2"));
-
-    await waitFor(() =>
-      expect(screen.getByTestId("inbox-thread-qa-needs-2")).toBeTruthy(),
-    );
-    expect(screen.getByTestId("inbox-thread-ai-draft")).toBeTruthy();
-    expect(screen.getByTestId("inbox-answer-composer")).toBeTruthy();
+    await waitFor(() => screen.getByTestId("inbox-report-card"));
+    expect(screen.getByTestId("inbox-report-download")).toBeTruthy();
   });
 
-  it("rejects empty composer submissions", async () => {
-    mockEmptyBackend();
-    renderPage(<ProfessorInboxPage />);
-
-    await waitFor(() => screen.getByTestId("inbox-list"));
-    // qa-needs-3 는 aiDraft 가 없어 composer 가 빈 상태
-    fireEvent.click(screen.getByTestId("inbox-row-open-qa-needs-3"));
-    await waitFor(() => screen.getByTestId("inbox-answer-composer"));
-
-    const sendBtn = screen.getByTestId("inbox-composer-send");
-    await act(async () => {
-      fireEvent.click(sendBtn);
-    });
-    expect(screen.getByTestId("inbox-composer-error")).toBeTruthy();
-  });
-
-  it("inserts the RAG draft when 'use draft' is clicked", async () => {
-    mockEmptyBackend();
-    renderPage(<ProfessorInboxPage />);
-
-    await waitFor(() => screen.getByTestId("inbox-list"));
-    fireEvent.click(screen.getByTestId("inbox-row-open-qa-needs-2"));
-    await waitFor(() => screen.getByTestId("inbox-composer-use-draft"));
-
-    const body = screen.getByTestId("inbox-composer-body") as HTMLTextAreaElement;
-    // composer 는 mount 시점에 aiDraft 를 자동으로 주입 — 강제로 비워서 use-draft 동작 확인
-    fireEvent.change(body, { target: { value: "" } });
-    expect(body.value).toBe("");
-
-    fireEvent.click(screen.getByTestId("inbox-composer-use-draft"));
-    expect(body.value.length).toBeGreaterThan(0);
-  });
-
-  it("confirms an answer (deferred path) and updates the row to professor-confirmed", async () => {
-    mockEmptyBackend();
-    apiPatch.mockRejectedValue(
-      Object.assign(new Error("nf"), { response: { status: 404 } }),
-    );
-    renderPage(<ProfessorInboxPage />);
-
-    await waitFor(() => screen.getByTestId("inbox-list"));
-    fireEvent.click(screen.getByTestId("inbox-row-open-qa-needs-2"));
-    await waitFor(() => screen.getByTestId("inbox-composer-body"));
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("inbox-composer-send"));
+  it("invokes /api/v1/qa/export when the download button is clicked (all courses)", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/inbox") {
+        throw Object.assign(new Error("nf"), { response: { status: 404 } });
+      }
+      if (url === "/api/courses") return { data: [] };
+      if (url.startsWith("/api/v1/qa/export")) {
+        return { data: new Blob(["a,b,c\n1,2,3"], { type: "text/csv" }) };
+      }
+      throw new Error(`unhandled GET ${url}`);
     });
 
-    await waitFor(() =>
-      expect(
-        screen.getByTestId("inbox-row-confirmed-qa-needs-2"),
-      ).toBeTruthy(),
-    );
+    // jsdom 은 createObjectURL / revokeObjectURL 이 기본 미정의 — stub.
+    const originalCreate = window.URL.createObjectURL;
+    const originalRevoke = window.URL.revokeObjectURL;
+    window.URL.createObjectURL = vi.fn(() => "blob:mock");
+    window.URL.revokeObjectURL = vi.fn();
+
+    try {
+      renderPage(<ProfessorInboxPage />);
+      await waitFor(() => screen.getByTestId("inbox-report-download"));
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("inbox-report-download"));
+      });
+
+      await waitFor(() => {
+        const called = apiGet.mock.calls.some((c) =>
+          String(c[0]).startsWith("/api/v1/qa/export"),
+        );
+        expect(called).toBe(true);
+      });
+
+      const exportCall = apiGet.mock.calls.find((c) =>
+        String(c[0]).startsWith("/api/v1/qa/export"),
+      )!;
+      // 기본 스코프는 전체 — course_id 가 붙지 않아야 한다.
+      expect(String(exportCall[0])).not.toContain("course_id");
+      expect(String(exportCall[0])).toContain("format=csv");
+    } finally {
+      window.URL.createObjectURL = originalCreate;
+      window.URL.revokeObjectURL = originalRevoke;
+    }
   });
 
-  it("hides the bulk action bar until rows are checked", async () => {
+  it("passes course_id when a specific course is selected and download is clicked", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/v1/inbox") {
+        throw Object.assign(new Error("nf"), { response: { status: 404 } });
+      }
+      if (url === "/api/courses") return { data: [] };
+      if (url.startsWith("/api/v1/qa/export")) {
+        return { data: new Blob(["x"], { type: "text/csv" }) };
+      }
+      throw new Error(`unhandled GET ${url}`);
+    });
+
+    const originalCreate = window.URL.createObjectURL;
+    const originalRevoke = window.URL.revokeObjectURL;
+    window.URL.createObjectURL = vi.fn(() => "blob:mock");
+    window.URL.revokeObjectURL = vi.fn();
+
+    try {
+      renderPage(<ProfessorInboxPage />);
+      await waitFor(() => screen.getByTestId("inbox-list"));
+      fireEvent.click(screen.getByTestId("inbox-course-course-corpus"));
+      await waitFor(() => screen.getByTestId("inbox-report-download"));
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId("inbox-report-download"));
+      });
+
+      await waitFor(() => {
+        const call = apiGet.mock.calls.find((c) =>
+          String(c[0]).startsWith("/api/v1/qa/export"),
+        );
+        expect(call).toBeDefined();
+        expect(String(call?.[0])).toContain("course_id=course-corpus");
+      });
+    } finally {
+      window.URL.createObjectURL = originalCreate;
+      window.URL.revokeObjectURL = originalRevoke;
+    }
+  });
+
+  it("does not render status badges, checkboxes, composer or bulk bar", async () => {
     mockEmptyBackend();
     renderPage(<ProfessorInboxPage />);
 
     await waitFor(() => screen.getByTestId("inbox-list"));
+
+    // 폐기된 요소가 다시 살아나지 않도록 회귀 차원에서 점검.
+    expect(screen.queryByTestId("inbox-status-tabs")).toBeNull();
+    expect(screen.queryByTestId("inbox-select-all")).toBeNull();
     expect(screen.queryByTestId("inbox-bulk-bar")).toBeNull();
-
-    fireEvent.click(screen.getByTestId("inbox-row-check-qa-needs-1"));
-    await waitFor(() =>
-      expect(screen.getByTestId("inbox-bulk-bar")).toBeTruthy(),
-    );
-  });
-
-  it("bulk-confirms selected items via the confirmation modal (deferred)", async () => {
-    mockEmptyBackend();
-    apiPost.mockRejectedValue(
-      Object.assign(new Error("nf"), { response: { status: 404 } }),
-    );
-    renderPage(<ProfessorInboxPage />);
-
-    await waitFor(() => screen.getByTestId("inbox-list"));
-    // qa-needs-1 과 qa-needs-2 는 둘 다 aiDraft 보유 → bulk 가능
-    fireEvent.click(screen.getByTestId("inbox-row-check-qa-needs-1"));
-    fireEvent.click(screen.getByTestId("inbox-row-check-qa-needs-2"));
-
-    await waitFor(() => screen.getByTestId("inbox-bulk-bar"));
-    fireEvent.click(screen.getByTestId("inbox-bulk-confirm"));
-    await waitFor(() =>
-      expect(screen.getByTestId("inbox-bulk-confirm-modal")).toBeTruthy(),
-    );
-
-    await act(async () => {
-      fireEvent.click(screen.getByTestId("inbox-bulk-confirm-yes"));
-    });
-
-    // 두 항목 모두 professor-confirmed 배지가 떠야 한다
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("inbox-row-confirmed-qa-needs-1"),
-      ).toBeTruthy();
-      expect(
-        screen.getByTestId("inbox-row-confirmed-qa-needs-2"),
-      ).toBeTruthy();
-    });
-  });
-
-  it("respects the unanswered-only filter on the active tab", async () => {
-    mockEmptyBackend();
-    renderPage(<ProfessorInboxPage />);
-
-    await waitFor(() => screen.getByTestId("inbox-list"));
-    // unansweredOnly=true 켜기 — needs_professor 시드는 모두 미답변이라 동일 결과지만
-    // 토글이 동작 + 항목 유지되는지 회귀 확인.
-    fireEvent.click(
-      screen
-        .getByTestId("inbox-unanswered-only")
-        .querySelector("input")! as HTMLInputElement,
-    );
-    expect(screen.getByTestId("inbox-row-qa-needs-1")).toBeTruthy();
+    expect(screen.queryByTestId("inbox-answer-composer")).toBeNull();
+    expect(screen.queryByTestId("inbox-row-check-qa-needs-1")).toBeNull();
   });
 });
