@@ -66,28 +66,61 @@ export default function LectureLibraryPage() {
   const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null);
   const [movingLecture, setMovingLecture] = useState<Lecture | null>(null);
 
+  // 세 단계(/api/courses → /api/folders → /api/courses/{id}/lectures) 중 어디서
+  // 실패했는지 콘솔에서 식별 가능하도록 단계별 try/catch 로 쪼개고, 단계별
+  // 회복 가능성에 따라 격리한다:
+  //   - courses 실패 → 보관함 자체가 불가능 → 에러 화면.
+  //   - folders 실패 → 폴더 메타만 비우고 강의 목록은 계속 로딩 (degrade).
+  //   - lectures(course 단위) 실패 → 해당 course 만 스킵 (best-effort).
   const reloadAll = useCallback(async () => {
     setError(null);
-    try {
-      const [{ data: cs }, { data: fs }] = await Promise.all([
-        api.get<Course[]>("/api/courses"),
-        api.get<Folder[]>("/api/folders"),
-      ]);
-      const allLectures: Lecture[] = [];
-      for (const c of cs) {
+
+    const [coursesResult, foldersResult] = await Promise.allSettled([
+      api.get<Course[]>("/api/courses"),
+      api.get<Folder[]>("/api/folders"),
+    ]);
+
+    if (coursesResult.status === "rejected") {
+      console.error(
+        "[library] GET /api/courses failed:",
+        coursesResult.reason,
+      );
+      setError(t("library.loadError"));
+      setLoading(false);
+      return;
+    }
+
+    let fs: Folder[] = [];
+    if (foldersResult.status === "rejected") {
+      console.error(
+        "[library] GET /api/folders failed:",
+        foldersResult.reason,
+      );
+      toast(t("library.loadError"), "error");
+    } else {
+      fs = foldersResult.value.data;
+    }
+
+    const cs = coursesResult.value.data;
+    const allLectures: Lecture[] = [];
+    for (const c of cs) {
+      try {
         const { data: lecs } = await api.get<Lecture[]>(
           `/api/courses/${c.id}/lectures`,
         );
         allLectures.push(...lecs);
+      } catch (e) {
+        console.error(
+          `[library] GET /api/courses/${c.id}/lectures failed:`,
+          e,
+        );
       }
-      setLectures(allLectures);
-      setFolders(fs);
-    } catch {
-      setError(t("library.loadError"));
-    } finally {
-      setLoading(false);
     }
-  }, [t]);
+
+    setLectures(allLectures);
+    setFolders(fs);
+    setLoading(false);
+  }, [t, toast]);
 
   useEffect(() => {
     reloadAll();
