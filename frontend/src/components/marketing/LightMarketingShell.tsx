@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useI18n, type Locale } from "@/contexts/I18nContext";
 import { useMarketingI18n } from "./useMarketingI18n";
 
@@ -49,11 +50,27 @@ export default function LightMarketingShell({
   variant?: "default" | "soft";
 }) {
   const { t } = useMarketingI18n();
-  const { locale, setLocale } = useI18n();
+  // marketing t() 는 `marketing.*` subtree 만 본다. `nav.dashboard` /
+  // `common.logout` 같은 본체 top-level 키는 useI18n().t 로 직접 조회.
+  const { locale, setLocale, t: tRoot } = useI18n();
+  const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   const finalCta =
     topCta ?? { href: "/beta-apply", label: t("common.ctaApplyBeta") };
+
+  // 로그인된 교수자가 `/` 같은 마케팅 화면으로 돌아왔을 때, 우측 상단이
+  // "베타 신청 / 로그인" 비로그인 UI 그대로면 로그아웃된 것처럼 보인다.
+  // user 가 살아있으면 1차 액션을 "내 대시보드"·"로그아웃" 으로 교체한다.
+  // (베타 신청 CTA 는 이미 베타 사용자에게는 의미가 없어 함께 숨김.)
+  // role 별 대시보드 라우트: professor → /professor/dashboard,
+  // admin → /admin, 그 외(student) → /dashboard.
+  const dashboardHref =
+    user?.role === "professor"
+      ? "/professor/dashboard"
+      : user?.role === "admin"
+        ? "/admin"
+        : "/dashboard";
 
   // 모바일 메뉴: Escape 로 닫기 + 데스크탑(>=768px) 으로 넓어지면 자동으로 닫아
   // 리사이즈 시 패널이 떠 있는 상태가 남지 않게 한다.
@@ -160,35 +177,71 @@ export default function LightMarketingShell({
               <option value="en">English</option>
             </select>
 
-            <Link
-              href={finalCta.href}
-              className="inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 transition motion-reduce:transition-none"
-              style={{
-                backgroundColor: "#FFB627",
-                color: "#1A1A1A",
-                boxShadow: "0 1px 2px rgba(184,131,8,0.18)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#FFC74D";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#FFB627";
-              }}
-            >
-              {finalCta.label}
-            </Link>
+            {user ? (
+              <>
+                {/* 로그인 상태: 1차 CTA 골드 버튼을 "내 대시보드" 로 교체.
+                    베타 신청은 이미 베타 사용자에게 의미 없어 숨김. */}
+                <Link
+                  href={dashboardHref}
+                  className="inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 transition motion-reduce:transition-none"
+                  style={{
+                    backgroundColor: "#FFB627",
+                    color: "#1A1A1A",
+                    boxShadow: "0 1px 2px rgba(184,131,8,0.18)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#FFC74D";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "#FFB627";
+                  }}
+                >
+                  {tRoot("nav.dashboard")}
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void logout();
+                  }}
+                  className="hidden sm:inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 border border-[rgba(10,10,10,0.16)] text-[rgba(10,10,10,0.72)] hover:text-[#0A0A0A] hover:border-[#B88308] hover:bg-black/[0.03] transition motion-reduce:transition-none"
+                >
+                  {tRoot("common.logout")}
+                </button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href={finalCta.href}
+                  className="inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 transition motion-reduce:transition-none"
+                  style={{
+                    backgroundColor: "#FFB627",
+                    color: "#1A1A1A",
+                    boxShadow: "0 1px 2px rgba(184,131,8,0.18)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = "#FFC74D";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = "#FFB627";
+                  }}
+                >
+                  {finalCta.label}
+                </Link>
 
-            {/* 사용자 결정 2026-05-18 (01-pricing-policy.md §5.3): 베타 기간
-                공개 회원가입은 막되, 베타 승인 교수자가 들어올 로그인 진입점은
-                대문 상단에 노출. 순서 = 언어 · 베타 신청 · 로그인. 베타 신청이
-                1차 CTA(골드 솔리드)이므로 로그인은 ghost(보더) 로 위계 분리.
-                좁은 화면에서는 햄버거 메뉴 안으로 흡수 (sm 미만 hidden). */}
-            <Link
-              href="/auth/login"
-              className="hidden sm:inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 border border-[rgba(10,10,10,0.16)] text-[rgba(10,10,10,0.72)] hover:text-[#0A0A0A] hover:border-[#B88308] hover:bg-black/[0.03] transition motion-reduce:transition-none"
-            >
-              {t("common.navLogin")}
-            </Link>
+                {/* 사용자 결정 2026-05-18 (01-pricing-policy.md §5.3): 베타
+                    기간 공개 회원가입은 막되, 베타 승인 교수자가 들어올
+                    로그인 진입점은 대문 상단에 노출. 순서 = 언어 · 베타 신청
+                    · 로그인. 베타 신청이 1차 CTA(골드 솔리드)이므로 로그인은
+                    ghost(보더) 로 위계 분리. 좁은 화면에서는 햄버거 메뉴 안
+                    으로 흡수 (sm 미만 hidden). */}
+                <Link
+                  href="/auth/login"
+                  className="hidden sm:inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 border border-[rgba(10,10,10,0.16)] text-[rgba(10,10,10,0.72)] hover:text-[#0A0A0A] hover:border-[#B88308] hover:bg-black/[0.03] transition motion-reduce:transition-none"
+                >
+                  {t("common.navLogin")}
+                </Link>
+              </>
+            )}
 
             {/* 모바일 햄버거 — md 미만에서만 노출. 데스크탑은 위 <nav> 가 보임. */}
             <button
@@ -239,14 +292,28 @@ export default function LightMarketingShell({
                   {t(link.key)}
                 </Link>
               ))}
-              {/* 좁은 화면에선 헤더 우측 로그인 버튼이 숨겨지므로 메뉴 안에 둔다. */}
-              <Link
-                href="/auth/login"
-                onClick={() => setMenuOpen(false)}
-                className="px-2 py-3 text-sm font-semibold text-[#0A0A0A] hover:text-[#B88308] transition motion-reduce:transition-none"
-              >
-                {t("common.navLogin")}
-              </Link>
+              {/* 좁은 화면에선 헤더 우측 로그인/로그아웃 버튼이 숨겨지므로
+                  메뉴 안에 둔다 — 인증 상태에 따라 분기. */}
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    void logout();
+                  }}
+                  className="px-2 py-3 text-sm font-semibold text-[#0A0A0A] hover:text-[#B88308] transition motion-reduce:transition-none text-left"
+                >
+                  {tRoot("common.logout")}
+                </button>
+              ) : (
+                <Link
+                  href="/auth/login"
+                  onClick={() => setMenuOpen(false)}
+                  className="px-2 py-3 text-sm font-semibold text-[#0A0A0A] hover:text-[#B88308] transition motion-reduce:transition-none"
+                >
+                  {t("common.navLogin")}
+                </Link>
+              )}
             </div>
           </nav>
         )}
