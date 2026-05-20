@@ -19,7 +19,11 @@
     "language": "언어",
     "offline": "인터넷 연결이 끊어졌습니다. 연결 상태를 확인해주세요.",
     "previous": "이전",
-    "next": "다음"
+    "next": "다음",
+    "processing": "처리 중...",
+    "delete": "삭제",
+    "rename": "이름 변경",
+    "move": "이동"
   },
   "landing": {
     "title1": "AI로 만드는",
@@ -112,7 +116,8 @@
     "analytics": "분석",
     "learners": "학습자",
     "dashboard": "대시보드",
-    "lectureList": "강의 목록"
+    "lectureList": "강의 목록",
+    "library": "보관함"
   },
   "professor": {
     "lectureManage": "강의 관리",

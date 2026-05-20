@@ -57,6 +57,13 @@ import changelogHubKo from "../../messages/_patches/changelogHub.ko.json";
 import changelogHubEn from "../../messages/_patches/changelogHub.en.json";
 import profileHubKo from "../../messages/_patches/profileHub.ko.json";
 import profileHubEn from "../../messages/_patches/profileHub.en.json";
+// ── 2026-05-20: 강의 보관함 / 카드 액션 (이어서 제작·삭제) / 폴더 관리 ──
+// dashboard 카드의 "스크립트 편집" 제거 후 [이어서 제작][삭제] 두 버튼으로 단순화,
+// `+N개 더 보기` 가 클릭 가능한 라이브러리 진입점으로 승격되면서 폴더 정리 기능이
+// 함께 들어왔다. namespace 는 `lectureCard` / `library` — 본체 / 다른 patch 와
+// 충돌 없음.
+import libraryKo from "../../messages/_patches/library.ko.json";
+import libraryEn from "../../messages/_patches/library.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -102,6 +109,7 @@ const koPatches: Messages[] = [
   helpHubKo as Messages,
   changelogHubKo as Messages,
   profileHubKo as Messages,
+  libraryKo as Messages,
 ];
 const enPatches: Messages[] = [
   professorEn as Messages,
@@ -116,6 +124,7 @@ const enPatches: Messages[] = [
   helpHubEn as Messages,
   changelogHubEn as Messages,
   profileHubEn as Messages,
+  libraryEn as Messages,
 ];
 
 const koMerged = koPatches.reduce(

@@ -1,0 +1,43 @@
+{
+  "lectureCard": {
+    "continueCreating": "이어서 제작",
+    "openLecture": "강의 열기",
+    "openLibrary": "전체 강의 보기",
+    "inProduction": "제작 중",
+    "delete": "삭제",
+    "deleteAria": "{title} 강의 삭제",
+    "deleteConfirmTitle": "이 강의를 삭제할까요?",
+    "deleteConfirmBody": "\"{title}\" 강의가 영구 삭제됩니다. 진행 중인 렌더링은 자동 취소되며, 학생 시청 기록·질문 데이터도 함께 사라집니다. 이 작업은 되돌릴 수 없습니다.",
+    "deleteConfirm": "삭제하기",
+    "deleteSuccess": "강의가 삭제되었습니다.",
+    "deleteError": "삭제에 실패했습니다. 잠시 후 다시 시도해주세요."
+  },
+  "library": {
+    "pageTitle": "강의 보관함",
+    "pageSubtitle": "지금까지 만든 모든 강의를 폴더로 정리하세요.",
+    "searchPlaceholder": "강의 제목 검색…",
+    "empty": "아직 강의가 없습니다.",
+    "uncategorized": "미분류",
+    "allLectures": "전체 강의",
+    "countLectures": "강의 {count}편",
+    "moveTo": "폴더로 이동",
+    "moveToFolderTitle": "강의를 폴더로 이동",
+    "moveToFolderBody": "\"{title}\" 강의를 옮길 폴더를 선택하세요.",
+    "moveToUncategorized": "미분류로 이동",
+    "moveSuccess": "강의가 이동되었습니다.",
+    "moveError": "강의 이동에 실패했습니다.",
+    "newFolder": "새 폴더",
+    "newFolderPlaceholder": "폴더 이름 (예: 2025-1학기 중국어)",
+    "folderCreated": "폴더가 생성되었습니다.",
+    "folderCreateError": "폴더 생성에 실패했습니다.",
+    "folderRenameTitle": "폴더 이름 변경",
+    "folderRenamed": "폴더 이름을 변경했습니다.",
+    "folderRenameError": "이름 변경에 실패했습니다.",
+    "folderDeleteTitle": "폴더를 삭제할까요?",
+    "folderDeleteBody": "\"{name}\" 폴더만 삭제됩니다. 폴더 안의 강의는 보존되며 \"미분류\"로 이동합니다.",
+    "folderDeleted": "폴더가 삭제되었습니다.",
+    "folderDeleteError": "폴더 삭제에 실패했습니다.",
+    "loadError": "강의 보관함을 불러오지 못했습니다.",
+    "back": "대시보드로 돌아가기"
+  }
+}

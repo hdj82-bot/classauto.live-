@@ -1,0 +1,43 @@
+{
+  "lectureCard": {
+    "continueCreating": "Continue",
+    "openLecture": "Open lecture",
+    "openLibrary": "Open library",
+    "inProduction": "Rendering",
+    "delete": "Delete",
+    "deleteAria": "Delete lecture {title}",
+    "deleteConfirmTitle": "Delete this lecture?",
+    "deleteConfirmBody": "\"{title}\" will be permanently deleted. Any in-flight render will be cancelled, and student watch history and Q&A data will be removed too. This cannot be undone.",
+    "deleteConfirm": "Delete",
+    "deleteSuccess": "Lecture deleted.",
+    "deleteError": "Delete failed. Please try again shortly."
+  },
+  "library": {
+    "pageTitle": "Lecture library",
+    "pageSubtitle": "Organize every lecture you have created into folders.",
+    "searchPlaceholder": "Search lecture titles…",
+    "empty": "No lectures yet.",
+    "uncategorized": "Uncategorized",
+    "allLectures": "All lectures",
+    "countLectures": "{count} lecture(s)",
+    "moveTo": "Move to folder",
+    "moveToFolderTitle": "Move lecture to folder",
+    "moveToFolderBody": "Choose a destination folder for \"{title}\".",
+    "moveToUncategorized": "Move to Uncategorized",
+    "moveSuccess": "Lecture moved.",
+    "moveError": "Failed to move lecture.",
+    "newFolder": "New folder",
+    "newFolderPlaceholder": "Folder name (e.g. Spring 2025 Chinese)",
+    "folderCreated": "Folder created.",
+    "folderCreateError": "Failed to create folder.",
+    "folderRenameTitle": "Rename folder",
+    "folderRenamed": "Folder renamed.",
+    "folderRenameError": "Rename failed.",
+    "folderDeleteTitle": "Delete folder?",
+    "folderDeleteBody": "Only the folder \"{name}\" will be deleted. Lectures inside it are preserved and moved to Uncategorized.",
+    "folderDeleted": "Folder deleted.",
+    "folderDeleteError": "Failed to delete folder.",
+    "loadError": "Failed to load lecture library.",
+    "back": "Back to dashboard"
+  }
+}
