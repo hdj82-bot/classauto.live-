@@ -64,6 +64,13 @@ import profileHubEn from "../../messages/_patches/profileHub.en.json";
 // 충돌 없음.
 import libraryKo from "../../messages/_patches/library.ko.json";
 import libraryEn from "../../messages/_patches/library.en.json";
+// ── 2026-05-20: shell nav 정리 (Q&A 인박스 라벨 단축) ──
+// `nav.inbox` 의 본체 값("Q&A 인박스" / "Inbox") 을 "Q&A" 로 override —
+// 220px 사이드바에서 라벨이 잘리는 문제를 해결한다. mergePatch 의 scalar
+// overwrite 를 의도적으로 활용 (단일 키, 단일 namespace 라 충돌 위험 없음).
+// 새 강의 / 구독 nav 항목은 Sidebar.tsx 에서 제거되어 본체 키는 그대로 유지.
+import shellCleanupKo from "../../messages/_patches/shellCleanup.ko.json";
+import shellCleanupEn from "../../messages/_patches/shellCleanup.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -110,6 +117,7 @@ const koPatches: Messages[] = [
   changelogHubKo as Messages,
   profileHubKo as Messages,
   libraryKo as Messages,
+  shellCleanupKo as Messages,
 ];
 const enPatches: Messages[] = [
   professorEn as Messages,
@@ -125,6 +133,7 @@ const enPatches: Messages[] = [
   changelogHubEn as Messages,
   profileHubEn as Messages,
   libraryEn as Messages,
+  shellCleanupEn as Messages,
 ];
 
 const koMerged = koPatches.reduce(

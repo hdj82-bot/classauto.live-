@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useI18n } from "@/contexts/I18nContext";
@@ -76,8 +77,8 @@ export default function ProfessorTopbar({
     >
       {/* LEFT — brand + back crumb */}
       <div className="flex items-center gap-3.5 flex-shrink-0">
-        <a
-          href="/professor/dashboard"
+        <Link
+          href="/"
           aria-label="ClassAuto"
           className="flex items-center gap-2"
           style={{
@@ -91,7 +92,7 @@ export default function ProfessorTopbar({
         >
           <BrandDot size={20} />
           ClassAuto
-        </a>
+        </Link>
         {showBack && (
           <button
             type="button"
