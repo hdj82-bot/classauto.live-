@@ -19,7 +19,11 @@
     "language": "Language",
     "offline": "You are offline. Please check your connection.",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "processing": "Processing...",
+    "delete": "Delete",
+    "rename": "Rename",
+    "move": "Move"
   },
   "landing": {
     "title1": "Create with AI",
@@ -112,7 +116,8 @@
     "analytics": "Analytics",
     "learners": "Learners",
     "dashboard": "Dashboard",
-    "lectureList": "Lectures"
+    "lectureList": "Lectures",
+    "library": "Library"
   },
   "professor": {
     "lectureManage": "Lecture Management",

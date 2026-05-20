@@ -31,9 +31,9 @@ import {
   Card,
   MonthlyQuotaMeter,
   displayStyle,
-  hanStyle,
   tabularStyle,
 } from "@/components/professor/shell";
+import LectureCard from "@/components/professor/LectureCard";
 
 interface Course {
   id: string;
@@ -147,6 +147,30 @@ export default function ProfessorDashboardPage() {
   const handleProfileSaved = useCallback((profile: InstructorProfileDraft) => {
     setProfileDraft(profile);
   }, []);
+
+  const handleContinueLecture = useCallback(
+    (lectureId: string) => {
+      const lec = lectures.find((l) => l.id === lectureId);
+      if (!lec) return;
+      // #185·#184 합의: 발행 안 됐고 영상도 없으면 = 제작 중단/미완 →
+      // Studio 마법사로 이어서 제작 진입. 영상이 있으면 강의 편집 페이지.
+      const inProgress = !lec.is_published && !lec.video_url;
+      if (inProgress) {
+        router.push(`/professor/studio/${lectureId}`);
+      } else {
+        router.push(`/professor/lecture/${lectureId}`);
+      }
+    },
+    [lectures, router],
+  );
+
+  const handleLectureDeleted = useCallback((lectureId: string) => {
+    setLectures((prev) => prev.filter((l) => l.id !== lectureId));
+  }, []);
+
+  const handleOpenLibrary = useCallback(() => {
+    router.push("/professor/lectures");
+  }, [router]);
 
   const [hub, setHub] = useState<DashboardHubData | null>(null);
   const [hubLoading, setHubLoading] = useState(false);
@@ -281,9 +305,9 @@ export default function ProfessorDashboardPage() {
       onCreateLecture={handleCreateLecture}
       onOpenProfile={() => setProfileModalOpen(true)}
       onJumpToInbox={() => router.push("/professor/inbox")}
-      onOpenLectureAnalytics={(id) => router.push(`/professor/analytics/${id}`)}
-      onEditLecture={(id) => router.push(`/professor/lecture/${id}`)}
-      onResumeStudio={(id) => router.push(`/professor/studio/${id}`)}
+      onContinueLecture={handleContinueLecture}
+      onLectureDeleted={handleLectureDeleted}
+      onOpenLibrary={handleOpenLibrary}
       profileModalOpen={profileModalOpen}
       onCloseProfileModal={() => setProfileModalOpen(false)}
       onProfileSaved={handleProfileSaved}
@@ -305,9 +329,9 @@ function DashboardHomeView({
   onCreateLecture,
   onOpenProfile,
   onJumpToInbox,
-  onOpenLectureAnalytics,
-  onEditLecture,
-  onResumeStudio,
+  onContinueLecture,
+  onLectureDeleted,
+  onOpenLibrary,
   profileModalOpen,
   onCloseProfileModal,
   onProfileSaved,
@@ -319,9 +343,9 @@ function DashboardHomeView({
   onCreateLecture: () => void;
   onOpenProfile: () => void;
   onJumpToInbox: () => void;
-  onOpenLectureAnalytics: (id: string) => void;
-  onEditLecture: (id: string) => void;
-  onResumeStudio: (id: string) => void;
+  onContinueLecture: (id: string) => void;
+  onLectureDeleted: (id: string) => void;
+  onOpenLibrary: () => void;
   profileModalOpen: boolean;
   onCloseProfileModal: () => void;
   onProfileSaved: (profile: InstructorProfileDraft) => void;
@@ -496,128 +520,52 @@ function DashboardHomeView({
           >
             {th("lectureGrid.title")}
           </h2>
-          {lectures.length > 4 && (
-            <span
+          {lectures.length > 4 ? (
+            <button
+              type="button"
+              onClick={onOpenLibrary}
+              className="rounded-lg motion-safe:transition"
               style={{
                 ...tabularStyle,
+                padding: "6px 10px",
                 fontSize: 11.5,
-                color: "var(--text-subtle)",
+                fontWeight: 600,
+                color: "var(--gold-on-light, var(--gold))",
+                background: "transparent",
+                border: "1px solid var(--line)",
+                cursor: "pointer",
               }}
             >
-              {th("lectureGrid.more", { count: lectures.length - 4 })}
-            </span>
+              {th("lectureGrid.more", { count: lectures.length - 4 })} →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onOpenLibrary}
+              className="rounded-lg motion-safe:transition"
+              style={{
+                fontSize: 11.5,
+                fontWeight: 600,
+                color: "var(--text-muted)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              {t("lectureCard.openLibrary")} →
+            </button>
           )}
         </header>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {lectures.slice(0, 4).map((lec) => {
-            // 발행 안 됐고 렌더된 영상도 없으면 = 제작이 중단/미완 상태.
-            // 이런 강의는 스크립트 편집기(영상 없음 막다른 화면)가 아니라
-            // Studio 마법사로 "이어서 제작" 진입해야 한다.
-            const inProgress = !lec.is_published && !lec.video_url;
-            const statusColor = lec.is_published
-              ? "var(--success)"
-              : inProgress
-                ? "var(--gold)"
-                : "var(--text-subtle)";
-            return (
-            <Card
+          {lectures.slice(0, 4).map((lec) => (
+            <LectureCard
               key={lec.id}
-              padding={20}
-              radius={14}
-              interactive
-              role="button"
-              tabIndex={0}
-              aria-label={`${lec.title} — ${th("lectureGrid.openProduction")}`}
-              onClick={() => onResumeStudio(lec.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  onResumeStudio(lec.id);
-                }
-              }}
-              style={{ cursor: "pointer" }}
-            >
-              <LectureTitle title={lec.title} />
-              <span
-                className="inline-flex items-center gap-1.5 rounded-full"
-                style={{
-                  marginTop: 8,
-                  padding: "3px 9px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: statusColor,
-                  background: lec.is_published
-                    ? "rgba(16, 185, 129, 0.10)"
-                    : inProgress
-                      ? "var(--gold-soft)"
-                      : "var(--bg-subtle)",
-                }}
-              >
-                <span
-                  aria-hidden="true"
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 999,
-                    background: lec.is_published
-                      ? "var(--success)"
-                      : inProgress
-                        ? "var(--gold)"
-                        : "var(--text-faint)",
-                  }}
-                />
-                {lec.is_published
-                  ? t("common.published")
-                  : inProgress
-                    ? th("lectureGrid.inProgress")
-                    : t("common.unpublished")}
-              </span>
-              <div className="mt-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditLecture(lec.id);
-                  }}
-                  className="flex-1 rounded-lg motion-safe:transition"
-                  style={{
-                    padding: "8px 12px",
-                    fontSize: 12,
-                    fontWeight: 500,
-                    color: "var(--text-muted)",
-                    background: "var(--bg-subtle)",
-                    border: "1px solid var(--line)",
-                    cursor: "pointer",
-                  }}
-                >
-                  {th("lectureGrid.edit")}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (inProgress) onResumeStudio(lec.id);
-                    else onOpenLectureAnalytics(lec.id);
-                  }}
-                  className="flex-1 rounded-lg motion-safe:transition"
-                  style={{
-                    padding: "8px 12px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--gold)",
-                    background: "var(--gold-soft)",
-                    border: "1px solid var(--gold-medium)",
-                    cursor: "pointer",
-                  }}
-                >
-                  {inProgress
-                    ? th("lectureGrid.resume")
-                    : th("lectureGrid.openAnalytics")}
-                </button>
-              </div>
-            </Card>
-            );
-          })}
+              lecture={lec}
+              onContinue={onContinueLecture}
+              onDeleted={onLectureDeleted}
+            />
+          ))}
         </div>
       </section>
 
@@ -631,48 +579,3 @@ function DashboardHomeView({
   );
 }
 
-/**
- * 강의 제목 표시 — 한자가 있으면 `.han` 스타일(serif + gold) 로 강조.
- *
- * docs/design-system/typography.md §1.1 / colors.md §4.
- * 한자 매칭: U+3400–U+4DBF, U+4E00–U+9FFF (CJK 통합/확장 A).
- */
-function LectureTitle({ title }: { title: string }) {
-  const han = /[㐀-䶿一-鿿]/;
-  const parts: { text: string; han: boolean }[] = [];
-  let buf = "";
-  let isHan = false;
-  for (const ch of title) {
-    const ch_is_han = han.test(ch);
-    if (ch_is_han !== isHan && buf) {
-      parts.push({ text: buf, han: isHan });
-      buf = "";
-    }
-    isHan = ch_is_han;
-    buf += ch;
-  }
-  if (buf) parts.push({ text: buf, han: isHan });
-
-  return (
-    <h3
-      className="truncate"
-      style={{
-        margin: 0,
-        fontSize: 15,
-        fontWeight: 700,
-        color: "var(--text)",
-        letterSpacing: "-0.01em",
-      }}
-    >
-      {parts.map((p, i) =>
-        p.han ? (
-          <span key={i} style={hanStyle}>
-            {p.text}
-          </span>
-        ) : (
-          <span key={i}>{p.text}</span>
-        ),
-      )}
-    </h3>
-  );
-}

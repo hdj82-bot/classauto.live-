@@ -87,6 +87,25 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    href: "/professor/lectures",
+    labelKey: "nav.library",
+    iconId: "ic-library",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="url(#nav-grad-electric)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M3 6h14a2 2 0 0 1 2 2v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z" />
+        <path d="M3 6V4a1 1 0 0 1 1-1h5l2 3" />
+      </svg>
+    ),
+  },
+  {
     href: "/professor/inbox",
     labelKey: "nav.inbox",
     iconId: "ic-inbox",
