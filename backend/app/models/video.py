@@ -46,7 +46,11 @@ class Video(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    lecture = relationship("Lecture", backref="videos")
+    # Lecture 측에서 cascade·passive_deletes 를 명시한다 (Lecture.videos).
+    # 과거 ``backref="videos"`` 는 옵션 없이 자동 생성되어 lecture 삭제 시
+    # SQLAlchemy 가 `UPDATE videos SET lecture_id=NULL` 를 시도하고
+    # NOT NULL 제약 위반으로 IntegrityError 가 났다.
+    lecture = relationship("Lecture", back_populates="videos")
     script = relationship(
         "VideoScript", back_populates="video", uselist=False, cascade="all, delete-orphan"
     )

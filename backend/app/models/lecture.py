@@ -70,7 +70,10 @@ class Lecture(Base):
     # T7: ORM 레벨 cascade — DB FK 의 ondelete=CASCADE 와 함께, 세션이 child 를 로드한
     # 상태에서 lecture 가 삭제될 때 child rows 도 일관되게 정리되도록 명시.
     sessions = relationship(
-        "LearningSession", back_populates="lecture", cascade="all, delete-orphan"
+        "LearningSession",
+        back_populates="lecture",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
     questions = relationship(
         "Question",
@@ -80,6 +83,17 @@ class Lecture(Base):
     )
     video_renders = relationship(
         "VideoRender",
+        back_populates="lecture",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    # videos.lecture_id 는 NOT NULL + ondelete=CASCADE. ORM 측에서도 cascade·
+    # passive_deletes 를 명시해야 lecture 삭제 시 SQLAlchemy 가 "UPDATE videos
+    # SET lecture_id=NULL" 시도하지 않고 DB 의 CASCADE 에 위임한다.
+    # 과거 Video.lecture 가 ``backref="videos"`` (옵션 없음) 만 가지고 있어
+    # production 에서 IntegrityError(NotNullViolation) 발생 — 본 명시로 해소.
+    videos = relationship(
+        "Video",
         back_populates="lecture",
         cascade="all, delete-orphan",
         passive_deletes=True,
