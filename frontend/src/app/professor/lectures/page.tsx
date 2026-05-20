@@ -160,9 +160,24 @@ export default function LectureLibraryPage() {
     [lectures, router],
   );
 
-  const handleDeleted = useCallback((id: string) => {
-    setLectures((prev) => prev.filter((l) => l.id !== id));
-  }, []);
+  const handleDeleted = useCallback(
+    (id: string) => {
+      // 삭제된 강의가 폴더에 속해 있었다면 해당 폴더의 lecture_count 를 1 감소.
+      // 안 그러면 "전체 강의 2 / 어흥 폴더 4" 같은 어긋난 카운트가 표시됨.
+      const lec = lectures.find((l) => l.id === id);
+      if (lec?.folder_id) {
+        setFolders((fs) =>
+          fs.map((f) =>
+            f.id === lec.folder_id
+              ? { ...f, lecture_count: Math.max(0, f.lecture_count - 1) }
+              : f,
+          ),
+        );
+      }
+      setLectures((prev) => prev.filter((l) => l.id !== id));
+    },
+    [lectures],
+  );
 
   const handleCreateFolder = async () => {
     const name = window.prompt(t("library.newFolderPlaceholder"));
@@ -674,6 +689,10 @@ function DeleteFolderModal({
   );
 }
 
+// 미분류 옵션을 동일 셀렉트 모델에 담기 위한 sentinel.
+// (null 은 "선택 없음" 과 구별이 어려워 명시적 문자열을 쓴다.)
+const UNCATEGORIZED_VALUE = "__uncategorized__";
+
 function MoveLectureModal({
   lecture,
   folders,
@@ -685,65 +704,117 @@ function MoveLectureModal({
   onClose: () => void;
   onConfirm: (lecture: Lecture, folderId: string | null) => void;
 }) {
-  const { t } = useI18n();
   if (!lecture) return null;
+  // lecture 가 바뀌면 새 인스턴스로 마운트되어 selected 가 새 lecture 기준으로 초기화.
+  return (
+    <MoveLectureModalBody
+      key={lecture.id}
+      lecture={lecture}
+      folders={folders}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+function MoveLectureModalBody({
+  lecture,
+  folders,
+  onClose,
+  onConfirm,
+}: {
+  lecture: Lecture;
+  folders: Folder[];
+  onClose: () => void;
+  onConfirm: (lecture: Lecture, folderId: string | null) => void;
+}) {
+  const { t } = useI18n();
+  const currentSelection = lecture.folder_id ?? UNCATEGORIZED_VALUE;
+  const [selected, setSelected] = useState<string>(currentSelection);
+
+  // 현재 폴더와 동일하면 confirm 비활성 (이동할 변화가 없음).
+  const canConfirm = selected !== currentSelection;
+
+  const handleConfirm = () => {
+    if (!canConfirm) return;
+    onConfirm(
+      lecture,
+      selected === UNCATEGORIZED_VALUE ? null : selected,
+    );
+  };
+
+  const renderOption = (
+    value: string,
+    label: string,
+    count?: number,
+  ) => {
+    const isSelected = selected === value;
+    const isCurrent = currentSelection === value;
+    return (
+      <button
+        key={value}
+        type="button"
+        onClick={() => setSelected(value)}
+        className="rounded-lg text-left motion-safe:transition"
+        style={{
+          padding: "10px 14px",
+          fontSize: 13,
+          fontWeight: isSelected ? 600 : 500,
+          color: isSelected ? "var(--gold)" : "var(--text)",
+          background: isSelected ? "var(--gold-soft)" : "var(--bg-subtle)",
+          border: `1px solid ${
+            isSelected ? "var(--gold-medium)" : "var(--line)"
+          }`,
+          cursor: "pointer",
+        }}
+        onMouseEnter={(e) => {
+          if (isSelected) return;
+          e.currentTarget.style.background = "var(--bg-hover)";
+          e.currentTarget.style.borderColor = "var(--gold-medium)";
+        }}
+        onMouseLeave={(e) => {
+          if (isSelected) return;
+          e.currentTarget.style.background = "var(--bg-subtle)";
+          e.currentTarget.style.borderColor = "var(--line)";
+        }}
+      >
+        {label}
+        {count !== undefined && (
+          <span
+            style={{
+              marginLeft: 8,
+              fontSize: 11,
+              color: "var(--text-faint)",
+            }}
+          >
+            ({count})
+          </span>
+        )}
+        {isCurrent && (
+          <span
+            style={{
+              marginLeft: 8,
+              fontSize: 11,
+              color: "var(--text-faint)",
+            }}
+          >
+            · {t("library.currentLocation")}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   return (
     <Modal open={true} onClose={onClose} title={t("library.moveToFolderTitle")}>
       <p style={{ color: "var(--text-muted)", marginBottom: 14 }}>
         {t("library.moveToFolderBody", { title: lecture.title })}
       </p>
       <div className="flex flex-col gap-2" style={{ marginBottom: 16 }}>
-        <button
-          type="button"
-          onClick={() => onConfirm(lecture, null)}
-          disabled={!lecture.folder_id}
-          className="rounded-lg text-left"
-          style={{
-            padding: "10px 14px",
-            fontSize: 13,
-            color: "var(--text-muted)",
-            background: !lecture.folder_id
-              ? "var(--gold-soft)"
-              : "var(--bg-subtle)",
-            border: "1px solid var(--line)",
-            cursor: !lecture.folder_id ? "default" : "pointer",
-          }}
-        >
-          {t("library.moveToUncategorized")}
-        </button>
-        {folders.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => onConfirm(lecture, f.id)}
-            disabled={lecture.folder_id === f.id}
-            className="rounded-lg text-left"
-            style={{
-              padding: "10px 14px",
-              fontSize: 13,
-              color: "var(--text)",
-              background:
-                lecture.folder_id === f.id
-                  ? "var(--gold-soft)"
-                  : "var(--bg-subtle)",
-              border: "1px solid var(--line)",
-              cursor: lecture.folder_id === f.id ? "default" : "pointer",
-            }}
-          >
-            {f.name}
-            <span
-              style={{
-                marginLeft: 8,
-                fontSize: 11,
-                color: "var(--text-faint)",
-              }}
-            >
-              ({f.lecture_count})
-            </span>
-          </button>
-        ))}
+        {renderOption(UNCATEGORIZED_VALUE, t("library.moveToUncategorized"))}
+        {folders.map((f) => renderOption(f.id, f.name, f.lecture_count))}
       </div>
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
@@ -754,9 +825,28 @@ function MoveLectureModal({
             color: "var(--text-muted)",
             background: "transparent",
             border: "1px solid var(--line)",
+            cursor: "pointer",
           }}
         >
           {t("common.cancel")}
+        </button>
+        <button
+          type="button"
+          disabled={!canConfirm}
+          onClick={handleConfirm}
+          className="rounded-lg"
+          style={{
+            padding: "8px 16px",
+            fontSize: 13,
+            fontWeight: 600,
+            color: "#fff",
+            background: "var(--gold)",
+            border: "1px solid var(--gold)",
+            cursor: canConfirm ? "pointer" : "not-allowed",
+            opacity: canConfirm ? 1 : 0.5,
+          }}
+        >
+          {t("common.confirm")}
         </button>
       </div>
     </Modal>

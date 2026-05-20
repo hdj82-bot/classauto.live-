@@ -23,7 +23,8 @@
     "processing": "Processing...",
     "delete": "Delete",
     "rename": "Rename",
-    "move": "Move"
+    "move": "Move",
+    "confirm": "Confirm"
   },
   "landing": {
     "title1": "Create with AI",
