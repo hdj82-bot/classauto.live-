@@ -142,6 +142,59 @@ export function countByStatus(items: InboxItem[]): Record<InboxStatus, number> {
   return out;
 }
 
+// ── 단순화된 리포트 뷰 전용 헬퍼 ────────────────────────────────────────────
+
+/**
+ * 강의(course) + 검색만 적용해 정렬한 리스트. 기존 `applyFilters` 와 달리
+ * status 필터를 적용하지 않아 모든 질문을 한 번에 본다 (리포트 뷰).
+ */
+export function applyReportFilters(
+  items: InboxItem[],
+  filters: { courseId: string; search: string; sort: InboxSort },
+): InboxItem[] {
+  const lowerSearch = filters.search.trim().toLowerCase();
+  const filtered = items.filter((it) => {
+    if (filters.courseId !== "all" && it.lecture.courseId !== filters.courseId) {
+      return false;
+    }
+    if (lowerSearch) {
+      const hay = (it.question + " " + (it.aiDraft ?? "")).toLowerCase();
+      if (!hay.includes(lowerSearch)) return false;
+    }
+    return true;
+  });
+  return sortItems(filtered, filters.sort);
+}
+
+/** 강의 영상(lecture) 단위 묶음 — 리포트 그루핑 뷰. */
+export interface LectureGroup {
+  courseId: string;
+  courseTitle: string;
+  lectureId: string;
+  lectureTitle: string;
+  items: InboxItem[];
+}
+
+export function groupByLecture(items: InboxItem[]): LectureGroup[] {
+  const map = new Map<string, LectureGroup>();
+  for (const it of items) {
+    const key = it.lecture.lectureId;
+    let g = map.get(key);
+    if (!g) {
+      g = {
+        courseId: it.lecture.courseId,
+        courseTitle: it.lecture.courseTitle,
+        lectureId: it.lecture.lectureId,
+        lectureTitle: it.lecture.lectureTitle,
+        items: [],
+      };
+      map.set(key, g);
+    }
+    g.items.push(it);
+  }
+  return Array.from(map.values());
+}
+
 /** UI 가 인박스 통계 카드 렌더에 쓰는 보조. */
 export function summariseStats(
   items: InboxItem[],
