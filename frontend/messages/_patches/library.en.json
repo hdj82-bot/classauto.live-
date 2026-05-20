@@ -24,6 +24,7 @@
     "moveToFolderTitle": "Move lecture to folder",
     "moveToFolderBody": "Choose a destination folder for \"{title}\".",
     "moveToUncategorized": "Move to Uncategorized",
+    "currentLocation": "Current",
     "moveSuccess": "Lecture moved.",
     "moveError": "Failed to move lecture.",
     "newFolder": "New folder",

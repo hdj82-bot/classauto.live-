@@ -23,7 +23,8 @@
     "processing": "처리 중...",
     "delete": "삭제",
     "rename": "이름 변경",
-    "move": "이동"
+    "move": "이동",
+    "confirm": "확인"
   },
   "landing": {
     "title1": "AI로 만드는",

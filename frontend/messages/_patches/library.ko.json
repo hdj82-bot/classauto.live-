@@ -24,6 +24,7 @@
     "moveToFolderTitle": "강의를 폴더로 이동",
     "moveToFolderBody": "\"{title}\" 강의를 옮길 폴더를 선택하세요.",
     "moveToUncategorized": "미분류로 이동",
+    "currentLocation": "현재 위치",
     "moveSuccess": "강의가 이동되었습니다.",
     "moveError": "강의 이동에 실패했습니다.",
     "newFolder": "새 폴더",
