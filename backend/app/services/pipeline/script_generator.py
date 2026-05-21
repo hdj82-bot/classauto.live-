@@ -56,7 +56,11 @@ SYSTEM_PROMPT = """\
 # TTS 가 별표·해시·백틱을 그대로 읽어버리는 사고를 막기 위한 2차 방어선.
 
 _RE_BOLD = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
-_RE_ITALIC_UNDERSCORE = re.compile(r"(?<!\w)__(.+?)__(?!\w)", re.DOTALL)
+# 단어 경계 lookaround 를 두지 않는다 — Unicode `\w` 에 한글·한자가 포함되어
+# `__중요__한` 처럼 한국어 문맥에서는 절대 매치하지 않는다 (CI #496/497 회귀).
+# Python dunder(`__init__`) 가 우연히 잡히는 false positive 는 TTS 스크립트
+# 컨텍스트에서 허용한다 — 마크다운 강조가 음성으로 발화되는 사고가 더 위험.
+_RE_ITALIC_UNDERSCORE = re.compile(r"__(.+?)__", re.DOTALL)
 _RE_ITALIC_STAR = re.compile(r"(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)", re.DOTALL)
 _RE_ITALIC_UNDER_SINGLE = re.compile(r"(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)", re.DOTALL)
 _RE_INLINE_CODE = re.compile(r"`+([^`]+?)`+")
