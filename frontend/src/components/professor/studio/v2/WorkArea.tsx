@@ -172,10 +172,14 @@ export default function WorkArea({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // 슬라이드가 바뀌면 편집 모드를 해제하고 draft 도 새 본문으로 동기화한다.
+  // react-hooks/set-state-in-effect: prop 변화에 따른 로컬 편집 상태 리셋이라
+  // 의도적 패턴. 정공법(`key` reset 또는 derived state)은 별도 리팩토링 PR 에서.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setEditing(false);
     setDraft(aiText);
   }, [aiText, slideNumber]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (editing && textareaRef.current) {
