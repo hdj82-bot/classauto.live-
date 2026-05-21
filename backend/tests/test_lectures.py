@@ -373,3 +373,96 @@ async def test_delete_lecture_not_found(client, professor):
         headers=make_auth_header(professor),
     )
     assert resp.status_code == 404
+
+
+# ── GET /api/lectures/{id}/slides ────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_get_lecture_slides_empty_before_pipeline(client, professor, lecture):
+    """파이프라인 시작 전 — pipeline_task_id 도 video 도 없는 상태에서는 빈 리스트."""
+    resp = await client.get(
+        f"/api/lectures/{lecture.id}/slides",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["lecture_id"] == str(lecture.id)
+    assert data["slides"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_lecture_slides_all_ready_from_script_segments(
+    client, professor, lecture, db,
+):
+    """스크립트 segments 가 모두 도착한 상태 — 전부 ready 로 반환."""
+    from app.models.video import Video, VideoScript, VideoStatus
+
+    v = Video(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        status=VideoStatus.pending_review,
+    )
+    db.add(v)
+    await db.flush()
+    db.add(VideoScript(
+        id=uuid.uuid4(),
+        video_id=v.id,
+        segments=[
+            {
+                "slide_index": 0,
+                "text": "안녕하세요. 첫 번째 슬라이드 다듬은 스크립트.",
+                "start_seconds": 0,
+                "end_seconds": 30,
+                "tone": "normal",
+                "question_pin_seconds": None,
+            },
+            {
+                "slide_index": 1,
+                "text": "두 번째 슬라이드 발화 텍스트.",
+                "start_seconds": 30,
+                "end_seconds": 60,
+                "tone": "emphasis",
+                "question_pin_seconds": None,
+            },
+        ],
+        ai_segments=[],
+    ))
+    await db.flush()
+
+    resp = await client.get(
+        f"/api/lectures/{lecture.id}/slides",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [s["index"] for s in data["slides"]] == [0, 1]
+    assert all(s["status"] == "ready" for s in data["slides"])
+    # 첫 줄을 잘라 title 로 사용
+    assert data["slides"][0]["title"] == "안녕하세요. 첫 번째 슬라이드 다듬은 스크립트."
+
+
+@pytest.mark.asyncio
+async def test_get_lecture_slides_other_professor_forbidden(
+    client, db, lecture, professor,
+):
+    """소유자가 아닌 교수자 → 404 (assert_professor_owns_lecture 패턴)."""
+    from app.models.user import User, UserRole
+
+    other = User(
+        id=uuid.uuid4(),
+        google_sub="other-prof-slides",
+        email="other-slides@test.ac.kr",
+        name="다른교수",
+        role=UserRole.professor,
+        school="다른대학교",
+        is_active=True,
+    )
+    db.add(other)
+    await db.flush()
+
+    resp = await client.get(
+        f"/api/lectures/{lecture.id}/slides",
+        headers=make_auth_header(other),
+    )
+    assert resp.status_code == 404

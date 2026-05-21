@@ -19,13 +19,24 @@ export interface StudioSlide {
   title: string;
   /** 썸네일에 표시할 핵심 글자 (한자 1자 권장). */
   thumbChar?: string;
-  status: "adopted" | "warn" | "empty";
+  /**
+   * - "adopted" / "warn" / "empty": 교수자 검토 액션 결과 (기존)
+   * - "pending":                    AI 스크립트가 아직 도착하지 않은 슬라이드.
+   *                                  카드는 즉시 보여주되 status dot 는 spinner 로.
+   */
+  status: "adopted" | "warn" | "empty" | "pending";
 }
 
 interface SlidePanelProps {
   slides: StudioSlide[];
   activeIndex: number;
   onSelect: (index: number) => void;
+  /**
+   * 초기 슬라이드 메타가 아직 도착하지 않았을 때 — 카드 자리에 skeleton 3장.
+   * 종전: scriptLoading 동안 SlidePanel 이 0장만 표시 → 페이지가 비어 보였음.
+   * /api/lectures/{id}/slides 폴링이 빈 응답 (PPTX 파싱 직전) 일 때 사용.
+   */
+  loading?: boolean;
 }
 
 const panelStyle: CSSProperties = {
@@ -86,7 +97,9 @@ export default function SlidePanel({
   slides,
   activeIndex,
   onSelect,
+  loading = false,
 }: SlidePanelProps) {
+  const showSkeleton = loading && slides.length === 0;
   return (
     <aside style={panelStyle} aria-label="슬라이드 목록">
       <div style={headStyle}>
@@ -98,9 +111,18 @@ export default function SlidePanel({
             color: "var(--text-faint)",
           }}
         >
-          {slides.length}장
+          {showSkeleton ? "—" : `${slides.length}장`}
         </span>
       </div>
+      {showSkeleton ? (
+        <ul style={listStyle} aria-busy="true" aria-label="슬라이드 메타 로딩 중">
+          {[0, 1, 2].map((i) => (
+            <li key={i}>
+              <SkeletonCard />
+            </li>
+          ))}
+        </ul>
+      ) : (
       <ul style={listStyle}>
         {slides.map((s) => {
           const active = s.index === activeIndex;
@@ -181,7 +203,15 @@ export default function SlidePanel({
                   </span>
                 </span>
                 {/* Status */}
-                <span className="flex-shrink-0" aria-hidden="true">
+                <span
+                  className="flex-shrink-0"
+                  aria-hidden={s.status === "pending" ? undefined : "true"}
+                  aria-label={
+                    s.status === "pending"
+                      ? "AI 스크립트 생성 중"
+                      : undefined
+                  }
+                >
                   <StatusDot status={s.status} />
                 </span>
               </button>
@@ -189,6 +219,7 @@ export default function SlidePanel({
           );
         })}
       </ul>
+      )}
       <button type="button" style={addBtnStyle}>
         <svg
           viewBox="0 0 24 24"
@@ -208,7 +239,85 @@ export default function SlidePanel({
   );
 }
 
+function SkeletonCard() {
+  // 슬라이드 메타가 도착하기 전 placeholder. 시각만 — onClick 없음.
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        padding: 8,
+        background: "var(--bg-card)",
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+      }}
+      aria-hidden="true"
+    >
+      <span
+        className="studio-skeleton-block"
+        style={{
+          width: 56,
+          height: 36,
+          borderRadius: 5,
+          flexShrink: 0,
+        }}
+      />
+      <span style={{ flex: 1, minWidth: 0, display: "block" }}>
+        <span
+          className="studio-skeleton-block"
+          style={{
+            display: "block",
+            width: "30%",
+            height: 8,
+            borderRadius: 3,
+          }}
+        />
+        <span
+          className="studio-skeleton-block"
+          style={{
+            display: "block",
+            marginTop: 6,
+            width: "80%",
+            height: 10,
+            borderRadius: 3,
+          }}
+        />
+      </span>
+    </div>
+  );
+}
+
 function StatusDot({ status }: { status: StudioSlide["status"] }) {
+  if (status === "pending") {
+    // AI 스크립트 생성 중 — 회전 spinner. prefers-reduced-motion 환경에선
+    // CSS 가 animation 을 무효화하므로 정적 호 모양만 남는다.
+    return (
+      <svg
+        viewBox="0 0 16 16"
+        width="14"
+        height="14"
+        className="studio-slide-spinner"
+      >
+        <circle
+          cx="8"
+          cy="8"
+          r="5.5"
+          fill="none"
+          stroke="rgba(255, 182, 39, 0.20)"
+          strokeWidth="1.6"
+        />
+        <path
+          d="M 8 2.5 A 5.5 5.5 0 0 1 13.5 8"
+          fill="none"
+          stroke="var(--gold-on-light, var(--gold))"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
   if (status === "adopted") {
     return (
       <svg viewBox="0 0 16 16" width="14" height="14" aria-label="채택됨">

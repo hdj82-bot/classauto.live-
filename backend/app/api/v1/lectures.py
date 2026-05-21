@@ -3,9 +3,11 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_professor
 from app.db.session import get_db
+from app.models.embedding import SlideEmbedding
 from app.models.user import User
 from app.models.video import Video
 from app.schemas.lecture import (
@@ -13,6 +15,8 @@ from app.schemas.lecture import (
     LecturePublicResponse,
     LectureResponse,
     LectureUpdate,
+    SlideMeta,
+    SlidesResponse,
 )
 from app.schemas.video import VideoStatusResponse
 from app.services.lecture import (
@@ -150,6 +154,96 @@ async def get_lecture_video(
         status=video.status.value,
         updated_at=video.updated_at,
     )
+
+
+# ── 슬라이드 메타 조회 (편집기 즉시 렌더용) ─────────────────────────────────
+
+
+_SLIDE_TITLE_MAX_LEN = 40
+
+
+def _truncate_title(text: str) -> str | None:
+    """슬라이드 카드 라벨용으로 첫 줄을 잘라 반환. 비어 있으면 None."""
+    if not text:
+        return None
+    first_line = text.strip().splitlines()[0].strip()
+    if not first_line:
+        return None
+    if len(first_line) <= _SLIDE_TITLE_MAX_LEN:
+        return first_line
+    return first_line[: _SLIDE_TITLE_MAX_LEN - 1] + "…"
+
+
+@router.get(
+    "/api/lectures/{lecture_id}/slides",
+    response_model=SlidesResponse,
+    summary="강의 슬라이드 메타 조회 (편집기 즉시 렌더용)",
+)
+async def get_lecture_slides(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """슬라이드 메타(순번 + 임시 제목 + status)를 반환합니다.
+
+    이 엔드포인트는 ``GET /api/videos/{id}/script`` 와 분리되어 있어, AI 스크립트
+    생성을 기다리지 않고 좌측 슬라이드 목록 + 중앙 미리보기 영역을 먼저 렌더할
+    수 있게 한다. ``status`` 는 슬라이드 단위로 산출된다:
+
+    - ``ready``: 해당 인덱스에 대한 ``VideoScript.segments`` 가 도착함.
+    - ``pending``: PPTX 파싱·임베딩까진 끝났지만 스크립트는 아직 생성 중.
+
+    어떤 출처도 없으면 빈 리스트 — 프론트는 그 상태를 "PPTX 파싱 대기" 스켈레톤
+    으로 표시한다.
+    """
+    lecture = await assert_professor_owns_lecture(db, lecture_id, professor.id)
+
+    # 1) VideoScript.segments — 이미 생성된 슬라이드 (status=ready)
+    video_result = await db.execute(
+        select(Video)
+        .options(selectinload(Video.script))
+        .where(Video.lecture_id == lecture_id)
+        .order_by(Video.created_at.desc())
+    )
+    video = video_result.scalars().first()
+
+    ready_titles: dict[int, str | None] = {}
+    if video is not None and video.script is not None:
+        for seg in video.script.segments or []:
+            idx = seg.get("slide_index")
+            if not isinstance(idx, int) or idx < 0:
+                continue
+            ready_titles[idx] = _truncate_title(seg.get("text") or "")
+
+    # 2) SlideEmbedding (step2 결과) — 임시 제목 fallback + slide_count 추정.
+    #    pipeline_task_id 가 비어 있으면 파싱조차 시작하지 않은 단계.
+    pending_titles: dict[int, str | None] = {}
+    if lecture.pipeline_task_id:
+        emb_result = await db.execute(
+            select(SlideEmbedding.slide_number, SlideEmbedding.text_content)
+            .where(SlideEmbedding.task_id == lecture.pipeline_task_id)
+            .order_by(SlideEmbedding.slide_number.asc())
+        )
+        for slide_number, text_content in emb_result.all():
+            # SlideEmbedding.slide_number 는 1-based (parser.py 참고),
+            # API 응답은 0-based 로 통일 (ScriptSegment.slide_index 와 동일).
+            idx = int(slide_number) - 1
+            if idx < 0:
+                continue
+            pending_titles[idx] = _truncate_title(text_content or "")
+
+    all_indices = sorted(set(ready_titles) | set(pending_titles))
+    slides: list[SlideMeta] = []
+    for idx in all_indices:
+        if idx in ready_titles:
+            title = ready_titles[idx] or pending_titles.get(idx)
+            slides.append(SlideMeta(index=idx, title=title, status="ready"))
+        else:
+            slides.append(
+                SlideMeta(index=idx, title=pending_titles.get(idx), status="pending")
+            )
+
+    return SlidesResponse(lecture_id=lecture_id, slides=slides)
 
 
 # ── 공개 강의 조회 (인증 불필요) ──────────────────────────────────────────────

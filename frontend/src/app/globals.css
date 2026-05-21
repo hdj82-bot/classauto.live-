@@ -252,6 +252,33 @@ button, input, select, textarea, optgroup {
 }
 .animate-pulse-warning { animation: pulse-warning 1.8s ease-in-out infinite; }
 
+/* Studio 편집기 — 슬라이드 메타가 도착하기 전 skeleton + AI 생성 중 spinner.
+   reduce-motion 미디어쿼리는 위의 전역 규칙이 그대로 적용 — shimmer/spin 모두
+   거의 정지 상태로 표시되며 시각만으로도 placeholder 인 것이 식별된다. */
+@keyframes studio-skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.studio-skeleton-block {
+  background-image: linear-gradient(
+    90deg,
+    rgba(176, 171, 158, 0.10) 0%,
+    rgba(176, 171, 158, 0.22) 50%,
+    rgba(176, 171, 158, 0.10) 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  background-color: rgba(176, 171, 158, 0.12);
+  animation: studio-skeleton-shimmer 1.6s var(--ease-out) infinite;
+}
+@keyframes studio-spin {
+  to { transform: rotate(360deg); }
+}
+.studio-slide-spinner {
+  animation: studio-spin 1.2s linear infinite;
+  transform-origin: center;
+}
+
 /* ── prefers-reduced-motion (animations.md §1.3 절대 원칙) ────────────── */
 
 @media (prefers-reduced-motion: reduce) {
