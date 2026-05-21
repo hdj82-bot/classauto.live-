@@ -77,7 +77,13 @@ def step1_parse(
     instructor_id: str | None = None,
     lecture_id: str | None = None,
 ) -> dict:
-    """Step 1: S3에서 PPT 다운로드 → PPTX 파싱 — 슬라이드 텍스트, 이미지, 노트 추출."""
+    """Step 1: S3에서 PPT 다운로드 → PPTX 파싱 + 슬라이드 PNG 렌더·업로드.
+
+    파싱 결과 외에 ``slide_image_urls`` (``{slide_number: https_url}``) 를
+    ``prev_result`` 로 함께 내려준다. 렌더 단계는 graceful — soffice/pdftoppm
+    실패, 업로드 실패, lecture_id 미지정 모두 로깅만 하고 파이프라인은 계속
+    진행한다. 결과 dict 의 ``slide_image_urls`` 는 항상 존재하되 비어 있을 수 있다.
+    """
     from app.services.pipeline.parser import parse_pptx
     from app.services.pipeline import s3 as s3_svc
 
@@ -118,10 +124,21 @@ def step1_parse(
             for s in slides
         ]
 
-        logger.info("Step1 완료: task_id=%s, %d 슬라이드 (S3: %s)", task_id, len(slides), s3_key)
+        slide_image_urls = _render_and_upload_slide_images(
+            pptx_local_path=local_path,
+            tmp_dir=tmp_dir,
+            task_id=task_id,
+            lecture_id=lecture_id,
+        )
+
+        logger.info(
+            "Step1 완료: task_id=%s, %d 슬라이드, %d 이미지 업로드 (S3: %s)",
+            task_id, len(slides), len(slide_image_urls), s3_key,
+        )
         return {
             "task_id": task_id,
             "slides": slides_data,
+            "slide_image_urls": slide_image_urls,
             "s3_key": s3_key,
             "instructor_id": instructor_id,
             "lecture_id": lecture_id,
@@ -132,18 +149,94 @@ def step1_parse(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def _render_and_upload_slide_images(
+    *,
+    pptx_local_path: str,
+    tmp_dir: str,
+    task_id: str,
+    lecture_id: str | None,
+) -> dict[int, str]:
+    """슬라이드 PNG 렌더 + S3 업로드. 실패는 graceful — 빈 dict 반환.
+
+    lecture_id 가 None 이면 업로드 키 경로(``slides/{lecture_id}/{n}.png``)
+    를 구성할 수 없으므로 빈 dict 만 돌려준다. 본 단계 실패가 파싱 결과를
+    버리지 않도록 모든 예외를 잡아 로깅만 한다.
+    """
+    if not lecture_id:
+        logger.warning(
+            "Step1 슬라이드 렌더 skip: lecture_id 없음 (task_id=%s)", task_id,
+        )
+        return {}
+
+    from pathlib import Path
+
+    from app.services.pipeline.s3 import upload_slide_image
+    from app.services.pipeline.slide_renderer import (
+        render_pptx_to_images,
+        SlideRenderError,
+    )
+
+    render_dir = os.path.join(tmp_dir, "slide_pngs")
+    try:
+        png_paths = render_pptx_to_images(Path(pptx_local_path), Path(render_dir))
+    except SlideRenderError as exc:
+        # soffice/pdftoppm 자체 실패 — 파이프라인은 계속 진행.
+        logger.warning(
+            "Step1 슬라이드 렌더 실패 (graceful skip): task_id=%s, lecture_id=%s, error=%s",
+            task_id, lecture_id, exc,
+        )
+        return {}
+    except Exception as exc:  # noqa: BLE001 — 어떠한 렌더 예외도 파이프라인을 중단시키지 않는다.
+        logger.warning(
+            "Step1 슬라이드 렌더 예기치 못한 실패 (graceful skip): "
+            "task_id=%s, lecture_id=%s, error=%s",
+            task_id, lecture_id, exc,
+        )
+        return {}
+
+    image_urls: dict[int, str] = {}
+    for slide_number, png_path in enumerate(png_paths, start=1):
+        try:
+            with open(png_path, "rb") as f:
+                image_bytes = f.read()
+            url = upload_slide_image(image_bytes, lecture_id, slide_number)
+        except Exception as exc:  # noqa: BLE001 — 한 장 실패가 전체를 멈추지 않는다.
+            logger.warning(
+                "Step1 슬라이드 PNG 업로드 실패 (skip): task_id=%s, slide=%d, error=%s",
+                task_id, slide_number, exc,
+            )
+            continue
+        image_urls[slide_number] = url
+
+    return image_urls
+
+
 @celery.task(base=PipelineTask, bind=True, max_retries=2, default_retry_delay=30)
 def step2_embed(self, prev_result: dict) -> dict:
-    """Step 2: OpenAI 임베딩 생성 → pgvector 저장."""
+    """Step 2: OpenAI 임베딩 생성 → pgvector 저장.
+
+    step1 에서 함께 내려온 ``slide_image_urls`` ({slide_number: https_url}) 를
+    그대로 ``store_slide_embeddings`` 에 전달해 ``SlideEmbedding.slide_image_url``
+    컬럼에 기록한다. 키가 누락된 슬라이드(렌더/업로드 실패)는 NULL 로 저장된다.
+    """
     from app.services.pipeline.embedding import store_slide_embeddings
 
     task_id = prev_result["task_id"]
     slides_data = prev_result["slides"]
     slides = [SlideContent(**sd) for sd in slides_data]
 
+    # prev_result 가 step1 이외(예: 단위 테스트) 에서 만들어진 경우를 대비해
+    # 키 누락도 허용한다 — 기본값은 빈 dict (모든 슬라이드 image_url = NULL).
+    raw_urls = prev_result.get("slide_image_urls") or {}
+    # JSON 직렬화/Celery 전송 과정에서 dict key 가 str 로 바뀔 수 있어
+    # int 로 정규화한다.
+    slide_image_urls = {int(k): v for k, v in raw_urls.items()}
+
     db = SyncSessionLocal()
     try:
-        count = store_slide_embeddings(db, task_id, slides)
+        count = store_slide_embeddings(
+            db, task_id, slides, slide_image_urls=slide_image_urls
+        )
         db.commit()
         logger.info("Step2 완료: task_id=%s, %d 임베딩 저장", task_id, count)
     except Exception as exc:
