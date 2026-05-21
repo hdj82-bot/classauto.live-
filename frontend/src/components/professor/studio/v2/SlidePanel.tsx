@@ -20,6 +20,13 @@ export interface StudioSlide {
   /** 썸네일에 표시할 핵심 글자 (한자 1자 권장). */
   thumbChar?: string;
   /**
+   * 백엔드 ``SlideMeta.image_url`` 을 camelCase 로 매핑한 값. studio 페이지의
+   * useMemo 가 ``meta.image_url`` → ``imageUrl`` 변환을 수행한 뒤 활성 슬라이드
+   * 의 이 값을 ``WorkArea`` 의 ``slideImageUrl`` 로 전달한다. 렌더 전이거나
+   * 컬럼 미존재 시 null/undefined — fallback mock 으로 그린다.
+   */
+  imageUrl?: string | null;
+  /**
    * - "adopted" / "warn" / "empty": 교수자 검토 액션 결과 (기존)
    * - "pending":                    AI 스크립트가 아직 도착하지 않은 슬라이드.
    *                                  카드는 즉시 보여주되 status dot 는 spinner 로.

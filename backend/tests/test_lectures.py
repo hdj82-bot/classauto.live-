@@ -440,6 +440,53 @@ async def test_get_lecture_slides_all_ready_from_script_segments(
     assert all(s["status"] == "ready" for s in data["slides"])
     # 첫 줄을 잘라 title 로 사용
     assert data["slides"][0]["title"] == "안녕하세요. 첫 번째 슬라이드 다듬은 스크립트."
+    # SlideMeta.image_url 응답 contract — SlideEmbedding 이 없으므로 None.
+    # 창 1/2 미배포 환경에서도 키 자체는 항상 존재해야 한다 (프론트가 안전하게 읽음).
+    assert all("image_url" in s for s in data["slides"])
+    assert all(s["image_url"] is None for s in data["slides"])
+
+
+@pytest.mark.asyncio
+async def test_get_lecture_slides_image_url_graceful_when_column_missing(
+    client, professor, lecture, db, monkeypatch,
+):
+    """slide_image_url 컬럼이 모델에 없는 (창 2 미배포) 상황을 시뮬레이션 —
+    pipeline_task_id 가 있어 SlideEmbedding 쿼리 경로를 타더라도 500 이 나지
+    않고 image_url=None 으로 응답해야 한다. hasattr 기반 graceful fallback 회귀
+    가드.
+    """
+    from sqlalchemy import update
+
+    from app.models.embedding import SlideEmbedding
+    from app.models.lecture import Lecture as LectureModel
+
+    task_id = "task-img-url-fallback"
+    await db.execute(
+        update(LectureModel)
+        .where(LectureModel.id == lecture.id)
+        .values(pipeline_task_id=task_id)
+    )
+    await db.flush()
+
+    # 창 2 가 컬럼을 추가하기 전 환경을 정확히 재현. SQLAlchemy mapped class
+    # 에서 컬럼 attribute 만 일시적으로 제거해 hasattr() 가 False 를 반환하게
+    # 한다. monkeypatch 가 테스트 종료 시 자동으로 원복한다.
+    if hasattr(SlideEmbedding, "slide_image_url"):
+        monkeypatch.delattr(SlideEmbedding, "slide_image_url", raising=False)
+    assert not hasattr(SlideEmbedding, "slide_image_url")
+
+    resp = await client.get(
+        f"/api/lectures/{lecture.id}/slides",
+        headers=make_auth_header(professor),
+    )
+    # 핵심: 500 이 아닌 200 OK — hasattr 분기가 AttributeError 를 막아야 한다.
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data["slides"], list)
+    # SlideEmbedding 행은 없지만 응답 스키마는 image_url 키 자체가 항상 nullable.
+    for slide in data["slides"]:
+        assert "image_url" in slide
+        assert slide["image_url"] is None
 
 
 @pytest.mark.asyncio
