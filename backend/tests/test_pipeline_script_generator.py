@@ -5,11 +5,8 @@ prompt caching 페이로드 형식을 검증한다. Anthropic API 는 mock.
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from app.services.pipeline.schemas import SlideContent, SlideScript
 from app.services.pipeline.script_generator import (
