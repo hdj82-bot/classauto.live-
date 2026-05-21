@@ -185,3 +185,23 @@ def upload_thumbnail(image_bytes: bytes, s3_key: str) -> str:
         ContentType="image/jpeg", CacheControl="public, max-age=86400",
     )
     return f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
+
+
+def upload_slide_image(image_bytes: bytes, lecture_id: str, slide_number: int) -> str:
+    """슬라이드 미리보기 PNG 를 S3 에 업로드한다.
+
+    studio 편집기가 ``GET /api/lectures/{id}/slides`` 응답에 포함된 image_url
+    로 직접 ``<img>`` 태그에 박아 쓰므로 24h 캐시 + image/png 로 저장한다.
+    1-based ``slide_number`` 를 그대로 key 에 박아 동일 강의 재업로드 시
+    이전 파일을 덮어쓴다 — 별도 정리 작업 없이 항상 최신 슬라이드를 반환.
+    """
+    s3_key = f"slides/{lecture_id}/{slide_number}.png"
+    s3 = get_s3_client()
+    s3.put_object(
+        Bucket=settings.S3_BUCKET,
+        Key=s3_key,
+        Body=image_bytes,
+        ContentType="image/png",
+        CacheControl="public, max-age=86400",
+    )
+    return f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
