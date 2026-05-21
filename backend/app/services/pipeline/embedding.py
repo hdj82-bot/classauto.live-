@@ -39,8 +39,24 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     return all_embeddings
 
 
-def store_slide_embeddings(db: Session, task_id: str, slides: list[SlideContent]) -> int:
-    """슬라이드 텍스트를 임베딩하여 DB에 저장. 저장 수 반환."""
+def store_slide_embeddings(
+    db: Session,
+    task_id: str,
+    slides: list[SlideContent],
+    slide_image_urls: dict[int, str] | None = None,
+) -> int:
+    """슬라이드 텍스트를 임베딩하여 DB에 저장. 저장 수 반환.
+
+    Args:
+        db: SQLAlchemy 세션.
+        task_id: 파이프라인 task_id (SlideEmbedding.task_id 컬럼).
+        slides: 파싱된 슬라이드 콘텐츠.
+        slide_image_urls: ``{slide_number: https_url}`` 매핑. step1 에서
+            LibreOffice 로 렌더한 슬라이드 PNG 의 S3 URL. 렌더 실패한 슬라이드
+            는 키 자체가 누락되며 그 행의 ``slide_image_url`` 은 NULL 로 저장.
+            None (기본값) 이면 빈 dict 와 동일.
+    """
+    image_url_map = slide_image_urls or {}
     slide_texts: list[tuple[int, str]] = []
     for slide in slides:
         combined = "\n".join(slide.texts)
@@ -63,6 +79,7 @@ def store_slide_embeddings(db: Session, task_id: str, slides: list[SlideContent]
             slide_number=slide_num,
             text_content=text,
             embedding=emb,
+            slide_image_url=image_url_map.get(slide_num),
         )
         for (slide_num, text), emb in zip(slide_texts, embeddings)
     ]

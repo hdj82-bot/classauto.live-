@@ -20,10 +20,14 @@ FROM python:3.14.0-slim-bookworm
 WORKDIR /app
 
 # runtime 단도 동일하게 OS 패치 적용 (Trivy 검사 대상은 최종 image 이므로 이쪽이 필수).
+# libreoffice-impress / poppler-utils 는 slide_renderer.py (studio 미리보기용
+# PPTX→PDF→PNG 변환) 가 사용한다. fonts-noto-cjk 는 한중일 슬라이드의 글자
+# 깨짐을 방지.
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
        libpq5 postgresql-client curl \
+       libreoffice-impress libreoffice-core poppler-utils fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/* \
     && adduser --system --no-create-home appuser
 

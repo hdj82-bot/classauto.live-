@@ -217,30 +217,46 @@ async def get_lecture_slides(
 
     # 2) SlideEmbedding (step2 결과) — 임시 제목 fallback + slide_count 추정.
     #    pipeline_task_id 가 비어 있으면 파싱조차 시작하지 않은 단계.
+    #    slide_image_url 은 step1 에서 LibreOffice 로 렌더한 슬라이드 PNG 의 S3
+    #    URL. 렌더 실패한 슬라이드는 NULL — 프론트는 fallback mock 으로 그린다.
     pending_titles: dict[int, str | None] = {}
+    slide_image_urls: dict[int, str | None] = {}
     if lecture.pipeline_task_id:
         emb_result = await db.execute(
-            select(SlideEmbedding.slide_number, SlideEmbedding.text_content)
+            select(
+                SlideEmbedding.slide_number,
+                SlideEmbedding.text_content,
+                SlideEmbedding.slide_image_url,
+            )
             .where(SlideEmbedding.task_id == lecture.pipeline_task_id)
             .order_by(SlideEmbedding.slide_number.asc())
         )
-        for slide_number, text_content in emb_result.all():
+        for slide_number, text_content, image_url in emb_result.all():
             # SlideEmbedding.slide_number 는 1-based (parser.py 참고),
             # API 응답은 0-based 로 통일 (ScriptSegment.slide_index 와 동일).
             idx = int(slide_number) - 1
             if idx < 0:
                 continue
             pending_titles[idx] = _truncate_title(text_content or "")
+            slide_image_urls[idx] = image_url
 
     all_indices = sorted(set(ready_titles) | set(pending_titles))
     slides: list[SlideMeta] = []
     for idx in all_indices:
+        image_url = slide_image_urls.get(idx)
         if idx in ready_titles:
             title = ready_titles[idx] or pending_titles.get(idx)
-            slides.append(SlideMeta(index=idx, title=title, status="ready"))
+            slides.append(
+                SlideMeta(index=idx, title=title, status="ready", image_url=image_url)
+            )
         else:
             slides.append(
-                SlideMeta(index=idx, title=pending_titles.get(idx), status="pending")
+                SlideMeta(
+                    index=idx,
+                    title=pending_titles.get(idx),
+                    status="pending",
+                    image_url=image_url,
+                )
             )
 
     return SlidesResponse(lecture_id=lecture_id, slides=slides)

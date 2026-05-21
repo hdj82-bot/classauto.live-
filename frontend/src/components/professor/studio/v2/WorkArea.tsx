@@ -28,6 +28,13 @@ export interface WorkAreaProps {
   slideTitle: string;
   /** 슬라이드 mock 콘텐츠 (badge + h1 + sub + 칼럼 카드 등). 없으면 placeholder. */
   slideMock?: ReactNode;
+  /**
+   * PPTX 를 페이지별로 렌더한 슬라이드 PNG 의 https URL. 주어지면 미리보기
+   * 영역을 ``<img>`` 한 장으로 교체한다. 비어 있으면 ``slideMock`` 또는 그것도
+   * 없으면 ``DefaultSlideMock`` fallback. next/image 가 아닌 단순 ``<img>`` 를
+   * 쓰므로 S3 도메인을 next.config 에 등록할 필요 없음.
+   */
+  slideImageUrl?: string | null;
   /** AI 아바타 발화 내용 텍스트. */
   aiText: string;
   /** 예상 길이·글자수 등 메타. */
@@ -165,6 +172,7 @@ export default function WorkArea({
   totalSlides,
   slideTitle,
   slideMock,
+  slideImageUrl,
   aiText,
   meta,
   activeSlidePending = false,
@@ -269,11 +277,28 @@ export default function WorkArea({
           </div>
           <div style={previewBodyStyle}>
             <div style={previewGridOverlay} aria-hidden="true" />
-            <div style={slideMockStyle}>
-              {slideMock ?? (
-                <DefaultSlideMock title={slideTitle} number={slideNumber} />
-              )}
-            </div>
+            {slideImageUrl ? (
+              // 실제 PPT 슬라이드 이미지 — next/image 대신 단순 <img> 로 S3
+              // 외부 도메인 등록을 회피한다. contain + borderRadius 만 적용해
+              // preview body 비율을 그대로 따른다.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={slideImageUrl}
+                alt={`슬라이드 ${slideNumber} 미리보기`}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "contain",
+                  borderRadius: 8,
+                }}
+              />
+            ) : (
+              <div style={slideMockStyle}>
+                {slideMock ?? (
+                  <DefaultSlideMock title={slideTitle} number={slideNumber} />
+                )}
+              </div>
+            )}
             {activeSlidePending && (
               <PendingPreviewOverlay slideNumber={slideNumber} />
             )}

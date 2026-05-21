@@ -440,6 +440,55 @@ async def test_get_lecture_slides_all_ready_from_script_segments(
     assert all(s["status"] == "ready" for s in data["slides"])
     # 첫 줄을 잘라 title 로 사용
     assert data["slides"][0]["title"] == "안녕하세요. 첫 번째 슬라이드 다듬은 스크립트."
+    # SlideMeta.image_url 응답 contract — SlideEmbedding 이 없으므로 None.
+    # 키 자체는 항상 존재해야 한다 (프론트가 안전하게 읽음).
+    assert all("image_url" in s for s in data["slides"])
+    assert all(s["image_url"] is None for s in data["slides"])
+
+
+@pytest.mark.asyncio
+async def test_get_lecture_slides_includes_slide_image_url_from_embedding(
+    client, professor, lecture, db,
+):
+    """SlideEmbedding.slide_image_url 이 SlideMeta.image_url 로 흘러가는지 검증."""
+    from sqlalchemy import update
+
+    from app.models.embedding import SlideEmbedding
+    from app.models.lecture import Lecture as LectureModel
+
+    task_id = "task-img-url-happy"
+    await db.execute(
+        update(LectureModel)
+        .where(LectureModel.id == lecture.id)
+        .values(pipeline_task_id=task_id)
+    )
+    db.add_all([
+        SlideEmbedding(
+            task_id=task_id,
+            slide_number=1,
+            text_content="첫 슬라이드",
+            embedding=[0.0] * 1536,
+            slide_image_url="https://cdn.example.com/slides/lec/1.png",
+        ),
+        SlideEmbedding(
+            task_id=task_id,
+            slide_number=2,
+            text_content="두번째 슬라이드",
+            embedding=[0.0] * 1536,
+            slide_image_url=None,
+        ),
+    ])
+    await db.flush()
+
+    resp = await client.get(
+        f"/api/lectures/{lecture.id}/slides",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    by_idx = {s["index"]: s for s in data["slides"]}
+    assert by_idx[0]["image_url"] == "https://cdn.example.com/slides/lec/1.png"
+    assert by_idx[1]["image_url"] is None
 
 
 @pytest.mark.asyncio

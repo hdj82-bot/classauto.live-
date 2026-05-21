@@ -124,6 +124,33 @@ def test_upload_audio_bytes():
     mock_client.put_object.assert_called_once()
 
 
+# ── upload_slide_image ───────────────────────────────────────────────────────
+
+def test_upload_slide_image_key_and_headers():
+    mock_client = MagicMock()
+    with patch.object(s3_svc, "get_s3_client", return_value=mock_client):
+        url = s3_svc.upload_slide_image(b"\x89PNG\r\n\x1a\n", "lecture-abc", 1)
+
+    mock_client.put_object.assert_called_once()
+    kw = mock_client.put_object.call_args[1]
+    assert kw["Key"] == "slides/lecture-abc/1.png"
+    assert kw["ContentType"] == "image/png"
+    assert kw["CacheControl"] == "public, max-age=86400"
+    assert kw["Body"] == b"\x89PNG\r\n\x1a\n"
+    assert "slides/lecture-abc/1.png" in url
+
+
+def test_upload_slide_image_overwrites_same_key_per_slide():
+    """동일 lecture_id + slide_number 는 같은 key — 재업로드 시 덮어쓰기."""
+    mock_client = MagicMock()
+    with patch.object(s3_svc, "get_s3_client", return_value=mock_client):
+        url1 = s3_svc.upload_slide_image(b"v1", "lec-1", 3)
+        url2 = s3_svc.upload_slide_image(b"v2", "lec-1", 3)
+
+    assert url1 == url2
+    assert mock_client.put_object.call_count == 2
+
+
 # ── upload_from_url ──────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

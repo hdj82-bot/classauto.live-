@@ -36,6 +36,15 @@ class SlideMeta(BaseModel):
         default="pending",
         description="'pending' = 아직 AI 스크립트 생성 전, 'ready' = 세그먼트 도착.",
     )
+    image_url: str | None = Field(
+        default=None,
+        description=(
+            "PPTX 를 페이지별로 PNG 로 렌더해 S3 에 올린 미리보기 이미지의 https URL. "
+            "studio 편집기 중앙 미리보기가 ``<img>`` 로 즉시 노출한다. 슬라이드 렌더 "
+            "인프라(창 1) 와 DB 컬럼(창 2) 가 아직 배포되지 않은 환경에서는 항상 None — "
+            "프론트는 DefaultSlideMock 으로 fallback."
+        ),
+    )
 
 
 class SlidesResponse(BaseModel):

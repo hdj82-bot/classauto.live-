@@ -75,6 +75,12 @@ export interface SlideMeta {
   index: number;
   title: string | null;
   status: SlideMetaStatus;
+  /**
+   * 백엔드 ``SlideMeta.image_url`` 과 1:1 (snake_case 유지 — wire shape).
+   * PPTX → PNG 렌더 결과의 S3 https URL. 렌더 인프라가 아직 배포되지 않았거나
+   * 컬럼이 없는 환경에서는 항상 null — 프론트는 DefaultSlideMock 으로 fallback.
+   */
+  image_url: string | null;
 }
 
 export interface SlidesResponse {
