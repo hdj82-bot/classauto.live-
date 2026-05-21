@@ -186,6 +186,17 @@ export default function WorkArea({
   const [draft, setDraft] = useState(aiText);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  // 슬라이드 이미지 로드 실패 (S3 403/404 등) 시 DefaultSlideMock 으로 폴백.
+  // #205 머지 후에도 운영에서 403 깨진 이미지 placeholder 가 노출된 회귀
+  // (2026-05-22 사용자 보고) — 깨진 alt 텍스트만 보이는 UX 를 막는 가드.
+  // slideImageUrl 이 바뀌면 다시 한 번 로드 시도하도록 false 로 리셋.
+  const [imgFailed, setImgFailed] = useState(false);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setImgFailed(false);
+  }, [slideImageUrl]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   // 슬라이드가 바뀌면 편집 모드를 해제하고 draft 도 새 본문으로 동기화한다.
   // react-hooks/set-state-in-effect: prop 변화에 따른 로컬 편집 상태 리셋이라
   // 의도적 패턴. 정공법(`key` reset 또는 derived state)은 별도 리팩토링 PR 에서.
@@ -277,14 +288,27 @@ export default function WorkArea({
           </div>
           <div style={previewBodyStyle}>
             <div style={previewGridOverlay} aria-hidden="true" />
-            {slideImageUrl ? (
+            {slideImageUrl && !imgFailed ? (
               // 실제 PPT 슬라이드 이미지 — next/image 대신 단순 <img> 로 S3
               // 외부 도메인 등록을 회피한다. contain + borderRadius 만 적용해
               // preview body 비율을 그대로 따른다.
+              // onError: S3 403/404 시 imgFailed=true 로 전환 → DefaultSlideMock
+              // 폴백. 깨진 이미지 placeholder ("슬라이드 N 미리보기" alt) 가
+              // 그대로 노출되던 회귀를 가드한다.
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={slideImageUrl}
                 alt={`슬라이드 ${slideNumber} 미리보기`}
+                onError={(e) => {
+                  if (typeof console !== "undefined") {
+                    // 운영 진단: 깨진 src 와 lectureId·slideNumber 파악용.
+                    console.warn(
+                      "[studio] slide image load failed",
+                      e.currentTarget.src,
+                    );
+                  }
+                  setImgFailed(true);
+                }}
                 style={{
                   width: "100%",
                   height: "100%",
