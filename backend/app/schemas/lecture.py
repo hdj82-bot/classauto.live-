@@ -1,9 +1,52 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.lecture import VoiceGender
+
+
+# ── 슬라이드 메타 ─────────────────────────────────────────────────────────────
+
+SlideStatus = Literal["pending", "ready"]
+
+
+class SlideMeta(BaseModel):
+    """편집기 좌측 패널 + 중앙 미리보기에서 즉시 렌더하기 위한 슬라이드 메타.
+
+    백엔드 ``GET /api/lectures/{lecture_id}/slides`` 응답에 1:1 대응.
+    스크립트 생성을 기다리지 않고 1) PPTX 파싱 직후 (embeddings 저장 시) 또는
+    2) 부분 스크립트만 있는 상태에서도 슬라이드 카드 + 순번 + 임시 제목을
+    내려줄 수 있도록 한다.
+
+    - ``status="pending"``: AI 다듬은 스크립트가 아직 없음 → 프론트가 skeleton
+      과 "AI 생성 중…" 인디케이터를 표시한다.
+    - ``status="ready"``: 해당 슬라이드의 스크립트 세그먼트가 도착함.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    index: int = Field(..., ge=0, description="슬라이드 인덱스 (0-based)")
+    title: str | None = Field(
+        default=None,
+        description="썸네일 라벨용 짧은 제목 — 노트/본문에서 추출. 없으면 null.",
+    )
+    status: SlideStatus = Field(
+        default="pending",
+        description="'pending' = 아직 AI 스크립트 생성 전, 'ready' = 세그먼트 도착.",
+    )
+
+
+class SlidesResponse(BaseModel):
+    """``GET /api/lectures/{lecture_id}/slides`` 응답 래퍼.
+
+    리스트만 내려도 충분하지만 향후 ``total_pending`` / ``last_updated_at``
+    같은 메타를 추가할 여지를 두기 위해 객체로 감싼다.
+    """
+
+    lecture_id: uuid.UUID
+    slides: list[SlideMeta]
 
 
 class LectureCreate(BaseModel):

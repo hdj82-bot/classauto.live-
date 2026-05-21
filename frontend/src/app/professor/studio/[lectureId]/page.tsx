@@ -19,11 +19,17 @@ import type {
   RenderStatus,
   ScriptResponse,
   ScriptSegment,
+  SlideMeta,
   SlideReviewStatus,
+  SlidesResponse,
   VoiceGender,
 } from "@/components/professor/studio/studioTypes";
 
 const SCRIPT_POLL_MS = 6000;
+// 슬라이드 메타는 스크립트보다 짧은 주기로 폴링 — 파싱·임베딩 결과가 도착하는
+// 순간 좌측 카드가 빠르게 채워지도록 한다. 모든 슬라이드가 ready 가 되면 폴링
+// 자체를 중단(useEffect 내부에서)하므로 정상화 후 네트워크 부담은 없다.
+const SLIDES_POLL_MS = 3000;
 const RENDER_POLL_MS = 5000;
 
 /**
@@ -67,6 +73,14 @@ export default function StudioWizardPage() {
   const [script, setScript] = useState<ScriptResponse | null>(null);
   const [scriptLoading, setScriptLoading] = useState(true);
   const scriptPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── 슬라이드 메타 (편집기 즉시 렌더용) ───────────────────────────────────────
+  // GET /api/lectures/{lecture_id}/slides — PPTX 파싱·임베딩 완료 시점부터
+  // pending 슬라이드 카드를 내려준다. 스크립트(AI 발화) 와는 독립 폴링이라
+  // 5단계 Celery 전체를 기다리지 않고 좌측 패널 + 중앙 영역이 즉시 채워진다.
+  // null = 아직 첫 응답 전 (skeleton), [] = 응답 왔는데 파싱 직전.
+  const [slidesMeta, setSlidesMeta] = useState<SlideMeta[] | null>(null);
+  const slidesPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Wizard 결정 ──────────────────────────────────────────────────────────────
   const [activeIndex, setActiveIndex] = useState(0);
@@ -151,6 +165,41 @@ export default function StudioWizardPage() {
     };
   }, [videoId, lectureId]);
 
+  // 슬라이드 메타 폴링 — videoId / script 와 무관하게 lectureId 만 알면 진행.
+  // 모든 슬라이드가 ready 상태로 도착하면 폴링 중단 (네트워크 절약).
+  useEffect(() => {
+    if (!lectureId) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const { data } = await api.get<SlidesResponse>(
+          `/api/lectures/${lectureId}/slides`,
+        );
+        if (cancelled) return;
+        setSlidesMeta(data.slides);
+        const allReady =
+          data.slides.length > 0 &&
+          data.slides.every((s) => s.status === "ready");
+        if (allReady && slidesPollRef.current) {
+          clearInterval(slidesPollRef.current);
+          slidesPollRef.current = null;
+        }
+      } catch {
+        /* 권한 오류 / 강의 없음 — 빈 배열로 폴백 후 폴링은 계속 (재시도) */
+        if (!cancelled) setSlidesMeta((prev) => prev ?? []);
+      }
+    };
+    tick();
+    slidesPollRef.current = setInterval(tick, SLIDES_POLL_MS);
+    return () => {
+      cancelled = true;
+      if (slidesPollRef.current) {
+        clearInterval(slidesPollRef.current);
+        slidesPollRef.current = null;
+      }
+    };
+  }, [lectureId]);
+
   // 스크립트 폴링
   useEffect(() => {
     if (!videoId) {
@@ -189,39 +238,62 @@ export default function StudioWizardPage() {
   }, [videoId]);
 
   // ── 슬라이드 목록 도출 ───────────────────────────────────────────────────────
+  // 데이터 소스 우선순위:
+  //   1) slidesMeta (백엔드 /api/lectures/{id}/slides) — index/title/status 의 권위.
+  //   2) script.segments — ready 슬라이드의 한자 추출, review 상태 결정.
+  // 두 소스 중 어느 쪽이 먼저 와도 카드가 즉시 보이도록 union 으로 인덱스를
+  // 모은다 — 종전 처럼 script.segments 만 본다면 5단계 Celery 전체가 끝나야
+  // 좌측 패널이 채워졌다.
   const slides: StudioSlide[] = useMemo(() => {
-    const segs = script?.segments ?? [];
-    const grouped = new Map<number, ScriptSegment[]>();
-    for (const s of segs) {
-      const arr = grouped.get(s.slide_index) ?? [];
-      arr.push(s);
-      grouped.set(s.slide_index, arr);
+    const segments = script?.segments ?? [];
+    const segByIndex = new Map<number, ScriptSegment>();
+    for (const s of segments) {
+      if (!segByIndex.has(s.slide_index)) segByIndex.set(s.slide_index, s);
     }
-    const indices = Array.from(grouped.keys()).sort((a, b) => a - b);
 
-    // 스크립트 미생성 시 빈 목록 — WorkArea 가 scriptLoading 기준으로
-    // "AI 가 PPT 노트를 추출하고 있어요…" 정직한 진행 상태를 표시한다.
-    // (종전: prototype 把자문 8슬라이드 시연 데이터를 모든 강의에 노출해
-    //  실제 PPT 와 무관한 동일 화면이 나오던 버그 — 데모 폴백 제거)
-    if (indices.length === 0) {
-      return [];
-    }
+    const indexSet = new Set<number>();
+    for (const m of slidesMeta ?? []) indexSet.add(m.index);
+    for (const s of segments) indexSet.add(s.slide_index);
+    const indices = Array.from(indexSet).sort((a, b) => a - b);
+    if (indices.length === 0) return [];
+
+    const metaByIndex = new Map<number, SlideMeta>();
+    for (const m of slidesMeta ?? []) metaByIndex.set(m.index, m);
 
     return indices.map((idx) => {
-      const first = grouped.get(idx)?.[0];
-      const text = first?.text ?? "";
-      const hanMatch = text.match(/[㐀-䶿一-鿿]/);
-      const title = text.slice(0, 26).trim() || `슬라이드 ${idx + 1}`;
+      const seg = segByIndex.get(idx) ?? null;
+      const meta = metaByIndex.get(idx);
       const review = reviewByIndex[idx];
-      const status: StudioSlide["status"] =
-        review === "accepted" || review === "edited"
-          ? "adopted"
-          : review === "rejected" || review === "warning"
-            ? "warn"
-            : "empty";
+
+      // backend 가 ready 라고 표시했거나, segment 텍스트가 실제로 도착한 경우 ready.
+      const backendReady = meta?.status === "ready";
+      const hasSegmentText = !!seg && seg.text.trim().length > 0;
+      const ready = backendReady || hasSegmentText;
+
+      let status: StudioSlide["status"];
+      if (!ready) {
+        status = "pending";
+      } else if (review === "accepted" || review === "edited") {
+        status = "adopted";
+      } else if (review === "rejected" || review === "warning") {
+        status = "warn";
+      } else {
+        status = "empty";
+      }
+
+      const segText = seg?.text ?? "";
+      const hanMatch = segText.match(/[㐀-䶿一-鿿]/);
+      const titleSource =
+        segText.trim() || meta?.title?.trim() || `슬라이드 ${idx + 1}`;
+      const title = titleSource.slice(0, 26).trim();
+
       return { index: idx, title, thumbChar: hanMatch?.[0], status };
     });
-  }, [script, reviewByIndex]);
+  }, [script, slidesMeta, reviewByIndex]);
+
+  // SlidePanel 의 skeleton 표시 조건 — 양 쪽 소스 모두 아직 응답 전.
+  // slidesMeta=null 이면 첫 폴링 응답조차 안 옴. script===null 도 동일.
+  const slidesShellLoading = slidesMeta === null && script === null;
 
   // 현재 슬라이드의 편집 가능한 세그먼트 (segments = AI 초안에서 시작해 교수자
   // 편집이 누적되는 working copy). 원본 baseline 은 script.ai_segments 에 별도
@@ -454,12 +526,18 @@ export default function StudioWizardPage() {
         slides={slides}
         activeIndex={activeIndex}
         onSelect={setActiveIndex}
+        loading={slidesShellLoading}
       />
 
       <WorkArea
         slideNumber={activeIndex + 1}
         totalSlides={slides.length}
         slideTitle={slideTitle}
+        // 활성 슬라이드가 pending 이면 WorkArea 내부에서 미리보기·script 영역을
+        // skeleton + "AI 생성 중…" 으로 표시한다.
+        // 참고: PR #203 에서 "원본 PPT 노트" 블록이 제거됐으므로 originalText
+        // prop 은 더 이상 넘기지 않는다.
+        activeSlidePending={activeSlide?.status === "pending"}
         aiText={
           activeSegment?.text ??
           (scriptLoading

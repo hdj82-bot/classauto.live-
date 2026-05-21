@@ -32,6 +32,12 @@ export interface WorkAreaProps {
   aiText: string;
   /** 예상 길이·글자수 등 메타. */
   meta?: string;
+  /**
+   * 활성 슬라이드가 백엔드에서 "pending" (스크립트 생성 전) 인지 여부.
+   * true 면 originalText·aiText 자리를 skeleton 으로 갈음하고 "AI 생성 중…"
+   * 인디케이터를 노출. 슬라이드 카드 (좌측) 는 SlidePanel 이 spinner 로 표시.
+   */
+  activeSlidePending?: boolean;
   /** 수동 편집 저장 — 새 본문을 받아 부모가 PATCH 호출. */
   onEditSave?: (nextText: string) => Promise<void> | void;
   /** 다시 생성 — 부모가 Claude 재생성 엔드포인트로 요청. */
@@ -161,6 +167,7 @@ export default function WorkArea({
   slideMock,
   aiText,
   meta,
+  activeSlidePending = false,
   onEditSave,
   onRegenerate,
   onListen,
@@ -267,6 +274,9 @@ export default function WorkArea({
                 <DefaultSlideMock title={slideTitle} number={slideNumber} />
               )}
             </div>
+            {activeSlidePending && (
+              <PendingPreviewOverlay slideNumber={slideNumber} />
+            )}
           </div>
         </div>
 
@@ -417,6 +427,68 @@ export default function WorkArea({
               </div>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 활성 슬라이드가 pending 상태일 때 preview body 위에 띄우는 반투명 오버레이.
+ * AI 스크립트 생성 중임을 알리는 spinner + 라벨로 구성. 슬라이드 미리보기
+ * 자체(slideMock) 는 그대로 보이되 위에 layer 가 깔린다 — 어떤 슬라이드인지
+ * 식별은 가능하면서도 "아직 작업 중" 임이 분명히 전달된다.
+ */
+function PendingPreviewOverlay({ slideNumber }: { slideNumber: number }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: "absolute",
+        inset: 0,
+        display: "grid",
+        placeItems: "center",
+        background: "rgba(250, 250, 247, 0.78)",
+        backdropFilter: "blur(2px)",
+        zIndex: 2,
+        gap: 8,
+      }}
+    >
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+        <svg
+          viewBox="0 0 32 32"
+          width="28"
+          height="28"
+          className="studio-slide-spinner"
+          aria-hidden="true"
+        >
+          <circle
+            cx="16"
+            cy="16"
+            r="12"
+            fill="none"
+            stroke="rgba(255, 182, 39, 0.20)"
+            strokeWidth="3"
+          />
+          <path
+            d="M 16 4 A 12 12 0 0 1 28 16"
+            fill="none"
+            stroke="var(--gold-on-light, var(--gold))"
+            strokeWidth="3"
+            strokeLinecap="round"
+          />
+        </svg>
+        <div
+          style={{
+            ...tabularStyle,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--gold-on-light, var(--gold))",
+            letterSpacing: "0.04em",
+          }}
+        >
+          슬라이드 {slideNumber} · AI 생성 중…
         </div>
       </div>
     </div>
