@@ -45,6 +45,13 @@ export interface WorkAreaProps {
    * 인디케이터를 노출. 슬라이드 카드 (좌측) 는 SlidePanel 이 spinner 로 표시.
    */
   activeSlidePending?: boolean;
+  /**
+   * 강의 전체 분석/스크립트 생성 진입 단계. true 면 슬라이드 카운트조차
+   * 아직 알려지지 않았거나 PPT 노트를 추출 중인 상태. preview-card 본문은
+   * 격자 배경 위 spinner + "스크립트 생성 중…" 으로, script-card 본문은
+   * placeholder 텍스트로 통일되고 액션 버튼은 모두 disabled.
+   */
+  isLoading?: boolean;
   /** 수동 편집 저장 — 새 본문을 받아 부모가 PATCH 호출. */
   onEditSave?: (nextText: string) => Promise<void> | void;
   /** 다시 생성 — 부모가 Claude 재생성 엔드포인트로 요청. */
@@ -176,6 +183,7 @@ export default function WorkArea({
   aiText,
   meta,
   activeSlidePending = false,
+  isLoading = false,
   onEditSave,
   onRegenerate,
   onListen,
@@ -185,6 +193,22 @@ export default function WorkArea({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(aiText);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // slideImageUrl 이 빈 문자열이거나 onError 로 로드 실패한 경우 broken <img>
+  // placeholder 가 노출되지 않도록 트래킹. URL 이 바뀌면 상태를 리셋해서
+  // 다음 슬라이드의 이미지는 다시 시도한다.
+  const [imageBroken, setImageBroken] = useState(false);
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setImageBroken(false);
+  }, [slideImageUrl]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const trimmedImageUrl = slideImageUrl?.trim() ?? "";
+  const showSlideImage =
+    !isLoading && !imageBroken && trimmedImageUrl.length > 0;
+  const slideCountUnknown = isLoading && totalSlides === 0;
+  const actionsDisabled = isLoading || regenerating;
 
   // 슬라이드가 바뀌면 편집 모드를 해제하고 draft 도 새 본문으로 동기화한다.
   // react-hooks/set-state-in-effect: prop 변화에 따른 로컬 편집 상태 리셋이라
@@ -238,28 +262,45 @@ export default function WorkArea({
         <div style={cardOuterStyle}>
           <div style={previewHeadStyle}>
             <div className="flex items-center gap-2.5 min-w-0">
-              <span
-                style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  color: "var(--gold)",
-                  textTransform: "uppercase",
-                }}
-              >
-                슬라이드 <span style={tabularStyle}>{slideNumber}</span> / {totalSlides}
-              </span>
-              <span
-                className="truncate"
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: "var(--text)",
-                  maxWidth: "40vw",
-                }}
-              >
-                {slideTitle}
-              </span>
+              {slideCountUnknown ? (
+                <span
+                  data-testid="workarea-header-analyzing"
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    color: "var(--gold)",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  슬라이드 분석 중
+                </span>
+              ) : (
+                <>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      letterSpacing: "0.08em",
+                      color: "var(--gold)",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    슬라이드 <span style={tabularStyle}>{slideNumber}</span> / {totalSlides}
+                  </span>
+                  <span
+                    className="truncate"
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: "var(--text)",
+                      maxWidth: "40vw",
+                    }}
+                  >
+                    {slideTitle}
+                  </span>
+                </>
+              )}
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={onListen} style={pillBtnStyle}>
@@ -277,14 +318,18 @@ export default function WorkArea({
           </div>
           <div style={previewBodyStyle}>
             <div style={previewGridOverlay} aria-hidden="true" />
-            {slideImageUrl ? (
+            {isLoading ? (
+              <LoadingPreviewMock />
+            ) : showSlideImage ? (
               // 실제 PPT 슬라이드 이미지 — next/image 대신 단순 <img> 로 S3
               // 외부 도메인 등록을 회피한다. contain + borderRadius 만 적용해
-              // preview body 비율을 그대로 따른다.
+              // preview body 비율을 그대로 따른다. 로드 실패 시 broken-image
+              // 아이콘 노출을 막기 위해 onError 로 fallback mock 으로 전환한다.
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={slideImageUrl}
+                src={trimmedImageUrl}
                 alt={`슬라이드 ${slideNumber} 미리보기`}
+                onError={() => setImageBroken(true)}
                 style={{
                   width: "100%",
                   height: "100%",
@@ -299,7 +344,7 @@ export default function WorkArea({
                 )}
               </div>
             )}
-            {activeSlidePending && (
+            {!isLoading && activeSlidePending && (
               <PendingPreviewOverlay slideNumber={slideNumber} />
             )}
           </div>
@@ -361,7 +406,18 @@ export default function WorkArea({
                   하두진 교수 톤 학습 모델
                 </span>
               </div>
-              {editing ? (
+              {isLoading ? (
+                <div
+                  data-testid="workarea-script-loading"
+                  style={{
+                    ...blockTextStyle,
+                    color: "var(--text-muted)",
+                    fontStyle: "italic",
+                  }}
+                >
+                  AI 가 PPT 노트를 추출하고 있어요…
+                </div>
+              ) : editing ? (
                 <div style={{ padding: 14 }}>
                   <textarea
                     ref={textareaRef}
@@ -422,8 +478,12 @@ export default function WorkArea({
                 <button
                   type="button"
                   onClick={handleEditClick}
-                  style={pillBtnStyle}
-                  disabled={regenerating}
+                  style={{
+                    ...pillBtnStyle,
+                    opacity: actionsDisabled ? 0.55 : 1,
+                    cursor: actionsDisabled ? "not-allowed" : "pointer",
+                  }}
+                  disabled={actionsDisabled}
                 >
                   <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -435,12 +495,12 @@ export default function WorkArea({
                 <button
                   type="button"
                   onClick={onRegenerate}
-                  disabled={regenerating}
+                  disabled={actionsDisabled}
                   style={{
                     ...pillBtnStyle,
                     color: "var(--text-muted)",
-                    opacity: regenerating ? 0.6 : 1,
-                    cursor: regenerating ? "wait" : "pointer",
+                    opacity: actionsDisabled ? 0.55 : 1,
+                    cursor: actionsDisabled ? (isLoading ? "not-allowed" : "wait") : "pointer",
                   }}
                 >
                   <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
@@ -515,6 +575,64 @@ function PendingPreviewOverlay({ slideNumber }: { slideNumber: number }) {
         >
           슬라이드 {slideNumber} · AI 생성 중…
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 강의 진입 시 isLoading=true 동안 preview body 가운데에 띄우는 mock.
+ * 격자 배경은 부모의 previewGridOverlay 가 이미 제공하므로 여기서는
+ * spinner + 문구만 렌더한다.
+ */
+function LoadingPreviewMock() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      data-testid="workarea-preview-loading"
+      style={{
+        position: "relative",
+        zIndex: 1,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 10,
+      }}
+    >
+      <svg
+        viewBox="0 0 32 32"
+        width="26"
+        height="26"
+        className="studio-slide-spinner"
+        aria-hidden="true"
+      >
+        <circle
+          cx="16"
+          cy="16"
+          r="12"
+          fill="none"
+          stroke="rgba(255, 182, 39, 0.20)"
+          strokeWidth="3"
+        />
+        <path
+          d="M 16 4 A 12 12 0 0 1 28 16"
+          fill="none"
+          stroke="var(--gold-on-light, var(--gold))"
+          strokeWidth="3"
+          strokeLinecap="round"
+        />
+      </svg>
+      <div
+        style={{
+          ...tabularStyle,
+          fontSize: 12.5,
+          fontWeight: 600,
+          color: "var(--gold-on-light, var(--gold))",
+          letterSpacing: "0.04em",
+        }}
+      >
+        스크립트 생성 중…
       </div>
     </div>
   );
