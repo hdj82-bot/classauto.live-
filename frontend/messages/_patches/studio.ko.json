@@ -70,7 +70,7 @@
       "slideStatusWarning": "보강 필요",
       "originalNotesTitle": "원본 PPT 노트",
       "originalNotesEmpty": "이 슬라이드에는 발표자 노트가 없습니다.",
-      "aiScriptTitle": "AI 다듬은 스크립트",
+      "aiScriptTitle": "AI 아바타 발화 내용",
       "aiScriptCharCount": "{count}자",
       "actions": {
         "accept": "채택",

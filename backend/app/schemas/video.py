@@ -45,6 +45,13 @@ class ScriptPatchRequest(BaseModel):
     segments: list[ScriptSegment] = Field(..., min_length=1)
 
 
+# ── 단일 슬라이드 재생성 요청 ─────────────────────────────────────────────────
+
+class ScriptRegenerateRequest(BaseModel):
+    """POST /api/videos/{id}/script/regenerate 요청."""
+    slide_index: int = Field(..., ge=0, description="재생성할 슬라이드 인덱스 (0-based)")
+
+
 # ── 승인·보관 응답 ────────────────────────────────────────────────────────────
 
 class VideoStatusResponse(BaseModel):

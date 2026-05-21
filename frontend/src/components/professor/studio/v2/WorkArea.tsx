@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { tabularStyle, hanStyle, displayStyle } from "@/components/professor/shell";
 
 /**
@@ -10,9 +10,15 @@ import { tabularStyle, hanStyle, displayStyle } from "@/components/professor/she
  * + `.script-card` 구조 그대로.
  *
  * - preview-card: 슬라이드 미리보기 (격자 배경 + slide-mock)
- * - script-card: 원본 PPT 노트 + AI 다듬은 스크립트 (2-block) + actions
+ * - script-card: AI 아바타 발화 내용 + actions (수동 편집 / 다시 생성)
  *
  * 본 컴포넌트는 시각만 책임지고 데이터는 props 로 받는다.
+ *
+ * 변경 이력:
+ * - 2026-05-21: "원본 PPT 노트" 블록 제거 — PPT 노트가 비어있는 경우가 많아
+ *   존재 자체가 혼란을 줌. "AI 다듬은 스크립트" → "AI 아바타 발화 내용" 라벨
+ *   변경. 채택·거부 버튼 제거하고 "수동 편집" / "다시 생성" 만 남김. 수동
+ *   편집은 인라인 textarea 로 동작.
  */
 
 export interface WorkAreaProps {
@@ -22,18 +28,18 @@ export interface WorkAreaProps {
   slideTitle: string;
   /** 슬라이드 mock 콘텐츠 (badge + h1 + sub + 칼럼 카드 등). 없으면 placeholder. */
   slideMock?: ReactNode;
-  /** 원본 PPT 노트 텍스트. */
-  originalText: string;
-  /** AI 다듬은 스크립트 텍스트. */
+  /** AI 아바타 발화 내용 텍스트. */
   aiText: string;
   /** 예상 길이·글자수 등 메타. */
   meta?: string;
-  /** 채택 / 거부 핸들러. */
-  onAccept?: () => void;
-  onReject?: () => void;
-  onEdit?: () => void;
-  onRegenerate?: () => void;
+  /** 수동 편집 저장 — 새 본문을 받아 부모가 PATCH 호출. */
+  onEditSave?: (nextText: string) => Promise<void> | void;
+  /** 다시 생성 — 부모가 Claude 재생성 엔드포인트로 요청. */
+  onRegenerate?: () => Promise<void> | void;
   onListen?: () => void;
+  /** 다시 생성·저장 진행 표시. */
+  regenerating?: boolean;
+  saving?: boolean;
 }
 
 const workStyle: CSSProperties = {
@@ -153,15 +159,59 @@ export default function WorkArea({
   totalSlides,
   slideTitle,
   slideMock,
-  originalText,
   aiText,
   meta,
-  onAccept,
-  onReject,
-  onEdit,
+  onEditSave,
   onRegenerate,
   onListen,
+  regenerating = false,
+  saving = false,
 }: WorkAreaProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(aiText);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // 슬라이드가 바뀌면 편집 모드를 해제하고 draft 도 새 본문으로 동기화한다.
+  useEffect(() => {
+    setEditing(false);
+    setDraft(aiText);
+  }, [aiText, slideNumber]);
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      const v = textareaRef.current.value;
+      textareaRef.current.setSelectionRange(v.length, v.length);
+    }
+  }, [editing]);
+
+  const handleEditClick = () => {
+    setDraft(aiText);
+    setEditing(true);
+  };
+
+  const handleCancel = () => {
+    setDraft(aiText);
+    setEditing(false);
+  };
+
+  const handleSave = async () => {
+    if (!onEditSave) {
+      setEditing(false);
+      return;
+    }
+    if (draft.trim() === aiText.trim()) {
+      setEditing(false);
+      return;
+    }
+    try {
+      await onEditSave(draft);
+      setEditing(false);
+    } catch {
+      /* 저장 실패는 부모에서 토스트로 알린다 — 편집 모드는 유지 */
+    }
+  };
+
   return (
     <div style={workStyle}>
       <div style={workScrollStyle}>
@@ -254,36 +304,11 @@ export default function WorkArea({
               <div
                 style={{
                   ...blockHeadBase,
-                  color: "var(--text-muted)",
-                }}
-              >
-                원본 PPT 노트
-                <span
-                  style={{
-                    marginLeft: "auto",
-                    fontSize: 10,
-                    letterSpacing: "0.04em",
-                    textTransform: "none",
-                    fontWeight: 500,
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  발표자 노트에서 추출
-                </span>
-              </div>
-              <div style={{ ...blockTextStyle, color: "var(--text-muted)" }}>
-                {originalText}
-              </div>
-            </div>
-            <div style={blockStyle}>
-              <div
-                style={{
-                  ...blockHeadBase,
                   color: "var(--gold)",
                   background: "rgba(255, 182, 39, 0.06)",
                 }}
               >
-                AI 다듬은 스크립트
+                AI 아바타 발화 내용
                 <span
                   style={{
                     marginLeft: "auto",
@@ -297,62 +322,96 @@ export default function WorkArea({
                   하두진 교수 톤 학습 모델
                 </span>
               </div>
-              <div style={{ ...blockTextStyle, color: "var(--text)" }}>
-                {aiText}
+              {editing ? (
+                <div style={{ padding: 14 }}>
+                  <textarea
+                    ref={textareaRef}
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    rows={Math.min(14, Math.max(5, draft.split("\n").length + 1))}
+                    aria-label="AI 아바타 발화 내용 편집"
+                    disabled={saving}
+                    style={{
+                      width: "100%",
+                      fontFamily: "inherit",
+                      fontSize: 13.5,
+                      lineHeight: 1.65,
+                      padding: 10,
+                      border: "1px solid var(--line-strong)",
+                      borderRadius: 8,
+                      background: "var(--bg)",
+                      color: "var(--text)",
+                      resize: "vertical",
+                      outline: "none",
+                    }}
+                  />
+                  <div
+                    className="flex justify-end gap-2"
+                    style={{ marginTop: 10 }}
+                  >
+                    <button
+                      type="button"
+                      onClick={handleCancel}
+                      disabled={saving}
+                      style={pillBtnStyle}
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={saving}
+                      style={{
+                        ...pillBtnStyle,
+                        background: "var(--gold-soft)",
+                        borderColor: "var(--gold)",
+                        color: "var(--gold-on-light, #B88308)",
+                      }}
+                    >
+                      {saving ? "저장 중…" : "저장"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ ...blockTextStyle, color: "var(--text)" }}>
+                  {aiText}
+                </div>
+              )}
+            </div>
+            {!editing && (
+              <div className="flex flex-wrap gap-2" style={{ marginTop: 4 }}>
+                <button
+                  type="button"
+                  onClick={handleEditClick}
+                  style={pillBtnStyle}
+                  disabled={regenerating}
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                  수동 편집
+                </button>
+                <span style={{ flex: 1 }} />
+                <button
+                  type="button"
+                  onClick={onRegenerate}
+                  disabled={regenerating}
+                  style={{
+                    ...pillBtnStyle,
+                    color: "var(--text-muted)",
+                    opacity: regenerating ? 0.6 : 1,
+                    cursor: regenerating ? "wait" : "pointer",
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="1 4 1 10 7 10" />
+                    <path d="M3.51 15A9 9 0 1 0 6 5.3L1 10" />
+                  </svg>
+                  {regenerating ? "다시 생성 중…" : "다시 생성"}
+                </button>
               </div>
-            </div>
-            <div className="flex flex-wrap gap-2" style={{ marginTop: 4 }}>
-              <button
-                type="button"
-                onClick={onAccept}
-                style={{
-                  ...pillBtnStyle,
-                  background: "rgba(16, 185, 129, 0.10)",
-                  borderColor: "rgba(16, 185, 129, 0.30)",
-                  color: "#047857",
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-                채택
-              </button>
-              <button
-                type="button"
-                onClick={onReject}
-                style={{
-                  ...pillBtnStyle,
-                  background: "rgba(239, 68, 68, 0.06)",
-                  borderColor: "rgba(239, 68, 68, 0.24)",
-                  color: "#B91C1C",
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-                거부
-              </button>
-              <button type="button" onClick={onEdit} style={pillBtnStyle}>
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-                수동 편집
-              </button>
-              <span style={{ flex: 1 }} />
-              <button
-                type="button"
-                onClick={onRegenerate}
-                style={{ ...pillBtnStyle, color: "var(--text-muted)" }}
-              >
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="1 4 1 10 7 10" />
-                  <path d="M3.51 15A9 9 0 1 0 6 5.3L1 10" />
-                </svg>
-                다시 생성
-              </button>
-            </div>
+            )}
           </div>
         </div>
       </div>

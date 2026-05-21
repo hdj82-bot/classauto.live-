@@ -42,6 +42,8 @@ const RENDER_POLL_MS = 5000;
  * - GET /api/lectures/{id}/video — video.id 확보 (파이프라인 진행 폴링)
  * - GET /api/videos/{video_id}/script — 스크립트 segments 폴링
  * - PATCH /api/lectures/{id} — 음성/만료 설정 반영
+ * - PATCH /api/videos/{video_id}/script — 수동 편집 저장 (스크립트 패널)
+ * - POST /api/videos/{video_id}/script/regenerate — 슬라이드 1장 Claude 재생성
  * - POST /api/videos/{video_id}/approve — 승인
  * - GET /api/v1/render/lecture/{id} — 렌더 진행 폴링
  *
@@ -84,6 +86,10 @@ export default function StudioWizardPage() {
   const [genDone, setGenDone] = useState(false);
   const [approved, setApproved] = useState(false);
   const renderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── 스크립트 검토 패널 액션 진행 상태 ────────────────────────────────────────
+  const [savingScript, setSavingScript] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   // ── 1) 강의 + 비디오 ID 로드 ─────────────────────────────────────────────────
   useEffect(() => {
@@ -217,14 +223,11 @@ export default function StudioWizardPage() {
     });
   }, [script, reviewByIndex]);
 
-  const activeOrigSegment = useMemo(() => {
+  // 현재 슬라이드의 편집 가능한 세그먼트 (segments = AI 초안에서 시작해 교수자
+  // 편집이 누적되는 working copy). 원본 baseline 은 script.ai_segments 에 별도
+  // 보존되어 있으며 reset 시에만 참조한다.
+  const activeSegment = useMemo(() => {
     return script?.segments?.find((s) => s.slide_index === activeIndex) ?? null;
-  }, [script, activeIndex]);
-
-  const activeAiSegment = useMemo(() => {
-    return (
-      script?.ai_segments?.find((s) => s.slide_index === activeIndex) ?? null
-    );
   }, [script, activeIndex]);
 
   const acceptedCount = useMemo(
@@ -234,13 +237,68 @@ export default function StudioWizardPage() {
     [reviewByIndex],
   );
 
-  const handleAccept = useCallback(() => {
-    setReviewByIndex((prev) => ({ ...prev, [activeIndex]: "accepted" }));
-  }, [activeIndex]);
+  // ── 수동 편집 저장 ───────────────────────────────────────────────────────────
+  // PATCH /api/videos/{video_id}/script — 백엔드는 전체 segments 배열을 받으므로
+  // 활성 슬라이드의 text 만 갈아끼운 새 배열을 보낸다. 성공 시 segments 전체
+  // 응답을 받아 로컬 script 도 동기화한다.
+  const handleEditSave = useCallback(
+    async (nextText: string) => {
+      if (!videoId || !script) {
+        // 시뮬레이션 모드 (백엔드 미준비) — 로컬 state 만 갱신
+        setReviewByIndex((prev) => ({ ...prev, [activeIndex]: "edited" }));
+        return;
+      }
+      const trimmed = nextText.trim();
+      if (!trimmed) {
+        toast("발화 내용은 비워둘 수 없습니다.", "error");
+        throw new Error("empty");
+      }
+      const nextSegments = (script.segments ?? []).map((s) =>
+        s.slide_index === activeIndex ? { ...s, text: trimmed } : s,
+      );
+      try {
+        setSavingScript(true);
+        const { data } = await api.patch<ScriptResponse>(
+          `/api/videos/${videoId}/script`,
+          { segments: nextSegments },
+        );
+        setScript(data);
+        setReviewByIndex((prev) => ({ ...prev, [activeIndex]: "edited" }));
+        toast(t("step2.saveSuccess"), "success");
+      } catch (err) {
+        toast(t("step2.saveError"), "error");
+        throw err;
+      } finally {
+        setSavingScript(false);
+      }
+    },
+    [videoId, script, activeIndex, toast, t],
+  );
 
-  const handleReject = useCallback(() => {
-    setReviewByIndex((prev) => ({ ...prev, [activeIndex]: "rejected" }));
-  }, [activeIndex]);
+  // ── 다시 생성 ────────────────────────────────────────────────────────────────
+  // POST /api/videos/{video_id}/script/regenerate — 해당 슬라이드 1장만 Claude 로
+  // 재생성한다. 응답은 PATCH 와 동일한 ScriptResponse.
+  const handleRegenerate = useCallback(async () => {
+    if (!videoId) {
+      // 시뮬레이션 모드 — 다른 액션처럼 로컬 state 만 표시
+      setReviewByIndex((prev) => ({ ...prev, [activeIndex]: "pending" }));
+      return;
+    }
+    try {
+      setRegenerating(true);
+      const { data } = await api.post<ScriptResponse>(
+        `/api/videos/${videoId}/script/regenerate`,
+        { slide_index: activeIndex },
+      );
+      setScript(data);
+      setReviewByIndex((prev) => ({ ...prev, [activeIndex]: "pending" }));
+      toast("발화 내용을 다시 생성했어요.", "success");
+    } catch {
+      toast("재생성 중 오류가 발생했습니다.", "error");
+    } finally {
+      setRegenerating(false);
+    }
+  }, [videoId, activeIndex, toast]);
 
   const handleNext = useCallback(() => {
     setActiveIndex((i) => Math.min(slides.length - 1, i + 1));
@@ -402,25 +460,21 @@ export default function StudioWizardPage() {
         slideNumber={activeIndex + 1}
         totalSlides={slides.length}
         slideTitle={slideTitle}
-        originalText={
-          activeOrigSegment?.text ??
-          (scriptLoading
-            ? "AI 가 PPT 노트를 추출하고 있어요. 잠시만 기다려주세요…"
-            : "원본 PPT 노트가 비어 있습니다.")
-        }
         aiText={
-          activeAiSegment?.text ??
+          activeSegment?.text ??
           (scriptLoading
-            ? "AI 다듬은 스크립트가 곧 표시됩니다."
-            : "다듬은 스크립트가 준비되지 않았습니다.")
+            ? "AI 아바타 발화 내용이 곧 표시됩니다."
+            : "AI 아바타 발화 내용이 준비되지 않았습니다.")
         }
         meta={
-          activeAiSegment
-            ? `예상 ${formatDuration(activeAiSegment)} · ${activeAiSegment.text.length}자`
+          activeSegment
+            ? `예상 ${formatDuration(activeSegment)} · ${activeSegment.text.length}자`
             : undefined
         }
-        onAccept={handleAccept}
-        onReject={handleReject}
+        onEditSave={handleEditSave}
+        onRegenerate={handleRegenerate}
+        saving={savingScript}
+        regenerating={regenerating}
       />
 
       <SettingsPanel
