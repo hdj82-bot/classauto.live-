@@ -44,6 +44,17 @@ interface SlidePanelProps {
    * /api/lectures/{id}/slides 폴링이 빈 응답 (PPTX 파싱 직전) 일 때 사용.
    */
   loading?: boolean;
+  /**
+   * 업로드 직후 PPTX 분석 단계 — 카드 자리에 shimmer skeleton 5장.
+   *
+   * `loading` 보다 더 적극적인 상태:
+   *  - 헤더 우측 "{n}장" 자리에 "분석 중" 텍스트 노출
+   *  - "슬라이드 추가" 하단 버튼은 mount 하지 않음 (분석 중 추가 비허용)
+   *
+   * `slides.length === 0` 조건과 함께 평가하므로 슬라이드가 1장이라도
+   * 도착한 뒤에는 자동으로 일반 렌더로 전환된다.
+   */
+  isLoading?: boolean;
 }
 
 const panelStyle: CSSProperties = {
@@ -105,10 +116,24 @@ export default function SlidePanel({
   activeIndex,
   onSelect,
   loading = false,
+  isLoading = false,
 }: SlidePanelProps) {
-  const showSkeleton = loading && slides.length === 0;
+  const showAnalyzing = isLoading && slides.length === 0;
+  const showSkeleton = !showAnalyzing && loading && slides.length === 0;
   return (
     <aside style={panelStyle} aria-label="슬라이드 목록">
+      {/* prefers-reduced-motion 시 shimmer animation 정지 + opacity 0.6 고정.
+          globals.css 전역 규칙은 animation-duration 만 0.01ms 로 줄여 시각적으로
+          정지처럼 보이게 하지만, 명시적 opacity 락이 필요해 별도 inline 규칙. */}
+      <style>{`
+        @media (prefers-reduced-motion: reduce) {
+          .slidepanel-analyzing-shimmer .studio-skeleton-block {
+            animation: none !important;
+            background-image: none !important;
+            opacity: 0.6;
+          }
+        }
+      `}</style>
       <div style={headStyle}>
         <h3 style={headLabelStyle}>슬라이드</h3>
         <span
@@ -118,10 +143,23 @@ export default function SlidePanel({
             color: "var(--text-faint)",
           }}
         >
-          {showSkeleton ? "—" : `${slides.length}장`}
+          {showAnalyzing ? "분석 중" : showSkeleton ? "—" : `${slides.length}장`}
         </span>
       </div>
-      {showSkeleton ? (
+      {showAnalyzing ? (
+        <ul
+          style={listStyle}
+          aria-busy="true"
+          aria-label="슬라이드 분석 중"
+          data-testid="slidepanel-analyzing"
+        >
+          {[0, 1, 2, 3, 4].map((i) => (
+            <li key={i}>
+              <AnalyzingSkeletonCard />
+            </li>
+          ))}
+        </ul>
+      ) : showSkeleton ? (
         <ul style={listStyle} aria-busy="true" aria-label="슬라이드 메타 로딩 중">
           {[0, 1, 2].map((i) => (
             <li key={i}>
@@ -227,22 +265,82 @@ export default function SlidePanel({
         })}
       </ul>
       )}
-      <button type="button" style={addBtnStyle}>
-        <svg
-          viewBox="0 0 24 24"
-          width="12"
-          height="12"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2.4}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        슬라이드 추가
-      </button>
+      {!showAnalyzing && (
+        <button type="button" style={addBtnStyle}>
+          <svg
+            viewBox="0 0 24 24"
+            width="12"
+            height="12"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.4}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          슬라이드 추가
+        </button>
+      )}
     </aside>
+  );
+}
+
+/**
+ * PPTX 분석 중 표시되는 shimmer 카드 — 5장 모킹용.
+ *
+ * `studio-skeleton-block` 클래스(globals.css) 가 `--ease-out` 토큰 기반의
+ * shimmer 그라데이션을 입혀준다. 추가로 `slidepanel-analyzing-shimmer`
+ * 클래스를 부여해 prefers-reduced-motion 환경에서 위쪽 inline `<style>`
+ * 블록이 animation 을 멈추고 opacity 0.6 으로 고정한다.
+ */
+function AnalyzingSkeletonCard() {
+  return (
+    <div
+      className="slidepanel-analyzing-shimmer"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        padding: 8,
+        background: "var(--bg-card)",
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+      }}
+      aria-hidden="true"
+    >
+      <span
+        className="studio-skeleton-block"
+        style={{
+          width: 56,
+          height: 36,
+          borderRadius: 5,
+          flexShrink: 0,
+        }}
+      />
+      <span style={{ flex: 1, minWidth: 0, display: "block" }}>
+        <span
+          className="studio-skeleton-block"
+          style={{
+            display: "block",
+            width: "32%",
+            height: 8,
+            borderRadius: 3,
+          }}
+        />
+        <span
+          className="studio-skeleton-block"
+          style={{
+            display: "block",
+            marginTop: 6,
+            width: "82%",
+            height: 10,
+            borderRadius: 3,
+          }}
+        />
+      </span>
+    </div>
   );
 }
 
