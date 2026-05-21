@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     SCRIPT_MODEL: str = "claude-sonnet-4-6"
     QA_MODEL: str = "claude-opus-4-6"
     SCRIPT_MAX_TOKENS: int = 2048
+    # 슬라이드별 스크립트 생성 시 동시 호출 상한. Anthropic 분당 요청 수
+    # rate limit 보호용. 너무 높이면 429 가 늘어 retry 백오프로 오히려 느려진다.
+    SCRIPT_CONCURRENCY: int = 5
     CLAUDE_INPUT_COST_PER_M: float = 3.00
     CLAUDE_OUTPUT_COST_PER_M: float = 15.00
 

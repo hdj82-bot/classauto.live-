@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import mimetypes
+import re
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
 import anthropic
@@ -36,23 +38,124 @@ SYSTEM_PROMPT = """\
 3. 구어체로 자연스럽게 작성합니다. (예: "~입니다", "~하겠습니다")
 4. 슬라이드 전환 멘트는 포함하지 않습니다.
 5. 1~2분 분량으로 작성합니다.
+
+출력 형식 (매우 중요):
+출력은 TTS(음성 합성)로 그대로 발화되는 평문입니다.
+마크다운 문법(**굵게**, ##헤딩, `코드`, [링크](url), - 목록, > 인용 등)을 절대 사용하지 마세요.
+중요한 단어를 강조할 때는 따옴표("")나 자연스러운 한국어 화법(예: "특히", "여기서 핵심은")으로 표현하세요.
+중국어 단어는 한자 뒤에 괄호로 병음을 병기합니다. 예: 他(tā), 喜欢(xǐhuān).
+
+예시:
+(O) 첫 번째 문장은 "他(tā)喜欢(xǐhuān)猫(māo)"입니다. 여기서 핵심은 동사 "喜欢"의 위치입니다.
+(X) 첫 번째 문장은 **他喜欢猫** 입니다. 여기서 ##핵심은 동사 `喜欢`의 위치입니다.
 """
 
 
+# ── 마크다운 sanitizer ───────────────────────────────────────────────────────
+# 시스템 프롬프트로 1차 차단해도 모델이 가끔 마크다운을 출력한다.
+# TTS 가 별표·해시·백틱을 그대로 읽어버리는 사고를 막기 위한 2차 방어선.
+
+_RE_BOLD = re.compile(r"\*\*(.+?)\*\*", re.DOTALL)
+# 단어 경계 lookaround 를 두지 않는다 — Unicode `\w` 에 한글·한자가 포함되어
+# `__중요__한` 처럼 한국어 문맥에서는 절대 매치하지 않는다 (CI #496/497 회귀).
+# Python dunder(`__init__`) 가 우연히 잡히는 false positive 는 TTS 스크립트
+# 컨텍스트에서 허용한다 — 마크다운 강조가 음성으로 발화되는 사고가 더 위험.
+_RE_ITALIC_UNDERSCORE = re.compile(r"__(.+?)__", re.DOTALL)
+_RE_ITALIC_STAR = re.compile(r"(?<!\*)\*(?!\s)(.+?)(?<!\s)\*(?!\*)", re.DOTALL)
+_RE_ITALIC_UNDER_SINGLE = re.compile(r"(?<!\w)_(?!\s)(.+?)(?<!\s)_(?!\w)", re.DOTALL)
+_RE_INLINE_CODE = re.compile(r"`+([^`]+?)`+")
+_RE_CODE_FENCE = re.compile(r"^```.*?$", re.MULTILINE)
+_RE_HEADING = re.compile(r"^\s{0,3}#{1,6}\s+", re.MULTILINE)
+_RE_BLOCKQUOTE = re.compile(r"^\s{0,3}>\s?", re.MULTILINE)
+_RE_HR = re.compile(r"^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$", re.MULTILINE)
+_RE_LIST_BULLET = re.compile(r"^\s{0,3}[-*+]\s+", re.MULTILINE)
+_RE_LIST_NUMBER = re.compile(r"^\s{0,3}\d+\.\s+", re.MULTILINE)
+_RE_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_RE_IMAGE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
+
+
+def _strip_markdown(text: str) -> str:
+    """LLM 출력에서 마크다운 문법을 제거해 TTS 안전 평문으로 변환.
+
+    문장 내용은 보존하고 표시 문법만 벗긴다. 강조(**굵게**, *기울임*) 는
+    내용을 그대로 살리고, 목록 마커·헤딩 마커는 줄 앞에서만 제거한다.
+    """
+    if not text:
+        return text
+
+    text = _RE_CODE_FENCE.sub("", text)
+    text = _RE_IMAGE.sub(r"\1", text)
+    text = _RE_LINK.sub(r"\1", text)
+    text = _RE_BOLD.sub(r"\1", text)
+    text = _RE_ITALIC_UNDERSCORE.sub(r"\1", text)
+    text = _RE_ITALIC_STAR.sub(r"\1", text)
+    text = _RE_ITALIC_UNDER_SINGLE.sub(r"\1", text)
+    text = _RE_INLINE_CODE.sub(r"\1", text)
+    text = _RE_HEADING.sub("", text)
+    text = _RE_BLOCKQUOTE.sub("", text)
+    text = _RE_HR.sub("", text)
+    text = _RE_LIST_BULLET.sub("", text)
+    text = _RE_LIST_NUMBER.sub("", text)
+
+    # 잔여 별표·백틱 안전망 (페어가 깨진 경우)
+    text = text.replace("**", "").replace("`", "")
+
+    # 연속된 빈 줄 압축 + 양 끝 공백 정리
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+# ── 시스템 프롬프트 (prompt caching 형식) ────────────────────────────────────
+# 슬라이드마다 동일한 system 텍스트라 cache_control="ephemeral" 로 표시해
+# 두 번째 슬라이드부터는 cache_read_input_tokens 로 청구된다.
+
+_SYSTEM_BLOCKS = [
+    {
+        "type": "text",
+        "text": SYSTEM_PROMPT,
+        "cache_control": {"type": "ephemeral"},
+    },
+]
+
+
 def generate_scripts(slides: list[SlideContent]) -> list[SlideScript]:
-    """모든 슬라이드에 대해 발화 스크립트를 생성."""
+    """모든 슬라이드에 대해 발화 스크립트를 병렬 생성.
+
+    - 첫 슬라이드는 동기 호출로 먼저 끝내 사용자가 가장 먼저 보는 화면을
+      가장 빨리 채운다(첫 호출이 prompt cache 도 적재해준다).
+    - 나머지는 SCRIPT_CONCURRENCY 상한의 ThreadPoolExecutor 로 병렬화.
+    - slide_number 순서를 보장해 반환.
+    """
     # 명시적 timeout 30s — anthropic SDK 의 with_options 로 호출별 한도 부과.
     client = anthropic.Anthropic(
         api_key=settings.ANTHROPIC_API_KEY, timeout=30.0,
     )
-    scripts: list[SlideScript] = []
 
-    for slide in slides:
-        script = _generate_single_script(client, slide)
-        scripts.append(SlideScript(slide_number=slide.slide_number, script=script))
-        logger.info("슬라이드 %d 스크립트 생성 완료", slide.slide_number)
+    if not slides:
+        return []
 
-    return scripts
+    results: dict[int, str] = {}
+
+    first, rest = slides[0], slides[1:]
+    results[first.slide_number] = _generate_single_script(client, first)
+    logger.info("슬라이드 %d 스크립트 생성 완료 (priming)", first.slide_number)
+
+    if rest:
+        max_workers = max(1, min(settings.SCRIPT_CONCURRENCY, len(rest)))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            future_to_slide: dict[Future, SlideContent] = {
+                pool.submit(_generate_single_script, client, slide): slide
+                for slide in rest
+            }
+            for fut in future_to_slide:
+                slide = future_to_slide[fut]
+                results[slide.slide_number] = fut.result()
+                logger.info("슬라이드 %d 스크립트 생성 완료", slide.slide_number)
+
+    return [
+        SlideScript(slide_number=s.slide_number, script=results[s.slide_number])
+        for s in slides
+    ]
 
 
 @track_external_api("claude")
@@ -88,7 +191,7 @@ def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) ->
         response = client.messages.create(
             model=settings.SCRIPT_MODEL,
             max_tokens=settings.SCRIPT_MAX_TOKENS,
-            system=SYSTEM_PROMPT,
+            system=_SYSTEM_BLOCKS,
             messages=[{"role": "user", "content": content_blocks}],
         )
     except anthropic.APIError as exc:
@@ -96,6 +199,19 @@ def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) ->
         raise RuntimeError(
             f"슬라이드 {slide.slide_number} 스크립트 생성 실패: {exc}"
         ) from exc
+
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        logger.debug(
+            "슬라이드 %d usage: input=%s output=%s cache_read=%s cache_write=%s",
+            slide.slide_number,
+            getattr(usage, "input_tokens", "?"),
+            getattr(usage, "output_tokens", "?"),
+            cache_read,
+            cache_write,
+        )
 
     if not response.content:
         logger.warning("슬라이드 %d: 빈 응답", slide.slide_number)
@@ -106,4 +222,4 @@ def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) ->
         logger.warning("슬라이드 %d: 텍스트 블록 없음", slide.slide_number)
         return "(스크립트를 생성할 수 없었습니다.)"
 
-    return text_block.text
+    return _strip_markdown(text_block.text)

@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.models.user import User
 from app.schemas.video import (
     ScriptPatchRequest,
+    ScriptRegenerateRequest,
     VideoScriptResponse,
     VideoStatusResponse,
 )
@@ -83,6 +84,35 @@ async def patch_script(
         video_id=video_id,
         professor_id=current_user.id,
         segments=body.segments,
+    )
+    return _build_script_response(video, script)
+
+
+# ── POST /api/videos/{id}/script/regenerate ──────────────────────────────────
+
+@router.post(
+    "/{video_id}/script/regenerate",
+    response_model=VideoScriptResponse,
+    summary="슬라이드 1장 Claude 재생성 (교수자 전용)",
+)
+async def regenerate_slide(
+    video_id: uuid.UUID,
+    body: ScriptRegenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_professor),
+):
+    """
+    지정한 슬라이드 1장의 발화 스크립트를 Claude 로 다시 생성합니다.
+
+    - `pending_review` 상태에서만 가능
+    - 원본 슬라이드 텍스트(`SlideEmbedding.text_content`) 를 입력으로 사용
+    - SYSTEM_PROMPT 와 `_generate_single_script` 는 그대로 재사용
+    """
+    video, script = await video_svc.regenerate_slide_segment(
+        db=db,
+        video_id=video_id,
+        professor_id=current_user.id,
+        slide_index=body.slide_index,
     )
     return _build_script_response(video, script)
 
