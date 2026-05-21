@@ -27,6 +27,7 @@ from app.services.lecture import (
     list_course_lectures,
     update_lecture,
 )
+from app.services.pipeline.s3 import presign_stored_s3_url
 
 router = APIRouter(tags=["lectures"])
 
@@ -243,7 +244,9 @@ async def get_lecture_slides(
     all_indices = sorted(set(ready_titles) | set(pending_titles))
     slides: list[SlideMeta] = []
     for idx in all_indices:
-        image_url = slide_image_urls.get(idx)
+        # DB 의 영구형 S3 URL → presigned (버킷이 thumbnails/slides/ 를 공개하지
+        # 않아 익명 GET 이 403 — 조회 시점에 IAM 서명 URL 로 변환). NULL 은 그대로.
+        image_url = presign_stored_s3_url(slide_image_urls.get(idx))
         if idx in ready_titles:
             title = ready_titles[idx] or pending_titles.get(idx)
             slides.append(

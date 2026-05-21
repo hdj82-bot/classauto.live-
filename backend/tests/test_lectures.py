@@ -492,6 +492,66 @@ async def test_get_lecture_slides_includes_slide_image_url_from_embedding(
 
 
 @pytest.mark.asyncio
+async def test_get_lecture_slides_presigns_our_bucket_image_url(
+    client, professor, lecture, db,
+):
+    """우리 버킷의 영구형 image_url 은 presigned URL 로 변환되어 응답된다.
+
+    회귀 가드 (2026-05-22): thumbnails/slides/ 가 public-read 가 아니라 익명
+    GET 이 403 → 조회 시점 presigned 변환으로 우회. 외부 버킷 URL 은 그대로
+    통과(위 happy 케이스가 커버).
+    """
+    from unittest.mock import MagicMock, patch
+
+    from sqlalchemy import update
+
+    from app.models.embedding import SlideEmbedding
+    from app.models.lecture import Lecture as LectureModel
+    from app.services.pipeline import s3 as s3_svc
+
+    bucket = s3_svc.settings.S3_BUCKET
+    region = s3_svc.settings.AWS_REGION
+    stored = (
+        f"https://{bucket}.s3.{region}.amazonaws.com"
+        f"/thumbnails/slides/{lecture.id}/1.png"
+    )
+
+    task_id = "task-img-url-presign"
+    await db.execute(
+        update(LectureModel)
+        .where(LectureModel.id == lecture.id)
+        .values(pipeline_task_id=task_id)
+    )
+    db.add(
+        SlideEmbedding(
+            task_id=task_id,
+            slide_number=1,
+            text_content="첫 슬라이드",
+            embedding=[0.0] * 1536,
+            slide_image_url=stored,
+        )
+    )
+    await db.flush()
+
+    mock_client = MagicMock()
+    mock_client.generate_presigned_url.return_value = (
+        "https://signed.example/1.png?X-Amz-Signature=abc"
+    )
+    with patch.object(s3_svc, "get_s3_client", return_value=mock_client):
+        resp = await client.get(
+            f"/api/lectures/{lecture.id}/slides",
+            headers=make_auth_header(professor),
+        )
+
+    assert resp.status_code == 200
+    by_idx = {s["index"]: s for s in resp.json()["slides"]}
+    assert by_idx[0]["image_url"] == "https://signed.example/1.png?X-Amz-Signature=abc"
+    # 추출된 key 가 prefix 포함 전체 경로로 서명 호출됐는지 확인.
+    _, call_kwargs = mock_client.generate_presigned_url.call_args
+    assert call_kwargs["Params"]["Key"] == f"thumbnails/slides/{lecture.id}/1.png"
+
+
+@pytest.mark.asyncio
 async def test_get_lecture_slides_other_professor_forbidden(
     client, db, lecture, professor,
 ):

@@ -53,6 +53,39 @@ def test_generate_presigned_url():
     )
 
 
+# ── presign_stored_s3_url ─────────────────────────────────────────────────────
+
+def test_presign_stored_s3_url_converts_our_bucket_url():
+    """우리 버킷의 영구형 URL → key 추출 후 presigned 로 변환."""
+    bucket = s3_svc.settings.S3_BUCKET
+    region = s3_svc.settings.AWS_REGION
+    stored = f"https://{bucket}.s3.{region}.amazonaws.com/thumbnails/slides/lec-1/3.png"
+
+    mock_client = MagicMock()
+    mock_client.generate_presigned_url.return_value = "https://signed.example/3.png?sig=abc"
+    with patch.object(s3_svc, "get_s3_client", return_value=mock_client):
+        out = s3_svc.presign_stored_s3_url(stored, expiration=600)
+
+    assert out == "https://signed.example/3.png?sig=abc"
+    # 추출된 key 가 prefix 포함 전체 경로여야 한다 (1-based 파일명까지).
+    mock_client.generate_presigned_url.assert_called_once_with(
+        "get_object",
+        Params={"Bucket": bucket, "Key": "thumbnails/slides/lec-1/3.png"},
+        ExpiresIn=600,
+    )
+
+
+def test_presign_stored_s3_url_passthrough_none_and_external():
+    """None 과 외부(타 버킷) URL 은 변환 없이 그대로 통과."""
+    external = "https://cdn.heygen.com/video/abc.mp4"
+    # 외부 URL 은 S3 client 를 아예 호출하지 않아야 한다.
+    with patch.object(s3_svc, "get_s3_client") as get_client:
+        assert s3_svc.presign_stored_s3_url(None) is None
+        assert s3_svc.presign_stored_s3_url("") == ""
+        assert s3_svc.presign_stored_s3_url(external) == external
+        get_client.assert_not_called()
+
+
 # ── delete_file ──────────────────────────────────────────────────────────────
 
 def test_delete_file_success():
