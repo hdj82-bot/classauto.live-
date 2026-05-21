@@ -287,7 +287,16 @@ export default function StudioWizardPage() {
         segText.trim() || meta?.title?.trim() || `슬라이드 ${idx + 1}`;
       const title = titleSource.slice(0, 26).trim();
 
-      return { index: idx, title, thumbChar: hanMatch?.[0], status };
+      // 백엔드 snake_case (image_url) → 프론트 camelCase (imageUrl) 변환.
+      // 컬럼이 없는 환경에서는 항상 null — WorkArea 가 DefaultSlideMock 으로
+      // fallback 한다.
+      return {
+        index: idx,
+        title,
+        thumbChar: hanMatch?.[0],
+        status,
+        imageUrl: meta?.image_url ?? null,
+      };
     });
   }, [script, slidesMeta, reviewByIndex]);
 
@@ -533,6 +542,7 @@ export default function StudioWizardPage() {
         slideNumber={activeIndex + 1}
         totalSlides={slides.length}
         slideTitle={slideTitle}
+        slideImageUrl={activeSlide?.imageUrl ?? null}
         // 활성 슬라이드가 pending 이면 WorkArea 내부에서 미리보기·script 영역을
         // skeleton + "AI 생성 중…" 으로 표시한다.
         // 참고: PR #203 에서 "원본 PPT 노트" 블록이 제거됐으므로 originalText
