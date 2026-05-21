@@ -217,41 +217,21 @@ async def get_lecture_slides(
 
     # 2) SlideEmbedding (step2 결과) — 임시 제목 fallback + slide_count 추정.
     #    pipeline_task_id 가 비어 있으면 파싱조차 시작하지 않은 단계.
-    #
-    # slide_image_url 컬럼은 창 2 (모델·마이그레이션) 가 별도 브랜치에서 추가
-    # 한다. 본 브랜치가 창 2 보다 먼저 배포되더라도 500 이 나지 않도록 컬럼
-    # 존재 여부를 hasattr 로 감지해 select 절을 분기한다. 없을 때는 image_url
-    # 을 None 으로 두며, 프론트는 DefaultSlideMock 으로 그린다.
+    #    slide_image_url 은 step1 에서 LibreOffice 로 렌더한 슬라이드 PNG 의 S3
+    #    URL. 렌더 실패한 슬라이드는 NULL — 프론트는 fallback mock 으로 그린다.
     pending_titles: dict[int, str | None] = {}
     slide_image_urls: dict[int, str | None] = {}
     if lecture.pipeline_task_id:
-        has_image_col = hasattr(SlideEmbedding, "slide_image_url")
-        columns = [SlideEmbedding.slide_number, SlideEmbedding.text_content]
-        if has_image_col:
-            columns.append(SlideEmbedding.slide_image_url)
-
-        try:
-            emb_result = await db.execute(
-                select(*columns)
-                .where(SlideEmbedding.task_id == lecture.pipeline_task_id)
-                .order_by(SlideEmbedding.slide_number.asc())
+        emb_result = await db.execute(
+            select(
+                SlideEmbedding.slide_number,
+                SlideEmbedding.text_content,
+                SlideEmbedding.slide_image_url,
             )
-            rows = emb_result.all()
-        except AttributeError:
-            # 모델 import 시점/세션 상태에 따라 다른 경로로 실패하는 극단 케이스 —
-            # 안전하게 image_url 없이 다시 시도.
-            has_image_col = False
-            emb_result = await db.execute(
-                select(SlideEmbedding.slide_number, SlideEmbedding.text_content)
-                .where(SlideEmbedding.task_id == lecture.pipeline_task_id)
-                .order_by(SlideEmbedding.slide_number.asc())
-            )
-            rows = emb_result.all()
-
-        for row in rows:
-            slide_number = row[0]
-            text_content = row[1]
-            image_url = row[2] if has_image_col and len(row) > 2 else None
+            .where(SlideEmbedding.task_id == lecture.pipeline_task_id)
+            .order_by(SlideEmbedding.slide_number.asc())
+        )
+        for slide_number, text_content, image_url in emb_result.all():
             # SlideEmbedding.slide_number 는 1-based (parser.py 참고),
             # API 응답은 0-based 로 통일 (ScriptSegment.slide_index 와 동일).
             idx = int(slide_number) - 1
