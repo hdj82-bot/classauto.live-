@@ -59,6 +59,33 @@ def generate_presigned_url(s3_key: str, expiration: int = 3600) -> str:
     return url
 
 
+def presign_stored_s3_url(url: str | None, expiration: int = 21600) -> str | None:
+    """DB 에 저장된 영구형 S3 객체 URL 을 presigned GET URL 로 변환한다.
+
+    슬라이드 미리보기 PNG 는 ``thumbnails/slides/...`` 키로 업로드되는데, 운영
+    버킷(classauto-live-media)이 이 prefix 에 public-read 를 부여하지 않아 익명
+    브라우저 GET 이 403 AccessDenied 가 난다 (2026-05-22 진단). 버킷 정책을
+    공개로 바꾸는 대신 — 강의 자료를 영구 공개하지 않는 편이 보안상 낫다 —
+    조회 시점에 IAM 서명된 시간제한 URL 로 바꿔 응답한다.
+
+    우리 버킷의 virtual-hosted URL (``https://{bucket}.s3.{region}.amazonaws.com/{key}``)
+    만 변환하고, 외부 URL·None 은 그대로 돌려준다. 만료는 기본 6시간 — studio
+    편집 세션을 충분히 덮으며, slides 폴링이 ready 후 멈추므로 재서명 부담도 없다.
+    """
+    if not url:
+        return url
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    expected_host = f"{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com"
+    if parsed.netloc != expected_host:
+        return url
+    key = parsed.path.lstrip("/")
+    if not key:
+        return url
+    return generate_presigned_url(key, expiration)
+
+
 def delete_file(s3_key: str) -> bool:
     """S3 객체 삭제. 성공 시 True 반환."""
     try:
