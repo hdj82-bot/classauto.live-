@@ -194,8 +194,13 @@ def upload_slide_image(image_bytes: bytes, lecture_id: str, slide_number: int) -
     로 직접 ``<img>`` 태그에 박아 쓰므로 24h 캐시 + image/png 로 저장한다.
     1-based ``slide_number`` 를 그대로 key 에 박아 동일 강의 재업로드 시
     이전 파일을 덮어쓴다 — 별도 정리 작업 없이 항상 최신 슬라이드를 반환.
+
+    Key prefix 가 ``thumbnails/slides/`` 인 이유: classauto-live-media 버킷
+    정책이 ``thumbnails/*`` 경로에만 public-read 를 부여하고 있어 브라우저가
+    직접 ``<img src=...>`` 로 가져올 수 있다. 신규 ``slides/`` prefix 를
+    그대로 쓰면 403 — 버킷 정책 갱신이 어려운 환경에서 코드만으로 우회.
     """
-    s3_key = f"slides/{lecture_id}/{slide_number}.png"
+    s3_key = f"thumbnails/slides/{lecture_id}/{slide_number}.png"
     s3 = get_s3_client()
     s3.put_object(
         Bucket=settings.S3_BUCKET,

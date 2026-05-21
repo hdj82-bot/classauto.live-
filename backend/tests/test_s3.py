@@ -127,17 +127,19 @@ def test_upload_audio_bytes():
 # ── upload_slide_image ───────────────────────────────────────────────────────
 
 def test_upload_slide_image_key_and_headers():
+    """key 가 thumbnails/ prefix 아래에 떨어져야 한다 — 버킷 정책 public-read
+    범위가 thumbnails/* 에만 잡혀 있어 그 안에 nest 한다."""
     mock_client = MagicMock()
     with patch.object(s3_svc, "get_s3_client", return_value=mock_client):
         url = s3_svc.upload_slide_image(b"\x89PNG\r\n\x1a\n", "lecture-abc", 1)
 
     mock_client.put_object.assert_called_once()
     kw = mock_client.put_object.call_args[1]
-    assert kw["Key"] == "slides/lecture-abc/1.png"
+    assert kw["Key"] == "thumbnails/slides/lecture-abc/1.png"
     assert kw["ContentType"] == "image/png"
     assert kw["CacheControl"] == "public, max-age=86400"
     assert kw["Body"] == b"\x89PNG\r\n\x1a\n"
-    assert "slides/lecture-abc/1.png" in url
+    assert "thumbnails/slides/lecture-abc/1.png" in url
 
 
 def test_upload_slide_image_overwrites_same_key_per_slide():

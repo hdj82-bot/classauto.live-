@@ -158,7 +158,7 @@ def _render_and_upload_slide_images(
 ) -> dict[int, str]:
     """슬라이드 PNG 렌더 + S3 업로드. 실패는 graceful — 빈 dict 반환.
 
-    lecture_id 가 None 이면 업로드 키 경로(``slides/{lecture_id}/{n}.png``)
+    lecture_id 가 None 이면 업로드 키 경로(``thumbnails/slides/{lecture_id}/{n}.png``)
     를 구성할 수 없으므로 빈 dict 만 돌려준다. 본 단계 실패가 파싱 결과를
     버리지 않도록 모든 예외를 잡아 로깅만 한다.
     """
