@@ -23,6 +23,41 @@ _MAX_PROFILE_PHOTO = 8 * 1024 * 1024  # 8MB
 _JPEG_MAGIC = b"\xff\xd8\xff"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
+# ── 큐레이션 allowlist ────────────────────────────────────────────────────────
+# HeyGen /v2/avatars 는 수백 개를 돌려주고 배경색·복장 메타데이터를 주지 않는다.
+# 그래서 갤러리에 노출할 아바타는 교수가 직접 지목한 이름 목록으로 고른다
+# (정장/세미정장·흰 배경·남녀 균등 기준은 사람이 보고 선택). 매칭은 avatar_name
+# 대소문자 무시 부분일치 — UI 에서 이름이 잘려도 접두/부분으로 잡힌다.
+#
+# 비어 있으면 필터를 적용하지 않고 전체를 그대로 노출한다(안전 기본값). 목록을
+# 채우면 "지목한 순서대로" 정렬되며, 한 항목이 여러 변형(예: Sitting/Standing)에
+# 매칭되면 모두 포함된다. 본인 사진 아바타(is_custom)는 큐레이션 대상이 아니다.
+CURATED_AVATAR_NAMES: list[str] = [
+    # 예: "Edward", "Esmond in Blue suit", "Anna", ...  (남/여 균등 + 애니메이션)
+]
+
+
+def curate_avatars(avatars: list[AvatarMeta]) -> list[AvatarMeta]:
+    """``CURATED_AVATAR_NAMES`` 에 지목된 아바타만 그 순서대로 남긴다.
+
+    목록이 비어 있으면 입력을 그대로 반환한다(미지정 시 전체 노출).
+    avatar_id 기준으로 중복을 제거한다.
+    """
+    terms = [t.strip().lower() for t in CURATED_AVATAR_NAMES if t.strip()]
+    if not terms:
+        return avatars
+
+    by_term: list[AvatarMeta] = []
+    seen: set[str] = set()
+    for term in terms:
+        for a in avatars:
+            if a.avatar_id in seen:
+                continue
+            if term in (a.avatar_name or "").lower():
+                by_term.append(a)
+                seen.add(a.avatar_id)
+    return by_term
+
 
 @router.get(
     "/api/avatars",
@@ -64,11 +99,12 @@ async def list_avatars_endpoint(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"HeyGen API 오류: {e}"
         )
 
+    heygen_items: list[AvatarMeta] = []
     for a in avatars:
         avatar_id = a.get("avatar_id")
         if not avatar_id:
             continue
-        items.append(
+        heygen_items.append(
             AvatarMeta(
                 avatar_id=avatar_id,
                 avatar_name=a.get("avatar_name") or "Avatar",
@@ -79,6 +115,8 @@ async def list_avatars_endpoint(
             )
         )
 
+    # 본인 아바타(items)는 그대로 두고, HeyGen 목록만 큐레이션해 합친다.
+    items.extend(curate_avatars(heygen_items))
     return AvatarsResponse(avatars=items, total=len(items))
 
 

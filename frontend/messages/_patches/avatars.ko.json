@@ -52,7 +52,7 @@
     "uploadStatusFailed": "아바타 생성에 실패했습니다. 다른 사진으로 다시 시도해 주세요.",
     "uploadError": "사진 업로드에 실패했습니다.",
     "uploadInvalidType": "이미지 파일(JPG·PNG)만 업로드할 수 있습니다.",
-    "uploadTooLarge": "사진 용량은 10MB 이하여야 합니다.",
+    "uploadTooLarge": "사진 용량은 25MB 이하여야 합니다.",
     "uploadPreviewAlt": "업로드한 프로필 사진 미리보기",
 
     "backToStudio": "편집기로 돌아가기"
