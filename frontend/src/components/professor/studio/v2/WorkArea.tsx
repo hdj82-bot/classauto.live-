@@ -325,13 +325,14 @@ export default function WorkArea({
               // 외부 도메인 등록을 회피한다. 로드 실패 시 broken-image 아이콘
               // 노출을 막기 위해 onError 로 fallback mock 으로 전환한다.
               //
-              // 크기: max-width/max-height 100% + width/height auto 로 슬라이드
-              // 전체가 박스 안에 비율 유지로 들어가게 한다. 이전의 width/height
-              // 100% + object-fit:contain 은 grid item 의 자동 최소 크기
-              // (min-height:auto = 이미지 원본 높이)가 height:100% 를 눌러 박스를
-              // 넘치고 overflow:hidden 으로 하단이 잘리던 버그가 있었다
-              // (2026-05-22 슬라이드 하단 잘림 재발). max 방식은 박스를 넘길 수
-              // 없어 구조적으로 잘림이 불가능하다.
+              // 크기: max-width/max-height 100% + width/height auto + min 0.
+              // grid item 은 기본 min-height:auto 인데, 이미지(replaced element)
+              // 에서는 이게 "원본 높이(intrinsic height)" 로 해석되고 min-height
+              // 는 max-height 를 항상 이긴다. 따라서 max-height:100% 만으로는
+              // 부족 — 원본 825px 가 그대로 적용돼 박스를 넘치고 overflow:hidden
+              // 으로 하단이 잘렸다 (#214 가 min:0 을 누락해 잘림이 재발).
+              // min-width/min-height:0 으로 자동 최소 크기를 끄면 비로소
+              // max-height:100% 가 먹어 박스 안에 비율 유지로 들어간다.
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={trimmedImageUrl}
@@ -343,6 +344,8 @@ export default function WorkArea({
                   maxHeight: "100%",
                   width: "auto",
                   height: "auto",
+                  minWidth: 0,
+                  minHeight: 0,
                   objectFit: "contain",
                   borderRadius: 8,
                 }}
