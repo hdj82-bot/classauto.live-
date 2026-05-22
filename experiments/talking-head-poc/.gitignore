@@ -1,0 +1,13 @@
+# PoC 실행 산출물·대용량 자산은 커밋하지 않는다.
+repos/
+results/
+samples/*
+!samples/.gitkeep
+!samples/script.txt
+*.mp4
+*.wav
+*.mp3
+*.pth
+*.safetensors
+__pycache__/
+*.pyc
