@@ -84,6 +84,16 @@ class LectureUpdate(BaseModel):
         default=None,
         description="변경 시 다음 렌더부터 적용. 기존 렌더된 영상은 재생성 전까지 유지.",
     )
+    avatar_id: str | None = Field(
+        default=None,
+        max_length=255,
+        description="강의에 선택된 HeyGen 아바타 ID. 다음 렌더부터 적용.",
+    )
+    avatar_name: str | None = Field(
+        default=None,
+        max_length=100,
+        description="강의별 아바타 표시 이름 (라벨 전용, 영상 생성과 무관).",
+    )
 
 
 class LectureResponse(BaseModel):
@@ -101,6 +111,8 @@ class LectureResponse(BaseModel):
     expires_at: datetime | None
     is_published: bool
     voice_gender: VoiceGender
+    avatar_id: str | None = None
+    avatar_name: str | None = None
     created_at: datetime
     updated_at: datetime
 

@@ -102,18 +102,31 @@ async def create_video(
     avatar_id: str | None = None,
     gender: str | None = None,
     callback_id: str | None = None,
+    talking_photo_id: str | None = None,
 ) -> str:
     """HeyGen v2 API로 아바타 립싱크 비디오 생성 요청. video_id를 반환.
 
+    talking_photo_id: 교수자 본인 사진으로 등록한 Talking Photo. 주어지면
+        avatar 대신 ``character.type="talking_photo"`` 로 본인 모습 영상을 만든다
+        (본인 아바타 1차 범위의 후속 연결 지점 — 현재 호출자는 미사용).
     avatar_id: 명시 시 그것 우선(custom 아바타 등), 아니면 ``pick_avatar_id(gender)``.
     gender:    ``"male"`` | ``"female"`` — avatar_id 가 None 일 때 _MALE/_FEMALE 분기 키.
     """
-    avatar = avatar_id or pick_avatar_id(gender)
+    if talking_photo_id:
+        character: dict[str, Any] = {
+            "type": "talking_photo",
+            "talking_photo_id": talking_photo_id,
+        }
+        character_label = f"talking_photo:{talking_photo_id}"
+    else:
+        avatar = avatar_id or pick_avatar_id(gender)
+        character = {"type": "avatar", "avatar_id": avatar, "avatar_style": "normal"}
+        character_label = f"avatar:{avatar}"
     url = f"{settings.HEYGEN_BASE_URL}/v2/video/generate"
     payload = {
         "video_inputs": [
             {
-                "character": {"type": "avatar", "avatar_id": avatar, "avatar_style": "normal"},
+                "character": character,
                 "voice": {"type": "audio", "audio_url": audio_url},
             }
         ],
@@ -122,7 +135,7 @@ async def create_video(
         "callback_url": settings.HEYGEN_CALLBACK_URL,
     }
 
-    logger.info("HeyGen 비디오 생성 요청: avatar=%s, callback_id=%s", avatar, callback_id)
+    logger.info("HeyGen 비디오 생성 요청: %s, callback_id=%s", character_label, callback_id)
     resp = await _request_with_retry("POST", url, json=payload)
 
     if resp.status_code != 200:
@@ -189,6 +202,45 @@ async def list_avatars() -> list[dict[str, Any]]:
         }
         for a in avatars
     ]
+
+
+# ── Talking Photo (본인 사진 아바타) ─────────────────────────────────────────
+
+
+async def upload_talking_photo(
+    image_bytes: bytes, content_type: str = "image/jpeg"
+) -> str:
+    """교수자 사진을 HeyGen 에 Talking Photo asset 으로 업로드. talking_photo_id 반환.
+
+    HeyGen 업로드 엔드포인트는 별도 호스트(``upload.heygen.com``)이고 raw 이미지
+    바이트를 그대로 본문에 싣는다(JSON 아님). 그래서 공통 ``_request_with_retry``
+    (JSON 전용) 대신 httpx 로 직접 호출한다. 성공 시 응답의
+    ``data.talking_photo_id`` 를 반환하고, 실패는 HeyGenError 로 래핑한다.
+    """
+    url = "https://upload.heygen.com/v1/talking_photo"
+    headers = {
+        "X-Api-Key": settings.HEYGEN_API_KEY,
+        "Content-Type": content_type,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(url, headers=headers, content=image_bytes)
+    except httpx.HTTPError as exc:
+        raise HeyGenError(f"HeyGen Talking Photo 업로드 통신 오류: {exc}") from exc
+
+    if resp.status_code != 200:
+        raise HeyGenError(
+            f"HeyGen Talking Photo 업로드 오류 [{resp.status_code}]: {resp.text[:300]}"
+        )
+
+    data = resp.json().get("data", {})
+    talking_photo_id = data.get("talking_photo_id") or data.get("id")
+    if not talking_photo_id:
+        raise HeyGenError(
+            f"HeyGen Talking Photo 응답에 talking_photo_id 없음: {resp.text[:300]}"
+        )
+    logger.info("HeyGen Talking Photo 등록 완료: %s", talking_photo_id)
+    return talking_photo_id
 
 
 # ── 비디오 삭제 ──────────────────────────────────────────────────────────────

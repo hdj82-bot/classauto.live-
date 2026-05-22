@@ -52,6 +52,14 @@ class Lecture(Base):
         default=VoiceGender.male,
         server_default=VoiceGender.male.value,
     )
+    # 강의에 선택된 HeyGen 아바타. NULL = voice_gender 기준 기본 아바타
+    # (HEYGEN_AVATAR_ID_{MALE,FEMALE}). 교수자가 아바타 페이지에서 특정 아바타
+    # (기본 목록 또는 본인 photo avatar)를 고르면 그 ID 를 저장하고
+    # heygen.create_video 가 우선 사용한다.
+    avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 우측 패널·갤러리에 노출할 강의별 아바타 표시 이름 (교수자 자유 편집).
+    # NULL = 기본 표시명. 영상 생성 로직과 무관한 라벨 전용.
+    avatar_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 교수자가 만든 컬렉션(Folder)으로 강의를 묶기 위한 옵션 외래키.
     # NULL = 미분류. 폴더 삭제 시 ondelete=SET NULL 로 자동 해제(강의 자체는 보존).

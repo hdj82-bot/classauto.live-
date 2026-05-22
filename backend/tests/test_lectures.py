@@ -113,6 +113,29 @@ async def test_update_lecture_student_forbidden(client, student, lecture):
     assert resp.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_update_lecture_avatar_id_and_name(client, professor, lecture):
+    """아바타 페이지에서 고른 avatar_id 와 교수자 편집 avatar_name 이 저장된다."""
+    resp = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"avatar_id": "av_custom_123", "avatar_name": "김교수 아바타"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["avatar_id"] == "av_custom_123"
+    assert data["avatar_name"] == "김교수 아바타"
+    # 다른 필드만 보낼 때 아바타 값이 보존되는지 (PATCH 부분 업데이트).
+    resp2 = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"title": "제목만 변경"},
+    )
+    assert resp2.status_code == 200
+    assert resp2.json()["avatar_id"] == "av_custom_123"
+    assert resp2.json()["avatar_name"] == "김교수 아바타"
+
+
 # ── GET /api/lectures/{slug}/public ──────────────────────────────────────────
 
 @pytest.mark.asyncio

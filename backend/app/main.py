@@ -30,6 +30,7 @@ from app.api.v1.translate import router as translate_router
 from app.api.v1.payment import router as payment_router
 from app.api.v1.admin import router as admin_router
 from app.api.v1.folders import router as folders_router
+from app.api.v1.avatars import router as avatars_router
 
 
 @asynccontextmanager
@@ -93,6 +94,7 @@ app.include_router(translate_router)
 app.include_router(payment_router)
 app.include_router(admin_router)
 app.include_router(folders_router)
+app.include_router(avatars_router)
 
 
 @app.get("/metrics", include_in_schema=False)
