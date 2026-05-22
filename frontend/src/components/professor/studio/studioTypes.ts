@@ -144,6 +144,11 @@ export interface TtsVoice {
   description?: string | null;
   preview_url?: string | null;
   category?: string | null;
+  // 한국어 표기.
+  display_name?: string;
+  description_ko?: string | null;
+  gender_ko?: string | null;
+  accent_ko?: string | null;
 }
 
 // ── 비용 ─────────────────────────────────────────────────────────────────────

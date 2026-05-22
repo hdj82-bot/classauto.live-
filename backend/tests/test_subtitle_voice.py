@@ -54,6 +54,42 @@ async def test_list_voices_maps_labels(client, professor):
     assert v["gender"] == "female"
     assert v["accent"] == "korean"
     assert v["preview_url"] == "https://el.example/yuna.mp3"
+    # 한국어 표기.
+    assert v["display_name"] == "Yuna"
+    assert v["gender_ko"] == "여성"
+    assert v["accent_ko"] == "한국"
+
+
+@pytest.mark.asyncio
+async def test_list_voices_korean_split_and_translation(client, professor):
+    """'고유명 - 설명' 분리 + 설명 한국어 번역 + 국적 한국어."""
+    fake = [
+        {
+            "voice_id": "v_charlie",
+            "name": "Charlie - Deep, Confident, Energetic",
+            "category": "premade",
+            "preview_url": "https://el.example/charlie.mp3",
+            "labels": {"gender": "male", "accent": "australian"},
+        }
+    ]
+
+    def fake_batch(texts, target_lang, source_lang="ko"):
+        return [SimpleNamespace(text="깊고 자신감 있으며 활기찬") for _ in texts]
+
+    with patch(
+        "app.services.pipeline.elevenlabs_client.list_voices",
+        new=AsyncMock(return_value=fake),
+    ), patch(
+        "app.services.pipeline.translator.translate_batch",
+        new=fake_batch,
+    ):
+        resp = await client.get("/api/voices", headers=make_auth_header(professor))
+    assert resp.status_code == 200
+    v = resp.json()["voices"][0]
+    assert v["display_name"] == "Charlie"
+    assert v["gender_ko"] == "남성"
+    assert v["accent_ko"] == "호주"
+    assert v["description_ko"] == "깊고 자신감 있으며 활기찬"
 
 
 @pytest.mark.asyncio
