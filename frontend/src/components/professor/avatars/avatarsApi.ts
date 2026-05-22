@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { downscaleImageFile } from "./imageResize";
 import type {
   Avatar,
   AvatarListResult,
@@ -155,8 +156,11 @@ export async function renameAvatarForLecture(
 export async function uploadProfilePhoto(
   file: File,
 ): Promise<ProfilePhotoResponse> {
+  // 고해상도·대용량 원본은 HeyGen 등록이 실패하므로 전송 전에 다운스케일·
+  // JPEG 재인코딩한다(실패 시 원본 유지).
+  const prepared = await downscaleImageFile(file);
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", prepared);
   try {
     const { data } = await api.post<ProfilePhotoResponseWire>(
       "/api/avatars/profile-photo",
@@ -173,7 +177,7 @@ export async function uploadProfilePhoto(
     if (isDeferredError(err)) {
       const previewUrl =
         typeof URL !== "undefined" && "createObjectURL" in URL
-          ? URL.createObjectURL(file)
+          ? URL.createObjectURL(prepared)
           : null;
       return {
         id: `custom-${Date.now()}`,

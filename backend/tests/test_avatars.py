@@ -1,4 +1,5 @@
 """아바타 API 테스트 — GET /api/avatars, POST /api/avatars/profile-photo."""
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,16 +28,27 @@ _FAKE_AVATARS = [
 _JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
 
 
+@contextmanager
 def _patch_list(avatars=None, error=None):
+    """list_avatars 를 모킹하고, 동시에 큐레이션 allowlist 를 비워(전체 통과)
+    엔드포인트 합성 로직만 검증한다 — 실제 CURATED_AVATAR_NAMES 값과 무관하게
+    안정적으로 동작. 큐레이션 자체는 별도 curate_avatars 단위 테스트가 다룬다."""
+    import app.api.v1.avatars as avmod
+
     if error is not None:
-        return patch(
+        list_patch = patch(
             "app.services.pipeline.heygen.list_avatars",
             new=AsyncMock(side_effect=error),
         )
-    return patch(
-        "app.services.pipeline.heygen.list_avatars",
-        new=AsyncMock(return_value=avatars if avatars is not None else _FAKE_AVATARS),
-    )
+    else:
+        list_patch = patch(
+            "app.services.pipeline.heygen.list_avatars",
+            new=AsyncMock(
+                return_value=avatars if avatars is not None else _FAKE_AVATARS
+            ),
+        )
+    with list_patch, patch.object(avmod, "CURATED_AVATAR_NAMES", []):
+        yield
 
 
 # ── GET /api/avatars ──────────────────────────────────────────────────────────
@@ -101,6 +113,56 @@ async def test_list_avatars_requires_professor(client, student):
     with _patch_list():
         resp = await client.get("/api/avatars", headers=make_auth_header(student))
     assert resp.status_code in (401, 403)
+
+
+# ── 큐레이션 allowlist ────────────────────────────────────────────────────────
+
+
+def _meta(avatar_id: str, name: str, gender: str = "male"):
+    from app.schemas.avatar import AvatarMeta
+
+    return AvatarMeta(
+        avatar_id=avatar_id,
+        avatar_name=name,
+        gender=gender,
+        preview_image_url=None,
+        preview_video_url=None,
+        is_custom=False,
+    )
+
+
+def test_curate_avatars_passthrough_when_empty():
+    import app.api.v1.avatars as mod
+
+    items = [_meta("a", "Edward"), _meta("b", "Anna", "female")]
+    with patch.object(mod, "CURATED_AVATAR_NAMES", []):
+        out = mod.curate_avatars(items)
+    assert [a.avatar_id for a in out] == ["a", "b"]
+
+
+def test_curate_avatars_filters_and_orders_by_allowlist():
+    import app.api.v1.avatars as mod
+
+    items = [
+        _meta("m1", "Edward in Black suit"),
+        _meta("m2", "Florin Maintain Sitting"),  # 제복 — 미지목
+        _meta("f1", "Anna", "female"),
+        _meta("m3", "Edward in Blue suit"),
+    ]
+    # "Anna" 를 먼저 지목 → 순서가 allowlist 순서를 따른다. "Edward" 는 두 변형 매칭.
+    with patch.object(mod, "CURATED_AVATAR_NAMES", ["Anna", "Edward"]):
+        out = mod.curate_avatars(items)
+    assert [a.avatar_id for a in out] == ["f1", "m1", "m3"]
+
+
+def test_curate_avatars_substring_match_handles_truncated_names():
+    import app.api.v1.avatars as mod
+
+    items = [_meta("x", "Esmond in Blue blazer"), _meta("y", "Diran iPad Sitting")]
+    # UI 에서 잘린 접두만 줘도 부분일치로 잡힌다.
+    with patch.object(mod, "CURATED_AVATAR_NAMES", ["esmond", "Diran iPad"]):
+        out = mod.curate_avatars(items)
+    assert [a.avatar_id for a in out] == ["x", "y"]
 
 
 # ── POST /api/avatars/profile-photo ───────────────────────────────────────────

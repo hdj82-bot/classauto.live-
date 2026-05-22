@@ -52,7 +52,7 @@
     "uploadStatusFailed": "Avatar generation failed. Please try a different photo.",
     "uploadError": "Photo upload failed.",
     "uploadInvalidType": "Only image files (JPG, PNG) can be uploaded.",
-    "uploadTooLarge": "The photo must be 10MB or smaller.",
+    "uploadTooLarge": "The photo must be 25MB or smaller.",
     "uploadPreviewAlt": "Preview of the uploaded profile photo",
 
     "backToStudio": "Back to the editor"

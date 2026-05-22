@@ -12,7 +12,9 @@ interface ProfilePhotoUploadCardProps {
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10MB
+// 업로드 직전 클라이언트에서 다운스케일·JPEG 재인코딩(imageResize)하므로
+// 원본 한도는 넉넉히 둔다 — 휴대폰 고화질 원본(보통 5~15MB)을 받아 축소한다.
+const MAX_BYTES = 25 * 1024 * 1024; // 25MB
 const ACCEPT = "image/png,image/jpeg,image/jpg,image/webp";
 
 export default function ProfilePhotoUploadCard({
