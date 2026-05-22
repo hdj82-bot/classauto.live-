@@ -33,7 +33,24 @@ _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 # 채우면 "지목한 순서대로" 정렬되며, 한 항목이 여러 변형(예: Sitting/Standing)에
 # 매칭되면 모두 포함된다. 본인 사진 아바타(is_custom)는 큐레이션 대상이 아니다.
 CURATED_AVATAR_NAMES: list[str] = [
-    # 예: "Edward", "Esmond in Blue suit", "Anna", ...  (남/여 균등 + 애니메이션)
+    # 남성 (정장/세미정장·흰 배경)
+    "Adita in Brown shirt",
+    "Adrian in Blue shirt",
+    "Albert in Khaki",
+    "Bastien in Blue",
+    "Brandon in Grey",
+    "Iker in Black blazer",
+    "Jinwoo in Blue suit",
+    "Lucien in Grey blazer",
+    "Minho in Blue blazer",
+    # 여성 (정장/세미정장·흰 배경)
+    "Abigail (Upper Body)",
+    "Adriana Business Front 2",
+    "Annelise in Dark blue dress",
+    "Annelore in Red sweater",
+    "Annie in Tan Jacket",
+    "Bahar Business Front",
+    "Bahar Suit Front",
 ]
 
 

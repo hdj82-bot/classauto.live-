@@ -1,4 +1,5 @@
 """아바타 API 테스트 — GET /api/avatars, POST /api/avatars/profile-photo."""
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,16 +28,27 @@ _FAKE_AVATARS = [
 _JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
 
 
+@contextmanager
 def _patch_list(avatars=None, error=None):
+    """list_avatars 를 모킹하고, 동시에 큐레이션 allowlist 를 비워(전체 통과)
+    엔드포인트 합성 로직만 검증한다 — 실제 CURATED_AVATAR_NAMES 값과 무관하게
+    안정적으로 동작. 큐레이션 자체는 별도 curate_avatars 단위 테스트가 다룬다."""
+    import app.api.v1.avatars as avmod
+
     if error is not None:
-        return patch(
+        list_patch = patch(
             "app.services.pipeline.heygen.list_avatars",
             new=AsyncMock(side_effect=error),
         )
-    return patch(
-        "app.services.pipeline.heygen.list_avatars",
-        new=AsyncMock(return_value=avatars if avatars is not None else _FAKE_AVATARS),
-    )
+    else:
+        list_patch = patch(
+            "app.services.pipeline.heygen.list_avatars",
+            new=AsyncMock(
+                return_value=avatars if avatars is not None else _FAKE_AVATARS
+            ),
+        )
+    with list_patch, patch.object(avmod, "CURATED_AVATAR_NAMES", []):
+        yield
 
 
 # ── GET /api/avatars ──────────────────────────────────────────────────────────
