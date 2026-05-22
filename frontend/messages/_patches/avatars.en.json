@@ -1,0 +1,60 @@
+{
+  "avatars": {
+    "eyebrow": "Avatar gallery",
+    "title": "Choose a lecture avatar",
+    "subtitle": "Compare how HeyGen avatars speak and move with sample clips, then pick the one for your lecture. You can also create your own avatar from a photo.",
+
+    "loading": "Loading avatars...",
+    "loadError": "Could not load avatars. Please try again shortly.",
+    "empty": "No avatars to show.",
+
+    "deferredBanner": "The avatar API isn't deployed yet, so this is a preview with sample data. Selecting, renaming, and uploads will be saved for real once the backend is connected.",
+
+    "sectionMale": "Male avatars",
+    "sectionFemale": "Female avatars",
+    "sectionCustom": "My avatar",
+    "sectionOther": "Other avatars",
+
+    "genderMale": "Male",
+    "genderFemale": "Female",
+    "customBadge": "My avatar",
+
+    "playPreview": "Play sample clip",
+    "previewPlaying": "Playing sample",
+    "previewStatic": "Reduced motion — thumbnail only",
+    "noPreview": "No preview",
+    "selected": "Selected",
+    "select": "Select",
+
+    "applyToLecture": "Apply to this lecture",
+    "applying": "Applying...",
+    "applySuccess": "Avatar applied to the lecture. Returning to the editor.",
+    "applyError": "Could not apply the avatar to the lecture.",
+    "applyHintNoLecture": "Enter from the lecture editor via 'Change avatar' to apply your selection directly to a lecture.",
+
+    "renameLabel": "Display name for this lecture",
+    "renamePlaceholder": "Enter an avatar name",
+    "renameEdit": "Rename",
+    "renameSave": "Save",
+    "renameCancel": "Cancel",
+    "renameSuccess": "Avatar name updated.",
+    "renameError": "Could not update the avatar name.",
+    "renameHintNoLecture": "Names are saved per lecture. Please enter from the lecture editor.",
+
+    "uploadTitle": "Create an avatar from your photo",
+    "uploadDescription": "Upload a front-facing upper-body photo to generate an avatar of yourself. Generation can take a few minutes.",
+    "uploadSelect": "Choose a photo",
+    "uploadChangePhoto": "Choose a different photo",
+    "uploadButton": "Create avatar",
+    "uploading": "Uploading...",
+    "uploadStatusProcessing": "Generating your avatar. It will appear at the top of the list when ready.",
+    "uploadStatusReady": "Your avatar is ready.",
+    "uploadStatusFailed": "Avatar generation failed. Please try a different photo.",
+    "uploadError": "Photo upload failed.",
+    "uploadInvalidType": "Only image files (JPG, PNG) can be uploaded.",
+    "uploadTooLarge": "The photo must be 10MB or smaller.",
+    "uploadPreviewAlt": "Preview of the uploaded profile photo",
+
+    "backToStudio": "Back to the editor"
+  }
+}

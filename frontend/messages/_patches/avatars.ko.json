@@ -1,0 +1,60 @@
+{
+  "avatars": {
+    "eyebrow": "아바타 갤러리",
+    "title": "강의 아바타 고르기",
+    "subtitle": "HeyGen 아바타가 어떻게 말하고 움직이는지 샘플 영상으로 비교하고, 강의에 쓸 아바타를 선택하세요. 본인 사진으로 나만의 아바타를 만들 수도 있습니다.",
+
+    "loading": "아바타 목록을 불러오는 중...",
+    "loadError": "아바타 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    "empty": "표시할 아바타가 없습니다.",
+
+    "deferredBanner": "아바타 API가 아직 배포되지 않아 샘플 데이터로 미리보기를 표시하고 있습니다. 선택·이름 변경·업로드는 백엔드 연결 후 실제로 저장됩니다.",
+
+    "sectionMale": "남성 아바타",
+    "sectionFemale": "여성 아바타",
+    "sectionCustom": "내 아바타",
+    "sectionOther": "기타 아바타",
+
+    "genderMale": "남성",
+    "genderFemale": "여성",
+    "customBadge": "내 아바타",
+
+    "playPreview": "샘플 영상 재생",
+    "previewPlaying": "샘플 재생 중",
+    "previewStatic": "정지 모션 환경 — 썸네일만 표시",
+    "noPreview": "미리보기 없음",
+    "selected": "선택됨",
+    "select": "선택",
+
+    "applyToLecture": "이 강의에 적용",
+    "applying": "적용하는 중...",
+    "applySuccess": "아바타를 강의에 적용했습니다. 편집기로 돌아갑니다.",
+    "applyError": "아바타를 강의에 적용하지 못했습니다.",
+    "applyHintNoLecture": "강의 편집기에서 '아바타 변경'으로 들어오면 선택한 아바타를 바로 강의에 적용할 수 있습니다.",
+
+    "renameLabel": "강의에서 표시할 이름",
+    "renamePlaceholder": "아바타 이름 입력",
+    "renameEdit": "이름 변경",
+    "renameSave": "저장",
+    "renameCancel": "취소",
+    "renameSuccess": "아바타 이름을 변경했습니다.",
+    "renameError": "아바타 이름을 변경하지 못했습니다.",
+    "renameHintNoLecture": "이름 변경은 강의별로 저장됩니다. 강의 편집기에서 진입해 주세요.",
+
+    "uploadTitle": "내 사진으로 아바타 만들기",
+    "uploadDescription": "정면을 바라본 상반신 사진을 업로드하면 본인 모습의 아바타를 생성합니다. 생성에는 몇 분이 걸릴 수 있습니다.",
+    "uploadSelect": "사진 선택",
+    "uploadChangePhoto": "다른 사진 선택",
+    "uploadButton": "아바타 만들기",
+    "uploading": "업로드하는 중...",
+    "uploadStatusProcessing": "아바타 생성 중입니다. 완료되면 목록 맨 앞에 표시됩니다.",
+    "uploadStatusReady": "내 아바타가 준비되었습니다.",
+    "uploadStatusFailed": "아바타 생성에 실패했습니다. 다른 사진으로 다시 시도해 주세요.",
+    "uploadError": "사진 업로드에 실패했습니다.",
+    "uploadInvalidType": "이미지 파일(JPG·PNG)만 업로드할 수 있습니다.",
+    "uploadTooLarge": "사진 용량은 10MB 이하여야 합니다.",
+    "uploadPreviewAlt": "업로드한 프로필 사진 미리보기",
+
+    "backToStudio": "편집기로 돌아가기"
+  }
+}

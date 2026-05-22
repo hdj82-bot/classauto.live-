@@ -71,6 +71,12 @@ import libraryEn from "../../messages/_patches/library.en.json";
 // 새 강의 / 구독 nav 항목은 Sidebar.tsx 에서 제거되어 본체 키는 그대로 유지.
 import shellCleanupKo from "../../messages/_patches/shellCleanup.ko.json";
 import shellCleanupEn from "../../messages/_patches/shellCleanup.en.json";
+// ── 2026-05-22: 아바타 갤러리 페이지 (/professor/avatars) ──
+// namespace `avatars` — 본체 / 다른 patch 와 충돌 없음 (studio.* 와 별개의
+// 독립 페이지). HeyGen 남/여 샘플 비교·선택·강의 적용·이름 변경·프로필 사진
+// 업로드 카피 전부 포함.
+import avatarsKo from "../../messages/_patches/avatars.ko.json";
+import avatarsEn from "../../messages/_patches/avatars.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -118,6 +124,7 @@ const koPatches: Messages[] = [
   profileHubKo as Messages,
   libraryKo as Messages,
   shellCleanupKo as Messages,
+  avatarsKo as Messages,
 ];
 const enPatches: Messages[] = [
   professorEn as Messages,
@@ -134,6 +141,7 @@ const enPatches: Messages[] = [
   profileHubEn as Messages,
   libraryEn as Messages,
   shellCleanupEn as Messages,
+  avatarsEn as Messages,
 ];
 
 const koMerged = koPatches.reduce(
