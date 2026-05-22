@@ -81,6 +81,48 @@ describe("AvatarsPage", () => {
     expect(screen.queryByTestId("avatars-apply")).toBeNull();
   });
 
+  it("maps backend wire shape ({avatars,total} + avatar_id/name) to cards", async () => {
+    // 창1(#212) 실제 200 응답 — snake_case 래퍼. avatarsApi 어댑터가
+    // avatar_id→id 로 매핑해야 카드 testid(avatar-card-{id})가 생성된다.
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/avatars") {
+        return {
+          data: {
+            avatars: [
+              {
+                avatar_id: "av_m1",
+                avatar_name: "James",
+                gender: "male",
+                preview_image_url: "https://x/m.png",
+                preview_video_url: "https://x/m.mp4",
+                is_custom: false,
+              },
+              {
+                avatar_id: "av_f1",
+                avatar_name: "Anna",
+                gender: "female",
+                preview_image_url: "https://x/f.png",
+                preview_video_url: "https://x/f.mp4",
+                is_custom: false,
+              },
+            ],
+            total: 2,
+          },
+        };
+      }
+      throw new Error(`unhandled GET ${url}`);
+    });
+
+    renderPage(<AvatarsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("avatar-card-av_m1")).toBeTruthy(),
+    );
+    expect(screen.getByTestId("avatar-card-av_f1")).toBeTruthy();
+    // 정상 200 → fixture 폴백 배너는 뜨지 않는다.
+    expect(screen.queryByTestId("avatars-deferred-banner")).toBeNull();
+  });
+
   it("applies the selected avatar to the lecture and returns to studio", async () => {
     mockDeferredBackend();
     apiPatch.mockResolvedValue({ data: {} });

@@ -2,20 +2,62 @@ import { api } from "@/lib/api";
 import type {
   Avatar,
   AvatarListResult,
+  CustomAvatarStatus,
   ProfilePhotoResponse,
 } from "./avatarsTypes";
 
 /**
  * 아바타 갤러리 API 래퍼.
  *
- * 창1 의 백엔드가 아직 배포되지 않았으므로(GET /api/avatars · PATCH
- * /api/lectures/{id} 의 avatar_* 필드 · POST /api/avatars/profile-photo),
- * 엔드포인트가 없을 때(404 또는 네트워크 실패) fixture/시뮬레이션으로
- * 폴백해 UI 를 개발할 수 있게 한다. 그 외 에러는 그대로 throw 해 호출자가
- * 토스트로 표면화한다.
+ * 백엔드(창1, PR #212) wire shape 는 snake_case + 래퍼다:
+ *  - GET  /api/avatars            → { avatars: AvatarWire[], total }
+ *  - PATCH /api/lectures/{id}      → { avatar_id } / { avatar_name }
+ *  - POST /api/avatars/profile-photo → ProfilePhotoWire
+ *      ({ photo_avatar_id, status, profile_image_url, message })
  *
- * 배포 후에는 폴백이 자연히 비활성화된다 (정상 200 응답을 그대로 사용).
+ * 프론트 도메인 타입(Avatar/ProfilePhotoResponse)은 studioTypes 의
+ * HeyGenAvatar 와 동일하게 ``id``/``name`` 을 쓰므로, 이 파일이 API 경계에서
+ * wire → domain 으로 매핑한다 (avatar_id→id, avatar_name→name,
+ * photo_avatar_id→id, profile_image_url→preview_image_url).
+ *
+ * 백엔드 미배포 시(404/네트워크 실패)에는 fixture/시뮬레이션으로 폴백해 UI 를
+ * 개발할 수 있게 한다. 그 외 에러는 그대로 throw 해 호출자가 토스트로 표면화한다.
  */
+
+// ── 백엔드 wire shape (창1 계약) ──────────────────────────────────────────────
+interface AvatarWire {
+  avatar_id: string;
+  avatar_name: string;
+  gender?: string | null;
+  preview_image_url?: string | null;
+  preview_video_url?: string | null;
+  is_custom?: boolean;
+}
+
+interface AvatarsResponseWire {
+  avatars: AvatarWire[];
+  total: number;
+}
+
+interface ProfilePhotoResponseWire {
+  photo_avatar_id: string | null;
+  status: CustomAvatarStatus;
+  profile_image_url: string;
+  message?: string;
+}
+
+function toAvatar(w: AvatarWire): Avatar {
+  return {
+    id: w.avatar_id,
+    name: w.avatar_name,
+    gender: w.gender ?? null,
+    preview_image_url: w.preview_image_url ?? null,
+    preview_video_url: w.preview_video_url ?? null,
+    is_custom: w.is_custom ?? false,
+    // 본인 아바타는 등록 완료된 항목으로 노출되므로 ready 취급.
+    status: w.is_custom ? "ready" : undefined,
+  };
+}
 
 // 엔드포인트 미배포로 간주할 상태 — 404(라우트 없음) 또는 응답 자체 부재.
 function isDeferredError(err: unknown): boolean {
@@ -68,8 +110,8 @@ const FIXTURE_AVATARS: Avatar[] = [
 
 export async function listAvatars(): Promise<AvatarListResult> {
   try {
-    const { data } = await api.get<Avatar[]>("/api/avatars");
-    return { avatars: data, deferred: false };
+    const { data } = await api.get<AvatarsResponseWire>("/api/avatars");
+    return { avatars: (data.avatars ?? []).map(toAvatar), deferred: false };
   } catch (err) {
     if (isDeferredError(err)) {
       return { avatars: FIXTURE_AVATARS, deferred: true };
@@ -116,12 +158,17 @@ export async function uploadProfilePhoto(
   const form = new FormData();
   form.append("file", file);
   try {
-    const { data } = await api.post<ProfilePhotoResponse>(
+    const { data } = await api.post<ProfilePhotoResponseWire>(
       "/api/avatars/profile-photo",
       form,
       { headers: { "Content-Type": "multipart/form-data" } },
     );
-    return data;
+    return {
+      id: data.photo_avatar_id ?? `custom-${Date.now()}`,
+      status: data.status,
+      preview_image_url: data.profile_image_url ?? null,
+      name: null,
+    };
   } catch (err) {
     if (isDeferredError(err)) {
       const previewUrl =
