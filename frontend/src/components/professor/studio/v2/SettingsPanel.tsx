@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { LANGUAGES, langLabel } from "../studioTypes";
 import type { LangCode, TtsProvider, TtsVoice, VoiceGender } from "../studioTypes";
@@ -558,6 +559,67 @@ function LangSelect({
   );
 }
 
+/** 보이스의 한국어 표기: 고유명(title) + 특성·성별·국적(meta). */
+function voiceTitle(v: TtsVoice): string {
+  return v.display_name || v.name;
+}
+function voiceMeta(v: TtsVoice): string {
+  const parts = [v.description_ko, v.gender_ko, v.accent_ko].filter(
+    (p): p is string => !!p,
+  );
+  return parts.join(" · ");
+}
+
+function PlayIcon({ playing }: { playing: boolean }) {
+  return playing ? (
+    <svg viewBox="0 0 24 24" width="11" height="11" fill="var(--gold-on-light, #B88308)" aria-hidden="true">
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" width="11" height="11" fill="var(--gold-on-light, #B88308)" aria-hidden="true">
+      <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
+    </svg>
+  );
+}
+
+function PreviewButton({
+  url,
+  playing,
+  onToggle,
+}: {
+  url: string | null | undefined;
+  playing: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      disabled={!url}
+      aria-label={playing ? "미리듣기 정지" : "미리듣기"}
+      title={url ? "미리듣기" : "미리듣기 샘플 없음"}
+      style={{
+        flexShrink: 0,
+        display: "inline-grid",
+        placeItems: "center",
+        width: 28,
+        height: 28,
+        borderRadius: 7,
+        border: "1px solid var(--line-strong)",
+        background: playing ? "var(--gold-soft)" : "var(--bg-card)",
+        cursor: url ? "pointer" : "not-allowed",
+        opacity: url ? 1 : 0.4,
+      }}
+    >
+      <PlayIcon playing={playing} />
+    </button>
+  );
+}
+
 function VoiceSelect({
   voices,
   loading,
@@ -569,17 +631,56 @@ function VoiceSelect({
   value: string | null;
   onChange: (id: string | null) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   const selected = voices.find((v) => v.voice_id === value) ?? null;
 
-  const playPreview = () => {
-    if (typeof window === "undefined" || !selected?.preview_url) return;
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPlayingId(null);
+  };
+
+  const togglePreview = (v: TtsVoice) => {
+    if (typeof window === "undefined" || !v.preview_url) return;
+    if (playingId === v.voice_id) {
+      stopAudio();
+      return;
+    }
+    stopAudio();
     try {
-      const audio = new Audio(selected.preview_url);
-      void audio.play();
+      const audio = new Audio(v.preview_url);
+      audio.onended = () => setPlayingId((cur) => (cur === v.voice_id ? null : cur));
+      audioRef.current = audio;
+      setPlayingId(v.voice_id);
+      void audio.play().catch(() => stopAudio());
     } catch {
-      /* 미리듣기 실패는 무시 — 핵심 흐름 아님 */
+      stopAudio();
     }
   };
+
+  // 바깥 클릭 시 닫기 + 오디오 정지. 언마운트 시에도 오디오 정리.
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) audioRef.current.pause();
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -597,46 +698,123 @@ function VoiceSelect({
     );
   }
 
+  const triggerLabel = selected
+    ? `${voiceTitle(selected)}${selected.gender_ko ? ` · ${selected.gender_ko}` : ""}${
+        selected.accent_ko ? ` · ${selected.accent_ko}` : ""
+      }`
+    : "기본 보이스 (성별 기준)";
+
   return (
-    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-      <select
-        aria-label="ElevenLabs 보이스 선택"
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || null)}
-        style={{ ...selectStyle, flex: 1 }}
-      >
-        <option value="">기본 보이스 (성별 기준)</option>
-        {voices.map((v) => (
-          <option key={v.voice_id} value={v.voice_id}>
-            {v.name}
-            {v.gender ? ` · ${v.gender}` : ""}
-            {v.accent ? ` · ${v.accent}` : ""}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        onClick={playPreview}
-        disabled={!selected?.preview_url}
-        aria-label="선택한 보이스 미리듣기"
-        title={selected?.preview_url ? "미리듣기" : "미리듣기 샘플 없음"}
-        style={{
-          flexShrink: 0,
-          display: "inline-grid",
-          placeItems: "center",
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          border: "1px solid var(--line-strong)",
-          background: "var(--bg-card)",
-          cursor: selected?.preview_url ? "pointer" : "not-allowed",
-          opacity: selected?.preview_url ? 1 : 0.45,
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="12" height="12" fill="var(--gold-on-light, #B88308)">
-          <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
-        </svg>
-      </button>
+    <div ref={rootRef} style={{ position: "relative" }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          style={{
+            ...selectStyle,
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 6,
+            textAlign: "left",
+          }}
+        >
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {triggerLabel}
+          </span>
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--text-subtle)" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        <PreviewButton
+          url={selected?.preview_url}
+          playing={!!selected && playingId === selected.voice_id}
+          onToggle={() => selected && togglePreview(selected)}
+        />
+      </div>
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="ElevenLabs 보이스 목록"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 4px)",
+            left: 0,
+            right: 0,
+            zIndex: 20,
+            maxHeight: 280,
+            overflowY: "auto",
+            background: "var(--bg-card)",
+            border: "1px solid var(--line-strong)",
+            borderRadius: 10,
+            boxShadow: "var(--shadow-md, 0 8px 24px rgba(10,10,10,0.12))",
+            padding: 4,
+          }}
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={value === null}
+            onClick={() => {
+              onChange(null);
+              setOpen(false);
+            }}
+            style={voiceRowStyle(value === null)}
+          >
+            <span style={{ fontWeight: 600, fontSize: 12.5 }}>기본 보이스 (성별 기준)</span>
+          </button>
+          {voices.map((v) => {
+            const meta = voiceMeta(v);
+            const isSel = v.voice_id === value;
+            return (
+              <div key={v.voice_id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={isSel}
+                  onClick={() => {
+                    onChange(v.voice_id);
+                    setOpen(false);
+                  }}
+                  style={{ ...voiceRowStyle(isSel), flex: 1 }}
+                >
+                  <span style={{ fontWeight: 600, fontSize: 12.5 }}>{voiceTitle(v)}</span>
+                  {meta && (
+                    <span style={{ fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.4 }}>
+                      {meta}
+                    </span>
+                  )}
+                </button>
+                <PreviewButton
+                  url={v.preview_url}
+                  playing={playingId === v.voice_id}
+                  onToggle={() => togglePreview(v)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
+
+const voiceRowStyle = (selected: boolean): CSSProperties => ({
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+  alignItems: "flex-start",
+  width: "100%",
+  textAlign: "left",
+  padding: "7px 9px",
+  borderRadius: 7,
+  border: "none",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  color: "var(--text)",
+  background: selected ? "var(--gold-soft)" : "transparent",
+});
