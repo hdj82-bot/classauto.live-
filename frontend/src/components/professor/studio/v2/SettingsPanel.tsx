@@ -1,7 +1,8 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import type { TtsProvider, VoiceGender } from "../studioTypes";
+import { LANGUAGES, langLabel } from "../studioTypes";
+import type { LangCode, TtsProvider, TtsVoice, VoiceGender } from "../studioTypes";
 
 /**
  * Studio v2 — 우측 settings panel.
@@ -14,13 +15,28 @@ import type { TtsProvider, VoiceGender } from "../studioTypes";
  */
 export interface SettingsPanelProps {
   avatarName: string;
-  ttsProvider: TtsProvider;
-  voiceGender: VoiceGender;
+  ttsProvider?: TtsProvider;
+  voiceGender?: VoiceGender;
   expiresAt: string | null;
   qaScopeOnUploaded: boolean;
   blockExternalSearch: boolean;
   monthlyUsed?: number;
   monthlyLimit?: number | null;
+  // ── 음성·자막 ──────────────────────────────────────────────────────────────
+  /** 영상 음성(TTS) 언어. */
+  voiceLang: LangCode;
+  /** 영상 자막 언어. null = 음성과 동일. */
+  subtitleLang: LangCode | null;
+  /** 선택한 ElevenLabs 보이스 ID. null = 기본 보이스. */
+  voiceId: string | null;
+  /** GET /api/voices 로 받은 보이스 목록. */
+  voices?: TtsVoice[];
+  voicesLoading?: boolean;
+  onChangeVoiceLang?: (lang: LangCode) => void;
+  /** null 전달 = 자막을 음성과 동일하게. */
+  onChangeSubtitleLang?: (lang: LangCode | null) => void;
+  onChangeVoiceId?: (id: string | null) => void;
+  // ───────────────────────────────────────────────────────────────────────────
   onChangeAvatar?: () => void;
   onChangeExpires?: (iso: string | null) => void;
   onToggleQaScope?: (on: boolean) => void;
@@ -127,6 +143,38 @@ const switchStyle = (on: boolean): CSSProperties => ({
   flexShrink: 0,
 });
 
+const subSectionLabelStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 7,
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: "var(--text-subtle)",
+};
+
+const subTagStyle = (tone: "gold" | "violet"): CSSProperties => ({
+  fontSize: 10,
+  fontWeight: 700,
+  padding: "1px 7px",
+  borderRadius: 4,
+  letterSpacing: "0.04em",
+  background: tone === "gold" ? "var(--gold-soft)" : "rgba(167, 139, 250, 0.12)",
+  color: tone === "gold" ? "var(--gold-on-light, #B88308)" : "#7c3aed",
+});
+
+const selectStyle: CSSProperties = {
+  width: "100%",
+  padding: "8px 10px",
+  background: "var(--bg)",
+  border: "1px solid var(--line-strong)",
+  borderRadius: 8,
+  fontSize: 12.5,
+  fontWeight: 500,
+  color: "var(--text)",
+  fontFamily: "inherit",
+  cursor: "pointer",
+};
+
 function Switch({ on, onClick, label }: { on: boolean; onClick?: () => void; label: string }) {
   return (
     <button
@@ -192,10 +240,17 @@ function H4Icon({ children }: { children: ReactNode }) {
 
 export default function SettingsPanel({
   avatarName,
-  voiceGender,
   expiresAt,
   qaScopeOnUploaded,
   blockExternalSearch,
+  voiceLang,
+  subtitleLang,
+  voiceId,
+  voices = [],
+  voicesLoading = false,
+  onChangeVoiceLang,
+  onChangeSubtitleLang,
+  onChangeVoiceId,
   onChangeAvatar,
   onChangeExpires,
   onToggleQaScope,
@@ -204,6 +259,11 @@ export default function SettingsPanel({
   attentionWarn = true,
 }: SettingsPanelProps) {
   const expDays = expiresAtToDays(expiresAt);
+  // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
+  const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
+  const summaryVoiceVal = subtitleSame
+    ? `${langLabel(voiceLang)} · 자막 동일`
+    : `${langLabel(voiceLang)} → ${langLabel(subtitleLang)}`;
 
   return (
     <aside style={settingsStyle} aria-label="강의 설정">
@@ -285,24 +345,69 @@ export default function SettingsPanel({
                 <path d="M3 19a2 2 0 0 0 2 2h1v-7H3z" />
               </svg>
             </H4Icon>
-            <h4 style={summaryTitleStyle}>음성 (이중 TTS)</h4>
-            <span style={summaryValStyle}>한 · 中</span>
+            <h4 style={summaryTitleStyle}>음성과 자막</h4>
+            <span style={summaryValStyle}>{summaryVoiceVal}</span>
           </summary>
           <div style={aBodyStyle}>
-            <VoiceRow
-              tag="주"
-              tagColor="gold"
-              name="한국어 (여)"
-              meta="Yuna · 자연스러움"
-            />
-            <VoiceRow
-              tag="부"
-              tagColor="violet"
-              name="中文 (남)"
-              meta="Xiaoming · 표준"
-            />
-            <div style={{ fontSize: 11, color: "var(--text-faint)" }}>
-              voiceGender: {voiceGender}
+            {/* ── 음성 (영상에서 나올 TTS) ── */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <div style={subSectionLabelStyle}>
+                <span style={subTagStyle("gold")}>음성</span>
+                <span>영상에서 나올 목소리</span>
+              </div>
+              <LangSelect
+                value={voiceLang}
+                onChange={(lang) => onChangeVoiceLang?.(lang)}
+                ariaLabel="음성 언어 선택"
+              />
+              <VoiceSelect
+                voices={voices}
+                loading={voicesLoading}
+                value={voiceId}
+                onChange={(id) => onChangeVoiceId?.(id)}
+              />
+            </div>
+
+            <div style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />
+
+            {/* ── 자막 (음성과 같거나 다르게) ── */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <div style={subSectionLabelStyle}>
+                <span style={subTagStyle("violet")}>자막</span>
+                <span>영상에 표시될 자막</span>
+              </div>
+              <div
+                className="flex items-center justify-between"
+                style={{ fontSize: 12.5, padding: "2px 0" }}
+              >
+                <span style={{ fontWeight: 500 }}>음성과 동일</span>
+                <Switch
+                  on={subtitleSame}
+                  onClick={() =>
+                    // 켜면 동일(null), 끄면 음성과 다른 기본값(영어, 단 음성이
+                    // 영어면 한국어)으로 시작해 교수자가 바꾸게 한다.
+                    onChangeSubtitleLang?.(
+                      subtitleSame
+                        ? voiceLang === "en"
+                          ? "ko"
+                          : "en"
+                        : null,
+                    )
+                  }
+                  label="자막을 음성과 동일하게"
+                />
+              </div>
+              {subtitleSame ? (
+                <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                  자막은 발화 내용과 동일한 언어로 표시됩니다.
+                </p>
+              ) : (
+                <LangSelect
+                  value={subtitleLang ?? "en"}
+                  onChange={(lang) => onChangeSubtitleLang?.(lang)}
+                  ariaLabel="자막 언어 선택"
+                />
+              )}
             </div>
           </div>
         </details>
@@ -428,48 +533,110 @@ function expiresAtToDays(iso: string | null): number | "∞" {
   return days > 0 ? days : 0;
 }
 
-function VoiceRow({
-  tag,
-  tagColor,
-  name,
-  meta,
+function LangSelect({
+  value,
+  onChange,
+  ariaLabel,
 }: {
-  tag: string;
-  tagColor: "gold" | "violet";
-  name: string;
-  meta: string;
+  value: LangCode;
+  onChange: (lang: LangCode) => void;
+  ariaLabel: string;
 }) {
   return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "7px 9px",
-        background: "var(--bg)",
-        border: "1px solid var(--line)",
-        borderRadius: 8,
-        fontSize: 12.5,
-      }}
+    <select
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(e) => onChange(e.target.value as LangCode)}
+      style={selectStyle}
     >
-      <span
+      {LANGUAGES.map((l) => (
+        <option key={l.code} value={l.code}>
+          {l.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function VoiceSelect({
+  voices,
+  loading,
+  value,
+  onChange,
+}: {
+  voices: TtsVoice[];
+  loading: boolean;
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const selected = voices.find((v) => v.voice_id === value) ?? null;
+
+  const playPreview = () => {
+    if (typeof window === "undefined" || !selected?.preview_url) return;
+    try {
+      const audio = new Audio(selected.preview_url);
+      void audio.play();
+    } catch {
+      /* 미리듣기 실패는 무시 — 핵심 흐름 아님 */
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ fontSize: 11.5, color: "var(--text-subtle)" }}>
+        보이스 목록을 불러오는 중…
+      </div>
+    );
+  }
+
+  if (voices.length === 0) {
+    return (
+      <div style={{ fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+        선택 가능한 ElevenLabs 보이스가 없습니다. 기본 보이스로 생성됩니다.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+      <select
+        aria-label="ElevenLabs 보이스 선택"
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        style={{ ...selectStyle, flex: 1 }}
+      >
+        <option value="">기본 보이스 (성별 기준)</option>
+        {voices.map((v) => (
+          <option key={v.voice_id} value={v.voice_id}>
+            {v.name}
+            {v.gender ? ` · ${v.gender}` : ""}
+            {v.accent ? ` · ${v.accent}` : ""}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={playPreview}
+        disabled={!selected?.preview_url}
+        aria-label="선택한 보이스 미리듣기"
+        title={selected?.preview_url ? "미리듣기" : "미리듣기 샘플 없음"}
         style={{
-          fontSize: 10,
-          fontWeight: 700,
-          padding: "1px 6px",
-          borderRadius: 4,
-          letterSpacing: "0.04em",
           flexShrink: 0,
-          background: tagColor === "gold" ? "var(--gold-soft)" : "rgba(167, 139, 250, 0.12)",
-          color: tagColor === "gold" ? "var(--gold)" : "#7c3aed",
+          display: "inline-grid",
+          placeItems: "center",
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          border: "1px solid var(--line-strong)",
+          background: "var(--bg-card)",
+          cursor: selected?.preview_url ? "pointer" : "not-allowed",
+          opacity: selected?.preview_url ? 1 : 0.45,
         }}
       >
-        {tag}
-      </span>
-      <span style={{ fontWeight: 600 }}>{name}</span>
-      <span style={{ color: "var(--text-subtle)", fontSize: 11.5, marginLeft: "auto" }}>
-        {meta}
-      </span>
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="var(--gold-on-light, #B88308)">
+          <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
+        </svg>
+      </button>
     </div>
   );
 }

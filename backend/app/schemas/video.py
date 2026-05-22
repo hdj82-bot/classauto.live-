@@ -23,6 +23,17 @@ class ScriptSegment(BaseModel):
     )
 
 
+# ── 자막 세그먼트 ─────────────────────────────────────────────────────────────
+
+class SubtitleSegment(BaseModel):
+    """슬라이드 한 장 분량의 자막. 발화 텍스트를 자막 언어로 번역한 결과.
+
+    발화(ScriptSegment) 와 달리 빈 문자열을 허용한다 (발화가 없는 슬라이드).
+    """
+    slide_index: int = Field(..., ge=0, description="슬라이드 인덱스 (0-based)")
+    text: str = Field(default="", description="자막 텍스트 (번역본, 편집 가능)")
+
+
 # ── 스크립트 조회 응답 ────────────────────────────────────────────────────────
 
 class VideoScriptResponse(BaseModel):
@@ -33,6 +44,8 @@ class VideoScriptResponse(BaseModel):
     status: str
     segments: list[ScriptSegment]
     ai_segments: list[ScriptSegment] | None = None   # 원본 AI 스크립트
+    # 자막 세그먼트. null = 아직 번역 안 함(자막 = 발화 내용과 동일).
+    subtitle_segments: list[SubtitleSegment] | None = None
     approved_at: datetime | None
     approved_by_id: uuid.UUID | None
     updated_at: datetime
@@ -43,6 +56,11 @@ class VideoScriptResponse(BaseModel):
 class ScriptPatchRequest(BaseModel):
     """PATCH /api/videos/{id}/script 요청."""
     segments: list[ScriptSegment] = Field(..., min_length=1)
+
+
+class SubtitlePatchRequest(BaseModel):
+    """PATCH /api/videos/{id}/subtitle 요청 — 슬라이드별 자막 편집 저장."""
+    segments: list[SubtitleSegment] = Field(..., min_length=1)
 
 
 # ── 단일 슬라이드 재생성 요청 ─────────────────────────────────────────────────

@@ -14,7 +14,9 @@ import {
   type StudioSlide,
 } from "@/components/professor/studio/v2";
 import { useStudioI18n } from "@/components/professor/studio/useStudioI18n";
+import { langLabel } from "@/components/professor/studio/studioTypes";
 import type {
+  LangCode,
   Lecture,
   RenderStatus,
   ScriptResponse,
@@ -22,6 +24,7 @@ import type {
   SlideMeta,
   SlideReviewStatus,
   SlidesResponse,
+  TtsVoice,
   VoiceGender,
 } from "@/components/professor/studio/studioTypes";
 
@@ -104,6 +107,15 @@ export default function StudioWizardPage() {
   const [blockExternalSearch, setBlockExternalSearch] = useState(true);
   const [attentionWarn, setAttentionWarn] = useState(true);
 
+  // ── 음성·자막 ──────────────────────────────────────────────────────────────
+  const [voiceLang, setVoiceLang] = useState<LangCode>("ko");
+  const [subtitleLang, setSubtitleLang] = useState<LangCode | null>(null);
+  const [voiceId, setVoiceId] = useState<string | null>(null);
+  const [voices, setVoices] = useState<TtsVoice[]>([]);
+  const [voicesLoading, setVoicesLoading] = useState(true);
+  const [translatingSubtitle, setTranslatingSubtitle] = useState(false);
+  const [savingSubtitle, setSavingSubtitle] = useState(false);
+
   // ── Generation modal ────────────────────────────────────────────────────────
   const [genOpen, setGenOpen] = useState(false);
   const [genPercent, setGenPercent] = useState(0);
@@ -133,6 +145,9 @@ export default function StudioWizardPage() {
               setLecture(found);
               setVoiceGender(found.voice_gender);
               setExpiresAt(found.expires_at);
+              setVoiceLang(found.voice_lang ?? "ko");
+              setSubtitleLang(found.subtitle_lang ?? null);
+              setVoiceId(found.voice_id ?? null);
             }
             break;
           }
@@ -153,6 +168,26 @@ export default function StudioWizardPage() {
       cancelled = true;
     };
   }, [lectureId]);
+
+  // ElevenLabs 보이스 목록 (음성 선택용). 키 미설정·장애 시 빈 목록.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<{ voices: TtsVoice[]; total: number }>(
+          "/api/voices",
+        );
+        if (!cancelled) setVoices(data.voices ?? []);
+      } catch {
+        /* 빈 목록 유지 — 기본 보이스로 생성 */
+      } finally {
+        if (!cancelled) setVoicesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // video.id 폴링 (파이프라인 도착 대기)
   useEffect(() => {
@@ -329,6 +364,15 @@ export default function StudioWizardPage() {
     [reviewByIndex],
   );
 
+  // 자막이 음성과 동일한지 (null 이거나 voiceLang 과 같으면 동일).
+  const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
+  // 활성 슬라이드의 자막 텍스트. subtitle_segments 가 없으면 null(미번역).
+  const activeSubtitle = useMemo<string | null>(() => {
+    const subs = script?.subtitle_segments;
+    if (!subs) return null;
+    return subs.find((s) => s.slide_index === activeIndex)?.text ?? "";
+  }, [script, activeIndex]);
+
   // ── 수동 편집 저장 ───────────────────────────────────────────────────────────
   // PATCH /api/videos/{video_id}/script — 백엔드는 전체 segments 배열을 받으므로
   // 활성 슬라이드의 text 만 갈아끼운 새 배열을 보낸다. 성공 시 segments 전체
@@ -391,6 +435,91 @@ export default function StudioWizardPage() {
       setRegenerating(false);
     }
   }, [videoId, activeIndex, toast]);
+
+  // ── 음성·자막 설정 저장 (변경 즉시 PATCH) ────────────────────────────────────
+  const persistLecture = useCallback(
+    async (patch: Record<string, unknown>) => {
+      if (!lectureId) return;
+      try {
+        const { data } = await api.patch<LectureWithAvatar>(
+          `/api/lectures/${lectureId}`,
+          patch,
+        );
+        setLecture(data);
+      } catch {
+        toast("설정 저장 중 오류가 발생했습니다.", "error");
+      }
+    },
+    [lectureId, toast],
+  );
+
+  const handleChangeVoiceLang = useCallback(
+    (lang: LangCode) => {
+      setVoiceLang(lang);
+      void persistLecture({ voice_lang: lang });
+    },
+    [persistLecture],
+  );
+
+  const handleChangeSubtitleLang = useCallback(
+    (lang: LangCode | null) => {
+      setSubtitleLang(lang);
+      void persistLecture({ subtitle_lang: lang });
+    },
+    [persistLecture],
+  );
+
+  const handleChangeVoiceId = useCallback(
+    (id: string | null) => {
+      setVoiceId(id);
+      void persistLecture({ voice_id: id });
+    },
+    [persistLecture],
+  );
+
+  // ── 자막 번역 생성 / 다시 번역 (전체 슬라이드) ───────────────────────────────
+  const handleTranslateSubtitle = useCallback(async () => {
+    if (!videoId || subtitleSame || !subtitleLang) return;
+    try {
+      setTranslatingSubtitle(true);
+      const { data } = await api.post<ScriptResponse>(
+        `/api/videos/${videoId}/subtitle/translate`,
+        undefined,
+        { params: { target_lang: subtitleLang } },
+      );
+      setScript(data);
+      toast("자막을 생성했어요.", "success");
+    } catch {
+      toast("자막 번역 중 오류가 발생했습니다.", "error");
+    } finally {
+      setTranslatingSubtitle(false);
+    }
+  }, [videoId, subtitleSame, subtitleLang, toast]);
+
+  // ── 자막 수동 편집 저장 (활성 슬라이드 1장) ──────────────────────────────────
+  const handleSubtitleEditSave = useCallback(
+    async (nextText: string) => {
+      if (!videoId || !script?.subtitle_segments) return;
+      const next = script.subtitle_segments.map((s) =>
+        s.slide_index === activeIndex ? { ...s, text: nextText } : s,
+      );
+      try {
+        setSavingSubtitle(true);
+        const { data } = await api.patch<ScriptResponse>(
+          `/api/videos/${videoId}/subtitle`,
+          { segments: next },
+        );
+        setScript(data);
+        toast("자막을 저장했어요.", "success");
+      } catch (err) {
+        toast("자막 저장 중 오류가 발생했습니다.", "error");
+        throw err;
+      } finally {
+        setSavingSubtitle(false);
+      }
+    },
+    [videoId, script, activeIndex, toast],
+  );
 
   const handleNext = useCallback(() => {
     setActiveIndex((i) => Math.min(slides.length - 1, i + 1));
@@ -574,6 +703,13 @@ export default function StudioWizardPage() {
         onRegenerate={handleRegenerate}
         saving={savingScript}
         regenerating={regenerating}
+        subtitleSame={subtitleSame}
+        subtitleLangLabel={subtitleSame ? undefined : langLabel(subtitleLang)}
+        subtitleText={subtitleSame ? null : activeSubtitle}
+        onSubtitleEditSave={handleSubtitleEditSave}
+        onTranslateSubtitle={handleTranslateSubtitle}
+        translatingSubtitle={translatingSubtitle}
+        savingSubtitle={savingSubtitle}
       />
 
       <SettingsPanel
@@ -584,6 +720,14 @@ export default function StudioWizardPage() {
         qaScopeOnUploaded={qaScopeOnUploaded}
         blockExternalSearch={blockExternalSearch}
         attentionWarn={attentionWarn}
+        voiceLang={voiceLang}
+        subtitleLang={subtitleLang}
+        voiceId={voiceId}
+        voices={voices}
+        voicesLoading={voicesLoading}
+        onChangeVoiceLang={handleChangeVoiceLang}
+        onChangeSubtitleLang={handleChangeSubtitleLang}
+        onChangeVoiceId={handleChangeVoiceId}
         onChangeAvatar={() =>
           router.push(`/professor/avatars?lecture=${lectureId}`)
         }

@@ -60,6 +60,16 @@ class Lecture(Base):
     # 우측 패널·갤러리에 노출할 강의별 아바타 표시 이름 (교수자 자유 편집).
     # NULL = 기본 표시명. 영상 생성 로직과 무관한 라벨 전용.
     avatar_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # 영상에서 나올 음성(TTS)의 언어. ISO 639-1 (ko/zh/en/ja/de/fr/ru). 기본 ko.
+    voice_lang: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="ko", server_default="ko"
+    )
+    # 영상 자막의 언어. NULL = 음성과 동일(별도 번역 없음). voice_lang 과 다른
+    # 값이면 자막은 발화 내용의 번역본(VideoScript.subtitle_segments)을 사용.
+    subtitle_lang: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # 교수자가 고른 ElevenLabs 보이스 ID. NULL = voice_gender 기준 기본 보이스
+    # (elevenlabs_client.pick_voice_id). 영상 생성과 무관한 1차 범위에서는 저장만.
+    voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 교수자가 만든 컬렉션(Folder)으로 강의를 묶기 위한 옵션 외래키.
     # NULL = 미분류. 폴더 삭제 시 ondelete=SET NULL 로 자동 해제(강의 자체는 보존).
