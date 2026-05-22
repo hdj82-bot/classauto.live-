@@ -25,6 +25,17 @@ import type {
   VoiceGender,
 } from "@/components/professor/studio/studioTypes";
 
+/**
+ * 창1 계약: PATCH·GET /api/lectures 응답에 avatar_id·avatar_name 이 추가될
+ * 예정. studioTypes.Lecture 에 정식 반영되기 전까지, 이 페이지 안에서만
+ * 옵셔널 확장으로 안전 접근한다 (미배포 동안 avatar_name 은 undefined →
+ * "기본 아바타" 폴백). Lecture 타입 파일은 창1 소유라 여기서 건드리지 않는다.
+ */
+type LectureWithAvatar = Lecture & {
+  avatar_id?: string | null;
+  avatar_name?: string | null;
+};
+
 const SCRIPT_POLL_MS = 6000;
 // 슬라이드 메타는 스크립트보다 짧은 주기로 폴링 — 파싱·임베딩 결과가 도착하는
 // 순간 좌측 카드가 빠르게 채워지도록 한다. 모든 슬라이드가 ready 가 되면 폴링
@@ -65,7 +76,7 @@ export default function StudioWizardPage() {
   const { t } = useStudioI18n();
 
   // ── 강의 + 비디오 ID ─────────────────────────────────────────────────────────
-  const [lecture, setLecture] = useState<Lecture | null>(null);
+  const [lecture, setLecture] = useState<LectureWithAvatar | null>(null);
   const [lectureLoading, setLectureLoading] = useState(true);
   const [videoId, setVideoId] = useState<string | null>(null);
 
@@ -113,7 +124,7 @@ export default function StudioWizardPage() {
       try {
         const { data: courses } = await api.get<{ id: string }[]>("/api/courses");
         for (const c of courses) {
-          const { data: lecs } = await api.get<Lecture[]>(
+          const { data: lecs } = await api.get<LectureWithAvatar[]>(
             `/api/courses/${c.id}/lectures`,
           );
           const found = lecs.find((l) => l.id === lectureId);
@@ -424,7 +435,7 @@ export default function StudioWizardPage() {
         lecture.voice_gender !== voiceGender ||
         lecture.expires_at !== expiresAt
       ) {
-        const { data } = await api.patch<Lecture>(
+        const { data } = await api.patch<LectureWithAvatar>(
           `/api/lectures/${lectureId}`,
           { voice_gender: voiceGender, expires_at: expiresAt },
         );
@@ -566,13 +577,16 @@ export default function StudioWizardPage() {
       />
 
       <SettingsPanel
-        avatarName="김교수"
+        avatarName={lecture.avatar_name ?? "기본 아바타"}
         ttsProvider="elevenlabs"
         voiceGender={voiceGender}
         expiresAt={expiresAt}
         qaScopeOnUploaded={qaScopeOnUploaded}
         blockExternalSearch={blockExternalSearch}
         attentionWarn={attentionWarn}
+        onChangeAvatar={() =>
+          router.push(`/professor/avatars?lecture=${lectureId}`)
+        }
         onChangeExpires={setExpiresAt}
         onToggleQaScope={setQaScopeOnUploaded}
         onToggleBlockExternal={setBlockExternalSearch}

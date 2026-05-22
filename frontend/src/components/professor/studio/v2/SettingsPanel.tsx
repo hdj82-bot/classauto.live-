@@ -235,22 +235,7 @@ export default function SettingsPanel({
               <div style={{ fontSize: 11.5, color: "var(--text-subtle)", fontWeight: 600 }}>
                 선택된 페르소나
               </div>
-              <div style={fieldValStyle}>
-                {avatarName}
-                <span
-                  style={{
-                    marginLeft: "auto",
-                    padding: "2px 7px",
-                    borderRadius: 999,
-                    fontSize: 10,
-                    fontWeight: 700,
-                    background: "var(--bg-hover)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  기본
-                </span>
-              </div>
+              <div style={fieldValStyle}>{avatarName}</div>
             </div>
             <button
               type="button"
