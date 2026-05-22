@@ -322,17 +322,27 @@ export default function WorkArea({
               <LoadingPreviewMock />
             ) : showSlideImage ? (
               // 실제 PPT 슬라이드 이미지 — next/image 대신 단순 <img> 로 S3
-              // 외부 도메인 등록을 회피한다. contain + borderRadius 만 적용해
-              // preview body 비율을 그대로 따른다. 로드 실패 시 broken-image
-              // 아이콘 노출을 막기 위해 onError 로 fallback mock 으로 전환한다.
+              // 외부 도메인 등록을 회피한다. 로드 실패 시 broken-image 아이콘
+              // 노출을 막기 위해 onError 로 fallback mock 으로 전환한다.
+              //
+              // 크기: max-width/max-height 100% + width/height auto 로 슬라이드
+              // 전체가 박스 안에 비율 유지로 들어가게 한다. 이전의 width/height
+              // 100% + object-fit:contain 은 grid item 의 자동 최소 크기
+              // (min-height:auto = 이미지 원본 높이)가 height:100% 를 눌러 박스를
+              // 넘치고 overflow:hidden 으로 하단이 잘리던 버그가 있었다
+              // (2026-05-22 슬라이드 하단 잘림 재발). max 방식은 박스를 넘길 수
+              // 없어 구조적으로 잘림이 불가능하다.
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={trimmedImageUrl}
                 alt={`슬라이드 ${slideNumber} 미리보기`}
                 onError={() => setImageBroken(true)}
                 style={{
-                  width: "100%",
-                  height: "100%",
+                  display: "block",
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  width: "auto",
+                  height: "auto",
                   objectFit: "contain",
                   borderRadius: 8,
                 }}
