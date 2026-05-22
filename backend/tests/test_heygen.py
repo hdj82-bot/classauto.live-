@@ -11,9 +11,63 @@ from app.services.pipeline.heygen import (
     list_avatars,
     delete_video,
     get_remaining_quota,
+    upload_talking_photo,
     _request_with_retry,
 )
 from tests.conftest import make_auth_header
+
+
+# ── Talking Photo (본인 사진 아바타) ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_upload_talking_photo_success():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"data": {"talking_photo_id": "tp_abc"}}
+    with patch("app.services.pipeline.heygen.httpx.AsyncClient") as cls:
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=mock_resp)
+        cls.return_value.__aenter__ = AsyncMock(return_value=client)
+        cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        tp_id = await upload_talking_photo(b"\xff\xd8\xff\x00", "image/jpeg")
+    assert tp_id == "tp_abc"
+
+
+@pytest.mark.asyncio
+async def test_upload_talking_photo_error_raises():
+    mock_resp = MagicMock()
+    mock_resp.status_code = 400
+    mock_resp.text = "bad image"
+    with patch("app.services.pipeline.heygen.httpx.AsyncClient") as cls:
+        client = AsyncMock()
+        client.post = AsyncMock(return_value=mock_resp)
+        cls.return_value.__aenter__ = AsyncMock(return_value=client)
+        cls.return_value.__aexit__ = AsyncMock(return_value=False)
+        with pytest.raises(HeyGenError):
+            await upload_talking_photo(b"\xff\xd8\xff\x00")
+
+
+@pytest.mark.asyncio
+async def test_create_video_uses_talking_photo_character():
+    """talking_photo_id 가 주어지면 character.type 이 talking_photo 로 전환된다."""
+    captured: dict = {}
+
+    async def fake_req(method, url, **kwargs):
+        captured["json"] = kwargs.get("json")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"data": {"video_id": "vid_1"}}
+        return resp
+
+    with patch("app.services.pipeline.heygen._request_with_retry", new=fake_req):
+        video_id = await create_video(
+            "https://audio.example/a.mp3", talking_photo_id="tp_self"
+        )
+    assert video_id == "vid_1"
+    character = captured["json"]["video_inputs"][0]["character"]
+    assert character["type"] == "talking_photo"
+    assert character["talking_photo_id"] == "tp_self"
 
 
 # ── _request_with_retry ──────────────────────────────────────────────────────
