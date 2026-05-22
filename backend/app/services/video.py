@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.video import Video, VideoScript, VideoStatus
-from app.schemas.video import ScriptSegment
+from app.schemas.video import ScriptSegment, SubtitleSegment
 
 
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
@@ -98,6 +98,96 @@ async def patch_script(
         )
 
     script.segments = _segments_to_dict(segments)
+    await db.commit()
+    await db.refresh(script)
+    return video, script
+
+
+# ── 자막 번역 / 편집 ──────────────────────────────────────────────────────────
+
+
+def _subtitles_to_dict(segments: list[SubtitleSegment]) -> list[dict]:
+    return [s.model_dump() for s in segments]
+
+
+async def translate_subtitles(
+    db: AsyncSession,
+    video_id: uuid.UUID,
+    professor_id: uuid.UUID,
+    target_lang: str,
+) -> tuple[Video, VideoScript]:
+    """발화 스크립트를 ``target_lang`` 으로 번역해 자막 세그먼트를 생성한다.
+
+    기존 ``translate_batch`` (DeepL → Google 폴백) 를 재사용한다. 발화 언어
+    (lecture.voice_lang) 를 source 로 쓰고, 슬라이드 순서를 보존해 슬라이드별
+    자막을 만든다. "번역 생성" 버튼 1회 호출 — 비용은 호출 시점에만 발생.
+    결과는 ``script.subtitle_segments`` 에 저장되고 교수자가 편집할 수 있다.
+    """
+    import asyncio
+
+    from app.models.lecture import Lecture
+    from app.services.pipeline.translator import translate_batch
+
+    video, script = await get_script(db, video_id)
+    await assert_professor_owns_video(db, video, professor_id)
+
+    if video.status != VideoStatus.pending_review:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"'{video.status.value}' 상태에서는 자막을 생성할 수 없습니다.",
+        )
+
+    segments = _dict_to_segments(script.segments)
+    if not segments:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="번역할 발화 스크립트가 없습니다.",
+        )
+
+    lec_result = await db.execute(
+        select(Lecture.voice_lang).where(Lecture.id == video.lecture_id)
+    )
+    source_lang = lec_result.scalar_one_or_none() or "ko"
+
+    texts = [s.text for s in segments]
+    # translate_batch 는 동기(blocking) 호출 — 이벤트 루프를 막지 않도록 thread 로.
+    results = await asyncio.to_thread(
+        translate_batch, texts, target_lang, source_lang
+    )
+
+    subtitle_segments = [
+        SubtitleSegment(
+            slide_index=seg.slide_index,
+            text=results[i].text if i < len(results) else "",
+        )
+        for i, seg in enumerate(segments)
+    ]
+    script.subtitle_segments = _subtitles_to_dict(subtitle_segments)
+    await db.commit()
+    await db.refresh(script)
+    return video, script
+
+
+async def patch_subtitles(
+    db: AsyncSession,
+    video_id: uuid.UUID,
+    professor_id: uuid.UUID,
+    segments: list[SubtitleSegment],
+) -> tuple[Video, VideoScript]:
+    """슬라이드별 자막 편집 저장."""
+    video, script = await get_script(db, video_id)
+    await assert_professor_owns_video(db, video, professor_id)
+
+    if video.status != VideoStatus.pending_review:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"'{video.status.value}' 상태에서는 자막을 수정할 수 없습니다.",
+        )
+
+    script.subtitle_segments = _subtitles_to_dict(segments)
     await db.commit()
     await db.refresh(script)
     return video, script

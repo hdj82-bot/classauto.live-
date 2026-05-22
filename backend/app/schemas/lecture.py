@@ -11,6 +11,9 @@ from app.models.lecture import VoiceGender
 
 SlideStatus = Literal["pending", "ready"]
 
+# 음성·자막 지원 언어 (ISO 639-1). translator.py(DeepL) 지원 범위 안의 7종.
+VoiceLang = Literal["ko", "zh", "en", "ja", "de", "fr", "ru"]
+
 
 class SlideMeta(BaseModel):
     """편집기 좌측 패널 + 중앙 미리보기에서 즉시 렌더하기 위한 슬라이드 메타.
@@ -94,6 +97,19 @@ class LectureUpdate(BaseModel):
         max_length=100,
         description="강의별 아바타 표시 이름 (라벨 전용, 영상 생성과 무관).",
     )
+    voice_lang: VoiceLang | None = Field(
+        default=None,
+        description="영상 음성(TTS) 언어. ko/zh/en/ja/de/fr/ru.",
+    )
+    subtitle_lang: VoiceLang | None = Field(
+        default=None,
+        description="영상 자막 언어. null = 음성과 동일(별도 번역 없음).",
+    )
+    voice_id: str | None = Field(
+        default=None,
+        max_length=255,
+        description="선택한 ElevenLabs 보이스 ID. null = 성별 기준 기본 보이스.",
+    )
 
 
 class LectureResponse(BaseModel):
@@ -113,6 +129,9 @@ class LectureResponse(BaseModel):
     voice_gender: VoiceGender
     avatar_id: str | None = None
     avatar_name: str | None = None
+    voice_lang: str = "ko"
+    subtitle_lang: str | None = None
+    voice_id: str | None = None
     created_at: datetime
     updated_at: datetime
 

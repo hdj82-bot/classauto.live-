@@ -24,6 +24,23 @@ export interface Course {
 
 export type VoiceGender = "male" | "female";
 
+// 음성·자막 지원 언어 (ISO 639-1). 백엔드 schemas/lecture.py VoiceLang 와 1:1.
+export type LangCode = "ko" | "zh" | "en" | "ja" | "de" | "fr" | "ru";
+
+export const LANGUAGES: { code: LangCode; label: string }[] = [
+  { code: "ko", label: "한국어" },
+  { code: "zh", label: "중국어" },
+  { code: "en", label: "영어" },
+  { code: "ja", label: "일본어" },
+  { code: "de", label: "독일어" },
+  { code: "fr", label: "프랑스어" },
+  { code: "ru", label: "러시아어" },
+];
+
+export function langLabel(code: string | null | undefined): string {
+  return LANGUAGES.find((l) => l.code === code)?.label ?? "한국어";
+}
+
 export interface Lecture {
   id: string;
   course_id: string;
@@ -35,6 +52,12 @@ export interface Lecture {
   pipeline_task_id?: string | null;
   expires_at: string | null;
   voice_gender: VoiceGender;
+  // 영상 음성(TTS) 언어. 기본 "ko".
+  voice_lang?: LangCode;
+  // 영상 자막 언어. null = 음성과 동일(별도 번역 없음).
+  subtitle_lang?: LangCode | null;
+  // 선택한 ElevenLabs 보이스 ID. null = 성별 기준 기본 보이스.
+  voice_id?: string | null;
 }
 
 // ── 스크립트 ─────────────────────────────────────────────────────────────────
@@ -50,11 +73,18 @@ export interface ScriptSegment {
   question_pin_seconds: number | null;
 }
 
+export interface SubtitleSegment {
+  slide_index: number;
+  text: string;
+}
+
 export interface ScriptResponse {
   video_id: string;
   status: string;
   segments: ScriptSegment[];
   ai_segments: ScriptSegment[] | null;
+  // 자막 세그먼트. null = 아직 번역 안 함(자막 = 발화 내용과 동일).
+  subtitle_segments?: SubtitleSegment[] | null;
   approved_at: string | null;
 }
 
@@ -104,6 +134,17 @@ export interface HeyGenAvatar {
 }
 
 export type TtsProvider = "elevenlabs" | "google";
+
+// GET /api/voices 의 보이스 1개. 백엔드 schemas/voice.py TtsVoice 와 1:1.
+export interface TtsVoice {
+  voice_id: string;
+  name: string;
+  gender?: string | null;
+  accent?: string | null;
+  description?: string | null;
+  preview_url?: string | null;
+  category?: string | null;
+}
 
 // ── 비용 ─────────────────────────────────────────────────────────────────────
 

@@ -194,6 +194,42 @@ def _status_from_exc(exc: BaseException) -> int | None:
     return None
 
 
+# ── 보이스 목록 (선택 UI) ─────────────────────────────────────────────────────
+
+
+async def list_voices(timeout: float = 30.0) -> list[dict[str, Any]]:
+    """ElevenLabs 보이스 목록 조회 (``GET /v1/voices``).
+
+    교수자 음성 선택 UI 용. 각 항목의 raw dict (voice_id / name / labels /
+    preview_url / category / description) 를 그대로 반환하고, 호출부에서
+    필요한 필드만 추려 응답 스키마로 변환한다. 합성 hot-path 가 아니라
+    재시도 데코는 생략 — 실패 시 도메인 예외를 던지고 호출부가 빈 목록으로
+    degrade 한다.
+    """
+    if not (settings.ELEVENLABS_API_KEY or "").strip():
+        raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
+    url = f"{_BASE_URL}/voices"
+    headers = {
+        "xi-api-key": settings.ELEVENLABS_API_KEY,
+        "Accept": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, headers=headers)
+    except httpx.TimeoutException as exc:
+        raise ElevenLabsServerError(f"ElevenLabs 보이스 목록 타임아웃: {exc}") from exc
+
+    if resp.status_code == 200:
+        data = resp.json()
+        voices = data.get("voices") if isinstance(data, dict) else None
+        return voices if isinstance(voices, list) else []
+    if resp.status_code == 401:
+        raise ElevenLabsAuthError(f"ElevenLabs voices 401: {resp.text[:300]}")
+    raise ElevenLabsServerError(
+        f"ElevenLabs voices HTTP {resp.status_code}: {resp.text[:300]}"
+    )
+
+
 # ── Instant Voice Cloning (IVC) ──────────────────────────────────────────────
 
 

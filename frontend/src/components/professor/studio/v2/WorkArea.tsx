@@ -60,6 +60,24 @@ export interface WorkAreaProps {
   /** 다시 생성·저장 진행 표시. */
   regenerating?: boolean;
   saving?: boolean;
+  // ── AI 영상 자막 ─────────────────────────────────────────────────────────────
+  /** 자막이 음성과 동일 언어인지. true 면 자막 카드는 "동일" 안내만 표시. */
+  subtitleSame?: boolean;
+  /** 자막 언어 라벨 (예: "영어"). 카드 헤더에 노출. */
+  subtitleLangLabel?: string;
+  /**
+   * 활성 슬라이드의 자막 텍스트. null = 아직 번역 안 함(번역 생성 버튼 노출),
+   * 문자열(빈 문자열 포함) = 번역됨(편집 가능). subtitleSame=true 면 무시.
+   */
+  subtitleText?: string | null;
+  /** 자막 수동 편집 저장 — 부모가 PATCH /subtitle 호출. */
+  onSubtitleEditSave?: (nextText: string) => Promise<void> | void;
+  /** 번역 생성/다시 번역 — 부모가 POST /subtitle/translate 호출 (전체 슬라이드). */
+  onTranslateSubtitle?: () => Promise<void> | void;
+  /** 번역 진행 표시. */
+  translatingSubtitle?: boolean;
+  /** 자막 저장 진행 표시. */
+  savingSubtitle?: boolean;
 }
 
 const workStyle: CSSProperties = {
@@ -189,10 +207,21 @@ export default function WorkArea({
   onListen,
   regenerating = false,
   saving = false,
+  subtitleSame = true,
+  subtitleLangLabel,
+  subtitleText = null,
+  onSubtitleEditSave,
+  onTranslateSubtitle,
+  translatingSubtitle = false,
+  savingSubtitle = false,
 }: WorkAreaProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(aiText);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const [editingSub, setEditingSub] = useState(false);
+  const [subDraft, setSubDraft] = useState(subtitleText ?? "");
+  const subTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // slideImageUrl 이 빈 문자열이거나 onError 로 로드 실패한 경우 broken <img>
   // placeholder 가 노출되지 않도록 트래킹. URL 이 바뀌면 상태를 리셋해서
@@ -228,6 +257,22 @@ export default function WorkArea({
     }
   }, [editing]);
 
+  // 슬라이드 변경·자막 갱신 시 자막 편집 상태 리셋.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setEditingSub(false);
+    setSubDraft(subtitleText ?? "");
+  }, [subtitleText, slideNumber]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (editingSub && subTextareaRef.current) {
+      subTextareaRef.current.focus();
+      const v = subTextareaRef.current.value;
+      subTextareaRef.current.setSelectionRange(v.length, v.length);
+    }
+  }, [editingSub]);
+
   const handleEditClick = () => {
     setDraft(aiText);
     setEditing(true);
@@ -252,6 +297,33 @@ export default function WorkArea({
       setEditing(false);
     } catch {
       /* 저장 실패는 부모에서 토스트로 알린다 — 편집 모드는 유지 */
+    }
+  };
+
+  const handleSubEditClick = () => {
+    setSubDraft(subtitleText ?? "");
+    setEditingSub(true);
+  };
+
+  const handleSubCancel = () => {
+    setSubDraft(subtitleText ?? "");
+    setEditingSub(false);
+  };
+
+  const handleSubSave = async () => {
+    if (!onSubtitleEditSave) {
+      setEditingSub(false);
+      return;
+    }
+    if (subDraft.trim() === (subtitleText ?? "").trim()) {
+      setEditingSub(false);
+      return;
+    }
+    try {
+      await onSubtitleEditSave(subDraft);
+      setEditingSub(false);
+    } catch {
+      /* 저장 실패는 부모 토스트 — 편집 모드 유지 */
     }
   };
 
@@ -522,6 +594,154 @@ export default function WorkArea({
                   </svg>
                   {regenerating ? "다시 생성 중…" : "다시 생성"}
                 </button>
+              </div>
+            )}
+
+            {/* ── AI 영상 자막 ── */}
+            {!isLoading && (
+              <div style={blockStyle}>
+                <div
+                  style={{
+                    ...blockHeadBase,
+                    color: "#7c3aed",
+                    background: "rgba(167, 139, 250, 0.07)",
+                  }}
+                >
+                  AI 영상 자막
+                  {!subtitleSame && subtitleLangLabel && (
+                    <span
+                      style={{
+                        marginLeft: "auto",
+                        fontSize: 10,
+                        letterSpacing: "0.04em",
+                        textTransform: "none",
+                        fontWeight: 600,
+                        color: "#7c3aed",
+                      }}
+                    >
+                      {subtitleLangLabel}
+                    </span>
+                  )}
+                </div>
+
+                {subtitleSame ? (
+                  <div
+                    data-testid="workarea-subtitle-same"
+                    style={{
+                      ...blockTextStyle,
+                      color: "var(--text-muted)",
+                      fontStyle: "italic",
+                    }}
+                  >
+                    자막은 위 발화 내용과 동일합니다.
+                  </div>
+                ) : subtitleText === null ? (
+                  <div
+                    style={{
+                      padding: 14,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.6 }}>
+                      음성과 자막 언어가 다릅니다. 발화 내용을{" "}
+                      {subtitleLangLabel ?? "자막 언어"}(으)로 번역해 자막을 만들 수 있어요.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={onTranslateSubtitle}
+                      disabled={translatingSubtitle}
+                      style={{
+                        ...pillBtnStyle,
+                        background: "var(--gold-soft)",
+                        borderColor: "var(--gold)",
+                        color: "var(--gold-on-light, #B88308)",
+                        opacity: translatingSubtitle ? 0.6 : 1,
+                        cursor: translatingSubtitle ? "wait" : "pointer",
+                      }}
+                    >
+                      {translatingSubtitle ? "번역 생성 중…" : "번역 생성"}
+                    </button>
+                  </div>
+                ) : editingSub ? (
+                  <div style={{ padding: 14 }}>
+                    <textarea
+                      ref={subTextareaRef}
+                      value={subDraft}
+                      onChange={(e) => setSubDraft(e.target.value)}
+                      rows={Math.min(14, Math.max(4, subDraft.split("\n").length + 1))}
+                      aria-label="AI 영상 자막 편집"
+                      disabled={savingSubtitle}
+                      style={{
+                        width: "100%",
+                        fontFamily: "inherit",
+                        fontSize: 13.5,
+                        lineHeight: 1.65,
+                        padding: 10,
+                        border: "1px solid var(--line-strong)",
+                        borderRadius: 8,
+                        background: "var(--bg)",
+                        color: "var(--text)",
+                        resize: "vertical",
+                        outline: "none",
+                      }}
+                    />
+                    <div className="flex justify-end gap-2" style={{ marginTop: 10 }}>
+                      <button
+                        type="button"
+                        onClick={handleSubCancel}
+                        disabled={savingSubtitle}
+                        style={pillBtnStyle}
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSubSave}
+                        disabled={savingSubtitle}
+                        style={{
+                          ...pillBtnStyle,
+                          background: "var(--gold-soft)",
+                          borderColor: "var(--gold)",
+                          color: "var(--gold-on-light, #B88308)",
+                        }}
+                      >
+                        {savingSubtitle ? "저장 중…" : "저장"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ ...blockTextStyle, color: "var(--text)" }}>
+                      {subtitleText || "(자막이 비어 있습니다)"}
+                    </div>
+                    <div className="flex flex-wrap gap-2" style={{ padding: "0 14px 12px" }}>
+                      <button type="button" onClick={handleSubEditClick} style={pillBtnStyle}>
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                        수동 편집
+                      </button>
+                      <span style={{ flex: 1 }} />
+                      <button
+                        type="button"
+                        onClick={onTranslateSubtitle}
+                        disabled={translatingSubtitle}
+                        style={{
+                          ...pillBtnStyle,
+                          color: "var(--text-muted)",
+                          opacity: translatingSubtitle ? 0.6 : 1,
+                          cursor: translatingSubtitle ? "wait" : "pointer",
+                        }}
+                      >
+                        {translatingSubtitle ? "다시 번역 중…" : "전체 다시 번역"}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>

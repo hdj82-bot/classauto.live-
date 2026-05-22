@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.video import (
     ScriptPatchRequest,
     ScriptRegenerateRequest,
+    SubtitlePatchRequest,
     VideoScriptResponse,
     VideoStatusResponse,
 )
@@ -20,18 +21,24 @@ router = APIRouter(prefix="/api/videos", tags=["script-editor"])
 
 def _build_script_response(video, script) -> VideoScriptResponse:
     """Video + VideoScript → VideoScriptResponse 변환."""
-    from app.schemas.video import ScriptSegment
+    from app.schemas.video import ScriptSegment, SubtitleSegment
 
     def _parse(raw: list | None) -> list[ScriptSegment] | None:
         if raw is None:
             return None
         return [ScriptSegment(**item) for item in raw]
 
+    def _parse_subs(raw: list | None) -> list[SubtitleSegment] | None:
+        if raw is None:
+            return None
+        return [SubtitleSegment(**item) for item in raw]
+
     return VideoScriptResponse(
         video_id=video.id,
         status=video.status.value,
         segments=_parse(script.segments) or [],
         ai_segments=_parse(script.ai_segments),
+        subtitle_segments=_parse_subs(script.subtitle_segments),
         approved_at=script.approved_at,
         approved_by_id=script.approved_by_id,
         updated_at=script.updated_at,
@@ -137,6 +144,58 @@ async def reset_script(
         db=db,
         video_id=video_id,
         professor_id=current_user.id,
+    )
+    return _build_script_response(video, script)
+
+
+# ── POST /api/videos/{id}/subtitle/translate ─────────────────────────────────
+
+@router.post(
+    "/{video_id}/subtitle/translate",
+    response_model=VideoScriptResponse,
+    summary="발화 스크립트를 자막 언어로 번역 (교수자 전용)",
+)
+async def translate_subtitle(
+    video_id: uuid.UUID,
+    target_lang: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_professor),
+):
+    """발화 스크립트를 ``target_lang`` 으로 번역해 슬라이드별 자막을 생성합니다.
+
+    - DeepL → Google 폴백 번역기(`translate_batch`) 재사용
+    - source 언어는 강의의 음성 언어(`lecture.voice_lang`)
+    - 결과는 `subtitle_segments` 에 저장되며 이후 PATCH 로 편집 가능
+    - "번역 생성" 버튼 1회당 1회 호출 — 비용은 이 시점에만 발생
+    """
+    video, script = await video_svc.translate_subtitles(
+        db=db,
+        video_id=video_id,
+        professor_id=current_user.id,
+        target_lang=target_lang,
+    )
+    return _build_script_response(video, script)
+
+
+# ── PATCH /api/videos/{id}/subtitle ───────────────────────────────────────────
+
+@router.patch(
+    "/{video_id}/subtitle",
+    response_model=VideoScriptResponse,
+    summary="슬라이드별 자막 편집 저장 (교수자 전용)",
+)
+async def patch_subtitle(
+    video_id: uuid.UUID,
+    body: SubtitlePatchRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_professor),
+):
+    """교수자가 편집한 자막 세그먼트를 저장합니다."""
+    video, script = await video_svc.patch_subtitles(
+        db=db,
+        video_id=video_id,
+        professor_id=current_user.id,
+        segments=body.segments,
     )
     return _build_script_response(video, script)
 

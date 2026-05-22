@@ -83,6 +83,11 @@ class VideoScript(Base):
     ai_segments: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # 교수자가 편집한 최종 스크립트
     segments: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    # 영상 자막 세그먼트 (자막 언어가 음성과 다를 때만 채워진다).
+    # 형식: [{"slide_index": 0, "text": "번역된 자막"}, ...]
+    # NULL = 아직 번역 안 함(자막 = 발화 내용과 동일). lecture.subtitle_lang 의
+    # 언어로 발화 텍스트를 번역한 결과이며 교수자가 슬라이드별로 편집 가능.
+    subtitle_segments: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
