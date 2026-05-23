@@ -372,3 +372,82 @@ async def test_patch_lecture_invalid_lang_422(client, professor, lecture):
         json={"voice_lang": "es"},  # 지원 7종 밖
     )
     assert resp.status_code == 422
+
+
+# ── 자막 언어 변경 시 기존 자막 무효화 ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_changing_subtitle_lang_clears_existing_subtitle(
+    client, professor, lecture, video_pending
+):
+    """자막 언어를 바꾸면 이전 언어로 번역된 subtitle_segments 가 비워져야 한다.
+
+    subtitle_segments 에는 언어 표시가 없어, 안 비우면 옛 언어 텍스트가 새 언어
+    라벨로 표시되는 혼란이 생긴다(교수자: '영어로 바꿔도 중국어가 그대로').
+    """
+    # 1) en 으로 번역해 자막 생성
+    await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"subtitle_lang": "en"},
+    )
+    with patch(
+        "app.services.pipeline.translator.translate_batch", new=_fake_translate_batch
+    ):
+        await client.post(
+            f"/api/videos/{video_pending.id}/subtitle/translate",
+            headers=make_auth_header(professor),
+            params={"target_lang": "en"},
+        )
+    got = await client.get(
+        f"/api/videos/{video_pending.id}/script", headers=make_auth_header(professor)
+    )
+    assert got.json()["subtitle_segments"], "선행 조건: 자막이 생성돼 있어야 함"
+
+    # 2) 자막 언어를 ja 로 변경 → 기존 en 자막은 무효화
+    resp = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"subtitle_lang": "ja"},
+    )
+    assert resp.status_code == 200
+
+    # 3) 자막이 비워졌는지 확인
+    got2 = await client.get(
+        f"/api/videos/{video_pending.id}/script", headers=make_auth_header(professor)
+    )
+    assert not got2.json()["subtitle_segments"]
+
+
+@pytest.mark.asyncio
+async def test_repatch_same_subtitle_lang_keeps_subtitle(
+    client, professor, lecture, video_pending
+):
+    """같은 자막 언어로 다시 PATCH 하면 기존 자막은 유지돼야 한다(불필요한 삭제 방지)."""
+    await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"subtitle_lang": "en"},
+    )
+    with patch(
+        "app.services.pipeline.translator.translate_batch", new=_fake_translate_batch
+    ):
+        await client.post(
+            f"/api/videos/{video_pending.id}/subtitle/translate",
+            headers=make_auth_header(professor),
+            params={"target_lang": "en"},
+        )
+
+    # 같은 언어(en)로 재 PATCH — 다른 필드만 바뀌어도 자막은 유지.
+    resp = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"subtitle_lang": "en", "voice_id": "v_yuna"},
+    )
+    assert resp.status_code == 200
+
+    got = await client.get(
+        f"/api/videos/{video_pending.id}/script", headers=make_auth_header(professor)
+    )
+    assert got.json()["subtitle_segments"], "같은 언어 재PATCH 는 자막을 지우면 안 됨"

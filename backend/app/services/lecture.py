@@ -244,9 +244,37 @@ async def update_lecture(
         raise PermissionError("이 강의를 수정할 권한이 없습니다.")
 
     update_data = data.model_dump(exclude_unset=True)
+
+    # 자막 언어가 바뀌면 기존 자막(이전 언어로 번역된 subtitle_segments)은 무효 —
+    # 비워서 다음 조회 시 새 언어로 다시 번역하도록 한다. subtitle_segments 에는
+    # 언어 표시가 없어, 안 비우면 옛 언어 텍스트가 새 언어 라벨로 표시되는 혼란이 생긴다.
+    subtitle_lang_changed = (
+        "subtitle_lang" in update_data
+        and update_data["subtitle_lang"] != lecture.subtitle_lang
+    )
+
     for field, value in update_data.items():
         setattr(lecture, field, value)
+
+    if subtitle_lang_changed:
+        await _clear_subtitle_segments(db, lecture_id)
 
     await db.commit()
     await db.refresh(lecture)
     return lecture
+
+
+async def _clear_subtitle_segments(db: AsyncSession, lecture_id: uuid.UUID) -> None:
+    """강의에 연결된 영상 스크립트의 자막(subtitle_segments)을 비운다(있으면)."""
+    from app.models.video import VideoScript
+
+    video = (
+        await db.execute(select(Video).where(Video.lecture_id == lecture_id))
+    ).scalar_one_or_none()
+    if not video:
+        return
+    script = (
+        await db.execute(select(VideoScript).where(VideoScript.video_id == video.id))
+    ).scalar_one_or_none()
+    if script and script.subtitle_segments:
+        script.subtitle_segments = None
