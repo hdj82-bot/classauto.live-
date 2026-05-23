@@ -69,6 +69,7 @@ async def synthesize(
     *,
     voice_id: str | None = None,
     gender: str | None = None,
+    speed: float | None = None,
     sessionmaker=None,
     video_render_id: uuid.UUID | None = None,
     s3_render_id: str | None = None,
@@ -76,10 +77,11 @@ async def synthesize(
     """ElevenLabs 합성 시도, 실패 시 Google TTS 폴백.
 
     voice_id: ElevenLabs voice ID. None 이면 ``elevenlabs_client.pick_voice_id(gender)``.
-              Cloned voice (IVC 결과) 를 쓰려면 user 의 elevenlabs_voice_id 전달.
+              교수자가 음성 패널에서 고른 보이스를 흘려보내는 용도.
     gender:   ``"male"`` | ``"female"`` — voice_id 가 None 일 때 _MALE/_FEMALE 분기 키.
-              Lecture.voice_gender 를 흘려보내는 용도. Google TTS 폴백에는 미적용
-              (현재 폴백은 단일 GOOGLE_TTS_VOICE_NAME 만 지원).
+              Lecture.voice_gender 를 흘려보내는 용도.
+    speed:    발화 속도 배율(1.0 = 기본). ElevenLabs 는 voice_settings.speed(0.7~1.2
+              로 클램프), Google 폴백은 speaking_rate 로 전달한다.
     sessionmaker, video_render_id: 둘 다 주어지면 cost_logs 에 즉시 기록.
                                    (별도 트랜잭션 — record_once_committed 위임)
     s3_render_id: 주어지면 audio 를 S3 의 표준 경로에 업로드.
@@ -92,12 +94,12 @@ async def synthesize(
     start = time.monotonic()
     try:
         audio_bytes = await elevenlabs_client.synthesize(
-            text, voice_id=voice_id, gender=gender,
+            text, voice_id=voice_id, gender=gender, speed=speed,
         )
         provider = "elevenlabs"
         logger.info(
-            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s",
-            len(text), voice_id or "<default>", gender or "<default>",
+            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s, speed=%s",
+            len(text), voice_id or "<default>", gender or "<default>", speed or 1.0,
         )
     except elevenlabs_client.ElevenLabsError as exc:
         fallback_reason = f"{type(exc).__name__}: {exc}"
@@ -105,7 +107,7 @@ async def synthesize(
             "ElevenLabs 합성 실패 → Google TTS 폴백 트리거: %s", fallback_reason,
         )
         try:
-            audio_bytes = await _run_google_tts(text)
+            audio_bytes = await _run_google_tts(text, speed=speed)
             provider = "google_tts"
             logger.info(
                 "Google TTS 폴백 합성 성공: chars=%d, original_failure=%s",
@@ -167,9 +169,19 @@ async def synthesize(
     return result
 
 
-async def _run_google_tts(text: str) -> bytes:
-    """Google TTS (gRPC sync) 를 비동기 컨텍스트에서 실행 — 스레드 오프로드."""
-    return await asyncio.to_thread(google_tts_client.synthesize, text)
+async def _run_google_tts(text: str, *, speed: float | None = None) -> bytes:
+    """Google TTS (gRPC sync) 를 비동기 컨텍스트에서 실행 — 스레드 오프로드.
+
+    speed: 발화 속도 배율. 1.0(기본)·None 이면 speaking_rate 를 넘기지 않고
+           기본 호출(elevenlabs 분기와 동일하게 1.0 은 미지정). 그 외에는
+           Google speaking_rate(유효범위 0.25~4.0 로 클램프)로 전달한다.
+    """
+    if speed is None or abs(float(speed) - 1.0) < 1e-9:
+        return await asyncio.to_thread(google_tts_client.synthesize, text)
+    rate = max(0.25, min(4.0, float(speed)))
+    return await asyncio.to_thread(
+        lambda: google_tts_client.synthesize(text, speaking_rate=rate)
+    )
 
 
 # ── 후방 호환 헬퍼 ───────────────────────────────────────────────────────────

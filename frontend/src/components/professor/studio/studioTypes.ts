@@ -58,6 +58,8 @@ export interface Lecture {
   subtitle_lang?: LangCode | null;
   // 선택한 ElevenLabs 보이스 ID. null = 성별 기준 기본 보이스.
   voice_id?: string | null;
+  // 발화 속도 배율. 1.0 = 기본. 합성 시 0.7~1.2 로 클램프.
+  voice_speed?: number;
 }
 
 // ── 스크립트 ─────────────────────────────────────────────────────────────────

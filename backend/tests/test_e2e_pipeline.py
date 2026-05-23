@@ -273,11 +273,13 @@ def test_e2e_render_slide_pipeline():
     mock_render.audio_url = None
     mock_render.heygen_job_id = None
 
-    # 0016 마이그레이션 이후 render task 가 lecture.voice_gender 를 추가 lookup 한다.
-    # mock 으로 voice_gender 를 명시하지 않으면 MagicMock 객체가 그대로 흘러
-    # synthesize/create_video 의 gender 인자에 들어가 assert 가 깨진다.
+    # render task 가 lecture 에서 voice_gender / voice_id / voice_speed 를 lookup 한다.
+    # mock 으로 명시하지 않으면 MagicMock 객체가 그대로 흘러 synthesize/create_video
+    # 인자에 들어가 assert 가 깨지므로 구체값으로 고정한다.
     mock_lecture = MagicMock()
     mock_lecture.voice_gender = "male"
+    mock_lecture.voice_id = None
+    mock_lecture.voice_speed = 1.0
 
     mock_tts_result = TTSResult(audio_bytes=b"tts-audio", provider="elevenlabs", duration_seconds=1.2)
 
@@ -299,8 +301,13 @@ def test_e2e_render_slide_pipeline():
             args=[str(render_id), "안녕하세요, 테스트 스크립트입니다.", str(instructor_id)],
         ).get(propagate=True)
 
-    # TTS 호출 검증 — 0016 이후 gender 인자 함께 전달
-    mock_tts.assert_called_once_with("안녕하세요, 테스트 스크립트입니다.", gender="male")
+    # TTS 호출 검증 — 교수자가 고른 voice_id·voice_speed 와 gender 가 함께 전달된다.
+    mock_tts.assert_called_once_with(
+        "안녕하세요, 테스트 스크립트입니다.",
+        voice_id=None,
+        gender="male",
+        speed=1.0,
+    )
 
     # S3 오디오 업로드 검증
     mock_s3_audio.assert_called_once_with(b"tts-audio", str(render_id))

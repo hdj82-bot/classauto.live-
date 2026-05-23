@@ -6,6 +6,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     Enum as SAEnum,
+    Float,
     ForeignKey,
     Integer,
     SmallInteger,
@@ -68,8 +69,13 @@ class Lecture(Base):
     # 값이면 자막은 발화 내용의 번역본(VideoScript.subtitle_segments)을 사용.
     subtitle_lang: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # 교수자가 고른 ElevenLabs 보이스 ID. NULL = voice_gender 기준 기본 보이스
-    # (elevenlabs_client.pick_voice_id). 영상 생성과 무관한 1차 범위에서는 저장만.
+    # (elevenlabs_client.pick_voice_id). render.py 가 합성 시 이 보이스를 사용.
     voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 영상 발화 속도 배율. 1.0 = 기본. ElevenLabs voice_settings.speed 유효범위
+    # 0.7~1.2 로 합성 시 클램프. render.py 가 synthesize(speed=) 로 전달.
+    voice_speed: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default="1.0"
+    )
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 교수자가 만든 컬렉션(Folder)으로 강의를 묶기 위한 옵션 외래키.
     # NULL = 미분류. 폴더 삭제 시 ondelete=SET NULL 로 자동 해제(강의 자체는 보존).

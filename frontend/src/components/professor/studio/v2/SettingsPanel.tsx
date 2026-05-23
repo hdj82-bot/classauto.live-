@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { LANGUAGES, langLabel } from "../studioTypes";
+import { LANGUAGES } from "../studioTypes";
 import type { LangCode, TtsProvider, TtsVoice, VoiceGender } from "../studioTypes";
 
 /**
@@ -30,13 +30,17 @@ export interface SettingsPanelProps {
   subtitleLang: LangCode | null;
   /** 선택한 ElevenLabs 보이스 ID. null = 기본 보이스. */
   voiceId: string | null;
+  /** 발화 속도 배율 (1.0 = 기본). */
+  voiceSpeed?: number;
   /** GET /api/voices 로 받은 보이스 목록. */
   voices?: TtsVoice[];
   voicesLoading?: boolean;
+  /** @deprecated 음성 언어 선택 UI 제거됨 — voiceLang 은 자막 "동일" 비교용으로만 유지. */
   onChangeVoiceLang?: (lang: LangCode) => void;
   /** null 전달 = 자막을 음성과 동일하게. */
   onChangeSubtitleLang?: (lang: LangCode | null) => void;
   onChangeVoiceId?: (id: string | null) => void;
+  onChangeVoiceSpeed?: (speed: number) => void;
   // ───────────────────────────────────────────────────────────────────────────
   onChangeAvatar?: () => void;
   onChangeExpires?: (iso: string | null) => void;
@@ -247,11 +251,12 @@ export default function SettingsPanel({
   voiceLang,
   subtitleLang,
   voiceId,
+  voiceSpeed = 1.0,
   voices = [],
   voicesLoading = false,
-  onChangeVoiceLang,
   onChangeSubtitleLang,
   onChangeVoiceId,
+  onChangeVoiceSpeed,
   onChangeAvatar,
   onChangeExpires,
   onToggleQaScope,
@@ -262,9 +267,12 @@ export default function SettingsPanel({
   const expDays = expiresAtToDays(expiresAt);
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
-  const summaryVoiceVal = subtitleSame
-    ? `${langLabel(voiceLang)} · 자막 동일`
-    : `${langLabel(voiceLang)} → ${langLabel(subtitleLang)}`;
+  // 아코디언 헤더 요약: 선택한 보이스 이름 + 속도 배율.
+  const selectedVoice = voices.find((v) => v.voice_id === voiceId) ?? null;
+  const selectedVoiceName = selectedVoice
+    ? selectedVoice.display_name || selectedVoice.name
+    : "기본 보이스";
+  const summaryVoiceVal = `${selectedVoiceName} · ${voiceSpeed.toFixed(1)}×`;
 
   return (
     <aside style={settingsStyle} aria-label="강의 설정">
@@ -356,16 +364,15 @@ export default function SettingsPanel({
                 <span style={subTagStyle("gold")}>음성</span>
                 <span>영상에서 나올 목소리</span>
               </div>
-              <LangSelect
-                value={voiceLang}
-                onChange={(lang) => onChangeVoiceLang?.(lang)}
-                ariaLabel="음성 언어 선택"
-              />
               <VoiceSelect
                 voices={voices}
                 loading={voicesLoading}
                 value={voiceId}
                 onChange={(id) => onChangeVoiceId?.(id)}
+              />
+              <SpeedSlider
+                value={voiceSpeed}
+                onChange={(v) => onChangeVoiceSpeed?.(v)}
               />
             </div>
 
@@ -532,6 +539,80 @@ function expiresAtToDays(iso: string | null): number | "∞" {
     (new Date(iso).getTime() - Date.now()) / (86400 * 1000),
   );
   return days > 0 ? days : 0;
+}
+
+/** 속도 배율을 보기 좋게 표기 (1.0→"1.0", 1.05→"1.05", 0.7→"0.7"). */
+function formatSpeed(v: number): string {
+  const r = Math.round(v * 100) / 100;
+  return Number.isInteger(r * 10) ? r.toFixed(1) : r.toFixed(2);
+}
+
+/**
+ * 발화 속도 슬라이더. 1.0배속 기준으로 좌(느림)·우(빠름) 드래그.
+ * 범위 0.7~1.2 (ElevenLabs voice_settings.speed 실효 범위), step 0.05.
+ */
+const SPEED_MIN = 0.7;
+const SPEED_MAX = 1.2;
+const SPEED_STEP = 0.05;
+
+function SpeedSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const clamped = Math.min(SPEED_MAX, Math.max(SPEED_MIN, value || 1.0));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, paddingTop: 2 }}>
+      <div
+        className="flex items-center justify-between"
+        style={{ fontSize: 12, fontWeight: 600, color: "var(--text-subtle)" }}
+      >
+        <span>발화 속도</span>
+        <span
+          style={{
+            color: "var(--text)",
+            fontWeight: 700,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {formatSpeed(clamped)}×
+        </span>
+      </div>
+      <input
+        type="range"
+        min={SPEED_MIN}
+        max={SPEED_MAX}
+        step={SPEED_STEP}
+        value={clamped}
+        aria-label="발화 속도"
+        onChange={(e) => {
+          const raw = parseFloat(e.target.value);
+          const snapped = Math.round(raw / SPEED_STEP) * SPEED_STEP;
+          const next = Math.min(SPEED_MAX, Math.max(SPEED_MIN, Number(snapped.toFixed(2))));
+          onChange(next);
+        }}
+        style={{
+          width: "100%",
+          accentColor: "var(--gold-on-light, #B88308)",
+          cursor: "pointer",
+        }}
+      />
+      <div
+        className="flex items-center justify-between"
+        style={{
+          fontSize: 10,
+          color: "var(--text-faint)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        <span>0.7× 느림</span>
+        <span>1.0×</span>
+        <span>빠름 1.2×</span>
+      </div>
+    </div>
+  );
 }
 
 function LangSelect({

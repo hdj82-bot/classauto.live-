@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     ELEVENLABS_VOICE_ID_MALE: str = ""
     ELEVENLABS_VOICE_ID_FEMALE: str = ""
     ELEVENLABS_MODEL_ID: str = "eleven_multilingual_v2"
+    # 교수자 음성 선택 UI 에 노출할 큐레이션 보이스 ID(쉼표 구분). 비우면
+    # voices.py 의 DEFAULT_CURATED_VOICE_IDS(한국어 강의용 기본 20종) 사용.
+    # "차차 추가" 시 이 환경변수에 ID 를 덧붙이면 코드 배포 없이 목록 확장.
+    CURATED_VOICE_IDS: str = ""
 
     # ── TTS: Google Cloud (fallback) ────────────────────────────
     GOOGLE_TTS_CREDENTIALS_JSON: str = ""

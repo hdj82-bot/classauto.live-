@@ -92,11 +92,26 @@ def _default_voice_settings() -> dict[str, Any]:
     }
 
 
+def _clamp_speed(speed: float | None) -> float | None:
+    """ElevenLabs voice_settings.speed 유효 범위는 0.7~1.2. 범위 밖은 클램프.
+
+    None 이면 그대로 None (속도 미지정 — 기본 1.0).
+    """
+    if speed is None:
+        return None
+    try:
+        s = float(speed)
+    except (TypeError, ValueError):
+        return None
+    return max(0.7, min(1.2, s))
+
+
 async def synthesize(
     text: str,
     *,
     voice_id: str | None = None,
     gender: str | None = None,
+    speed: float | None = None,
     model_id: str | None = None,
     output_format: str = "mp3_44100_128",
     voice_settings: dict[str, Any] | None = None,
@@ -104,16 +119,21 @@ async def synthesize(
 ) -> bytes:
     """ElevenLabs TTS 합성. 성공 시 mp3 audio bytes 반환.
 
-    voice_id: Cloned voice (IVC) 를 사용하려면 user 의 elevenlabs_voice_id 를 전달.
-              None 이면 ``pick_voice_id(gender)`` 의 시스템 기본 voice 사용.
+    voice_id: 교수자가 고른 보이스 ID. None 이면 ``pick_voice_id(gender)`` 의
+              시스템 기본 voice 사용.
     gender:   ``"male"`` | ``"female"`` — voice_id 가 None 일 때 _MALE/_FEMALE 분기 키.
               None 이면 male.
+    speed:    발화 속도 배율. 1.0 이 기본. 0.7~1.2 로 클램프해 voice_settings.speed
+              에 실어 보낸다. None 이면 속도 키를 넣지 않음(기본 속도).
     """
     if not (settings.ELEVENLABS_API_KEY or "").strip():
         raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
     vid = _voice_id_or_default(voice_id, gender)
     mid = (model_id or settings.ELEVENLABS_MODEL_ID).strip()
-    payload_settings = voice_settings or _default_voice_settings()
+    payload_settings = dict(voice_settings or _default_voice_settings())
+    clamped_speed = _clamp_speed(speed)
+    if clamped_speed is not None and clamped_speed != 1.0:
+        payload_settings["speed"] = clamped_speed
 
     try:
         return await _synthesize_with_retry(
@@ -227,6 +247,37 @@ async def list_voices(timeout: float = 30.0) -> list[dict[str, Any]]:
         raise ElevenLabsAuthError(f"ElevenLabs voices 401: {resp.text[:300]}")
     raise ElevenLabsServerError(
         f"ElevenLabs voices HTTP {resp.status_code}: {resp.text[:300]}"
+    )
+
+
+async def get_voice(voice_id: str, timeout: float = 30.0) -> dict[str, Any]:
+    """단일 보이스 메타 조회 (``GET /v1/voices/{voice_id}``).
+
+    큐레이션 목록의 보이스가 계정 ``GET /v1/voices`` 응답에 안 잡힐 때(premade
+    보이스가 계정 라이브러리에 미등록인 경우 등) 개별 조회용. 반환 dict 의 shape
+    는 ``list_voices`` 항목과 동일하다. 합성 hot-path 가 아니므로 재시도 데코는
+    생략하고, 실패 시 도메인 예외를 던져 호출부가 해당 보이스를 스킵하게 한다.
+    """
+    if not (settings.ELEVENLABS_API_KEY or "").strip():
+        raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
+    url = f"{_BASE_URL}/voices/{voice_id}"
+    headers = {
+        "xi-api-key": settings.ELEVENLABS_API_KEY,
+        "Accept": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, headers=headers)
+    except httpx.TimeoutException as exc:
+        raise ElevenLabsServerError(f"ElevenLabs voice {voice_id} 타임아웃: {exc}") from exc
+
+    if resp.status_code == 200:
+        data = resp.json()
+        return data if isinstance(data, dict) else {}
+    if resp.status_code == 401:
+        raise ElevenLabsAuthError(f"ElevenLabs voice {voice_id} 401: {resp.text[:200]}")
+    raise ElevenLabsServerError(
+        f"ElevenLabs voice {voice_id} HTTP {resp.status_code}: {resp.text[:200]}"
     )
 
 

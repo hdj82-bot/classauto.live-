@@ -111,10 +111,13 @@ export default function StudioWizardPage() {
   const [voiceLang, setVoiceLang] = useState<LangCode>("ko");
   const [subtitleLang, setSubtitleLang] = useState<LangCode | null>(null);
   const [voiceId, setVoiceId] = useState<string | null>(null);
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(true);
   const [translatingSubtitle, setTranslatingSubtitle] = useState(false);
   const [savingSubtitle, setSavingSubtitle] = useState(false);
+  // 속도 슬라이더 드래그 중 PATCH 폭주 방지용 디바운스 타이머.
+  const voiceSpeedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Generation modal ────────────────────────────────────────────────────────
   const [genOpen, setGenOpen] = useState(false);
@@ -148,6 +151,7 @@ export default function StudioWizardPage() {
               setVoiceLang(found.voice_lang ?? "ko");
               setSubtitleLang(found.subtitle_lang ?? null);
               setVoiceId(found.voice_id ?? null);
+              setVoiceSpeed(found.voice_speed ?? 1.0);
             }
             break;
           }
@@ -373,6 +377,12 @@ export default function StudioWizardPage() {
     return subs.find((s) => s.slide_index === activeIndex)?.text ?? "";
   }, [script, activeIndex]);
 
+  // 선택한 보이스 — WorkArea 의 'AI 발화 내용' 미리듣기 버튼용 (샘플 mp3 + 표시명).
+  const selectedVoice = useMemo(
+    () => voices.find((v) => v.voice_id === voiceId) ?? null,
+    [voices, voiceId],
+  );
+
   // ── 수동 편집 저장 ───────────────────────────────────────────────────────────
   // PATCH /api/videos/{video_id}/script — 백엔드는 전체 segments 배열을 받으므로
   // 활성 슬라이드의 text 만 갈아끼운 새 배열을 보낸다. 성공 시 segments 전체
@@ -453,14 +463,6 @@ export default function StudioWizardPage() {
     [lectureId, toast],
   );
 
-  const handleChangeVoiceLang = useCallback(
-    (lang: LangCode) => {
-      setVoiceLang(lang);
-      void persistLecture({ voice_lang: lang });
-    },
-    [persistLecture],
-  );
-
   const handleChangeSubtitleLang = useCallback(
     (lang: LangCode | null) => {
       setSubtitleLang(lang);
@@ -476,6 +478,26 @@ export default function StudioWizardPage() {
     },
     [persistLecture],
   );
+
+  // 속도는 슬라이더 드래그 중 연속으로 바뀌므로, 로컬 state 는 즉시 갱신하되
+  // 서버 PATCH 는 마지막 값으로 디바운스(500ms)해 호출 폭주를 막는다.
+  const handleChangeVoiceSpeed = useCallback(
+    (speed: number) => {
+      setVoiceSpeed(speed);
+      if (voiceSpeedSaveRef.current) clearTimeout(voiceSpeedSaveRef.current);
+      voiceSpeedSaveRef.current = setTimeout(() => {
+        void persistLecture({ voice_speed: speed });
+      }, 500);
+    },
+    [persistLecture],
+  );
+
+  // 언마운트 시 대기 중인 속도 저장 타이머 정리.
+  useEffect(() => {
+    return () => {
+      if (voiceSpeedSaveRef.current) clearTimeout(voiceSpeedSaveRef.current);
+    };
+  }, []);
 
   // ── 자막 번역 생성 / 다시 번역 (전체 슬라이드) ───────────────────────────────
   const handleTranslateSubtitle = useCallback(async () => {
@@ -701,6 +723,12 @@ export default function StudioWizardPage() {
         }
         onEditSave={handleEditSave}
         onRegenerate={handleRegenerate}
+        voicePreviewUrl={selectedVoice?.preview_url ?? null}
+        voiceName={
+          selectedVoice
+            ? selectedVoice.display_name || selectedVoice.name
+            : undefined
+        }
         saving={savingScript}
         regenerating={regenerating}
         subtitleSame={subtitleSame}
@@ -723,11 +751,12 @@ export default function StudioWizardPage() {
         voiceLang={voiceLang}
         subtitleLang={subtitleLang}
         voiceId={voiceId}
+        voiceSpeed={voiceSpeed}
         voices={voices}
         voicesLoading={voicesLoading}
-        onChangeVoiceLang={handleChangeVoiceLang}
         onChangeSubtitleLang={handleChangeSubtitleLang}
         onChangeVoiceId={handleChangeVoiceId}
+        onChangeVoiceSpeed={handleChangeVoiceSpeed}
         onChangeAvatar={() =>
           router.push(`/professor/avatars?lecture=${lectureId}`)
         }
