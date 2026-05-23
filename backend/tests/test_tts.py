@@ -346,6 +346,26 @@ async def test_google_fallback_receives_speaking_rate_for_non_default_speed():
     assert captured.get("speaking_rate") == 0.8
 
 
+@pytest.mark.asyncio
+async def test_synthesize_falls_back_on_non_domain_elevenlabs_error():
+    """ElevenLabsError 가 아닌 예외(예: httpx.ConnectError)도 Google 폴백으로 흘린다.
+
+    과거엔 ElevenLabsError 만 잡아, 변환 안 된 연결오류가 그대로 새어 호출부에서
+    핸들링 안 된 500(미리듣기 CORS 누수)을 유발했다.
+    """
+    import httpx
+
+    conn_err = httpx.ConnectError("connection refused")
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=conn_err,
+    ), patch.object(google_tts_client, "synthesize", return_value=b"google-after-connerr"):
+        result = await synthesize("연결오류 폴백")
+
+    assert result.provider == "google_tts"
+    assert result.audio_bytes == b"google-after-connerr"
+    assert "ConnectError" in (result.fallback_reason or "")
+
+
 # ── 모듈 export sanity ──────────────────────────────────────────────────────
 
 

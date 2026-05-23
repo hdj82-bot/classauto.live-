@@ -243,6 +243,26 @@ async def test_preview_voice_tts_failure_returns_502(client, professor):
 
 
 @pytest.mark.asyncio
+async def test_preview_voice_unexpected_error_returns_502(client, professor):
+    """합성이 TTSError 가 아닌 예외를 던져도 502 로 변환(핸들링 안 된 500 누수 방지).
+
+    누수된 500 은 CORS 헤더가 없어 브라우저가 '연결 불가'로 막으므로, 반드시
+    HTTPException 으로 잡아 CORS 가 적용되게 한다.
+    """
+    with patch(
+        "app.services.pipeline.tts.synthesize",
+        new=AsyncMock(side_effect=RuntimeError("예기치 못한 연결오류")),
+    ):
+        resp = await client.post(
+            "/api/voices/preview",
+            json={"text": "안녕하세요"},
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 502
+    assert "RuntimeError" in resp.json().get("detail", "")
+
+
+@pytest.mark.asyncio
 async def test_preview_voice_requires_professor(client, student):
     resp = await client.post(
         "/api/voices/preview",

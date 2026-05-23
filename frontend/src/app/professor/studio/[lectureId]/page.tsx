@@ -402,8 +402,20 @@ export default function StudioWizardPage() {
         { responseType: "blob" },
       );
       return data;
-    } catch {
-      toast("미리듣기 생성 중 오류가 발생했습니다.", "error");
+    } catch (err) {
+      // 응답이 Blob(responseType blob)이라 에러 본문도 Blob — 백엔드 detail 을
+      // 꺼내 토스트로 보여줘 사유(예: 합성 오류 종류)를 화면에서 바로 확인 가능.
+      const data = (err as { response?: { data?: unknown } })?.response?.data;
+      let detail = "";
+      if (data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await data.text());
+          if (typeof parsed?.detail === "string") detail = parsed.detail;
+        } catch {
+          /* JSON 아님 — 무시 */
+        }
+      }
+      toast(detail || "미리듣기 생성 중 오류가 발생했습니다.", "error");
       return null;
     }
   }, [activeAiText, voiceId, voiceGender, voiceSpeed, toast]);
