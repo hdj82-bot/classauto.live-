@@ -313,6 +313,39 @@ def test_google_tts_synthesize_helper_translates_errors():
             _google_tts_synthesize("hi")
 
 
+# ── 발화 속도(speed) 전달 ────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_synthesize_forwards_speed_to_elevenlabs():
+    """caller 가 넘긴 speed 가 ElevenLabs client 까지 그대로 전달된다."""
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, return_value=b"a",
+    ) as el_mock:
+        await synthesize("속도 적용", speed=0.85)
+    _, kwargs = el_mock.call_args
+    assert kwargs.get("speed") == 0.85
+
+
+@pytest.mark.asyncio
+async def test_google_fallback_receives_speaking_rate_for_non_default_speed():
+    """비기본 speed 면 Google 폴백에 speaking_rate 로 전달된다."""
+    el_exc = elevenlabs_client.ElevenLabsServerError("5xx")
+    captured: dict = {}
+
+    def google_sync(text, **kwargs):
+        captured.update(kwargs)
+        return b"g"
+
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=el_exc,
+    ), patch.object(google_tts_client, "synthesize", side_effect=google_sync):
+        result = await synthesize("폴백 속도", speed=0.8)
+
+    assert result.provider == "google_tts"
+    assert captured.get("speaking_rate") == 0.8
+
+
 # ── 모듈 export sanity ──────────────────────────────────────────────────────
 
 

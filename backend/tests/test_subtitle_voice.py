@@ -34,6 +34,28 @@ def _fake_translate_batch(texts, target_lang, source_lang="ko"):
     return [SimpleNamespace(text=f"[{target_lang}] {t}") for t in texts]
 
 
+@pytest.fixture(autouse=True)
+def _isolate_curated_voices():
+    """단위 테스트 격리: 큐레이션 보이스의 개별 조회(get_voice)를 비활성화하고
+    프로세스 캐시를 초기화한다.
+
+    /api/voices 는 기본으로 큐레이션 20종을 개별 조회(get_voice)해 목록 앞에
+    붙인다. 단위 테스트는 list_voices 모킹 경로만 검증하므로(또한 개발자 셸에
+    실제 ELEVENLABS_API_KEY 가 있어도 네트워크를 안 타도록) get_voice 를
+    raise 로 막는다. 큐레이션 주입 자체는 test_list_voices_curated_first 에서
+    get_voice 를 재패치해 검증한다.
+    """
+    from app.api.v1 import voices as voices_api
+
+    voices_api._CURATED_RAW_CACHE.clear()
+    with patch(
+        "app.services.pipeline.elevenlabs_client.get_voice",
+        new=AsyncMock(side_effect=RuntimeError("curated fetch disabled in unit test")),
+    ):
+        yield
+    voices_api._CURATED_RAW_CACHE.clear()
+
+
 # ── GET /api/voices ───────────────────────────────────────────────────────────
 
 
@@ -110,6 +132,52 @@ async def test_list_voices_degrades_to_empty_on_error(client, professor):
 async def test_list_voices_requires_professor(client, student):
     resp = await client.get("/api/voices", headers=make_auth_header(student))
     assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_list_voices_curated_first(client, professor):
+    """큐레이션 ID 가 계정에 없으면 개별 조회로 보충되고, 목록 맨 앞에 온다.
+
+    계정 커스텀 보이스(v_custom)는 큐레이션 뒤에 덧붙는다.
+    """
+    from app.api.v1 import voices as voices_api
+
+    account = [
+        {"voice_id": "v_custom", "name": "내 보이스", "category": "cloned", "labels": {}},
+    ]
+    curated_id = voices_api.DEFAULT_CURATED_VOICE_IDS[0]
+
+    async def fake_get_voice(vid, *args, **kwargs):
+        if vid == curated_id:
+            return {
+                "voice_id": vid,
+                "name": "Aria",
+                "category": "premade",
+                "preview_url": "https://el.example/aria.mp3",
+                "labels": {"gender": "female", "accent": "american"},
+            }
+        raise RuntimeError("미캐시 — 스킵 대상")
+
+    with patch(
+        "app.services.pipeline.elevenlabs_client.list_voices",
+        new=AsyncMock(return_value=account),
+    ), patch(
+        "app.services.pipeline.elevenlabs_client.get_voice",
+        new=fake_get_voice,
+    ):
+        resp = await client.get("/api/voices", headers=make_auth_header(professor))
+
+    assert resp.status_code == 200
+    data = resp.json()
+    ids = [v["voice_id"] for v in data["voices"]]
+    # 큐레이션(aria)이 앞, 계정 커스텀(v_custom)이 뒤.
+    assert ids[0] == curated_id
+    assert "v_custom" in ids
+    assert ids.index(curated_id) < ids.index("v_custom")
+    aria = data["voices"][0]
+    assert aria["display_name"] == "Aria"
+    assert aria["gender_ko"] == "여성"
+    assert aria["preview_url"] == "https://el.example/aria.mp3"
 
 
 # ── POST /api/videos/{id}/subtitle/translate ──────────────────────────────────

@@ -56,7 +56,14 @@ export interface WorkAreaProps {
   onEditSave?: (nextText: string) => Promise<void> | void;
   /** 다시 생성 — 부모가 Claude 재생성 엔드포인트로 요청. */
   onRegenerate?: () => Promise<void> | void;
-  onListen?: () => void;
+  /**
+   * 선택한 보이스의 미리듣기 mp3 URL. 있으면 'AI 아바타 발화 내용' 카드 우측
+   * 상단에 재생버튼이 노출돼 해당 보이스 샘플을 들어볼 수 있다. null/undefined
+   * (보이스 미선택·샘플 없음) 이면 버튼은 비활성.
+   */
+  voicePreviewUrl?: string | null;
+  /** 선택한 보이스 표시명 — 재생버튼 title 용. */
+  voiceName?: string;
   /** 다시 생성·저장 진행 표시. */
   regenerating?: boolean;
   saving?: boolean;
@@ -204,7 +211,8 @@ export default function WorkArea({
   isLoading = false,
   onEditSave,
   onRegenerate,
-  onListen,
+  voicePreviewUrl,
+  voiceName,
   regenerating = false,
   saving = false,
   subtitleSame = true,
@@ -222,6 +230,51 @@ export default function WorkArea({
   const [editingSub, setEditingSub] = useState(false);
   const [subDraft, setSubDraft] = useState(subtitleText ?? "");
   const subTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // 선택 보이스 미리듣기 (샘플 mp3 재생).
+  const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(false);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopVoicePreview = () => {
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current = null;
+    }
+    setVoicePreviewPlaying(false);
+  };
+
+  const toggleVoicePreview = () => {
+    if (typeof window === "undefined" || !voicePreviewUrl) return;
+    if (voicePreviewPlaying) {
+      stopVoicePreview();
+      return;
+    }
+    try {
+      const audio = new Audio(voicePreviewUrl);
+      audio.onended = () => setVoicePreviewPlaying(false);
+      voiceAudioRef.current = audio;
+      setVoicePreviewPlaying(true);
+      void audio.play().catch(() => stopVoicePreview());
+    } catch {
+      stopVoicePreview();
+    }
+  };
+
+  // 선택 보이스(미리듣기 URL)가 바뀌거나 언마운트되면 재생 정지.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current = null;
+    }
+    setVoicePreviewPlaying(false);
+  }, [voicePreviewUrl]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    return () => {
+      if (voiceAudioRef.current) voiceAudioRef.current.pause();
+    };
+  }, []);
 
   // slideImageUrl 이 빈 문자열이거나 onError 로 로드 실패한 경우 broken <img>
   // placeholder 가 노출되지 않도록 트래킹. URL 이 바뀌면 상태를 리셋해서
@@ -374,19 +427,6 @@ export default function WorkArea({
                 </>
               )}
             </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={onListen} style={pillBtnStyle}>
-                <svg
-                  viewBox="0 0 24 24"
-                  width="11"
-                  height="11"
-                  fill="var(--gold)"
-                >
-                  <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
-                </svg>
-                미리듣기
-              </button>
-            </div>
           </div>
           <div style={previewBodyStyle}>
             <div style={previewGridOverlay} aria-hidden="true" />
@@ -490,6 +530,12 @@ export default function WorkArea({
                 >
                   하두진 교수 톤 학습 모델
                 </span>
+                <VoicePreviewButton
+                  url={voicePreviewUrl}
+                  voiceName={voiceName}
+                  playing={voicePreviewPlaying}
+                  onToggle={toggleVoicePreview}
+                />
               </div>
               {isLoading ? (
                 <div
@@ -748,6 +794,74 @@ export default function WorkArea({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * 'AI 아바타 발화 내용' 카드 우측 상단의 보이스 미리듣기 버튼.
+ * 선택한 보이스의 샘플 mp3(``voicePreviewUrl``)를 재생/정지한다. URL 이 없으면
+ * (보이스 미선택·샘플 없음) 비활성.
+ */
+function VoicePreviewButton({
+  url,
+  voiceName,
+  playing,
+  onToggle,
+}: {
+  url: string | null | undefined;
+  voiceName?: string;
+  playing: boolean;
+  onToggle: () => void;
+}) {
+  const enabled = !!url;
+  const title = enabled
+    ? voiceName
+      ? `${voiceName} 미리듣기`
+      : "선택한 보이스 미리듣기"
+    : "미리듣기 샘플 없음 — 우측 패널에서 보이스를 선택하세요";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      disabled={!enabled}
+      aria-label={playing ? "보이스 미리듣기 정지" : "보이스 미리듣기"}
+      title={title}
+      style={{
+        marginLeft: 8,
+        flexShrink: 0,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "3px 9px 3px 7px",
+        borderRadius: 999,
+        border: "1px solid",
+        borderColor: enabled ? "var(--gold)" : "var(--line-strong)",
+        background: playing ? "var(--gold-soft)" : "var(--bg-card)",
+        color: enabled ? "var(--gold-on-light, #B88308)" : "var(--text-faint)",
+        cursor: enabled ? "pointer" : "not-allowed",
+        opacity: enabled ? 1 : 0.5,
+        fontSize: 10.5,
+        fontWeight: 700,
+        letterSpacing: 0,
+        textTransform: "none",
+        fontFamily: "inherit",
+      }}
+    >
+      {playing ? (
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
+          <rect x="6" y="5" width="4" height="14" rx="1" />
+          <rect x="14" y="5" width="4" height="14" rx="1" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
+          <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
+        </svg>
+      )}
+      {playing ? "정지" : "미리듣기"}
+    </button>
   );
 }
 

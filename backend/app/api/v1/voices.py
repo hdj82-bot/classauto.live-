@@ -15,12 +15,82 @@ import logging
 from fastapi import APIRouter, Depends
 
 from app.api.deps import require_professor
+from app.core.config import settings
 from app.models.user import User
 from app.schemas.voice import TtsVoice, TtsVoicesResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["voices"])
+
+# 한국어 강의에 두루 쓰기 좋은 ElevenLabs 기본(premade) 보이스 20종.
+# 모두 eleven_multilingual_v2 로 한국어 발화가 가능하고, 계정에 별도 등록 없이도
+# 합성(POST /v1/text-to-speech/{id})에 바로 쓸 수 있다. 한국어 네이티브 보이스는
+# 추후 settings.CURATED_VOICE_IDS 환경변수로 차차 추가(코드 배포 불필요).
+DEFAULT_CURATED_VOICE_IDS: tuple[str, ...] = (
+    "9BWtsMINqrJLrRacOk9x",  # Aria (여성)
+    "EXAVITQu4vr4xnSDxMaL",  # Sarah (여성)
+    "FGY2WhTYpPnrIDTdsKH5",  # Laura (여성)
+    "XB0fDUnXU5powFXDhCwa",  # Charlotte (여성)
+    "Xb7hH8MSUJpSbSDYk0k2",  # Alice (여성)
+    "XrExE9yKIg1WjnnlVkGX",  # Matilda (여성)
+    "cgSgspJ2msm6clMCkdW9",  # Jessica (여성)
+    "pFZP5JQG7iQjIQuC4Bku",  # Lily (여성)
+    "CwhRBWXzGAHq8TQ4Fs17",  # Roger (남성)
+    "IKne3meq5aSn9XLyUdCD",  # Charlie (남성)
+    "JBFqnCBsd6RMkjVDRZzb",  # George (남성)
+    "N2lVS1w4EtoT3dr4eOWO",  # Callum (남성)
+    "TX3LPaxmHKxFdv7VOQHJ",  # Liam (남성)
+    "bIHbv24MWmeRgasZH58o",  # Will (남성)
+    "cjVigY5qzO86Huf0OWal",  # Eric (남성)
+    "iP95p4xoKVk53GoZ742B",  # Chris (남성)
+    "nPczCjzI2devNBz1zQrb",  # Brian (남성)
+    "onwK4e9ZLuTAKqWW03F9",  # Daniel (남성)
+    "pqHfZKP75CvOlQylNhV4",  # Bill (남성)
+    "SAz9YHcvj6GT2YYXdXww",  # River (중성)
+)
+
+# 개별 조회한 큐레이션 보이스 raw 메타 캐시 (프로세스 수명). 보이스 목록은 거의
+# 안 바뀌므로 첫 성공 이후엔 ElevenLabs 재호출 없이 재사용한다.
+_CURATED_RAW_CACHE: dict[str, dict] = {}
+
+
+def _curated_voice_ids() -> list[str]:
+    """노출할 큐레이션 보이스 ID 목록(순서 보존·중복 제거).
+
+    settings.CURATED_VOICE_IDS(쉼표 구분)가 있으면 그것을, 없으면 기본 20종.
+    """
+    raw = (settings.CURATED_VOICE_IDS or "").strip()
+    source = [x.strip() for x in raw.split(",") if x.strip()] if raw else list(
+        DEFAULT_CURATED_VOICE_IDS
+    )
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for vid in source:
+        if vid not in seen:
+            seen.add(vid)
+            ordered.append(vid)
+    return ordered
+
+
+async def _fetch_voices_by_id(ids: list[str]) -> dict[str, dict]:
+    """주어진 보이스 ID 들의 raw 메타를 개별 조회(캐시 우선). 실패 항목은 제외.
+
+    {voice_id: raw dict} 반환. ELEVENLABS_API_KEY 미설정·장애 시 빈 dict 로 degrade.
+    """
+    from app.services.pipeline.elevenlabs_client import get_voice
+
+    todo = [i for i in ids if i not in _CURATED_RAW_CACHE]
+    if todo:
+        results = await asyncio.gather(
+            *(get_voice(i) for i in todo), return_exceptions=True
+        )
+        for vid, res in zip(todo, results):
+            if isinstance(res, dict) and res.get("voice_id"):
+                _CURATED_RAW_CACHE[vid] = res
+            # 예외(키 미설정/조회 실패)는 스킵 — 다음 요청에 재시도.
+    return {i: _CURATED_RAW_CACHE[i] for i in ids if i in _CURATED_RAW_CACHE}
+
 
 # ElevenLabs labels.gender / labels.accent → 한국어. 미수록 값은 원문 유지.
 _GENDER_KO = {"male": "남성", "female": "여성", "neutral": "중성", "non-binary": "중성"}
@@ -85,14 +155,43 @@ async def _translate_descriptions(descs: list[str]) -> dict[str, str]:
 async def list_tts_voices(user: User = Depends(require_professor)):
     from app.services.pipeline.elevenlabs_client import ElevenLabsError, list_voices
 
+    # 0) 계정 보이스(교수자 커스텀 포함). 실패해도 빈 목록으로 진행 — 큐레이션
+    #    보이스만으로도 목록을 구성할 수 있다.
     try:
-        raw = await list_voices()
+        account_raw = await list_voices()
     except ElevenLabsError:
+        account_raw = []
+    account_by_id: dict[str, dict] = {
+        v["voice_id"]: v for v in account_raw if v.get("voice_id")
+    }
+
+    # 1) 노출 순서 결정: 큐레이션 목록을 앞에(계정에 없으면 개별 조회로 보충),
+    #    그 뒤에 계정 커스텀 보이스(큐레이션에 없는 것)를 덧붙인다.
+    #    큐레이션이 비어 있으면 계정 보이스 전체(기존 동작).
+    curated_ids = _curated_voice_ids()
+    ordered_raw: list[dict] = []
+    seen: set[str] = set()
+
+    if curated_ids:
+        missing = [cid for cid in curated_ids if cid not in account_by_id]
+        fetched = await _fetch_voices_by_id(missing)
+        for cid in curated_ids:
+            entry = account_by_id.get(cid) or fetched.get(cid)
+            if entry and cid not in seen:
+                ordered_raw.append(entry)
+                seen.add(cid)
+
+    for vid, entry in account_by_id.items():
+        if vid not in seen:
+            ordered_raw.append(entry)
+            seen.add(vid)
+
+    if not ordered_raw:
         return TtsVoicesResponse(voices=[], total=0)
 
-    # 1) 1차 파싱: voice_id 있는 항목만, 이름 분리.
+    # 2) 1차 파싱: voice_id 있는 항목만, 이름 분리.
     parsed: list[dict] = []
-    for v in raw:
+    for v in ordered_raw:
         vid = v.get("voice_id")
         if not vid:
             continue

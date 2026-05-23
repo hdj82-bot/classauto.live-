@@ -110,6 +110,15 @@ class LectureUpdate(BaseModel):
         max_length=255,
         description="선택한 ElevenLabs 보이스 ID. null = 성별 기준 기본 보이스.",
     )
+    voice_speed: float | None = Field(
+        default=None,
+        ge=0.5,
+        le=2.0,
+        description=(
+            "영상 발화 속도 배율(1.0 = 기본). 합성 시 ElevenLabs 0.7~1.2 로 클램프. "
+            "다음 렌더부터 적용."
+        ),
+    )
 
 
 class LectureResponse(BaseModel):
@@ -132,6 +141,7 @@ class LectureResponse(BaseModel):
     voice_lang: str = "ko"
     subtitle_lang: str | None = None
     voice_id: str | None = None
+    voice_speed: float = 1.0
     created_at: datetime
     updated_at: datetime
 
