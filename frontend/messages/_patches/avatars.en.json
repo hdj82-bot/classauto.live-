@@ -29,13 +29,15 @@
 
     "stagePlaceholder": "Click an avatar below to play it large here.",
     "stageNowPlaying": "Playing",
+    "stageCustomNoMotion": "Your avatar is photo-based, so the preview shows a still image. In the actual lecture video it moves naturally in sync with the voice.",
     "customAvatarHint": "Upload a photo to create your own avatar and it will appear here.",
 
     "voiceHeading": "Voice",
-    "voiceNote": "Plays a sample voice together with the avatar clip. Switch between male and female voices to compare.",
+    "voiceNote": "Plays a sample voice together with the avatar clip. Switch between voices to compare.",
     "voiceNowPlaying": "Now playing",
     "voiceGroupMale": "Male voices",
     "voiceGroupFemale": "Female voices",
+    "voiceLoading": "Loading voices...",
     "voicePlay": "Play",
     "voiceStop": "Stop",
     "voiceUnsupported": "This browser does not support voice preview.",

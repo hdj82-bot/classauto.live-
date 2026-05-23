@@ -42,6 +42,7 @@ const renderPage = (ui: ReactNode) =>
   );
 
 // /api/avatars 가 미배포(404) → avatarsApi 가 fixture(deferred) 로 폴백.
+// /api/voices 도 throw → 음성 합성 폴백 목록 사용.
 function mockDeferredBackend() {
   apiGet.mockImplementation(async (url: string) => {
     if (url === "/api/avatars") {
@@ -121,6 +122,52 @@ describe("AvatarsPage", () => {
     expect(screen.getByTestId("avatar-card-av_f1")).toBeTruthy();
     // 정상 200 → fixture 폴백 배너는 뜨지 않는다.
     expect(screen.queryByTestId("avatars-deferred-banner")).toBeNull();
+  });
+
+  it("loads the real /api/voices catalog into the preview stage", async () => {
+    // /api/avatars 는 fixture, /api/voices 는 실제 ElevenLabs 카탈로그 반환.
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/avatars") {
+        throw Object.assign(new Error("nf"), { response: { status: 404 } });
+      }
+      if (url === "/api/voices") {
+        return {
+          data: {
+            voices: [
+              {
+                voice_id: "v_lily",
+                name: "Lily",
+                display_name: "Lily",
+                gender: "female",
+                gender_ko: "여성",
+                accent_ko: "영국",
+                description_ko: "부드러운 목소리",
+                preview_url: "https://x/lily.mp3",
+              },
+              {
+                voice_id: "v_adam",
+                name: "Adam",
+                display_name: "Adam",
+                gender: "male",
+                gender_ko: "남성",
+                accent_ko: "미국",
+                preview_url: "https://x/adam.mp3",
+              },
+            ],
+            total: 2,
+          },
+        };
+      }
+      throw new Error(`unhandled GET ${url}`);
+    });
+
+    renderPage(<AvatarsPage />);
+
+    // 백엔드 음성 카탈로그가 무대 음성 목록으로 렌더된다.
+    await waitFor(() =>
+      expect(screen.getByTestId("avatar-voice-option-v_lily")).toBeTruthy(),
+    );
+    expect(screen.getByTestId("avatar-voice-option-v_adam")).toBeTruthy();
   });
 
   it("applies the selected avatar to the lecture and returns to studio", async () => {

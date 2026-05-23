@@ -29,13 +29,15 @@
 
     "stagePlaceholder": "아래에서 아바타를 클릭하면 여기서 크게 재생됩니다.",
     "stageNowPlaying": "재생 중",
+    "stageCustomNoMotion": "본인 아바타는 사진 기반이라 미리보기는 정지 이미지로 표시됩니다. 실제 강의 영상에서는 음성에 맞춰 자연스럽게 움직입니다.",
     "customAvatarHint": "사진을 업로드해 본인 아바타를 만들면 여기에 표시됩니다.",
 
     "voiceHeading": "음성",
-    "voiceNote": "샘플 음성을 아바타 영상과 함께 재생합니다. 남성·여성 음성을 바꿔 들어볼 수 있어요.",
+    "voiceNote": "샘플 음성을 아바타 영상과 함께 재생합니다. 여러 음성을 바꿔 들어볼 수 있어요.",
     "voiceNowPlaying": "재생 중인 음성",
     "voiceGroupMale": "남성 음성",
     "voiceGroupFemale": "여성 음성",
+    "voiceLoading": "음성 목록을 불러오는 중...",
     "voicePlay": "재생",
     "voiceStop": "정지",
     "voiceUnsupported": "이 브라우저는 음성 미리듣기를 지원하지 않습니다.",

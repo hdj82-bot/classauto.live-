@@ -16,10 +16,12 @@ import {
   renameAvatarForLecture,
   uploadProfilePhoto,
 } from "@/components/professor/avatars/avatarsApi";
+import { listVoiceOptions } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
   CustomAvatarStatus,
 } from "@/components/professor/avatars/avatarsTypes";
+import type { VoiceOption } from "@/components/professor/avatars/voicePresets";
 
 /**
  * /professor/avatars — 아바타 갤러리.
@@ -55,6 +57,9 @@ export default function AvatarsPage() {
   );
   const readyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [voices, setVoices] = useState<VoiceOption[]>([]);
+  const [voicesLoading, setVoicesLoading] = useState(true);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -81,6 +86,22 @@ export default function AvatarsPage() {
     },
     [],
   );
+
+  // 음성 카탈로그 (studio 와 동일한 /api/voices). 실패 시 합성 폴백.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { voices: list } = await listVoiceOptions();
+        if (!cancelled) setVoices(list);
+      } finally {
+        if (!cancelled) setVoicesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 본인 아바타는 업로드 카드 우측에 별도 노출하므로 그리드 섹션에서는 제외한다.
   const sections = useMemo(() => {
@@ -240,6 +261,8 @@ export default function AvatarsPage() {
         {/* 클릭한 아바타를 크게 재생 + 음성 함께 듣기 */}
         <AvatarPreviewStage
           avatar={selectedAvatar}
+          voices={voices}
+          voicesLoading={voicesLoading}
           reducedMotion={reducedMotion}
           t={t}
         />

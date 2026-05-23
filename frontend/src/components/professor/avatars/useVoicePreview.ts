@@ -7,13 +7,14 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import type { VoiceGender, VoicePreset } from "./voicePresets";
+import type { VoiceGender, VoiceOption } from "./voicePresets";
 
 /**
  * 아바타 샘플과 함께 음성을 들려주는 훅.
  *
  * 우선순위:
- *  1. preset.sampleUrl 이 있으면 ``<audio>`` 로 그 음원을 재생(실제 voice 미리보기).
+ *  1. option.previewUrl 이 있으면 ``<audio>`` 로 그 음원(ElevenLabs preview)을
+ *     재생 — 실제 voice 미리듣기.
  *  2. 없으면 브라우저 음성 합성(Web Speech API)으로 샘플 문장을 읽어 준다.
  *
  * 둘 다 사용 불가한 환경(SSR·jsdom·미지원 브라우저)에서는 ``supported=false`` 로
@@ -41,18 +42,18 @@ function guessGender(name: string): VoiceGender | null {
   return null;
 }
 
-/** preset 에 가장 잘 맞는 시스템 음성 선택: 언어 우선 → 성별 매칭 → 폴백. */
+/** option 에 가장 잘 맞는 시스템 음성 선택: 언어 우선 → 성별 매칭 → 폴백. */
 function resolveSystemVoice(
-  preset: VoicePreset,
+  option: VoiceOption,
   voices: SpeechSynthesisVoice[],
 ): SpeechSynthesisVoice | null {
   if (voices.length === 0) return null;
-  const langBase = preset.lang.split("-")[0].toLowerCase();
+  const langBase = (option.ttsLang ?? "ko-KR").split("-")[0].toLowerCase();
   const sameLang = voices.filter((v) =>
     v.lang.toLowerCase().startsWith(langBase),
   );
   const pool = sameLang.length > 0 ? sameLang : voices;
-  const genderMatch = pool.find((v) => guessGender(v.name) === preset.gender);
+  const genderMatch = pool.find((v) => guessGender(v.name) === option.gender);
   // 성별 매칭 음성 > 같은 언어 첫 음성 > 기본(default) > 첫 음성.
   return genderMatch ?? pool[0] ?? voices.find((v) => v.default) ?? voices[0];
 }
@@ -74,8 +75,9 @@ export interface VoicePreviewState {
   supported: boolean;
   /** 현재 재생(합성/음원) 중인지. */
   speaking: boolean;
-  /** preset 음성으로 sampleText 를 재생. loop=true 면 끝난 뒤 자동 반복. */
-  play: (preset: VoicePreset, sampleText: string, loop?: boolean) => void;
+  /** option 음성으로 재생. previewUrl 이 있으면 음원, 없으면 sampleText 합성.
+   *  loop=true 면 끝난 뒤 자동 반복. */
+  play: (option: VoiceOption, sampleText: string, loop?: boolean) => void;
   /** 재생 중지. */
   stop: () => void;
 }
@@ -106,14 +108,14 @@ export function useVoicePreview(): VoicePreviewState {
   }, []);
 
   const play = useCallback(
-    (preset: VoicePreset, sampleText: string, loop = false) => {
+    (option: VoiceOption, sampleText: string, loop = false) => {
       if (typeof window === "undefined") return;
       stop();
       const session = sessionRef.current;
 
-      // 1) 실제 음원이 있으면 그것을 재생.
-      if (preset.sampleUrl && typeof window.Audio !== "undefined") {
-        const audio = new Audio(preset.sampleUrl);
+      // 1) 실제 음원(ElevenLabs preview)이 있으면 그것을 재생.
+      if (option.previewUrl && typeof window.Audio !== "undefined") {
+        const audio = new Audio(option.previewUrl);
         audio.loop = loop;
         audioRef.current = audio;
         audio.onended = () => {
@@ -138,15 +140,15 @@ export function useVoicePreview(): VoicePreviewState {
       const speakOnce = () => {
         if (sessionRef.current !== session) return;
         const utter = new SpeechSynthesisUtterance(sampleText);
-        const voice = resolveSystemVoice(preset, voices);
+        const voice = resolveSystemVoice(option, voices);
         if (voice) {
           utter.voice = voice;
           utter.lang = voice.lang;
         } else {
-          utter.lang = preset.lang;
+          utter.lang = option.ttsLang ?? "ko-KR";
         }
-        utter.pitch = preset.pitch;
-        utter.rate = preset.rate;
+        utter.pitch = option.ttsPitch ?? 1;
+        utter.rate = option.ttsRate ?? 1;
         utter.onend = () => {
           if (sessionRef.current !== session) return;
           if (loop) {
