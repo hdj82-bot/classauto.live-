@@ -78,7 +78,7 @@ RATE_LIMIT_EXEMPT_PREFIXES: tuple[str, ...] = (
 )
 
 _RATE_LIMIT_EXEMPT_PATHS: frozenset[str] = frozenset(
-    {"/health", "/docs", "/openapi.json", "/metrics", "/redoc"}
+    {"/health", "/health/deep", "/docs", "/openapi.json", "/metrics", "/redoc"}
 )
 
 

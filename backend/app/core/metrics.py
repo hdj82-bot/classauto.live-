@@ -138,7 +138,7 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         path = request.url.path
 
         # /metrics, /health, static 파일은 메트릭에서 제외
-        if path in ("/metrics", "/health", "/docs", "/openapi.json", "/redoc"):
+        if path in ("/metrics", "/health", "/health/deep", "/docs", "/openapi.json", "/redoc"):
             return await call_next(request)
 
         method = request.method

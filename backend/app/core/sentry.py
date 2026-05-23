@@ -116,9 +116,10 @@ def _before_send(event, hint):
     J: 이벤트 dict 전체를 재귀적으로 walk — request.data, request.cookies, breadcrumbs,
     extras, contexts 어느 곳에 들어 있든 ``_SENSITIVE_KEYS`` 매칭 시 [Filtered].
     """
-    # 헬스체크 에러는 무시
+    # 헬스체크 에러는 무시 (/health, /health/deep 모두)
     try:
-        if event.get("request", {}).get("url", "").endswith("/health"):
+        _url = event.get("request", {}).get("url", "")
+        if _url.endswith("/health") or _url.endswith("/health/deep"):
             return None
     except AttributeError:
         pass
