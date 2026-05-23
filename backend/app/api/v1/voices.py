@@ -91,6 +91,7 @@ async def _fetch_voices_by_id(ids: list[str]) -> dict[str, dict]:
             # 예외(키 미설정/조회 실패)는 스킵 — 다음 요청에 재시도.
     return {i: _CURATED_RAW_CACHE[i] for i in ids if i in _CURATED_RAW_CACHE}
 
+
 # ElevenLabs labels.gender / labels.accent → 한국어. 미수록 값은 원문 유지.
 _GENDER_KO = {"male": "남성", "female": "여성", "neutral": "중성", "non-binary": "중성"}
 _ACCENT_KO = {

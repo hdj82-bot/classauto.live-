@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { CustomAvatarStatus } from "./avatarsTypes";
+import type { Avatar, CustomAvatarStatus } from "./avatarsTypes";
 
 interface ProfilePhotoUploadCardProps {
   /** 검증 통과한 파일을 부모로 올린다 — 실제 업로드는 페이지가 수행. */
@@ -9,6 +9,12 @@ interface ProfilePhotoUploadCardProps {
   /** 부모가 보유한 생성 상태 (null = 미시작). */
   status: CustomAvatarStatus | null;
   uploading: boolean;
+  /** 생성된 본인 아바타 — 우측에 표시(없으면 안내만). */
+  customAvatar?: Avatar | null;
+  /** 본인 아바타가 현재 미리보기에 선택되어 있는지. */
+  customSelected?: boolean;
+  /** 본인 아바타 클릭 — 상단 무대에서 크게 재생. */
+  onSelectCustom?: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -21,6 +27,9 @@ export default function ProfilePhotoUploadCard({
   onSubmit,
   status,
   uploading,
+  customAvatar,
+  customSelected,
+  onSelectCustom,
   t,
 }: ProfilePhotoUploadCardProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -106,7 +115,14 @@ export default function ProfilePhotoUploadCard({
         {t("uploadDescription")}
       </p>
 
-      <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 14,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
         <div
           aria-hidden={previewUrl ? undefined : "true"}
           style={{
@@ -201,6 +217,122 @@ export default function ProfilePhotoUploadCard({
             </p>
           )}
         </div>
+
+        {/* 우측: 생성된 본인 아바타 — 클릭하면 상단 무대에서 크게 재생 */}
+        {customAvatar ? (
+          <button
+            type="button"
+            onClick={onSelectCustom}
+            aria-pressed={customSelected}
+            data-testid="upload-custom-avatar"
+            style={{
+              marginLeft: "auto",
+              flexShrink: 0,
+              width: 140,
+              padding: 8,
+              borderRadius: 12,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              textAlign: "center",
+              background: "var(--bg-card)",
+              border: `2px solid ${
+                customSelected ? "var(--gold)" : "var(--line)"
+              }`,
+              boxShadow: customSelected
+                ? "0 0 0 3px var(--gold-medium)"
+                : "var(--shadow-sm)",
+            }}
+          >
+            <span
+              style={{
+                display: "block",
+                fontSize: 10,
+                fontWeight: 700,
+                color: "var(--gold-on-light)",
+                marginBottom: 6,
+              }}
+            >
+              {t("customBadge")}
+            </span>
+            <span
+              style={{
+                display: "block",
+                width: "100%",
+                aspectRatio: "3 / 4",
+                borderRadius: 8,
+                overflow: "hidden",
+                background: "var(--bg-subtle)",
+                position: "relative",
+              }}
+            >
+              {customAvatar.preview_image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={customAvatar.preview_image_url}
+                  alt={customAvatar.name}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "grid",
+                    placeItems: "center",
+                    fontSize: 32,
+                    fontWeight: 700,
+                    color: "var(--text-faint)",
+                  }}
+                >
+                  {customAvatar.name.slice(0, 1)}
+                </span>
+              )}
+            </span>
+            <span
+              style={{
+                display: "block",
+                marginTop: 6,
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--text)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {customAvatar.name}
+            </span>
+            <span
+              style={{
+                display: "block",
+                marginTop: 2,
+                fontSize: 10.5,
+                color: "var(--text-faint)",
+              }}
+            >
+              {t("playPreviewLarge")}
+            </span>
+          </button>
+        ) : (
+          <p
+            style={{
+              marginLeft: "auto",
+              alignSelf: "center",
+              maxWidth: 180,
+              fontSize: 11.5,
+              lineHeight: 1.5,
+              color: "var(--text-faint)",
+            }}
+          >
+            {t("customAvatarHint")}
+          </p>
+        )}
       </div>
     </div>
   );

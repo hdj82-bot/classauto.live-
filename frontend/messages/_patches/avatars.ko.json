@@ -20,11 +20,26 @@
     "customBadge": "내 아바타",
 
     "playPreview": "샘플 영상 재생",
+    "playPreviewLarge": "클릭하면 크게 재생",
     "previewPlaying": "샘플 재생 중",
     "previewStatic": "정지 모션 환경 — 썸네일만 표시",
     "noPreview": "미리보기 없음",
     "selected": "선택됨",
     "select": "선택",
+
+    "stagePlaceholder": "아래에서 아바타를 클릭하면 여기서 크게 재생됩니다.",
+    "stageNowPlaying": "재생 중",
+    "customAvatarHint": "사진을 업로드해 본인 아바타를 만들면 여기에 표시됩니다.",
+
+    "voiceHeading": "음성",
+    "voiceNote": "샘플 음성을 아바타 영상과 함께 재생합니다. 남성·여성 음성을 바꿔 들어볼 수 있어요.",
+    "voiceNowPlaying": "재생 중인 음성",
+    "voiceGroupMale": "남성 음성",
+    "voiceGroupFemale": "여성 음성",
+    "voicePlay": "재생",
+    "voiceStop": "정지",
+    "voiceUnsupported": "이 브라우저는 음성 미리듣기를 지원하지 않습니다.",
+    "voiceSampleText": "안녕하세요. 이 음성으로 강의를 진행하겠습니다.",
 
     "applyToLecture": "이 강의에 적용",
     "applying": "적용하는 중...",

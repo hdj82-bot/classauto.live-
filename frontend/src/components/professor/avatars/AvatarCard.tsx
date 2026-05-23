@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  useEffect,
-  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
@@ -13,8 +11,6 @@ interface AvatarCardProps {
   avatar: Avatar;
   selected: boolean;
   onSelect: (id: string) => void;
-  /** prefers-reduced-motion — true 면 영상 자동재생 안 함(썸네일만). */
-  reducedMotion: boolean;
   /** 강의 컨텍스트(?lecture=)가 있어 인라인 이름 변경이 가능한지. */
   renameEnabled: boolean;
   /** 강의별 표시 이름 저장 콜백. */
@@ -30,40 +26,25 @@ const mediaWrapStyle: CSSProperties = {
   overflow: "hidden",
 };
 
+/**
+ * 아바타 카드 — 정지 썸네일 + 클릭 선택.
+ *
+ * 마우스 hover 자동 영상재생은 제거했다(작은 창에서 보기 어렵고 산만함). 카드는
+ * 썸네일만 보여 주고, 클릭하면 선택되어 상단 ``AvatarPreviewStage`` 에서 크게
+ * 음성과 함께 재생된다.
+ */
 export default function AvatarCard({
   avatar,
   selected,
   onSelect,
-  reducedMotion,
   renameEnabled,
   onRename,
   t,
 }: AvatarCardProps) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(avatar.name);
 
   const hasVideo = !!avatar.preview_video_url;
-  const shouldPlay = !reducedMotion && hasVideo && (hovered || selected);
-
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    // play()/pause() 는 환경에 따라(자동재생 정책 거부, jsdom 미구현) 동기/비동기
-    // 예외를 던질 수 있어 전부 무시한다 — 실패 시 poster 썸네일이 남는다.
-    try {
-      if (shouldPlay) {
-        const p = v.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
-      } else {
-        v.pause();
-        v.currentTime = 0; // 다음 hover 때 처음부터 재생되도록 되감기.
-      }
-    } catch {
-      /* no-op */
-    }
-  }, [shouldPlay]);
 
   const startEdit = () => {
     setDraftName(avatar.name);
@@ -99,8 +80,6 @@ export default function AvatarCard({
     <div
       data-testid={`avatar-card-${avatar.id}`}
       data-selected={selected ? "true" : "false"}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         background: "var(--bg-card)",
         border: `2px solid ${selected ? "var(--gold)" : "var(--line)"}`,
@@ -114,8 +93,6 @@ export default function AvatarCard({
       <button
         type="button"
         onClick={() => onSelect(avatar.id)}
-        onFocus={() => setHovered(true)}
-        onBlur={() => setHovered(false)}
         aria-pressed={selected}
         aria-label={t("select") + ": " + avatar.name}
         style={{
@@ -130,16 +107,12 @@ export default function AvatarCard({
         }}
       >
         <span style={mediaWrapStyle}>
-          {hasVideo ? (
-            <video
-              ref={videoRef}
-              src={avatar.preview_video_url ?? undefined}
-              poster={avatar.preview_image_url ?? undefined}
-              muted
-              loop
-              playsInline
-              preload="none"
-              aria-hidden="true"
+          {avatar.preview_image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatar.preview_image_url}
+              alt={avatar.name}
+              loading="lazy"
               style={{
                 width: "100%",
                 height: "100%",
@@ -147,12 +120,14 @@ export default function AvatarCard({
                 display: "block",
               }}
             />
-          ) : avatar.preview_image_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={avatar.preview_image_url}
-              alt={avatar.name}
-              loading="lazy"
+          ) : hasVideo ? (
+            // 이미지가 없을 때는 영상의 첫 프레임만 정지 노출(자동재생 안 함).
+            <video
+              src={avatar.preview_video_url ?? undefined}
+              muted
+              playsInline
+              preload="metadata"
+              aria-hidden="true"
               style={{
                 width: "100%",
                 height: "100%",
@@ -177,14 +152,17 @@ export default function AvatarCard({
             </span>
           )}
 
-          {/* 재생/정지 인디케이터 — 모션 환경에서만 의미 */}
-          {hasVideo && (
+          {/* 클릭 안내 — hover 자동재생 대신 "클릭하면 크게 재생" */}
+          {hasVideo && !selected && (
             <span
               style={{
                 position: "absolute",
                 bottom: 6,
                 right: 6,
-                padding: "2px 7px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "2px 8px",
                 borderRadius: 999,
                 fontSize: 10,
                 fontWeight: 600,
@@ -193,11 +171,8 @@ export default function AvatarCard({
                 backdropFilter: "blur(2px)",
               }}
             >
-              {reducedMotion
-                ? t("previewStatic")
-                : shouldPlay
-                  ? t("previewPlaying")
-                  : t("playPreview")}
+              <span aria-hidden="true">▶</span>
+              {t("playPreviewLarge")}
             </span>
           )}
 

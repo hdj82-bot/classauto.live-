@@ -44,10 +44,19 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/auth/google/callback"
 
     # ── Anthropic ───────────────────────────────────────────────
+    # 모델 정책(2026-05-23): 모든 생성 과정은 "속도 최우선" — 가장 빠른 경량
+    # 모델(Haiku)을 기본으로 한다. 특정 과정의 결과 품질이 부족하다고 판단되면
+    # 그 과정의 *_MODEL 만 상위 모델(sonnet/opus)로 올려 대응한다. 모델은 모두
+    # 설정값이므로 코드 변경 없이 env 로 즉시 조정 가능.
     ANTHROPIC_API_KEY: str = ""
-    CLAUDE_MODEL: str = "claude-opus-4-6"
-    SCRIPT_MODEL: str = "claude-sonnet-4-6"
-    QA_MODEL: str = "claude-opus-4-6"
+    CLAUDE_MODEL: str = "claude-haiku-4-5"        # 공용 기본값(현재 직접 사용처 없음)
+    SCRIPT_MODEL: str = "claude-haiku-4-5"        # 발화 스크립트 생성 (스튜디오)
+    QUESTION_MODEL: str = "claude-haiku-4-5"      # 평가 문제 생성 (스튜디오)
+    QA_MODEL: str = "claude-haiku-4-5"            # 학생 RAG Q&A
+    # 자막 번역 전용 — 텍스트→텍스트라 가장 빠르고 저렴한 Haiku 로 충분.
+    # 전 슬라이드를 단일 호출로 번역하므로 max_tokens 는 넉넉히 둔다(잘리면 폴백).
+    TRANSLATE_MODEL: str = "claude-haiku-4-5"
+    TRANSLATE_MAX_TOKENS: int = 16384
     SCRIPT_MAX_TOKENS: int = 2048
     # 슬라이드별 스크립트 생성 시 동시 호출 상한. Anthropic 분당 요청 수
     # rate limit 보호용. 너무 높이면 429 가 늘어 retry 백오프로 오히려 느려진다.
