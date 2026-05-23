@@ -29,7 +29,7 @@ _CLAUDE_RETRY_ON = (
 @retry_external(label="claude.questions.generate", extra_retry_on=_CLAUDE_RETRY_ON)
 def _claude_generate_questions(client: anthropic.Anthropic, user_prompt: str):
     return client.messages.create(
-        model="claude-opus-4-6",
+        model=settings.QUESTION_MODEL,
         max_tokens=8192,
         thinking={"type": "adaptive"},
         system=_SYSTEM_PROMPT,
