@@ -490,10 +490,17 @@ export default function StudioWizardPage() {
 
   const handleChangeSubtitleLang = useCallback(
     (lang: LangCode | null) => {
+      if (lang === subtitleLang) return;
       setSubtitleLang(lang);
+      // 언어가 바뀌면 기존(이전 언어) 자막은 무효 — 즉시 비워서 카드가 새 언어의
+      // "번역 생성" 프롬프트를 바로 보여주게 한다. (서버도 subtitle_lang 변경 시
+      // subtitle_segments 를 비우므로 새로고침 후에도 일관됨.)
+      setScript((prev) =>
+        prev?.subtitle_segments ? { ...prev, subtitle_segments: null } : prev,
+      );
       void persistLecture({ subtitle_lang: lang });
     },
-    [persistLecture],
+    [persistLecture, subtitleLang],
   );
 
   const handleChangeVoiceId = useCallback(
