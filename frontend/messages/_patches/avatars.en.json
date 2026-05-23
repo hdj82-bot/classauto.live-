@@ -20,11 +20,26 @@
     "customBadge": "My avatar",
 
     "playPreview": "Play sample clip",
+    "playPreviewLarge": "Click to play large",
     "previewPlaying": "Playing sample",
     "previewStatic": "Reduced motion — thumbnail only",
     "noPreview": "No preview",
     "selected": "Selected",
     "select": "Select",
+
+    "stagePlaceholder": "Click an avatar below to play it large here.",
+    "stageNowPlaying": "Playing",
+    "customAvatarHint": "Upload a photo to create your own avatar and it will appear here.",
+
+    "voiceHeading": "Voice",
+    "voiceNote": "Plays a sample voice together with the avatar clip. Switch between male and female voices to compare.",
+    "voiceNowPlaying": "Now playing",
+    "voiceGroupMale": "Male voices",
+    "voiceGroupFemale": "Female voices",
+    "voicePlay": "Play",
+    "voiceStop": "Stop",
+    "voiceUnsupported": "This browser does not support voice preview.",
+    "voiceSampleText": "Hello. I will teach this lecture with this voice.",
 
     "applyToLecture": "Apply to this lecture",
     "applying": "Applying...",

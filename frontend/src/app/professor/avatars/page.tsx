@@ -8,6 +8,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useAvatarsI18n } from "@/components/professor/avatars/useAvatarsI18n";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
 import AvatarCard from "@/components/professor/avatars/AvatarCard";
+import AvatarPreviewStage from "@/components/professor/avatars/AvatarPreviewStage";
 import ProfilePhotoUploadCard from "@/components/professor/avatars/ProfilePhotoUploadCard";
 import {
   applyAvatarToLecture,
@@ -81,20 +82,28 @@ export default function AvatarsPage() {
     [],
   );
 
+  // 본인 아바타는 업로드 카드 우측에 별도 노출하므로 그리드 섹션에서는 제외한다.
   const sections = useMemo(() => {
-    const custom = avatars.filter((a) => a.is_custom);
     const male = avatars.filter((a) => !a.is_custom && a.gender === "male");
     const female = avatars.filter((a) => !a.is_custom && a.gender === "female");
     const other = avatars.filter(
       (a) => !a.is_custom && a.gender !== "male" && a.gender !== "female",
     );
     return [
-      { key: "custom", label: t("sectionCustom"), items: custom },
       { key: "male", label: t("sectionMale"), items: male },
       { key: "female", label: t("sectionFemale"), items: female },
       { key: "other", label: t("sectionOther"), items: other },
     ].filter((s) => s.items.length > 0);
   }, [avatars, t]);
+
+  const customAvatar = useMemo(
+    () => avatars.find((a) => a.is_custom) ?? null,
+    [avatars],
+  );
+  const selectedAvatar = useMemo(
+    () => avatars.find((a) => a.id === selectedId) ?? null,
+    [avatars, selectedId],
+  );
 
   const handleApply = useCallback(async () => {
     if (!lectureId || !selectedId) return;
@@ -220,6 +229,18 @@ export default function AvatarsPage() {
           onSubmit={handleUpload}
           status={customStatus}
           uploading={customUploading}
+          customAvatar={customAvatar}
+          customSelected={!!customAvatar && customAvatar.id === selectedId}
+          onSelectCustom={
+            customAvatar ? () => setSelectedId(customAvatar.id) : undefined
+          }
+          t={t}
+        />
+
+        {/* 클릭한 아바타를 크게 재생 + 음성 함께 듣기 */}
+        <AvatarPreviewStage
+          avatar={selectedAvatar}
+          reducedMotion={reducedMotion}
           t={t}
         />
 
@@ -280,7 +301,6 @@ export default function AvatarsPage() {
                     avatar={a}
                     selected={a.id === selectedId}
                     onSelect={setSelectedId}
-                    reducedMotion={reducedMotion}
                     renameEnabled={renameEnabled}
                     onRename={(name) => handleRename(a.id, name)}
                     t={t}
