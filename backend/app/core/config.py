@@ -54,9 +54,17 @@ class Settings(BaseSettings):
     QUESTION_MODEL: str = "claude-haiku-4-5"      # 평가 문제 생성 (스튜디오)
     QA_MODEL: str = "claude-haiku-4-5"            # 학생 RAG Q&A
     # 자막 번역 전용 — 텍스트→텍스트라 가장 빠르고 저렴한 Haiku 로 충분.
-    # 전 슬라이드를 단일 호출로 번역하므로 max_tokens 는 넉넉히 둔다(잘리면 폴백).
+    # 슬라이드별로 1회씩 병렬 호출한다(전체를 1회로 묶으면 출력이 커져 30s
+    # 타임아웃 → 폴백 hang 으로 이어졌다). max_tokens 는 슬라이드 1장 분량 상한.
     TRANSLATE_MODEL: str = "claude-haiku-4-5"
-    TRANSLATE_MAX_TOKENS: int = 16384
+    TRANSLATE_MAX_TOKENS: int = 4096
+    # 자막 번역 동시 호출 상한 (슬라이드 N장 → 최대 N개 병렬). 너무 높이면 429.
+    TRANSLATE_CONCURRENCY: int = 10
+    # Google Translate 폴백 활성화 여부. 운영엔 Google 번역 자격증명이 없어
+    # 기본 비활성 — 켜면 google.cloud Client() 가 자격증명을 못 찾아 GCE
+    # 메타데이터 서버 조회로 무한 대기(요청 hang)하므로, 실제 자격증명을
+    # 구성한 환경에서만 true 로 둔다.
+    GOOGLE_TRANSLATE_ENABLED: bool = False
     SCRIPT_MAX_TOKENS: int = 2048
     # 슬라이드별 스크립트 생성 시 동시 호출 상한. Anthropic 분당 요청 수
     # rate limit 보호용. 너무 높이면 429 가 늘어 retry 백오프로 오히려 느려진다.
