@@ -225,6 +225,40 @@ async def test_upload_profile_photo_heygen_fail_keeps_photo(client, professor, d
 
 
 @pytest.mark.asyncio
+async def test_upload_new_photo_clears_stale_preview(client, professor, db):
+    # 이미 만들어 둔 미리보기 캐시가 있는 상태에서 새 사진 업로드 →
+    # 옛 얼굴 미리보기는 무효화되어야 한다(다음 조회 시 재생성 유도).
+    professor.photo_avatar_preview_url = "https://b.s3/old.mp4"
+    professor.photo_avatar_preview_video_id = None
+    professor.photo_avatar_preview_voice_id = "old_voice"
+    await db.flush()
+
+    with patch(
+        "app.services.pipeline.s3.get_s3_client", return_value=MagicMock()
+    ), patch(
+        "app.services.pipeline.s3.generate_presigned_url",
+        return_value="https://signed.example/p.jpg",
+    ), patch(
+        "app.services.pipeline.heygen.upload_talking_photo",
+        new=AsyncMock(return_value="tp_new"),
+    ):
+        resp = await client.post(
+            "/api/avatars/profile-photo",
+            headers=make_auth_header(professor),
+            files={"file": ("me.jpg", _JPEG, "image/jpeg")},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ready"
+
+    await db.refresh(professor)
+    assert professor.photo_avatar_id == "tp_new"
+    # 캐시 3종 모두 비워졌는지.
+    assert professor.photo_avatar_preview_url is None
+    assert professor.photo_avatar_preview_video_id is None
+    assert professor.photo_avatar_preview_voice_id is None
+
+
+@pytest.mark.asyncio
 async def test_upload_profile_photo_rejects_non_image(client, professor):
     resp = await client.post(
         "/api/avatars/profile-photo",

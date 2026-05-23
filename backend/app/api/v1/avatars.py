@@ -194,6 +194,11 @@ async def upload_profile_photo(
     try:
         photo_avatar_id = await upload_talking_photo(content, content_type=ctype)
         user.photo_avatar_id = photo_avatar_id
+        # 새 아바타로 교체됨 → 이전 사진으로 만든 "움직이는 미리보기" 캐시는
+        # 옛 얼굴이라 더 이상 유효하지 않으므로 비운다(다음 조회 시 재생성 유도).
+        user.photo_avatar_preview_url = None
+        user.photo_avatar_preview_video_id = None
+        user.photo_avatar_preview_voice_id = None
         result_status = "ready"
         message = "본인 아바타가 등록되었습니다."
     except HeyGenError as e:
