@@ -189,4 +189,55 @@ export async function uploadProfilePhoto(
   }
 }
 
+// ── 본인 아바타 "움직이는 미리보기" (POST/GET /api/avatars/me/preview) ──────────
+
+export type AvatarPreviewStatus =
+  | "not_started"
+  | "processing"
+  | "ready"
+  | "failed";
+
+export interface AvatarPreview {
+  status: AvatarPreviewStatus;
+  video_url?: string | null;
+  voice_id?: string | null;
+  message?: string | null;
+}
+
+/** GET /api/avatars/me/preview — 캐시/진행 상태 조회. deferred 면 not_started. */
+export async function getAvatarPreview(): Promise<AvatarPreview> {
+  try {
+    const { data } = await api.get<AvatarPreview>("/api/avatars/me/preview");
+    return data;
+  } catch (err) {
+    if (isDeferredError(err)) return { status: "not_started" };
+    throw err;
+  }
+}
+
+/**
+ * POST /api/avatars/me/preview — 렌더 시작(또는 캐시 반환).
+ * voiceId 를 주면 그 음성으로 렌더한다. force=true 면 캐시 무시하고 재생성.
+ */
+export async function startAvatarPreview(
+  voiceId?: string | null,
+  force = false,
+): Promise<AvatarPreview> {
+  try {
+    const { data } = await api.post<AvatarPreview>("/api/avatars/me/preview", {
+      voice_id: voiceId ?? null,
+      force,
+    });
+    return data;
+  } catch (err) {
+    if (isDeferredError(err)) {
+      return {
+        status: "failed",
+        message: "백엔드 연결 후 사용할 수 있습니다.",
+      };
+    }
+    throw err;
+  }
+}
+
 export const __fixtures = { FIXTURE_AVATARS };

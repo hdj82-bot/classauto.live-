@@ -41,6 +41,42 @@ class AvatarsResponse(BaseModel):
     total: int
 
 
+class AvatarPreviewRequest(BaseModel):
+    """``POST /api/avatars/me/preview`` 요청 본문."""
+
+    voice_id: str | None = Field(
+        default=None,
+        description="미리보기를 렌더할 ElevenLabs voice_id. null 이면 기본 음성.",
+    )
+    force: bool = Field(
+        default=False,
+        description="true 면 캐시를 무시하고 다시 렌더한다(다른 음성으로 재생성 등).",
+    )
+
+
+class AvatarPreviewResponse(BaseModel):
+    """본인 아바타 "움직이는 미리보기" 상태.
+
+    Talking Photo 는 정지 사진이라 아이들 영상이 없어, 짧은 샘플을 1회 렌더해
+    캐시한다. 프론트는 ``status`` 로 버튼/로딩/재생을 분기한다.
+    """
+
+    status: Literal["not_started", "processing", "ready", "failed"] = Field(
+        ...,
+        description=(
+            "'not_started' = 아직 안 만듦, 'processing' = HeyGen 렌더 중, "
+            "'ready' = 영상 준비됨(video_url 제공), 'failed' = 렌더 실패."
+        ),
+    )
+    video_url: str | None = Field(
+        default=None, description="ready 일 때 재생할 영상 URL(presigned)."
+    )
+    voice_id: str | None = Field(
+        default=None, description="이 미리보기를 렌더한 voice_id."
+    )
+    message: str | None = Field(default=None, description="사용자 표시용 메시지.")
+
+
 class ProfilePhotoResponse(BaseModel):
     """``POST /api/avatars/profile-photo`` 응답.
 

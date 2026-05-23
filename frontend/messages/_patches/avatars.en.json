@@ -29,11 +29,19 @@
 
     "stagePlaceholder": "Click an avatar below to play it large here.",
     "stageNowPlaying": "Playing",
-    "stageCustomNoMotion": "Your avatar is photo-based, so the preview shows a still image. In the actual lecture video it moves naturally in sync with the voice.",
+    "stageCustomNoMotion": "It's photo-based, so it shows a still image by default. Tap the button to generate a moving preview.",
     "customAvatarHint": "Upload a photo to create your own avatar and it will appear here.",
+
+    "previewGenerate": "Generate moving preview",
+    "previewGenerateNote": "Runs one HeyGen render with the selected voice (takes a few dozen seconds).",
+    "previewGenerating": "Generating the moving preview...",
+    "previewRegenerate": "Regenerate with this voice",
+    "previewVoiceLabel": "Preview voice",
 
     "voiceHeading": "Voice",
     "voiceNote": "Plays a sample voice together with the avatar clip. Switch between voices to compare.",
+    "voiceNoteCustom": "Your avatar speaking with the selected voice.",
+    "voiceChangeNeedsRerender": "To hear a different voice, pick one above and tap 'Regenerate with this voice'.",
     "voiceNowPlaying": "Now playing",
     "voiceGroupMale": "Male voices",
     "voiceGroupFemale": "Female voices",

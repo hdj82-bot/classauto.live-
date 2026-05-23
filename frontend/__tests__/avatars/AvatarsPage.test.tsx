@@ -170,6 +170,61 @@ describe("AvatarsPage", () => {
     expect(screen.getByTestId("avatar-voice-option-v_adam")).toBeTruthy();
   });
 
+  it("offers a 'generate moving preview' action for the custom avatar", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/avatars") {
+        return {
+          data: {
+            avatars: [
+              {
+                avatar_id: "tp_self",
+                avatar_name: "하두진 (본인)",
+                is_custom: true,
+                preview_image_url: "https://x/me.png",
+                preview_video_url: null,
+              },
+            ],
+            total: 1,
+          },
+        };
+      }
+      if (url === "/api/voices") {
+        return {
+          data: {
+            voices: [
+              { voice_id: "v1", name: "Adam", gender: "male", preview_url: "https://x/a.mp3" },
+            ],
+            total: 1,
+          },
+        };
+      }
+      if (url === "/api/avatars/me/preview") {
+        // 아직 만들지 않음 → 생성 버튼 노출.
+        return { data: { status: "not_started" } };
+      }
+      throw new Error(`unhandled GET ${url}`);
+    });
+    apiPost.mockResolvedValue({ data: { status: "processing" } });
+
+    renderPage(<AvatarsPage />);
+
+    // 본인 아바타는 업로드 카드 우측에 노출 → 클릭해 무대에서 선택.
+    const customBtn = await screen.findByTestId("upload-custom-avatar");
+    fireEvent.click(customBtn);
+
+    // 사진 기반이라 '움직이는 미리보기 만들기' 버튼이 떠야 한다.
+    const genBtn = await screen.findByTestId("avatar-preview-generate");
+    fireEvent.click(genBtn);
+
+    await waitFor(() =>
+      expect(apiPost).toHaveBeenCalledWith(
+        "/api/avatars/me/preview",
+        expect.objectContaining({ force: false }),
+        undefined,
+      ),
+    );
+  });
+
   it("applies the selected avatar to the lecture and returns to studio", async () => {
     mockDeferredBackend();
     apiPatch.mockResolvedValue({ data: {} });
