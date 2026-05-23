@@ -107,6 +107,24 @@ async def prometheus_metrics():
 
 @app.get("/health")
 async def health_check():
+    """경량 liveness probe — 프로세스가 떠서 응답하는지만 확인한다.
+
+    컨테이너 HEALTHCHECK(Dockerfile.prod, timeout 5s)·업타임 모니터가 30초마다
+    때리는 hot path 라 **외부 의존성(DB·Redis·S3·Celery)을 절대 건드리지 않는다**.
+    의존성 점검은 `/health/deep` 로 분리 — 종전엔 여기서 celery inspect.ping(2s)
+    + S3 head_bucket 등을 매번 실행해 5~10초가 걸렸고, HEALTHCHECK 타임아웃을
+    넘겨 멀쩡한 컨테이너가 unhealthy 로 오판될 위험이 있었다.
+    """
+    return {"status": "ok", "env": settings.ENVIRONMENT}
+
+
+@app.get("/health/deep")
+async def health_check_deep():
+    """의존성 포함 readiness 점검 — DB·Redis·S3·Celery worker 도달성.
+
+    느릴 수 있으므로(특히 celery `inspect.ping`) liveness 와 분리한다. 운영
+    점검·디버깅용으로 수동 호출하거나, 타임아웃이 넉넉한 모니터에서만 사용.
+    """
     checks = {"service": "ok"}
     # DB check
     try:
