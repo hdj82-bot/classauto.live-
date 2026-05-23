@@ -180,6 +180,78 @@ async def test_list_voices_curated_first(client, professor):
     assert aria["preview_url"] == "https://el.example/aria.mp3"
 
 
+# ── POST /api/voices/preview ──────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_preview_voice_synthesizes_with_voice_and_speed(client, professor):
+    """발화 내용을 선택 보이스·속도로 합성해 audio/mpeg 로 반환."""
+    fake = SimpleNamespace(
+        audio_bytes=b"ID3-fake-mp3-bytes", provider="elevenlabs", duration_seconds=0.5
+    )
+    with patch(
+        "app.services.pipeline.tts.synthesize", new=AsyncMock(return_value=fake)
+    ) as m:
+        resp = await client.post(
+            "/api/voices/preview",
+            json={"text": "안녕하세요, 미리듣기 테스트입니다.", "voice_id": "v_aria", "speed": 0.9},
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("audio/mpeg")
+    assert resp.content == b"ID3-fake-mp3-bytes"
+    # 선택한 voice_id·speed 가 합성에 전달됐는지.
+    _, kwargs = m.call_args
+    assert kwargs.get("voice_id") == "v_aria"
+    assert kwargs.get("speed") == 0.9
+
+
+@pytest.mark.asyncio
+async def test_preview_voice_caps_text_length(client, professor):
+    """과도한 길이의 텍스트는 상한으로 잘라서 합성한다(비용 보호)."""
+    from app.schemas.voice import VOICE_PREVIEW_MAX_CHARS
+
+    fake = SimpleNamespace(audio_bytes=b"x", provider="elevenlabs", duration_seconds=0.1)
+    long_text = "가" * (VOICE_PREVIEW_MAX_CHARS + 500)
+    with patch(
+        "app.services.pipeline.tts.synthesize", new=AsyncMock(return_value=fake)
+    ) as m:
+        resp = await client.post(
+            "/api/voices/preview",
+            json={"text": long_text},
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    sent_text = m.call_args[0][0]
+    assert len(sent_text) == VOICE_PREVIEW_MAX_CHARS
+
+
+@pytest.mark.asyncio
+async def test_preview_voice_tts_failure_returns_502(client, professor):
+    from app.services.pipeline.tts import TTSError
+
+    with patch(
+        "app.services.pipeline.tts.synthesize",
+        new=AsyncMock(side_effect=TTSError("양쪽 provider 실패")),
+    ):
+        resp = await client.post(
+            "/api/voices/preview",
+            json={"text": "안녕하세요"},
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 502
+
+
+@pytest.mark.asyncio
+async def test_preview_voice_requires_professor(client, student):
+    resp = await client.post(
+        "/api/voices/preview",
+        json={"text": "안녕하세요"},
+        headers=make_auth_header(student),
+    )
+    assert resp.status_code in (401, 403)
+
+
 # ── POST /api/videos/{id}/subtitle/translate ──────────────────────────────────
 
 

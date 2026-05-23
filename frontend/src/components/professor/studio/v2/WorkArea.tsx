@@ -57,11 +57,16 @@ export interface WorkAreaProps {
   /** 다시 생성 — 부모가 Claude 재생성 엔드포인트로 요청. */
   onRegenerate?: () => Promise<void> | void;
   /**
-   * 선택한 보이스의 미리듣기 mp3 URL. 있으면 'AI 아바타 발화 내용' 카드 우측
-   * 상단에 재생버튼이 노출돼 해당 보이스 샘플을 들어볼 수 있다. null/undefined
-   * (보이스 미선택·샘플 없음) 이면 버튼은 비활성.
+   * 'AI 아바타 발화 내용' 미리듣기 — 현재 발화 내용을 선택한 보이스·속도로
+   * 실제 합성한 mp3 ``Blob`` 을 반환한다(보이스 고정 샘플이 아님). 실패 시 null.
+   * 제공되지 않으면 미리듣기 버튼은 비활성.
    */
-  voicePreviewUrl?: string | null;
+  onRequestVoicePreview?: () => Promise<Blob | null>;
+  /**
+   * 미리듣기 캐시 키 — 보이스·속도·슬라이드가 바뀌면 값이 달라져 재합성을
+   * 트리거한다. 같은 키면 직전 합성 결과를 그대로 재생(비용 절약).
+   */
+  voicePreviewKey?: string;
   /** 선택한 보이스 표시명 — 재생버튼 title 용. */
   voiceName?: string;
   /** 다시 생성·저장 진행 표시. */
@@ -211,7 +216,8 @@ export default function WorkArea({
   isLoading = false,
   onEditSave,
   onRegenerate,
-  voicePreviewUrl,
+  onRequestVoicePreview,
+  voicePreviewKey,
   voiceName,
   regenerating = false,
   saving = false,
@@ -231,9 +237,12 @@ export default function WorkArea({
   const [subDraft, setSubDraft] = useState(subtitleText ?? "");
   const subTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // 선택 보이스 미리듣기 (샘플 mp3 재생).
+  // 'AI 발화 내용' 미리듣기 — 실제 발화 내용을 선택 보이스·속도로 합성해 재생.
+  // 같은 voicePreviewKey 면 직전 합성 결과(blob URL)를 재사용해 재합성 비용을 아낀다.
   const [voicePreviewPlaying, setVoicePreviewPlaying] = useState(false);
+  const [voicePreviewLoading, setVoicePreviewLoading] = useState(false);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewCacheRef = useRef<{ key: string; url: string } | null>(null);
 
   const stopVoicePreview = () => {
     if (voiceAudioRef.current) {
@@ -243,14 +252,9 @@ export default function WorkArea({
     setVoicePreviewPlaying(false);
   };
 
-  const toggleVoicePreview = () => {
-    if (typeof window === "undefined" || !voicePreviewUrl) return;
-    if (voicePreviewPlaying) {
-      stopVoicePreview();
-      return;
-    }
+  const playPreviewUrl = (url: string) => {
     try {
-      const audio = new Audio(voicePreviewUrl);
+      const audio = new Audio(url);
       audio.onended = () => setVoicePreviewPlaying(false);
       voiceAudioRef.current = audio;
       setVoicePreviewPlaying(true);
@@ -260,19 +264,47 @@ export default function WorkArea({
     }
   };
 
-  // 선택 보이스(미리듣기 URL)가 바뀌거나 언마운트되면 재생 정지.
-  /* eslint-disable react-hooks/set-state-in-effect */
+  const toggleVoicePreview = async () => {
+    if (typeof window === "undefined" || !onRequestVoicePreview) return;
+    if (voicePreviewPlaying) {
+      stopVoicePreview();
+      return;
+    }
+    const key = voicePreviewKey ?? "";
+    const cached = previewCacheRef.current;
+    if (cached && cached.key === key) {
+      playPreviewUrl(cached.url);
+      return;
+    }
+    setVoicePreviewLoading(true);
+    try {
+      const blob = await onRequestVoicePreview();
+      if (!blob) return;
+      if (previewCacheRef.current) URL.revokeObjectURL(previewCacheRef.current.url);
+      const url = URL.createObjectURL(blob);
+      previewCacheRef.current = { key, url };
+      playPreviewUrl(url);
+    } finally {
+      setVoicePreviewLoading(false);
+    }
+  };
+
+  // 캐시 키(보이스·속도·슬라이드)가 바뀌면 재생 정지 + 합성 캐시 무효화.
   useEffect(() => {
     if (voiceAudioRef.current) {
       voiceAudioRef.current.pause();
       voiceAudioRef.current = null;
     }
     setVoicePreviewPlaying(false);
-  }, [voicePreviewUrl]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+    if (previewCacheRef.current) {
+      URL.revokeObjectURL(previewCacheRef.current.url);
+      previewCacheRef.current = null;
+    }
+  }, [voicePreviewKey]);
   useEffect(() => {
     return () => {
       if (voiceAudioRef.current) voiceAudioRef.current.pause();
+      if (previewCacheRef.current) URL.revokeObjectURL(previewCacheRef.current.url);
     };
   }, []);
 
@@ -280,11 +312,9 @@ export default function WorkArea({
   // placeholder 가 노출되지 않도록 트래킹. URL 이 바뀌면 상태를 리셋해서
   // 다음 슬라이드의 이미지는 다시 시도한다.
   const [imageBroken, setImageBroken] = useState(false);
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setImageBroken(false);
   }, [slideImageUrl]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const trimmedImageUrl = slideImageUrl?.trim() ?? "";
   const showSlideImage =
@@ -295,12 +325,10 @@ export default function WorkArea({
   // 슬라이드가 바뀌면 편집 모드를 해제하고 draft 도 새 본문으로 동기화한다.
   // react-hooks/set-state-in-effect: prop 변화에 따른 로컬 편집 상태 리셋이라
   // 의도적 패턴. 정공법(`key` reset 또는 derived state)은 별도 리팩토링 PR 에서.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setEditing(false);
     setDraft(aiText);
   }, [aiText, slideNumber]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (editing && textareaRef.current) {
@@ -311,12 +339,10 @@ export default function WorkArea({
   }, [editing]);
 
   // 슬라이드 변경·자막 갱신 시 자막 편집 상태 리셋.
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setEditingSub(false);
     setSubDraft(subtitleText ?? "");
   }, [subtitleText, slideNumber]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (editingSub && subTextareaRef.current) {
@@ -531,9 +557,10 @@ export default function WorkArea({
                   하두진 교수 톤 학습 모델
                 </span>
                 <VoicePreviewButton
-                  url={voicePreviewUrl}
+                  enabled={!!onRequestVoicePreview && aiText.trim().length > 0}
                   voiceName={voiceName}
                   playing={voicePreviewPlaying}
+                  loading={voicePreviewLoading}
                   onToggle={toggleVoicePreview}
                 />
               </div>
@@ -798,27 +825,29 @@ export default function WorkArea({
 }
 
 /**
- * 'AI 아바타 발화 내용' 카드 우측 상단의 보이스 미리듣기 버튼.
- * 선택한 보이스의 샘플 mp3(``voicePreviewUrl``)를 재생/정지한다. URL 이 없으면
- * (보이스 미선택·샘플 없음) 비활성.
+ * 'AI 아바타 발화 내용' 카드 우측 상단의 미리듣기 버튼.
+ * 클릭하면 현재 발화 내용을 선택한 보이스·속도로 합성해 재생한다(고정 샘플 아님).
+ * ``loading`` 동안엔 '생성 중…', 재생 중엔 '정지'. ``enabled=false`` 면 비활성.
  */
 function VoicePreviewButton({
-  url,
+  enabled,
   voiceName,
   playing,
+  loading,
   onToggle,
 }: {
-  url: string | null | undefined;
+  enabled: boolean;
   voiceName?: string;
   playing: boolean;
+  loading: boolean;
   onToggle: () => void;
 }) {
-  const enabled = !!url;
   const title = enabled
     ? voiceName
-      ? `${voiceName} 미리듣기`
-      : "선택한 보이스 미리듣기"
-    : "미리듣기 샘플 없음 — 우측 패널에서 보이스를 선택하세요";
+      ? `${voiceName} 보이스·속도로 발화 내용 미리듣기`
+      : "선택한 보이스·속도로 발화 내용 미리듣기"
+    : "미리들을 발화 내용이 없습니다";
+  const interactive = enabled && !loading;
   return (
     <button
       type="button"
@@ -826,8 +855,9 @@ function VoicePreviewButton({
         e.stopPropagation();
         onToggle();
       }}
-      disabled={!enabled}
-      aria-label={playing ? "보이스 미리듣기 정지" : "보이스 미리듣기"}
+      disabled={!interactive}
+      aria-label={playing ? "미리듣기 정지" : "발화 내용 미리듣기"}
+      aria-busy={loading}
       title={title}
       style={{
         marginLeft: 8,
@@ -841,7 +871,7 @@ function VoicePreviewButton({
         borderColor: enabled ? "var(--gold)" : "var(--line-strong)",
         background: playing ? "var(--gold-soft)" : "var(--bg-card)",
         color: enabled ? "var(--gold-on-light, #B88308)" : "var(--text-faint)",
-        cursor: enabled ? "pointer" : "not-allowed",
+        cursor: interactive ? "pointer" : loading ? "wait" : "not-allowed",
         opacity: enabled ? 1 : 0.5,
         fontSize: 10.5,
         fontWeight: 700,
@@ -850,7 +880,12 @@ function VoicePreviewButton({
         fontFamily: "inherit",
       }}
     >
-      {playing ? (
+      {loading ? (
+        <svg viewBox="0 0 32 32" width="11" height="11" className="studio-slide-spinner" aria-hidden="true">
+          <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(184,131,8,0.25)" strokeWidth="4" />
+          <path d="M 16 4 A 12 12 0 0 1 28 16" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+        </svg>
+      ) : playing ? (
         <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true">
           <rect x="6" y="5" width="4" height="14" rx="1" />
           <rect x="14" y="5" width="4" height="14" rx="1" />
@@ -860,7 +895,7 @@ function VoicePreviewButton({
           <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
         </svg>
       )}
-      {playing ? "정지" : "미리듣기"}
+      {loading ? "생성 중…" : playing ? "정지" : "미리듣기"}
     </button>
   );
 }
