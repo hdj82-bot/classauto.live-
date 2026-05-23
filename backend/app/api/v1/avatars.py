@@ -6,14 +6,20 @@
 """
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_professor
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.avatar import AvatarMeta, AvatarsResponse, ProfilePhotoResponse
+from app.schemas.avatar import (
+    AvatarMeta,
+    AvatarPreviewRequest,
+    AvatarPreviewResponse,
+    AvatarsResponse,
+    ProfilePhotoResponse,
+)
 from app.services.pipeline import s3 as s3_svc
 
 router = APIRouter(tags=["avatars"])
@@ -22,6 +28,9 @@ router = APIRouter(tags=["avatars"])
 _MAX_PROFILE_PHOTO = 8 * 1024 * 1024  # 8MB
 _JPEG_MAGIC = b"\xff\xd8\xff"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+# "움직이는 미리보기" 렌더에 쓰는 짧은 샘플 문장 — 렌더 시간·비용을 줄이려 짧게.
+_PREVIEW_TEXT = "안녕하세요. 이 모습으로 강의를 진행하겠습니다."
 
 # ── 큐레이션 allowlist ────────────────────────────────────────────────────────
 # HeyGen /v2/avatars 는 수백 개를 돌려주고 배경색·복장 메타데이터를 주지 않는다.
@@ -198,4 +207,150 @@ async def upload_profile_photo(
         status=result_status,
         profile_image_url=s3_svc.presign_stored_s3_url(profile_url) or profile_url,
         message=message,
+    )
+
+
+@router.post(
+    "/api/avatars/me/preview",
+    response_model=AvatarPreviewResponse,
+    summary="본인 아바타 '움직이는 미리보기' 렌더 시작/조회",
+)
+async def create_avatar_preview(
+    payload: AvatarPreviewRequest | None = Body(default=None),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """본인 Talking Photo 로 짧은 샘플 영상을 1회 렌더한다.
+
+    Talking Photo 는 정지 사진이라 아이들 영상이 없으므로, 갤러리에서 움직이는
+    모습을 보여 주려면 실제 렌더가 필요하다. 결과는 ``users.photo_avatar_preview_url``
+    에 캐시하고, 같은 음성이면 다시 렌더하지 않는다(HeyGen 비용 절감).
+    상태 조회·완료 수령은 ``GET /api/avatars/me/preview`` 폴링으로 한다.
+    """
+    payload = payload or AvatarPreviewRequest()
+    if not user.photo_avatar_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="본인 아바타가 아직 등록되지 않았습니다. 먼저 사진으로 아바타를 만들어 주세요.",
+        )
+
+    voice_id = payload.voice_id
+
+    # 캐시 적중: 강제 아님 + 완성본 있음 + 같은 음성(또는 음성 미지정).
+    if (
+        not payload.force
+        and user.photo_avatar_preview_url
+        and (voice_id is None or voice_id == user.photo_avatar_preview_voice_id)
+    ):
+        return AvatarPreviewResponse(
+            status="ready",
+            video_url=s3_svc.presign_stored_s3_url(user.photo_avatar_preview_url),
+            voice_id=user.photo_avatar_preview_voice_id,
+        )
+
+    # 이미 렌더 진행 중 + 강제 아님 → 새로 시작하지 않고 진행 상태만 알린다.
+    if not payload.force and user.photo_avatar_preview_video_id:
+        return AvatarPreviewResponse(
+            status="processing", voice_id=user.photo_avatar_preview_voice_id
+        )
+
+    # 새 렌더 시작: 샘플 텍스트 → TTS → S3 → HeyGen Talking Photo 비디오 생성.
+    from app.services.pipeline import tts
+    from app.services.pipeline.heygen import HeyGenError, create_video
+
+    try:
+        result = await tts.synthesize(_PREVIEW_TEXT, voice_id=voice_id)
+        stored_audio_url = s3_svc.upload_audio_bytes(
+            result.audio_bytes, f"avatar-preview-{user.id}"
+        )
+        audio_url = s3_svc.presign_stored_s3_url(stored_audio_url) or stored_audio_url
+        video_id = await create_video(
+            audio_url=audio_url,
+            talking_photo_id=user.photo_avatar_id,
+            callback_id=f"avatar-preview:{user.id}",
+        )
+    except (HeyGenError, tts.TTSError) as e:
+        return AvatarPreviewResponse(
+            status="failed",
+            voice_id=voice_id,
+            message=f"미리보기 생성에 실패했습니다: {e}",
+        )
+
+    user.photo_avatar_preview_video_id = video_id
+    user.photo_avatar_preview_voice_id = voice_id
+    user.photo_avatar_preview_url = None  # 새 렌더 시작 — 이전 캐시 무효화.
+    await db.commit()
+
+    return AvatarPreviewResponse(
+        status="processing",
+        voice_id=voice_id,
+        message="움직이는 미리보기를 만들고 있습니다. 잠시만 기다려 주세요.",
+    )
+
+
+@router.get(
+    "/api/avatars/me/preview",
+    response_model=AvatarPreviewResponse,
+    summary="본인 아바타 '움직이는 미리보기' 상태 폴링",
+)
+async def get_avatar_preview(
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """미리보기 렌더 상태를 조회한다.
+
+    완성본이 캐시돼 있으면 즉시 ready. 진행 중이면 HeyGen 상태를 폴링하고,
+    완료되면 영상을 S3 로 옮겨 캐시한 뒤 ready 로 전환한다.
+    """
+    if user.photo_avatar_preview_url:
+        return AvatarPreviewResponse(
+            status="ready",
+            video_url=s3_svc.presign_stored_s3_url(user.photo_avatar_preview_url),
+            voice_id=user.photo_avatar_preview_voice_id,
+        )
+
+    if not user.photo_avatar_preview_video_id:
+        return AvatarPreviewResponse(status="not_started")
+
+    from app.services.pipeline.heygen import HeyGenError, get_video_status
+
+    try:
+        st = await get_video_status(user.photo_avatar_preview_video_id)
+    except HeyGenError:
+        # 일시적 조회 실패 — 계속 진행 중으로 보고 다음 폴링을 기다린다.
+        return AvatarPreviewResponse(
+            status="processing", voice_id=user.photo_avatar_preview_voice_id
+        )
+
+    heygen_status = st.get("status")
+    heygen_url = st.get("video_url")
+
+    if heygen_status == "completed" and heygen_url:
+        # HeyGen URL 은 만료되므로 S3 로 옮겨 영구 캐시한다.
+        try:
+            s3_url, _ = await s3_svc.upload_from_url(
+                heygen_url, f"avatar-preview-{user.id}"
+            )
+        except Exception:  # 다운로드/업로드 실패 시 HeyGen URL 을 임시로 사용.
+            s3_url = heygen_url
+        user.photo_avatar_preview_url = s3_url
+        user.photo_avatar_preview_video_id = None
+        await db.commit()
+        return AvatarPreviewResponse(
+            status="ready",
+            video_url=s3_svc.presign_stored_s3_url(s3_url) or s3_url,
+            voice_id=user.photo_avatar_preview_voice_id,
+        )
+
+    if heygen_status in ("failed", "error"):
+        user.photo_avatar_preview_video_id = None
+        await db.commit()
+        return AvatarPreviewResponse(
+            status="failed",
+            voice_id=user.photo_avatar_preview_voice_id,
+            message="미리보기 렌더에 실패했습니다. 다시 시도해 주세요.",
+        )
+
+    return AvatarPreviewResponse(
+        status="processing", voice_id=user.photo_avatar_preview_voice_id
     )

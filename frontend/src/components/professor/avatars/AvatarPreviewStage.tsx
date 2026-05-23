@@ -15,6 +15,7 @@ import {
   type VoiceOption,
 } from "./voicePresets";
 import { useVoicePreview } from "./useVoicePreview";
+import { useCustomAvatarPreview } from "./useCustomAvatarPreview";
 
 interface AvatarPreviewStageProps {
   /** 갤러리에서 선택(클릭)된 아바타. null 이면 안내 플레이스홀더. */
@@ -31,10 +32,10 @@ interface AvatarPreviewStageProps {
 /**
  * 아바타 대형 미리보기 무대 + 음성 패널.
  *
- * 갤러리에서 아바타를 클릭하면 여기서 크게 재생되고(영상은 muted), 음성 목록 중
- * 하나가 랜덤으로 함께 재생된다. 사용자는 우측 패널에서 음성을 바꿔 아바타 샘플과
- * 함께 들어볼 수 있다. 실제 프레임 단위 립싱크는 렌더 시점(HeyGen+voice)에
- * 이뤄지며, 여기서는 "이 음성으로 말하는" 느낌을 미리 들려주는 미리보기다.
+ * 일반 HeyGen 아바타는 idle 미리보기 영상(muted)과 함께 음성 목록 중 하나를
+ * 오버레이로 재생한다. 본인(사진) 아바타는 idle 영상이 없으므로, 사용자가
+ * "움직이는 미리보기 만들기" 를 누르면 HeyGen 으로 짧은 말하는 영상을 1회 렌더해
+ * (캐시) 그 영상을 음성과 함께 재생한다.
  */
 export default function AvatarPreviewStage({
   avatar,
@@ -48,6 +49,18 @@ export default function AvatarPreviewStage({
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [voiceId, setVoiceId] = useState<string | null>(null);
+
+  const isCustom = !!avatar?.is_custom;
+  const preview = useCustomAvatarPreview(isCustom);
+
+  // 본인 렌더 클립은 음성이 입혀져 있어 그 자체 오디오로 재생한다.
+  const isCustomRender =
+    isCustom && preview.status === "ready" && !!preview.videoUrl;
+  const effectiveVideoUrl = isCustom
+    ? preview.videoUrl
+    : (avatar?.preview_video_url ?? null);
+  const hasVideo = !!effectiveVideoUrl;
+
   const [playing, setPlaying] = useState(false);
 
   // 최신 값을 effect 의존성에 넣지 않고 읽기 위한 ref.
@@ -62,7 +75,6 @@ export default function AvatarPreviewStage({
   const lastAvatarIdRef = useRef<string | null>(null);
 
   const sampleText = t("voiceSampleText");
-  const hasVideo = !!avatar?.preview_video_url;
 
   const playVideo = useCallback(() => {
     const v = videoRef.current;
@@ -86,12 +98,15 @@ export default function AvatarPreviewStage({
   }, []);
 
   const startPlayback = useCallback(
-    (option: VoiceOption) => {
+    (option: VoiceOption | null) => {
       playVideo();
-      if (supported) play(option, sampleText, true);
+      // 일반/오디션 상황에서만 음성 오버레이를 재생. 본인 렌더 클립은 자체 오디오.
+      if (!isCustomRender && option && supported) {
+        play(option, sampleText, true);
+      }
       setPlaying(true);
     },
-    [playVideo, play, supported, sampleText],
+    [playVideo, play, supported, sampleText, isCustomRender],
   );
 
   const stopPlayback = useCallback(() => {
@@ -100,44 +115,56 @@ export default function AvatarPreviewStage({
     setPlaying(false);
   }, [pauseVideo, stop]);
 
-  // 아바타가 바뀌면: 새 아바타면 음성 랜덤 배정 → 영상+음성 함께 재생.
-  // reducedMotion 환경에서는 자동재생 없이 재생 버튼을 기다린다.
+  // 새 아바타면 음성 랜덤 배정.
   useEffect(() => {
-    stop();
-    setPlaying(false);
     if (!avatar) {
       lastAvatarIdRef.current = null;
       return;
     }
     const pool = voicesRef.current;
-    if (pool.length === 0) return; // 음성 목록 아직 로딩 전.
-
+    if (pool.length === 0) return;
     const isNewAvatar = lastAvatarIdRef.current !== avatar.id;
     lastAvatarIdRef.current = avatar.id;
-
-    let option = getVoiceById(pool, voiceIdRef.current);
-    if (isNewAvatar || !option) {
-      option = randomVoice(pool);
-      setVoiceId(option?.id ?? null);
-    }
-    if (!option) return;
-
-    if (reducedMotion) return; // 자동재생 안 함.
-    playVideo();
-    if (supported) {
-      play(option, sampleText, true);
-      setPlaying(true);
+    const existing = getVoiceById(pool, voiceIdRef.current);
+    if (isNewAvatar || !existing) {
+      setVoiceId(randomVoice(pool)?.id ?? null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [avatar?.id, reducedMotion, sampleText, supported, voices.length]);
+  }, [avatar?.id, voices.length]);
+
+  // 영상/음성 재생: 아바타·렌더 영상·모드가 바뀌면 (재)시작.
+  useEffect(() => {
+    stop();
+    setPlaying(false);
+    if (!avatar) return;
+    if (reducedMotion) return; // 자동재생 안 함 — 재생 버튼 대기.
+    const option =
+      getVoiceById(voicesRef.current, voiceIdRef.current) ??
+      randomVoice(voicesRef.current);
+    playVideo();
+    if (!isCustomRender && option && supported) {
+      play(option, sampleText, true);
+    }
+    setPlaying(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    avatar?.id,
+    effectiveVideoUrl,
+    isCustomRender,
+    reducedMotion,
+    sampleText,
+    supported,
+  ]);
 
   const handleSelectVoice = useCallback(
     (id: string) => {
       setVoiceId(id);
+      // 본인 렌더가 이미 있으면 음성 변경은 "다시 만들기"로만 반영(비용).
+      if (isCustomRender) return;
       const option = getVoiceById(voicesRef.current, id);
       if (option && avatar) startPlayback(option);
     },
-    [avatar, startPlayback],
+    [avatar, startPlayback, isCustomRender],
   );
 
   const handleToggle = useCallback(() => {
@@ -148,11 +175,16 @@ export default function AvatarPreviewStage({
     const option =
       getVoiceById(voicesRef.current, voiceIdRef.current) ??
       randomVoice(voicesRef.current);
-    if (option) {
-      setVoiceId(option.id);
-      startPlayback(option);
-    }
+    if (option) setVoiceId(option.id);
+    startPlayback(option);
   }, [playing, stopPlayback, startPlayback]);
+
+  const handleGenerate = useCallback(
+    (force: boolean) => {
+      preview.generate(voiceIdRef.current, force);
+    },
+    [preview],
+  );
 
   const current = getVoiceById(voices, voiceId);
   const males = voices.filter((v) => v.gender === "male");
@@ -174,7 +206,6 @@ export default function AvatarPreviewStage({
       <div
         style={{
           display: "grid",
-          // 영상 무대 + 음성 패널. 넓으면 2열, 좁으면 자동 줄바꿈.
           gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
           gap: 18,
           alignItems: "stretch",
@@ -198,193 +229,109 @@ export default function AvatarPreviewStage({
             {!avatar ? (
               <div
                 data-testid="avatar-preview-empty"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "grid",
-                  placeItems: "center",
-                  padding: 24,
-                  textAlign: "center",
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  color: "var(--text-muted)",
-                }}
+                style={placeholderStyle}
               >
                 {t("stagePlaceholder")}
               </div>
             ) : hasVideo ? (
               <video
-                key={avatar.id}
+                key={effectiveVideoUrl ?? avatar.id}
                 ref={videoRef}
-                src={avatar.preview_video_url ?? undefined}
+                src={effectiveVideoUrl ?? undefined}
                 poster={avatar.preview_image_url ?? undefined}
-                muted
+                muted={!isCustomRender}
                 loop
                 playsInline
                 preload="metadata"
                 aria-label={avatar.name}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
+                style={mediaFillStyle}
               />
             ) : avatar.preview_image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={avatar.preview_image_url}
                 alt={avatar.name}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
+                style={mediaFillStyle}
               />
             ) : (
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  display: "grid",
-                  placeItems: "center",
-                  fontSize: 64,
-                  fontWeight: 700,
-                  color: "var(--text-faint)",
-                }}
-              >
+              <span aria-hidden="true" style={initialStyle}>
                 {avatar.name.slice(0, 1)}
               </span>
             )}
 
+            {/* 본인 아바타 렌더 진행 중 오버레이 */}
+            {isCustom && preview.status === "processing" && (
+              <div data-testid="avatar-preview-rendering" style={overlayStyle}>
+                {t("previewGenerating")}
+              </div>
+            )}
+
             {avatar && playing && (
-              <span
-                style={{
-                  position: "absolute",
-                  bottom: 8,
-                  left: 8,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "3px 9px",
-                  borderRadius: 999,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: "#fff",
-                  background: "rgba(10,10,10,0.6)",
-                  backdropFilter: "blur(2px)",
-                }}
-              >
-                <span
-                  aria-hidden="true"
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: 999,
-                    background: "var(--gold)",
-                  }}
-                />
+              <span style={playingBadgeStyle}>
+                <span aria-hidden="true" style={playingDotStyle} />
                 {t("stageNowPlaying")}
               </span>
             )}
           </div>
 
           {avatar && (
-            <p
-              style={{
-                margin: "10px 0 0",
-                textAlign: "center",
-                fontSize: 14,
-                fontWeight: 600,
-                color: "var(--text)",
-              }}
-            >
-              {avatar.name}
-            </p>
+            <p style={avatarNameStyle}>{avatar.name}</p>
           )}
 
-          {/* 본인(사진) 아바타는 미리보기 영상이 없어 정지 이미지로 표시 */}
-          {avatar && !hasVideo && avatar.is_custom && (
-            <p
-              data-testid="avatar-stage-no-motion"
-              style={{
-                margin: "6px auto 0",
-                maxWidth: 320,
-                textAlign: "center",
-                fontSize: 11.5,
-                lineHeight: 1.5,
-                color: "var(--text-faint)",
-              }}
-            >
-              {t("stageCustomNoMotion")}
-            </p>
+          {/* 본인 아바타: 움직이는 미리보기 컨트롤 */}
+          {isCustom && (
+            <div style={{ marginTop: 10, textAlign: "center" }}>
+              {preview.status === "ready" ? (
+                <button
+                  type="button"
+                  onClick={() => handleGenerate(true)}
+                  data-testid="avatar-preview-regenerate"
+                  style={secondaryControlStyle}
+                >
+                  {t("previewRegenerate")}
+                </button>
+              ) : preview.status === "processing" ? (
+                <p style={previewHintStyle}>{t("previewGenerating")}</p>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerate(false)}
+                    data-testid="avatar-preview-generate"
+                    style={primaryControlStyle}
+                  >
+                    {`▶ ${t("previewGenerate")}`}
+                  </button>
+                  <p style={previewHintStyle}>
+                    {preview.status === "failed" && preview.message
+                      ? preview.message
+                      : t("stageCustomNoMotion")}
+                  </p>
+                  <p style={{ ...previewHintStyle, marginTop: 2 }}>
+                    {t("previewGenerateNote")}
+                  </p>
+                </>
+              )}
+            </div>
           )}
         </div>
 
         {/* ── 우: 음성 패널 ─────────────────────────────────────────── */}
         <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
-          <h3
-            style={{
-              margin: "0 0 4px",
-              fontSize: 14,
-              fontWeight: 700,
-              color: "var(--text)",
-            }}
-          >
-            {t("voiceHeading")}
-          </h3>
-          <p
-            style={{
-              margin: "0 0 12px",
-              fontSize: 12,
-              lineHeight: 1.5,
-              color: "var(--text-muted)",
-            }}
-          >
-            {t("voiceNote")}
+          <h3 style={voiceHeadingStyle}>{t("voiceHeading")}</h3>
+          <p style={voiceNoteStyle}>
+            {isCustomRender ? t("voiceNoteCustom") : t("voiceNote")}
           </p>
 
-          {/* 현재 재생 중인 음성 표기 */}
-          <div
-            data-testid="avatar-voice-current"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 12px",
-              borderRadius: 10,
-              background: "var(--gold-soft)",
-              border: "1px solid var(--gold-medium)",
-              marginBottom: 12,
-            }}
-          >
+          {/* 현재 음성 표기 */}
+          <div data-testid="avatar-voice-current" style={voiceCurrentStyle}>
             <span aria-hidden="true" style={{ fontSize: 15 }}>
               🔊
             </span>
-            <span
-              style={{
-                fontSize: 11.5,
-                color: "var(--gold-on-light)",
-                fontWeight: 600,
-                flexShrink: 0,
-              }}
-            >
-              {t("voiceNowPlaying")}
+            <span style={voiceCurrentLabelStyle}>
+              {isCustomRender ? t("previewVoiceLabel") : t("voiceNowPlaying")}
             </span>
-            <span
-              style={{
-                fontSize: 13,
-                fontWeight: 700,
-                color: "var(--text)",
-                marginLeft: "auto",
-                textAlign: "right",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
+            <span style={voiceCurrentNameStyle}>
               {current
                 ? `${current.name} · ${genderLabel(current.gender)}`
                 : "—"}
@@ -397,15 +344,7 @@ export default function AvatarPreviewStage({
               {t("voiceLoading")}
             </p>
           ) : (
-            <div
-              data-testid="avatar-voice-list"
-              style={{
-                maxHeight: 240,
-                overflowY: "auto",
-                paddingRight: 4,
-                marginBottom: 12,
-              }}
-            >
+            <div data-testid="avatar-voice-list" style={voiceListStyle}>
               {(
                 [
                   ["male", males],
@@ -414,17 +353,7 @@ export default function AvatarPreviewStage({
               ).map(([g, list]) =>
                 list.length === 0 ? null : (
                   <div key={g} style={{ marginBottom: 10 }}>
-                    <span
-                      style={{
-                        display: "block",
-                        margin: "0 0 6px",
-                        fontSize: 10.5,
-                        fontWeight: 700,
-                        letterSpacing: "0.06em",
-                        textTransform: "uppercase",
-                        color: "var(--text-faint)",
-                      }}
-                    >
+                    <span style={voiceGroupLabelStyle}>
                       {g === "male" ? t("voiceGroupMale") : t("voiceGroupFemale")}
                     </span>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -440,41 +369,13 @@ export default function AvatarPreviewStage({
                             style={voiceRowStyle(active)}
                           >
                             <span style={{ minWidth: 0 }}>
-                              <span
-                                style={{
-                                  display: "block",
-                                  fontSize: 13,
-                                  fontWeight: 600,
-                                  color: active ? "#0A0A0A" : "var(--text)",
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {v.name}
-                              </span>
+                              <span style={voiceRowNameStyle(active)}>{v.name}</span>
                               {v.meta && (
-                                <span
-                                  style={{
-                                    display: "block",
-                                    fontSize: 10.5,
-                                    color: active
-                                      ? "rgba(10,10,10,0.7)"
-                                      : "var(--text-faint)",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  {v.meta}
-                                </span>
+                                <span style={voiceRowMetaStyle(active)}>{v.meta}</span>
                               )}
                             </span>
                             {active && playing && (
-                              <span
-                                aria-hidden="true"
-                                style={{ fontSize: 12, flexShrink: 0 }}
-                              >
+                              <span aria-hidden="true" style={{ fontSize: 12, flexShrink: 0 }}>
                                 ♪
                               </span>
                             )}
@@ -497,6 +398,7 @@ export default function AvatarPreviewStage({
               data-testid="avatar-voice-toggle"
               style={{
                 ...primaryControlStyle,
+                flex: 1,
                 opacity: !avatar || voices.length === 0 ? 0.45 : 1,
                 cursor: !avatar || voices.length === 0 ? "not-allowed" : "pointer",
               }}
@@ -505,16 +407,14 @@ export default function AvatarPreviewStage({
             </button>
           </div>
 
+          {isCustomRender && (
+            <p style={{ ...previewHintStyle, textAlign: "left", marginTop: 8 }}>
+              {t("voiceChangeNeedsRerender")}
+            </p>
+          )}
+
           {!supported && (
-            <p
-              role="note"
-              style={{
-                margin: "10px 0 0",
-                fontSize: 11.5,
-                lineHeight: 1.5,
-                color: "var(--text-faint)",
-              }}
-            >
+            <p role="note" style={{ ...previewHintStyle, textAlign: "left", marginTop: 10 }}>
               {t("voiceUnsupported")}
             </p>
           )}
@@ -523,6 +423,151 @@ export default function AvatarPreviewStage({
     </section>
   );
 }
+
+// ── 스타일 ────────────────────────────────────────────────────────────────────
+
+const mediaFillStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
+};
+
+const placeholderStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "grid",
+  placeItems: "center",
+  padding: 24,
+  textAlign: "center",
+  fontSize: 13,
+  lineHeight: 1.6,
+  color: "var(--text-muted)",
+};
+
+const initialStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "grid",
+  placeItems: "center",
+  fontSize: 64,
+  fontWeight: 700,
+  color: "var(--text-faint)",
+};
+
+const overlayStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "grid",
+  placeItems: "center",
+  padding: 20,
+  textAlign: "center",
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: "#fff",
+  background: "rgba(10,10,10,0.5)",
+  backdropFilter: "blur(2px)",
+};
+
+const playingBadgeStyle: CSSProperties = {
+  position: "absolute",
+  bottom: 8,
+  left: 8,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "3px 9px",
+  borderRadius: 999,
+  fontSize: 11,
+  fontWeight: 600,
+  color: "#fff",
+  background: "rgba(10,10,10,0.6)",
+  backdropFilter: "blur(2px)",
+};
+
+const playingDotStyle: CSSProperties = {
+  width: 7,
+  height: 7,
+  borderRadius: 999,
+  background: "var(--gold)",
+};
+
+const avatarNameStyle: CSSProperties = {
+  margin: "10px 0 0",
+  textAlign: "center",
+  fontSize: 14,
+  fontWeight: 600,
+  color: "var(--text)",
+};
+
+const previewHintStyle: CSSProperties = {
+  margin: "6px auto 0",
+  maxWidth: 320,
+  textAlign: "center",
+  fontSize: 11.5,
+  lineHeight: 1.5,
+  color: "var(--text-faint)",
+};
+
+const voiceHeadingStyle: CSSProperties = {
+  margin: "0 0 4px",
+  fontSize: 14,
+  fontWeight: 700,
+  color: "var(--text)",
+};
+
+const voiceNoteStyle: CSSProperties = {
+  margin: "0 0 12px",
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: "var(--text-muted)",
+};
+
+const voiceCurrentStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 8,
+  padding: "8px 12px",
+  borderRadius: 10,
+  background: "var(--gold-soft)",
+  border: "1px solid var(--gold-medium)",
+  marginBottom: 12,
+};
+
+const voiceCurrentLabelStyle: CSSProperties = {
+  fontSize: 11.5,
+  color: "var(--gold-on-light)",
+  fontWeight: 600,
+  flexShrink: 0,
+};
+
+const voiceCurrentNameStyle: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: "var(--text)",
+  marginLeft: "auto",
+  textAlign: "right",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const voiceListStyle: CSSProperties = {
+  maxHeight: 240,
+  overflowY: "auto",
+  paddingRight: 4,
+  marginBottom: 12,
+};
+
+const voiceGroupLabelStyle: CSSProperties = {
+  display: "block",
+  margin: "0 0 6px",
+  fontSize: 10.5,
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  textTransform: "uppercase",
+  color: "var(--text-faint)",
+};
 
 function voiceRowStyle(active: boolean): CSSProperties {
   return {
@@ -543,8 +588,30 @@ function voiceRowStyle(active: boolean): CSSProperties {
   };
 }
 
+function voiceRowNameStyle(active: boolean): CSSProperties {
+  return {
+    display: "block",
+    fontSize: 13,
+    fontWeight: 600,
+    color: active ? "#0A0A0A" : "var(--text)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  };
+}
+
+function voiceRowMetaStyle(active: boolean): CSSProperties {
+  return {
+    display: "block",
+    fontSize: 10.5,
+    color: active ? "rgba(10,10,10,0.7)" : "var(--text-faint)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  };
+}
+
 const primaryControlStyle: CSSProperties = {
-  flex: 1,
   padding: "9px 16px",
   fontSize: 13,
   fontWeight: 700,
@@ -553,4 +620,17 @@ const primaryControlStyle: CSSProperties = {
   background: "linear-gradient(135deg, #FFB627, #E89E0E)",
   color: "#0A0A0A",
   fontFamily: "inherit",
+  cursor: "pointer",
+};
+
+const secondaryControlStyle: CSSProperties = {
+  padding: "8px 14px",
+  fontSize: 12.5,
+  fontWeight: 600,
+  borderRadius: 10,
+  border: "1px solid var(--line-strong)",
+  background: "var(--bg-card)",
+  color: "var(--text)",
+  fontFamily: "inherit",
+  cursor: "pointer",
 };

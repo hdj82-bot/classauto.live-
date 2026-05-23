@@ -32,6 +32,14 @@ class User(Base):
     # 영상을 만들 때 heygen.create_video 의 talking_photo_id 로 쓴다. NULL =
     # 아직 본인 아바타 미등록 또는 생성 대기/실패.
     photo_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 본인 아바타 "움직이는 미리보기" — Talking Photo 로 1회 렌더한 짧은 샘플 영상.
+    # photo_avatar_preview_url: 완성된 영상의 영구 S3 https URL (있으면 캐시 적중).
+    # photo_avatar_preview_video_id: 렌더 진행 중인 HeyGen video_id (폴링 키).
+    # photo_avatar_preview_voice_id: 그 미리보기를 렌더할 때 쓴 ElevenLabs voice_id
+    #   (다른 음성으로 다시 만들기 판정용).
+    photo_avatar_preview_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    photo_avatar_preview_video_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    photo_avatar_preview_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 학습자 전용
     student_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

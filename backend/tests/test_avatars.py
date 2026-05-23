@@ -232,3 +232,117 @@ async def test_upload_profile_photo_rejects_non_image(client, professor):
         files={"file": ("x.txt", b"this is not an image", "text/plain")},
     )
     assert resp.status_code == 400
+
+
+# ── 본인 아바타 "움직이는 미리보기" (POST/GET /api/avatars/me/preview) ──────────
+
+
+@pytest.mark.asyncio
+async def test_preview_requires_custom_avatar(client, professor):
+    # photo_avatar_id 없음 → 400.
+    resp = await client.post(
+        "/api/avatars/me/preview",
+        headers=make_auth_header(professor),
+        json={},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_preview_starts_render(client, professor, db):
+    professor.photo_avatar_id = "tp_self"
+    await db.flush()
+
+    tts_result = MagicMock(audio_bytes=b"audio")
+    with patch(
+        "app.services.pipeline.tts.synthesize",
+        new=AsyncMock(return_value=tts_result),
+    ), patch(
+        "app.services.pipeline.s3.upload_audio_bytes",
+        return_value="https://b.s3/a.mp3",
+    ), patch(
+        "app.services.pipeline.s3.presign_stored_s3_url",
+        side_effect=lambda u, *a, **k: u,
+    ), patch(
+        "app.services.pipeline.heygen.create_video",
+        new=AsyncMock(return_value="vid123"),
+    ) as create_video:
+        resp = await client.post(
+            "/api/avatars/me/preview",
+            headers=make_auth_header(professor),
+            json={"voice_id": "el_voice_1"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "processing"
+    create_video.assert_awaited_once()
+    await db.refresh(professor)
+    assert professor.photo_avatar_preview_video_id == "vid123"
+    assert professor.photo_avatar_preview_voice_id == "el_voice_1"
+
+
+@pytest.mark.asyncio
+async def test_preview_cache_hit_skips_render(client, professor, db):
+    professor.photo_avatar_id = "tp_self"
+    # 외부 URL → presign passthrough (boto3 호출 없음).
+    professor.photo_avatar_preview_url = "https://cdn.example/v.mp4"
+    professor.photo_avatar_preview_voice_id = None
+    await db.flush()
+
+    with patch(
+        "app.services.pipeline.heygen.create_video",
+        new=AsyncMock(return_value="should_not_run"),
+    ) as create_video:
+        resp = await client.post(
+            "/api/avatars/me/preview",
+            headers=make_auth_header(professor),
+            json={},
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ready"
+    assert data["video_url"] == "https://cdn.example/v.mp4"
+    create_video.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_preview_not_started(client, professor, db):
+    professor.photo_avatar_id = "tp_self"
+    await db.flush()
+    resp = await client.get(
+        "/api/avatars/me/preview", headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "not_started"
+
+
+@pytest.mark.asyncio
+async def test_get_preview_completes_and_caches(client, professor, db):
+    professor.photo_avatar_id = "tp_self"
+    professor.photo_avatar_preview_video_id = "vid123"
+    await db.flush()
+
+    with patch(
+        "app.services.pipeline.heygen.get_video_status",
+        new=AsyncMock(
+            return_value={"status": "completed", "video_url": "https://hg/v.mp4"}
+        ),
+    ), patch(
+        "app.services.pipeline.s3.upload_from_url",
+        new=AsyncMock(return_value=("https://b.s3/cached.mp4", 0.1)),
+    ), patch(
+        "app.services.pipeline.s3.presign_stored_s3_url",
+        side_effect=lambda u, *a, **k: u,
+    ):
+        resp = await client.get(
+            "/api/avatars/me/preview", headers=make_auth_header(professor)
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ready"
+    assert data["video_url"] == "https://b.s3/cached.mp4"
+    await db.refresh(professor)
+    assert professor.photo_avatar_preview_url == "https://b.s3/cached.mp4"
+    assert professor.photo_avatar_preview_video_id is None
