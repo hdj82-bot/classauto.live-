@@ -274,9 +274,19 @@ async def preview_voice(
             speed=req.speed,
         )
     except TTSError as exc:
-        logger.warning("음성 미리듣기 합성 실패: %s", exc)
+        logger.warning("음성 미리듣기 합성 실패(TTS): %s", exc)
         raise HTTPException(
-            status_code=502, detail="미리듣기 합성에 실패했습니다. 잠시 후 다시 시도해 주세요."
+            status_code=502,
+            detail="미리듣기 합성에 실패했습니다(TTS). 잠시 후 다시 시도해 주세요.",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        # 예기치 못한 예외(예: 외부 연결오류)가 핸들링 안 된 500 으로 새면, 그 응답엔
+        # CORS 헤더가 안 붙어 브라우저가 "서버 연결 불가"로 막아버린다. 여기서 잡아
+        # HTTPException(502)으로 변환하면 CORS 가 적용돼 프론트가 사유를 표시할 수 있다.
+        # detail 에 예외 클래스명을 담아 운영 진단을 돕는다(스택/메시지는 로그에만).
+        logger.exception("음성 미리듣기 예기치 못한 오류")
+        raise HTTPException(
+            status_code=502, detail=f"미리듣기 합성 오류: {type(exc).__name__}"
         ) from exc
 
     return Response(

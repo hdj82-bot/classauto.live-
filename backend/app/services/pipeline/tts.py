@@ -101,7 +101,11 @@ async def synthesize(
             "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s, speed=%s",
             len(text), voice_id or "<default>", gender or "<default>", speed or 1.0,
         )
-    except elevenlabs_client.ElevenLabsError as exc:
+    except Exception as exc:
+        # ElevenLabsError 뿐 아니라 httpx.ConnectError 등 변환 안 된 네트워크 예외도
+        # Google 폴백으로 흘려보낸다. (과거엔 ElevenLabsError 만 잡아, 연결오류가
+        # 그대로 새어 호출부에서 핸들링 안 된 500 — 미리듣기에서 CORS 없는 500 →
+        # 브라우저 "연결 불가" — 의 원인이 됐다.)
         fallback_reason = f"{type(exc).__name__}: {exc}"
         logger.warning(
             "ElevenLabs 합성 실패 → Google TTS 폴백 트리거: %s", fallback_reason,
@@ -113,7 +117,9 @@ async def synthesize(
                 "Google TTS 폴백 합성 성공: chars=%d, original_failure=%s",
                 len(text), fallback_reason,
             )
-        except google_tts_client.GoogleTTSError as g_exc:
+        except Exception as g_exc:
+            # Google 도 어떤 이유로든 실패하면 단일 TTSError 로 통합 — synthesize 는
+            # TTSError 외 예외를 절대 밖으로 흘리지 않는다(호출부 핸들링 단순화).
             logger.error(
                 "TTS 양쪽 provider 모두 실패: elevenlabs=%s, google=%s",
                 fallback_reason, g_exc,
