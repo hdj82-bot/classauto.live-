@@ -58,8 +58,10 @@ class Settings(BaseSettings):
     # 타임아웃 → 폴백 hang 으로 이어졌다). max_tokens 는 슬라이드 1장 분량 상한.
     TRANSLATE_MODEL: str = "claude-haiku-4-5"
     TRANSLATE_MAX_TOKENS: int = 4096
-    # 자막 번역 동시 호출 상한 (슬라이드 N장 → 최대 N개 병렬). 너무 높이면 429.
-    TRANSLATE_CONCURRENCY: int = 10
+    # 자막 번역 동시 호출 상한. Anthropic 계정의 "동시 연결 수" 제한이 낮아
+    # 10 이면 429(concurrent connections exceeded) 발생 → 스크립트 생성(5)보다
+    # 보수적으로 4. 초과분은 retry_external 백오프 재시도가 흡수.
+    TRANSLATE_CONCURRENCY: int = 4
     # Google Translate 폴백 활성화 여부. 운영엔 Google 번역 자격증명이 없어
     # 기본 비활성 — 켜면 google.cloud Client() 가 자격증명을 못 찾아 GCE
     # 메타데이터 서버 조회로 무한 대기(요청 hang)하므로, 실제 자격증명을
