@@ -15,10 +15,22 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
+import anthropic
+
 from app.core.config import settings
 from app.core.metrics import track_external_api
+from app.core.retry import retry_external
 
 logger = logging.getLogger(__name__)
+
+# Claude SDK 일시적 오류만 재시도(특히 429 rate_limit — 동시 연결 수 초과).
+# 스크립트 생성(_RETRY_ON)과 동일 정책. 4xx(BadRequest 등)는 즉시 실패.
+_CLAUDE_RETRY_ON = (
+    anthropic.APIConnectionError,
+    anthropic.APITimeoutError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+)
 
 DEEPL_TARGET_LANGUAGES: dict[str, str] = {
     "en": "EN-US", "ja": "JA", "zh": "ZH-HANS", "de": "DE", "fr": "FR",
@@ -92,15 +104,14 @@ def _translate_claude_batch(
     각 호출이 슬라이드 1장 분량이라 빠르게 끝나며, 타임아웃·재시도 폭주가 없다.
     하나라도 실패하면 예외를 전파해 상위에서 폴백/에러 처리하게 한다.
     """
-    import anthropic
-
     logger.info(
-        "Claude 번역 요청: %s→%s, segments=%d, total_chars=%d (병렬)",
+        "Claude 번역 요청: %s→%s, segments=%d, total_chars=%d (병렬 x%d)",
         source_lang, target_lang, len(texts), sum(len(t) for t in texts),
+        max(1, min(settings.TRANSLATE_CONCURRENCY, len(texts))),
     )
-    # max_retries=1: 타임아웃 시 SDK 기본 2회 재시도(×3) 로 90s 가까이 매달리던 것을 축소.
+    # SDK 자체 재시도는 끄고(max_retries=0), 재시도는 retry_external(백오프)에 일원화.
     client = anthropic.Anthropic(
-        api_key=settings.ANTHROPIC_API_KEY, timeout=30.0, max_retries=1,
+        api_key=settings.ANTHROPIC_API_KEY, timeout=30.0, max_retries=0,
     )
     workers = max(1, min(settings.TRANSLATE_CONCURRENCY, len(texts)))
     results: list[TranslationResult | None] = [None] * len(texts)
@@ -116,10 +127,14 @@ def _translate_claude_batch(
 
 
 @track_external_api("claude")
+@retry_external(label="claude.translate", extra_retry_on=_CLAUDE_RETRY_ON)
 def _translate_claude_one(
     client, text: str, target_lang: str, source_lang: str
 ) -> TranslationResult:
-    """세그먼트 1개 번역 — 평문만 반환(JSON 파싱 없음)."""
+    """세그먼트 1개 번역 — 평문만 반환(JSON 파싱 없음).
+
+    429(동시 연결 초과)·타임아웃·연결오류는 ``retry_external`` 백오프로 재시도된다.
+    """
     if not text.strip():
         return TranslationResult(
             text="", source_lang=source_lang, target_lang=target_lang, provider="claude",

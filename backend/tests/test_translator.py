@@ -6,6 +6,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import anthropic
+import httpx
 import pytest
 
 from app.core.config import settings
@@ -88,6 +90,35 @@ def test_claude_failure_without_google_raises_fast(monkeypatch):
 
     # Google 은 절대 호출되지 않아야 한다(미구성 시 hang 위험).
     google.assert_not_called()
+
+
+def test_claude_retries_on_transient_error(monkeypatch):
+    """429(rate_limit)·연결오류 등 일시 오류는 retry_external 백오프로 재시도된다.
+
+    동시 연결 수 초과(429) 가 이 경로로 흡수되는 것이 이번 수정의 핵심.
+    """
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "sk-test", raising=False)
+    req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+    calls = {"n": 0}
+
+    def create(model, max_tokens, system, messages):
+        calls["n"] += 1
+        if calls["n"] == 1:  # 첫 시도는 일시 오류 → 재시도되어야 함
+            raise anthropic.APIConnectionError(message="boom", request=req)
+        return SimpleNamespace(
+            content=[SimpleNamespace(type="text", text="zh:" + messages[0]["content"])]
+        )
+
+    client = MagicMock()
+    client.messages.create.side_effect = create
+    factory = MagicMock(return_value=client)
+
+    # 백오프 sleep 은 패치해 테스트를 빠르게.
+    with patch("anthropic.Anthropic", factory), patch("app.core.retry.time.sleep"):
+        results = T.translate_batch(["안녕"], "zh", "ko")
+
+    assert results[0].text == "zh:안녕"
+    assert calls["n"] == 2  # 1회 실패 후 재시도 성공
 
 
 def test_claude_failure_with_google_enabled_falls_back(monkeypatch):
