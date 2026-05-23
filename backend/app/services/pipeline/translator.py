@@ -1,14 +1,18 @@
 """Claude(기본) + DeepL/Google(폴백) 번역 서비스.
 
-자막 번역은 텍스트→텍스트라 Claude Haiku 단일 호출이 가장 빠르고, 이미 검증된
+자막 번역은 텍스트→텍스트라 Claude Haiku 가 가장 빠르고, 이미 검증된
 ``ANTHROPIC_API_KEY`` 만 있으면 동작한다(DeepL/Google 자격증명 불필요). 따라서
-Claude 를 1순위로 두고, 실패 시에만 DeepL→Google 로 폴백한다.
+Claude 를 1순위로 둔다.
+
+**슬라이드별 병렬 호출**한다 — 전체 스크립트(수천 자)를 1회로 묶으면 출력이
+30s 타임아웃을 넘겨 실패하고, 이어 폴백이 hang 되는 문제가 있었다. 각 세그먼트는
+작아 1회 호출이 빠르게 끝나며, 동시 실행으로 전체 시간도 짧다(스크립트 생성과
+동일한 ThreadPoolExecutor 패턴).
 """
 from __future__ import annotations
 
-import json
 import logging
-import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from app.core.config import settings
@@ -55,102 +59,91 @@ def translate_batch(texts: list[str], target_lang: str, source_lang: str = "ko")
     if not texts:
         return []
 
-    # 1순위: Claude — 단일 호출, 빠름, ANTHROPIC_API_KEY 만 있으면 동작.
+    # 1순위: Claude — 슬라이드별 병렬 호출. ANTHROPIC_API_KEY 만 있으면 동작.
     if settings.ANTHROPIC_API_KEY:
         try:
             return _translate_claude_batch(texts, target_lang, source_lang)
         except Exception as exc:
-            logger.warning("Claude 번역 실패, DeepL/Google로 폴백: %s", exc)
+            logger.warning("Claude 번역 실패, 폴백 시도: %s", exc)
 
     # 2순위: DeepL (키가 있고 지원 언어일 때만).
     if target_lang in DEEPL_TARGET_LANGUAGES and settings.DEEPL_API_KEY:
         try:
             return _translate_deepl_batch(texts, target_lang, source_lang)
         except Exception as exc:
-            logger.warning("DeepL 배치 실패, Google Translate로 폴백: %s", exc)
+            logger.warning("DeepL 배치 실패: %s", exc)
 
-    # 3순위: Google Translate (자격증명 필요).
-    return [_translate_google(t, target_lang, source_lang) for t in texts]
+    # 3순위: Google Translate — 자격증명이 구성된 경우에만(GOOGLE_TRANSLATE_ENABLED).
+    # 미구성 상태에서 google.cloud Client() 를 만들면 GCE 메타데이터 서버 조회로
+    # 무한 대기(요청 hang)하므로 절대 호출하지 않는다.
+    if settings.GOOGLE_TRANSLATE_ENABLED:
+        return [_translate_google(t, target_lang, source_lang) for t in texts]
+
+    raise RuntimeError(
+        "번역 실패: Claude 호출이 실패했고 구성된 폴백 번역기(DeepL/Google)가 없습니다."
+    )
 
 
-@track_external_api("claude")
 def _translate_claude_batch(
     texts: list[str], target_lang: str, source_lang: str
 ) -> list[TranslationResult]:
-    """전체 세그먼트를 Claude 1회 호출로 번역한다(순서·개수 보존).
+    """세그먼트별 Claude 호출을 동시 실행해 번역한다(순서 보존).
 
-    입력을 ``[{"id": i, "text": ...}]`` JSON 으로 주고 같은 형태의 JSON 배열을
-    돌려받아 id 로 정렬한다. 개수가 안 맞거나 파싱 실패 시 예외를 던져
-    상위에서 DeepL/Google 로 폴백하게 한다.
+    각 호출이 슬라이드 1장 분량이라 빠르게 끝나며, 타임아웃·재시도 폭주가 없다.
+    하나라도 실패하면 예외를 전파해 상위에서 폴백/에러 처리하게 한다.
     """
     import anthropic
 
-    src, tgt = _lang_name(source_lang), _lang_name(target_lang)
     logger.info(
-        "Claude 번역 요청: %s→%s, segments=%d, total_chars=%d",
+        "Claude 번역 요청: %s→%s, segments=%d, total_chars=%d (병렬)",
         source_lang, target_lang, len(texts), sum(len(t) for t in texts),
     )
-
-    payload = json.dumps(
-        [{"id": i, "text": t} for i, t in enumerate(texts)], ensure_ascii=False
+    # max_retries=1: 타임아웃 시 SDK 기본 2회 재시도(×3) 로 90s 가까이 매달리던 것을 축소.
+    client = anthropic.Anthropic(
+        api_key=settings.ANTHROPIC_API_KEY, timeout=30.0, max_retries=1,
     )
+    workers = max(1, min(settings.TRANSLATE_CONCURRENCY, len(texts)))
+    results: list[TranslationResult | None] = [None] * len(texts)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        future_to_idx = {
+            pool.submit(_translate_claude_one, client, t, target_lang, source_lang): i
+            for i, t in enumerate(texts)
+        }
+        for future in future_to_idx:
+            idx = future_to_idx[future]
+            results[idx] = future.result()  # 예외는 그대로 전파
+    return [r for r in results if r is not None]
+
+
+@track_external_api("claude")
+def _translate_claude_one(
+    client, text: str, target_lang: str, source_lang: str
+) -> TranslationResult:
+    """세그먼트 1개 번역 — 평문만 반환(JSON 파싱 없음)."""
+    if not text.strip():
+        return TranslationResult(
+            text="", source_lang=source_lang, target_lang=target_lang, provider="claude",
+        )
+
+    src, tgt = _lang_name(source_lang), _lang_name(target_lang)
     system = (
-        f"You are a professional lecture-subtitle translator. Translate each item's "
-        f"`text` from {src} to {tgt}. Translate faithfully and naturally for spoken "
-        f"lecture delivery, preserving meaning, tone, numbers, and proper nouns. "
-        f"Return ONLY a JSON array of objects with keys \"id\" (the same integer) and "
-        f"\"text\" (the translation), in the same order and exact same count as the "
-        f"input. Never merge, split, add, drop, or renumber items. If an item is empty, "
-        f"return an empty string. Output JSON only — no markdown, no commentary."
+        f"You are a professional lecture-subtitle translator. Translate the user's "
+        f"message from {src} to {tgt}. Output ONLY the translation as plain text — no "
+        f"quotes, no markdown, no commentary, no notes. Preserve meaning, tone, numbers, "
+        f"and proper nouns, and keep it natural for spoken lecture delivery."
     )
-
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
     response = client.messages.create(
         model=settings.TRANSLATE_MODEL,
         max_tokens=settings.TRANSLATE_MAX_TOKENS,
         system=system,
-        messages=[{"role": "user", "content": payload}],
+        messages=[{"role": "user", "content": text}],
     )
-
-    raw = "".join(
+    out = "".join(
         b.text for b in response.content if getattr(b, "type", None) == "text"
     ).strip()
-    items = _parse_json_array(raw)
-    by_id: dict[int, str] = {
-        int(it["id"]): str(it.get("text", ""))
-        for it in items
-        if isinstance(it, dict) and "id" in it
-    }
-    if len(by_id) != len(texts):
-        raise ValueError(
-            f"Claude 번역 개수 불일치: got {len(by_id)}, want {len(texts)}"
-        )
-
-    return [
-        TranslationResult(
-            text=by_id[i], source_lang=source_lang, target_lang=target_lang,
-            provider="claude",
-        )
-        for i in range(len(texts))
-    ]
-
-
-def _parse_json_array(raw: str) -> list:
-    """모델 응답에서 JSON 배열을 추출한다. 코드펜스/잡설이 섞여도 견디게."""
-    try:
-        parsed = json.loads(raw)
-        if isinstance(parsed, list):
-            return parsed
-    except json.JSONDecodeError:
-        pass
-    # ```json ... ``` 펜스 제거 후 첫 번째 [ ... ] 블록을 시도.
-    fenced = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw.strip(), flags=re.MULTILINE)
-    match = re.search(r"\[.*\]", fenced, flags=re.DOTALL)
-    if match:
-        parsed = json.loads(match.group(0))
-        if isinstance(parsed, list):
-            return parsed
-    raise ValueError("Claude 응답에서 JSON 배열을 찾지 못함")
+    return TranslationResult(
+        text=out, source_lang=source_lang, target_lang=target_lang, provider="claude",
+    )
 
 
 @track_external_api("deepl")
