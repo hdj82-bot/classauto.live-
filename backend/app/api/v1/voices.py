@@ -12,12 +12,17 @@ ElevenLabs 보이스를 나열하되, 키 미설정·장애 시에는 빈 목록
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.api.deps import require_professor
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.voice import TtsVoice, TtsVoicesResponse
+from app.schemas.voice import (
+    VOICE_PREVIEW_MAX_CHARS,
+    TtsVoice,
+    TtsVoicesResponse,
+    VoicePreviewRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -237,3 +242,45 @@ async def list_tts_voices(user: User = Depends(require_professor)):
             )
         )
     return TtsVoicesResponse(voices=voices, total=len(voices))
+
+
+@router.post(
+    "/api/voices/preview",
+    summary="발화 내용 미리듣기 합성 (선택 보이스·속도로 실제 TTS)",
+    responses={200: {"content": {"audio/mpeg": {}}}},
+)
+async def preview_voice(
+    req: VoicePreviewRequest,
+    user: User = Depends(require_professor),
+) -> Response:
+    """주어진 발화 내용을 선택한 보이스·속도로 실제 합성해 mp3 로 돌려준다.
+
+    스튜디오의 'AI 발화 내용' 미리듣기 버튼이 호출 — 보이스 고정 샘플이 아니라
+    실제 스크립트를 그 보이스/속도로 들려주기 위함. 비용·지연 보호로 텍스트는
+    ``VOICE_PREVIEW_MAX_CHARS`` 로 잘라서 합성한다(영상 본 렌더와 무관, 미리듣기 전용).
+    """
+    from app.services.pipeline.tts import TTSError, synthesize
+
+    text = req.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="미리들을 발화 내용이 비어 있습니다.")
+    text = text[:VOICE_PREVIEW_MAX_CHARS]
+
+    try:
+        result = await synthesize(
+            text,
+            voice_id=req.voice_id or None,
+            gender=req.gender,
+            speed=req.speed,
+        )
+    except TTSError as exc:
+        logger.warning("음성 미리듣기 합성 실패: %s", exc)
+        raise HTTPException(
+            status_code=502, detail="미리듣기 합성에 실패했습니다. 잠시 후 다시 시도해 주세요."
+        ) from exc
+
+    return Response(
+        content=result.audio_bytes,
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "no-store"},
+    )

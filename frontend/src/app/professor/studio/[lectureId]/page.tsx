@@ -377,11 +377,36 @@ export default function StudioWizardPage() {
     return subs.find((s) => s.slide_index === activeIndex)?.text ?? "";
   }, [script, activeIndex]);
 
-  // 선택한 보이스 — WorkArea 의 'AI 발화 내용' 미리듣기 버튼용 (샘플 mp3 + 표시명).
+  // 선택한 보이스 — WorkArea 의 'AI 발화 내용' 미리듣기 버튼 표시명용.
   const selectedVoice = useMemo(
     () => voices.find((v) => v.voice_id === voiceId) ?? null,
     [voices, voiceId],
   );
+
+  // 미리듣기 캐시 키 — 보이스·속도·활성 슬라이드·본문이 바뀌면 재합성.
+  const activeAiText = activeSegment?.text ?? "";
+  const voicePreviewKey = `${voiceId ?? "default"}|${voiceSpeed}|${activeIndex}|${activeAiText.length}`;
+
+  // 'AI 발화 내용' 미리듣기 — 현재 발화 내용을 선택 보이스·속도로 실제 합성.
+  // POST /api/voices/preview 가 audio/mpeg 를 반환 → Blob 으로 받아 WorkArea 가 재생.
+  const handleRequestVoicePreview = useCallback(async (): Promise<Blob | null> => {
+    const text = activeAiText.trim();
+    if (!text) {
+      toast("미리들을 발화 내용이 없습니다.", "error");
+      return null;
+    }
+    try {
+      const { data } = await api.post<Blob>(
+        "/api/voices/preview",
+        { text, voice_id: voiceId, gender: voiceGender, speed: voiceSpeed },
+        { responseType: "blob" },
+      );
+      return data;
+    } catch {
+      toast("미리듣기 생성 중 오류가 발생했습니다.", "error");
+      return null;
+    }
+  }, [activeAiText, voiceId, voiceGender, voiceSpeed, toast]);
 
   // ── 수동 편집 저장 ───────────────────────────────────────────────────────────
   // PATCH /api/videos/{video_id}/script — 백엔드는 전체 segments 배열을 받으므로
@@ -723,7 +748,8 @@ export default function StudioWizardPage() {
         }
         onEditSave={handleEditSave}
         onRegenerate={handleRegenerate}
-        voicePreviewUrl={selectedVoice?.preview_url ?? null}
+        onRequestVoicePreview={handleRequestVoicePreview}
+        voicePreviewKey={voicePreviewKey}
         voiceName={
           selectedVoice
             ? selectedVoice.display_name || selectedVoice.name
