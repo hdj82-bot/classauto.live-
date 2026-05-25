@@ -97,16 +97,23 @@ export default function AvatarPreviewStage({
     }
   }, []);
 
+  // 샘플 음성은 1회만 재생한다. 끝나면 영상도 멈추고 정지 상태로 되돌려
+  // 사용자가 다시 들으려면 재생 버튼/음성을 다시 누르도록 한다.
+  const handleEnded = useCallback(() => {
+    pauseVideo();
+    setPlaying(false);
+  }, [pauseVideo]);
+
   const startPlayback = useCallback(
     (option: VoiceOption | null) => {
       playVideo();
       // 일반/오디션 상황에서만 음성 오버레이를 재생. 본인 렌더 클립은 자체 오디오.
       if (!isCustomRender && option && supported) {
-        play(option, sampleText, true);
+        play(option, sampleText, handleEnded);
       }
       setPlaying(true);
     },
-    [playVideo, play, supported, sampleText, isCustomRender],
+    [playVideo, play, supported, sampleText, isCustomRender, handleEnded],
   );
 
   const stopPlayback = useCallback(() => {
@@ -143,7 +150,7 @@ export default function AvatarPreviewStage({
       randomVoice(voicesRef.current);
     playVideo();
     if (!isCustomRender && option && supported) {
-      play(option, sampleText, true);
+      play(option, sampleText, handleEnded);
     }
     setPlaying(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -240,7 +247,12 @@ export default function AvatarPreviewStage({
                 src={effectiveVideoUrl ?? undefined}
                 poster={avatar.preview_image_url ?? undefined}
                 muted={!isCustomRender}
-                loop
+                // 일반 아바타: 무음 영상은 음성(1회) 길이 동안 시각적으로 반복.
+                // 본인 렌더 클립: 자체 오디오가 있어 1회만 재생하고 멈춘다.
+                loop={!isCustomRender}
+                onEnded={() => {
+                  if (isCustomRender) setPlaying(false);
+                }}
                 playsInline
                 preload="metadata"
                 aria-label={avatar.name}

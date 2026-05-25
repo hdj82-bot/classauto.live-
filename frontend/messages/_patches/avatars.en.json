@@ -39,10 +39,10 @@
     "previewVoiceLabel": "Preview voice",
 
     "voiceHeading": "Voice",
-    "voiceNote": "Plays a sample voice together with the avatar clip. Switch between voices to compare.",
+    "voiceNote": "Plays the sample voice once with the avatar clip. Click to replay or pick another voice.",
     "voiceNoteCustom": "Your avatar speaking with the selected voice.",
     "voiceChangeNeedsRerender": "To hear a different voice, pick one above and tap 'Regenerate with this voice'.",
-    "voiceNowPlaying": "Now playing",
+    "voiceNowPlaying": "Selected voice",
     "voiceGroupMale": "Male voices",
     "voiceGroupFemale": "Female voices",
     "voiceLoading": "Loading voices...",
