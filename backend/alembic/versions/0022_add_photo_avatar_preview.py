@@ -1,8 +1,13 @@
 """Add photo-avatar preview fields to users.
 
-Revision ID: 0021
-Revises: 0020
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-05-23
+
+주의: 이 마이그레이션은 voice_speed(0021)와 동시에 머지되어 둘 다 revision="0021"·
+down_revision="0020" 으로 충돌(중복 revision·다중 head)했다. voice_speed 가 운영에
+먼저 적용된 정식 0021 이므로, 이쪽을 0022 로 재번호해 체인을 선형화한다
+(0020 → 0021[voice_speed] → 0022[photo_avatar_preview]).
 
 변경 내용 (본인 아바타 "움직이는 미리보기" 캐시):
 - ``users.photo_avatar_preview_url`` (VARCHAR(1024), nullable): Talking Photo 로
@@ -20,8 +25,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "0021"
-down_revision: Union[str, None] = "0020"
+revision: str = "0022"
+down_revision: Union[str, None] = "0021"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
