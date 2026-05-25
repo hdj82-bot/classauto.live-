@@ -75,9 +75,13 @@ export interface VoicePreviewState {
   supported: boolean;
   /** 현재 재생(합성/음원) 중인지. */
   speaking: boolean;
-  /** option 음성으로 재생. previewUrl 이 있으면 음원, 없으면 sampleText 합성.
-   *  loop=true 면 끝난 뒤 자동 반복. */
-  play: (option: VoiceOption, sampleText: string, loop?: boolean) => void;
+  /** option 음성으로 1회 재생. previewUrl 이 있으면 음원, 없으면 sampleText 합성.
+   *  재생이 끝나거나(또는 실패하면) onEnded 가 호출된다(다시 들으려면 재호출). */
+  play: (
+    option: VoiceOption,
+    sampleText: string,
+    onEnded?: () => void,
+  ) => void;
   /** 재생 중지. */
   stop: () => void;
 }
@@ -108,66 +112,54 @@ export function useVoicePreview(): VoicePreviewState {
   }, []);
 
   const play = useCallback(
-    (option: VoiceOption, sampleText: string, loop = false) => {
+    (option: VoiceOption, sampleText: string, onEnded?: () => void) => {
       if (typeof window === "undefined") return;
       stop();
       const session = sessionRef.current;
+      // 재생 종료/실패 시 1회만 호출(중지로 무효화된 세션은 무시).
+      const finish = () => {
+        if (sessionRef.current !== session) return;
+        setSpeaking(false);
+        onEnded?.();
+      };
 
-      // 1) 실제 음원(ElevenLabs preview)이 있으면 그것을 재생.
+      // 1) 실제 음원(ElevenLabs preview)이 있으면 그것을 1회 재생.
       if (option.previewUrl && typeof window.Audio !== "undefined") {
         const audio = new Audio(option.previewUrl);
-        audio.loop = loop;
         audioRef.current = audio;
-        audio.onended = () => {
-          if (sessionRef.current === session && !loop) setSpeaking(false);
-        };
-        audio.onerror = () => {
-          if (sessionRef.current === session) setSpeaking(false);
-        };
+        audio.onended = finish;
+        audio.onerror = finish;
         const p = audio.play();
-        if (p && typeof p.catch === "function") p.catch(() => setSpeaking(false));
+        if (p && typeof p.catch === "function") p.catch(finish);
         setSpeaking(true);
         return;
       }
 
-      // 2) 음성 합성 폴백.
+      // 2) 음성 합성 폴백 — 1회.
       const synth = window.speechSynthesis;
       if (!synth || typeof window.SpeechSynthesisUtterance === "undefined") {
         return;
       }
       // getVoices() 는 호출 시점에 읽는다(브라우저에 따라 늦게 채워짐).
       const voices = synth.getVoices();
-      const speakOnce = () => {
-        if (sessionRef.current !== session) return;
-        const utter = new SpeechSynthesisUtterance(sampleText);
-        const voice = resolveSystemVoice(option, voices);
-        if (voice) {
-          utter.voice = voice;
-          utter.lang = voice.lang;
-        } else {
-          utter.lang = option.ttsLang ?? "ko-KR";
-        }
-        utter.pitch = option.ttsPitch ?? 1;
-        utter.rate = option.ttsRate ?? 1;
-        utter.onend = () => {
-          if (sessionRef.current !== session) return;
-          if (loop) {
-            speakOnce();
-          } else {
-            setSpeaking(false);
-          }
-        };
-        utter.onerror = () => {
-          if (sessionRef.current === session) setSpeaking(false);
-        };
-        try {
-          synth.speak(utter);
-        } catch {
-          setSpeaking(false);
-        }
-      };
+      const utter = new SpeechSynthesisUtterance(sampleText);
+      const voice = resolveSystemVoice(option, voices);
+      if (voice) {
+        utter.voice = voice;
+        utter.lang = voice.lang;
+      } else {
+        utter.lang = option.ttsLang ?? "ko-KR";
+      }
+      utter.pitch = option.ttsPitch ?? 1;
+      utter.rate = option.ttsRate ?? 1;
+      utter.onend = finish;
+      utter.onerror = finish;
       setSpeaking(true);
-      speakOnce();
+      try {
+        synth.speak(utter);
+      } catch {
+        finish();
+      }
     },
     [stop],
   );
