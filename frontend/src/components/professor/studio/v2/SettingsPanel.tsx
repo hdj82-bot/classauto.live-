@@ -828,7 +828,7 @@ function QuizPointCard({
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
-        {authored ? "문제 다시 만들기" : "문제 만들기"}
+        {authored ? "문제 보기·수정" : "문제 만들기"}
       </button>
     </div>
   );

@@ -66,10 +66,24 @@ class SocraticResult:
 
 # ── 프롬프트 ──────────────────────────────────────────────────────────────────
 
-def _build_system_prompt(slide_context: str, n: int, question_type: str, difficulty: str) -> str:
+def _build_system_prompt(
+    slide_context: str,
+    n: int,
+    question_type: str,
+    difficulty: str,
+    current_draft: dict | None = None,
+) -> str:
     qtype_ko = _QTYPE_KO.get(question_type, _QTYPE_KO["multiple_choice"])
     diff_ko = _DIFFICULTY_KO.get(difficulty, _DIFFICULTY_KO["medium"])
-    return f"""당신은 대학 교수자와 함께 강의 영상에 삽입할 평가 문제를 설계하는 교육과정 설계 파트너입니다. 소크라테스식 대화법으로 교수자의 의도를 이끌어내어 최종 문제를 확정합니다.
+    edit_block = ""
+    if current_draft and current_draft.get("content"):
+        edit_block = (
+            "\n## 현재 저장된 문제 (수정 대상)\n"
+            f"{json.dumps(current_draft, ensure_ascii=False)}\n"
+            "교수자가 이 문제를 다시 열었습니다. 교수자의 수정 요청을 반영해 이 문제를 다듬으세요. "
+            "별도 지시가 없으면 이 문제를 기준으로 삼습니다.\n"
+        )
+    return f"""당신은 대학 교수자와 함께 강의 영상에 삽입할 평가 문제를 설계하는 교육과정 설계 파트너입니다. 소크라테스식 대화법으로 교수자의 의도를 이끌어내어 최종 문제를 확정합니다.{edit_block}
 
 ## 출제 맥락
 - 삽입 위치: 슬라이드 {n + 1}번과 {n + 2}번 사이 (학생이 영상에서 이 지점에 도달하면 출제)
@@ -210,10 +224,13 @@ def socratic_turn(
     question_type: str,
     difficulty: str,
     messages: list[dict],
+    current_draft: dict | None = None,
 ) -> SocraticResult:
     """대화 1턴 실행. messages 가 비어 있으면 클로드가 먼저 초안을 제시한다."""
     context = _slide_context(db, lecture_id, insert_after_slide_index)
-    system = _build_system_prompt(context, insert_after_slide_index, question_type, difficulty)
+    system = _build_system_prompt(
+        context, insert_after_slide_index, question_type, difficulty, current_draft,
+    )
 
     # 숨은 kickoff(user) 를 항상 맨 앞에 붙인다. 프론트는 화면에 보이는 턴만 보관하므로
     # 그 히스토리는 항상 assistant 응답으로 시작한다 → 여기에 user kickoff 를 선행시키면

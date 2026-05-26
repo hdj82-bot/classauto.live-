@@ -38,6 +38,8 @@ class SocraticTurnRequest(BaseModel):
     difficulty: DifficultyLit = "medium"
     # 비어 있으면 첫 턴(클로드가 먼저 초안을 제시). 비용 방어용 상한.
     messages: list[SocraticMessage] = Field(default_factory=list, max_length=40)
+    # 수정 중인 현재 문제(있으면). 저장된 문제를 다시 열어 다듬을 때 모델에 컨텍스트로 전달.
+    current_draft: QuizDraft | None = None
 
 
 class SocraticTurnResponse(BaseModel):
