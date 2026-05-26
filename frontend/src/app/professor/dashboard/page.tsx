@@ -3,6 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import {
+  fetchProfessorData,
+  getCachedProfessorData,
+  getCachedHub,
+  setCachedHub,
+} from "@/lib/professorData";
 import { useI18n } from "@/contexts/I18nContext";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import EmptyDashboard from "@/components/professor/EmptyDashboard";
@@ -50,6 +56,14 @@ interface Lecture {
   created_at?: string | null;
 }
 
+/** 허브 집계 캐시 키 — 현재 강의 id 집합. 강의 구성이 같으면 재집계 생략. */
+function hubCacheKey(lectures: { id: string }[]): string {
+  return lectures
+    .map((l) => l.id)
+    .sort()
+    .join(",");
+}
+
 /**
  * 교수자 대시보드 — v2 디자인 (라이트 베이지 + 골드).
  *
@@ -68,9 +82,15 @@ interface Lecture {
 export default function ProfessorDashboardPage() {
   const router = useRouter();
   const { t } = useI18n();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [lectures, setLectures] = useState<Lecture[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [courses, setCourses] = useState<Course[]>(
+    () => getCachedProfessorData<Lecture>()?.courses ?? [],
+  );
+  const [lectures, setLectures] = useState<Lecture[]>(
+    () => getCachedProfessorData<Lecture>()?.lectures ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => getCachedProfessorData<Lecture>() === null,
+  );
   const [error, setError] = useState<string | null>(null);
 
   // 학과·소속 정보 — 모달 제출 시 채워짐.
@@ -81,24 +101,17 @@ export default function ProfessorDashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+    // 캐시가 없을 때만 스피너 — 재방문 시 캐시로 즉시 렌더.
+    if (getCachedProfessorData() === null) setLoading(true);
     (async () => {
       setError(null);
       try {
-        const { data: cs } = await api.get<Course[]>("/api/courses");
+        // 강좌·강의는 공유 캐시에서 (다른 교수자 페이지와 공유, 재방문 시 즉시).
+        const { courses: cs, lectures: lecs } =
+          await fetchProfessorData<Lecture>();
         if (cancelled) return;
         setCourses(cs);
-
-        // 강좌별 강의 fan-out 은 순차 await 로 묶으면 강좌 수만큼 RTT 가 직렬로
-        // 누적된다. 메뉴 진입 체감 지연의 가장 큰 원인이라 Promise.all 로 병렬화.
-        const lecsByCourse = await Promise.all(
-          cs.map((c) =>
-            api
-              .get<Lecture[]>(`/api/courses/${c.id}/lectures`)
-              .then((r) => r.data),
-          ),
-        );
-        if (cancelled) return;
-        setLectures(lecsByCourse.flat());
+        setLectures(lecs);
       } catch {
         if (!cancelled) setError(t("professor.loadError"));
       } finally {
@@ -174,11 +187,21 @@ export default function ProfessorDashboardPage() {
     router.push("/professor/lectures");
   }, [router]);
 
-  const [hub, setHub] = useState<DashboardHubData | null>(null);
+  const [hub, setHub] = useState<DashboardHubData | null>(
+    () => getCachedHub<DashboardHubData>(hubCacheKey(lectures)),
+  );
   const [hubLoading, setHubLoading] = useState(false);
 
   useEffect(() => {
     if (lectures.length === 0) return;
+    // 강의 구성이 같고 캐시가 살아있으면 5N 재요청 없이 집계 결과 재사용.
+    const key = hubCacheKey(lectures);
+    const cachedHub = getCachedHub<DashboardHubData>(key);
+    if (cachedHub) {
+      setHub(cachedHub);
+      setHubLoading(false);
+      return;
+    }
     let cancelled = false;
     setHubLoading(true);
 
@@ -243,6 +266,7 @@ export default function ProfessorDashboardPage() {
         monthlyCostLimitUsd: null,
       });
       setHub(aggregated);
+      setCachedHub(key, aggregated);
       setHubLoading(false);
     })();
 

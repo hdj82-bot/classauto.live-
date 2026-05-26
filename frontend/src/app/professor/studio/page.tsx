@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import {
+  fetchProfessorData,
+  getCachedProfessorData,
+  invalidateProfessorData,
+} from "@/lib/professorData";
 import { useToast } from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import StepIndicator from "@/components/professor/studio/StepIndicator";
@@ -33,8 +38,12 @@ export default function StudioEntryPage() {
   const { toast } = useToast();
   const { t } = useStudioI18n();
 
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [courses, setCourses] = useState<Course[]>(
+    () => getCachedProfessorData()?.courses ?? [],
+  );
+  const [coursesLoading, setCoursesLoading] = useState(
+    () => getCachedProfessorData() === null,
+  );
   const [submitting, setSubmitting] = useState(false);
   // 최근 작업 강의(이어서 작업하기) — 강좌별 강의를 모아 최신순 상위 몇 개.
   const [recent, setRecent] = useState<
@@ -45,38 +54,25 @@ export default function StudioEntryPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: cs } = await api.get<Course[]>("/api/courses");
+        // 강좌·강의는 공유 캐시에서 (다른 교수자 페이지가 이미 채워뒀으면 즉시).
+        const { courses: cs, lectures } = await fetchProfessorData<{
+          id: string;
+          title: string;
+          course_id: string;
+          created_at?: string | null;
+          updated_at?: string | null;
+        }>();
         if (cancelled) return;
         setCourses(cs);
-        const perCourse = await Promise.all(
-          cs.map(async (c) => {
-            try {
-              const { data } = await api.get<
-                {
-                  id: string;
-                  title: string;
-                  created_at?: string;
-                  updated_at?: string;
-                }[]
-              >(`/api/courses/${c.id}/lectures`);
-              return data.map((l) => ({
-                id: l.id,
-                title: l.title,
-                courseTitle: c.title,
-                ts: Date.parse(l.updated_at || l.created_at || "") || 0,
-              }));
-            } catch {
-              return [];
-            }
-          }),
-        );
-        if (cancelled) return;
-        const flat = perCourse.flat().sort((a, b) => b.ts - a.ts);
+        const courseTitle = new Map(cs.map((c) => [c.id, c.title] as const));
+        const ts = (l: { updated_at?: string | null; created_at?: string | null }) =>
+          Date.parse(l.updated_at || l.created_at || "") || 0;
+        const flat = [...lectures].sort((a, b) => ts(b) - ts(a));
         setRecent(
-          flat.slice(0, 4).map(({ id, title, courseTitle }) => ({
-            id,
-            title,
-            courseTitle,
+          flat.slice(0, 4).map((l) => ({
+            id: l.id,
+            title: l.title,
+            courseTitle: courseTitle.get(l.course_id) ?? "",
           })),
         );
       } catch {
@@ -124,6 +120,8 @@ export default function StudioEntryPage() {
           { headers: { "Content-Type": "multipart/form-data" } },
         );
 
+        // 새 강좌/강의가 생겼으니 공유 캐시 무효화 → 다른 페이지 진입 시 반영.
+        invalidateProfessorData();
         router.push(`/professor/studio/${lecture.id}?step=2`);
       } catch {
         toast(t("step1.errors.uploadFailed"), "error");

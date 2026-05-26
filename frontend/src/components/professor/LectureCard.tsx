@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { invalidateProfessorData } from "@/lib/professorData";
 import { useToast } from "@/components/ui/Toast";
 import Modal from "@/components/ui/Modal";
 import { useI18n } from "@/contexts/I18nContext";
@@ -54,6 +55,8 @@ export default function LectureCard({
     setDeleting(true);
     try {
       await api.delete(`/api/lectures/${lecture.id}`);
+      // 공유 캐시 무효화 — 다른 페이지 재진입 시 삭제가 반영되도록.
+      invalidateProfessorData();
       toast(t("lectureCard.deleteSuccess"), "success");
       setConfirmOpen(false);
       onDeleted(lecture.id);
