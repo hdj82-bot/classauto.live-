@@ -523,7 +523,8 @@ export default function WorkArea({
                 )}
               </div>
             )}
-            {/* 선택된 아바타가 슬라이드 위에서 말하는 모습 (PiP, 우측 하단). */}
+            {/* 선택된 아바타가 슬라이드 위에서 말하는 모습 (PiP, 우측 하단).
+                미리듣기(voicePreviewPlaying) 와 연동 — 재생 중에만 클립이 움직인다. */}
             {!isLoading && (avatarVideoUrl || avatarImageUrl) && (
               <AvatarOverlay
                 videoUrl={avatarVideoUrl}
@@ -531,6 +532,7 @@ export default function WorkArea({
                 label={avatarLabel ?? "아바타"}
                 scale={avatarScale}
                 reducedMotion={reducedMotion}
+                speaking={voicePreviewPlaying}
               />
             )}
             {!isLoading && activeSlidePending && (
@@ -1003,9 +1005,15 @@ function PendingPreviewOverlay({ slideNumber }: { slideNumber: number }) {
 /**
  * 선택된 아바타가 슬라이드 위에서 말하는 모습을 보여주는 PiP 오버레이.
  * preview body(position:relative) 의 우측 하단에 고정되고, ``scale`` 에 따라
- * 높이(컨테이너 대비 %)가 커지거나 줄어든다. 움직이는 클립(avatarVideoUrl)이
- * 있으면 muted·loop 자동재생으로 "말하는 모습"을 표현하고, 없거나 reducedMotion
- * 이면 정지 이미지로, 둘 다 없으면 이니셜로 폴백한다.
+ * 높이(컨테이너 대비 %)가 커지거나 줄어든다.
+ *
+ * 움직임은 '미리듣기'(``speaking``)와 연동된다 — 발화 미리듣기가 재생되는 동안에만
+ * 아바타 클립(avatarVideoUrl)을 muted·loop 로 재생하고, 멈추면 첫 프레임으로
+ * 되돌려 정지한다. 이 클립은 HeyGen 의 샘플 모션이라 발화 내용에 정확히
+ * 립싱크되지는 않으며(진짜 립싱크 영상은 '전체 생성 시작' 의 최종 렌더가 제공),
+ * 클립이 없는 사진 아바타나 reducedMotion 환경에서는 정지 이미지(또는 이니셜)로
+ * 폴백한다. 재생 중에는 '재생 중' 배지로 상태를 표시해 정지 사진에서도 동작이
+ * 분명히 보이게 한다.
  *
  * scale 은 SettingsPanel 의 '아바타 크기' 슬라이더와 1:1 매핑(0.5~1.5)이며,
  * 같은 값이 강의에 저장돼 렌더 시 HeyGen character.scale 로 전달된다.
@@ -1018,16 +1026,40 @@ function AvatarOverlay({
   label,
   scale,
   reducedMotion,
+  speaking,
 }: {
   videoUrl: string | null;
   imageUrl: string | null;
   label: string;
   scale: number;
   reducedMotion: boolean;
+  speaking: boolean;
 }) {
   const clamped = Math.min(1.5, Math.max(0.5, scale || 1));
   const heightPct = AVATAR_OVERLAY_BASE_PCT * clamped;
   const showVideo = !reducedMotion && !!videoUrl;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // 미리듣기(speaking) 재생 중에만 클립을 재생, 멈추면 첫 프레임으로 되돌린다.
+  // play()/pause() 는 jsdom 미구현·자동재생 정책 거부 시 throw/reject 할 수 있어
+  // 통째로 try/catch 로 감싼다. videoUrl 변경(슬라이드/아바타 교체)으로 <video>
+  // 가 remount 되면 새 엘리먼트에도 현재 speaking 상태를 다시 적용한다.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      if (speaking) {
+        const p = v.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } else {
+        v.pause();
+        v.currentTime = 0;
+      }
+    } catch {
+      /* no-op */
+    }
+  }, [speaking, showVideo, videoUrl]);
+
   const mediaStyle: CSSProperties = {
     width: "100%",
     height: "100%",
@@ -1057,9 +1089,9 @@ function AvatarOverlay({
       {showVideo ? (
         <video
           key={videoUrl ?? undefined}
+          ref={videoRef}
           src={videoUrl ?? undefined}
           poster={imageUrl ?? undefined}
-          autoPlay
           loop
           muted
           playsInline
@@ -1084,6 +1116,40 @@ function AvatarOverlay({
           }}
         >
           {label.slice(0, 1)}
+        </span>
+      )}
+
+      {/* 미리듣기 재생 중 표시 — 클립이 없는 정지 사진 아바타에서도 상태가 분명히
+          보이도록 (펄스 dot + '재생 중'). */}
+      {speaking && (
+        <span
+          data-testid="workarea-avatar-speaking"
+          style={{
+            position: "absolute",
+            bottom: 6,
+            left: 6,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "2px 8px",
+            borderRadius: 999,
+            fontSize: 10,
+            fontWeight: 600,
+            color: "#fff",
+            background: "rgba(10,10,10,0.6)",
+            backdropFilter: "blur(2px)",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 999,
+              background: "var(--gold)",
+            }}
+          />
+          재생 중
         </span>
       )}
     </div>
