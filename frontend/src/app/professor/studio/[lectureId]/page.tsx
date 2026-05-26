@@ -11,16 +11,22 @@ import {
   SettingsPanel,
   ActionBar,
   GenerationModal,
+  SocraticQuizModal,
   type StudioSlide,
 } from "@/components/professor/studio/v2";
 import { useStudioI18n } from "@/components/professor/studio/useStudioI18n";
 import { langLabel } from "@/components/professor/studio/studioTypes";
+import {
+  deleteQuiz,
+  listAuthoredQuizzes,
+} from "@/components/professor/studio/quizApi";
 import { listAvatars } from "@/components/professor/avatars/avatarsApi";
 import type { Avatar } from "@/components/professor/avatars/avatarsTypes";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
 import type {
   LangCode,
   Lecture,
+  QuizInsertionPoint,
   RenderStatus,
   ScriptResponse,
   ScriptSegment,
@@ -143,6 +149,12 @@ export default function StudioWizardPage() {
   // ── 스크립트 검토 패널 액션 진행 상태 ────────────────────────────────────────
   const [savingScript, setSavingScript] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+
+  // ── 인터랙티브 퀴즈 (소크라테스 저작) ────────────────────────────────────────
+  // 우측 "퀴즈/문제" 패널의 삽입 지점들 + 소크라테스 대화 모달 대상 인덱스.
+  // 저작된 문제는 GET /api/lectures/{id}/quiz 로 불러와 점으로 복원한다.
+  const [quizPoints, setQuizPoints] = useState<QuizInsertionPoint[]>([]);
+  const [socraticOpenIndex, setSocraticOpenIndex] = useState<number | null>(null);
 
   // ── 1) 강의 + 비디오 ID 로드 ─────────────────────────────────────────────────
   useEffect(() => {
@@ -279,6 +291,30 @@ export default function StudioWizardPage() {
         clearInterval(slidesPollRef.current);
         slidesPollRef.current = null;
       }
+    };
+  }, [lectureId]);
+
+  // 저작된 인터랙티브 퀴즈 로드 — 삽입 지점들을 경계별로 복원(경계당 1문항).
+  useEffect(() => {
+    if (!lectureId) return;
+    let cancelled = false;
+    (async () => {
+      const { quizzes } = await listAuthoredQuizzes(lectureId);
+      if (cancelled) return;
+      const points: QuizInsertionPoint[] = quizzes
+        .filter((q) => q.insert_after_slide_index !== null)
+        .map((q) => ({
+          boundaryIndex: q.insert_after_slide_index as number,
+          questionType: q.question_type,
+          difficulty: q.difficulty,
+          authoredId: q.id,
+        }))
+        .sort((a, b) => a.boundaryIndex - b.boundaryIndex);
+      // 백엔드에 저작된 게 있으면 그것으로 복원. (없으면 빈 상태 — 교수자가 추가)
+      if (points.length > 0) setQuizPoints(points);
+    })();
+    return () => {
+      cancelled = true;
     };
   }, [lectureId]);
 
@@ -749,6 +785,72 @@ export default function StudioWizardPage() {
     router.push(`/professor/lecture/${lectureId}`);
   }, [router, lectureId]);
 
+  // ── 퀴즈/문제 핸들러 ─────────────────────────────────────────────────────────
+  const handleAddQuizPoint = useCallback(() => {
+    setQuizPoints((prev) => {
+      if (prev.length >= 3) return prev;
+      // 아직 안 쓰인 첫 경계를 기본값으로(없으면 0).
+      const used = new Set(prev.map((p) => p.boundaryIndex));
+      const maxBoundary = Math.max(0, slides.length - 2);
+      let boundary = 0;
+      for (let n = 0; n <= maxBoundary; n += 1) {
+        if (!used.has(n)) {
+          boundary = n;
+          break;
+        }
+      }
+      return [
+        ...prev,
+        {
+          boundaryIndex: boundary,
+          questionType: "multiple_choice",
+          difficulty: "medium",
+          authoredId: null,
+        },
+      ];
+    });
+  }, [slides.length]);
+
+  const handleRemoveQuizPoint = useCallback(
+    (index: number) => {
+      setQuizPoints((prev) => {
+        const target = prev[index];
+        // 저장된 문제면 백엔드에서도 삭제(best-effort).
+        if (target?.authoredId) {
+          void deleteQuiz(lectureId, target.authoredId).catch(() => {
+            /* 미배포/네트워크 — 로컬 상태만 제거 */
+          });
+        }
+        return prev.filter((_, i) => i !== index);
+      });
+    },
+    [lectureId],
+  );
+
+  const handleChangeQuizPoint = useCallback(
+    (index: number, patch: Partial<QuizInsertionPoint>) => {
+      setQuizPoints((prev) =>
+        prev.map((p, i) => (i === index ? { ...p, ...patch } : p)),
+      );
+    },
+    [],
+  );
+
+  const handleQuizConfirmed = useCallback(
+    (result: { id: string; boundaryIndex: number }) => {
+      setQuizPoints((prev) =>
+        prev.map((p, i) =>
+          i === socraticOpenIndex
+            ? { ...p, boundaryIndex: result.boundaryIndex, authoredId: result.id }
+            : p,
+        ),
+      );
+      setSocraticOpenIndex(null);
+      toast("퀴즈가 저장되었습니다.", "success");
+    },
+    [socraticOpenIndex, toast],
+  );
+
   // ── 렌더링 ───────────────────────────────────────────────────────────────────
   if (lectureLoading) {
     return (
@@ -878,6 +980,12 @@ export default function StudioWizardPage() {
         onToggleQaScope={setQaScopeOnUploaded}
         onToggleBlockExternal={setBlockExternalSearch}
         onToggleAttentionWarn={setAttentionWarn}
+        slideCount={slides.length}
+        quizPoints={quizPoints}
+        onAddQuizPoint={handleAddQuizPoint}
+        onRemoveQuizPoint={handleRemoveQuizPoint}
+        onChangeQuizPoint={handleChangeQuizPoint}
+        onOpenSocratic={setSocraticOpenIndex}
       />
 
       <div style={{ gridColumn: "1 / -1" }}>
@@ -914,6 +1022,14 @@ export default function StudioWizardPage() {
           setGenDone(true);
         }}
         onDevBackground={() => setGenOpen(false)}
+      />
+
+      <SocraticQuizModal
+        open={socraticOpenIndex !== null}
+        lectureId={lectureId}
+        point={socraticOpenIndex !== null ? quizPoints[socraticOpenIndex] ?? null : null}
+        onClose={() => setSocraticOpenIndex(null)}
+        onConfirmed={handleQuizConfirmed}
       />
     </div>
   );

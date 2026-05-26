@@ -4,8 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LANGUAGES } from "../studioTypes";
-import type { LangCode, TtsProvider, TtsVoice, VoiceGender } from "../studioTypes";
+import { LANGUAGES, QUIZ_DIFFICULTY_LABEL } from "../studioTypes";
+import type {
+  LangCode,
+  QuizDifficulty,
+  QuizInsertionPoint,
+  QuizQuestionType,
+  TtsProvider,
+  TtsVoice,
+  VoiceGender,
+} from "../studioTypes";
 import { setVoiceFavorite } from "@/components/professor/avatars/voicesApi";
 
 /**
@@ -54,6 +62,16 @@ export interface SettingsPanelProps {
   onToggleBlockExternal?: (on: boolean) => void;
   onToggleAttentionWarn?: (on: boolean) => void;
   attentionWarn?: boolean;
+  // ── 퀴즈/문제 (인터랙티브 퀴즈 저작) ──────────────────────────────────────────
+  /** 영상 슬라이드 총 개수 — 삽입 경계 드롭다운 생성용. */
+  slideCount?: number;
+  /** 현재 설정된 삽입 지점들 (최대 3). */
+  quizPoints?: QuizInsertionPoint[];
+  onAddQuizPoint?: () => void;
+  onRemoveQuizPoint?: (index: number) => void;
+  onChangeQuizPoint?: (index: number, patch: Partial<QuizInsertionPoint>) => void;
+  /** "문제 만들기/수정" — 소크라테스 대화 모달 오픈. */
+  onOpenSocratic?: (index: number) => void;
 }
 
 const settingsStyle: CSSProperties = {
@@ -271,6 +289,12 @@ export default function SettingsPanel({
   onToggleBlockExternal,
   onToggleAttentionWarn,
   attentionWarn = true,
+  slideCount = 0,
+  quizPoints = [],
+  onAddQuizPoint,
+  onRemoveQuizPoint,
+  onChangeQuizPoint,
+  onOpenSocratic,
 }: SettingsPanelProps) {
   const expDays = expiresAtToDays(expiresAt);
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
@@ -281,6 +305,12 @@ export default function SettingsPanel({
     ? selectedVoice.display_name || selectedVoice.name
     : "기본 보이스";
   const summaryVoiceVal = `${selectedVoiceName} · ${voiceSpeed.toFixed(1)}×`;
+  // 퀴즈 아코디언 요약: 개수 + 작성됨 수.
+  const authoredCount = quizPoints.filter((p) => p.authoredId !== null).length;
+  const summaryQuizVal =
+    quizPoints.length === 0
+      ? "없음"
+      : `${quizPoints.length}개${authoredCount > 0 ? ` · ${authoredCount} 작성됨` : ""}`;
 
   return (
     <aside style={settingsStyle} aria-label="강의 설정">
@@ -547,8 +577,238 @@ export default function SettingsPanel({
             </p>
           </div>
         </details>
+
+        {/* 퀴즈/문제 (인터랙티브 퀴즈 저작) */}
+        <details style={accordionStyle}>
+          <summary style={summaryStyle}>
+            <CaretIcon />
+            <H4Icon>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="url(#grad-success)"
+                strokeWidth={2.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+            </H4Icon>
+            <h4 style={summaryTitleStyle}>퀴즈/문제</h4>
+            <span style={summaryValStyle}>{summaryQuizVal}</span>
+          </summary>
+          <div style={aBodyStyle}>
+            <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+              강의 영상 중간(슬라이드 사이)에 삽입할 퀴즈입니다. 클로드와 대화하며 문제를 확정합니다. 강의당 최대 3개.
+            </p>
+
+            {slideCount < 2 ? (
+              <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                슬라이드가 2장 이상일 때 퀴즈를 삽입할 수 있습니다.
+              </p>
+            ) : (
+              <>
+                {quizPoints.map((pt, i) => (
+                  <QuizPointCard
+                    key={i}
+                    point={pt}
+                    index={i}
+                    slideCount={slideCount}
+                    onChange={(patch) => onChangeQuizPoint?.(i, patch)}
+                    onRemove={() => onRemoveQuizPoint?.(i)}
+                    onOpen={() => onOpenSocratic?.(i)}
+                  />
+                ))}
+                {quizPoints.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={onAddQuizPoint}
+                    style={{
+                      alignSelf: "flex-start",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "7px 12px",
+                      borderRadius: 8,
+                      border: "1px dashed var(--line-strong)",
+                      background: "var(--bg-card)",
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      color: "var(--text)",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 5v14M5 12h14" />
+                    </svg>
+                    삽입 지점 추가
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </details>
       </div>
     </aside>
+  );
+}
+
+/** 삽입 지점 1개 카드 — 위치·유형·난이도 설정 + "문제 만들기" 버튼. */
+function QuizPointCard({
+  point,
+  index,
+  slideCount,
+  onChange,
+  onRemove,
+  onOpen,
+}: {
+  point: QuizInsertionPoint;
+  index: number;
+  slideCount: number;
+  onChange: (patch: Partial<QuizInsertionPoint>) => void;
+  onRemove: () => void;
+  onOpen: () => void;
+}) {
+  const authored = point.authoredId !== null;
+  // 경계 N 은 0 ~ slideCount-2 (슬라이드 N+1 과 N+2 사이).
+  const maxBoundary = Math.max(0, slideCount - 2);
+  const boundary = Math.min(point.boundaryIndex, maxBoundary);
+
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        padding: "10px 12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        background: "var(--bg)",
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)" }}>
+          퀴즈 {index + 1}
+        </span>
+        <div className="flex items-center" style={{ gap: 6 }}>
+          {authored && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "1px 7px",
+                borderRadius: 4,
+                background: "var(--gold-soft)",
+                color: "var(--gold-on-light, #B88308)",
+              }}
+            >
+              작성됨
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`퀴즈 ${index + 1} 삭제`}
+            title="삭제"
+            style={{
+              display: "inline-grid",
+              placeItems: "center",
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              border: "1px solid var(--line-strong)",
+              background: "var(--bg-card)",
+              cursor: "pointer",
+              color: "var(--text-subtle)",
+              lineHeight: 1,
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* 삽입 위치 */}
+      <select
+        aria-label={`퀴즈 ${index + 1} 삽입 위치`}
+        value={boundary}
+        onChange={(e) => onChange({ boundaryIndex: Number(e.target.value) })}
+        style={selectStyle}
+      >
+        {Array.from({ length: maxBoundary + 1 }).map((_, n) => (
+          <option key={n} value={n}>
+            슬라이드 {n + 1} ↔ {n + 2} 사이
+          </option>
+        ))}
+      </select>
+
+      {/* 유형 */}
+      <div className="flex items-center justify-between" style={{ fontSize: 12 }}>
+        <span style={{ fontWeight: 500 }}>유형</span>
+        <div style={segStyle}>
+          {(["multiple_choice", "short_answer"] as QuizQuestionType[]).map((qt) => (
+            <button
+              key={qt}
+              type="button"
+              style={segOptStyle(point.questionType === qt)}
+              onClick={() => onChange({ questionType: qt })}
+            >
+              {qt === "multiple_choice" ? "객관식" : "주관식"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 난이도 */}
+      <div className="flex items-center justify-between" style={{ fontSize: 12 }}>
+        <span style={{ fontWeight: 500 }}>난이도</span>
+        <div style={segStyle}>
+          {(["hard", "medium", "easy"] as QuizDifficulty[]).map((d) => (
+            <button
+              key={d}
+              type="button"
+              style={segOptStyle(point.difficulty === d)}
+              onClick={() => onChange({ difficulty: d })}
+            >
+              {QUIZ_DIFFICULTY_LABEL[d]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onOpen}
+        style={{
+          marginTop: 2,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+          padding: "8px 12px",
+          borderRadius: 8,
+          border: "none",
+          background: "linear-gradient(135deg, #FFB627, #E89E0E)",
+          fontSize: 12.5,
+          fontWeight: 700,
+          cursor: "pointer",
+          color: "#0A0A0A",
+          fontFamily: "inherit",
+        }}
+      >
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+        {authored ? "문제 다시 만들기" : "문제 만들기"}
+      </button>
+    </div>
   );
 }
 

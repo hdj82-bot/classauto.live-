@@ -10,3 +10,4 @@ export type { WorkAreaProps } from "./WorkArea";
 export { default as SettingsPanel } from "./SettingsPanel";
 export { default as ActionBar } from "./ActionBar";
 export { default as GenerationModal } from "./GenerationModal";
+export { default as SocraticQuizModal } from "./SocraticQuizModal";

@@ -193,3 +193,61 @@ export interface RenderStatus {
   failed: number;
   renders: RenderItem[];
 }
+
+// ── 인터랙티브 퀴즈 (소크라테스식 저작) ───────────────────────────────────────
+//
+// 강의 영상 중간(슬라이드 N↔N+1 사이)에 삽입할 퀴즈를 클로드와 다중 턴 대화로
+// 확정한다. 백엔드 schemas/quiz.py 와 1:1. 난이도는 상=hard / 중=medium / 하=easy.
+
+export type QuizQuestionType = "multiple_choice" | "short_answer";
+export type QuizDifficulty = "easy" | "medium" | "hard";
+
+export const QUIZ_DIFFICULTY_LABEL: Record<QuizDifficulty, string> = {
+  hard: "상",
+  medium: "중",
+  easy: "하",
+};
+
+export const QUIZ_TYPE_LABEL: Record<QuizQuestionType, string> = {
+  multiple_choice: "객관식",
+  short_answer: "주관식",
+};
+
+/** 대화 중 클로드가 제시하는 현재 최선 문제 초안 (확정 전). */
+export interface QuizDraft {
+  question_type: QuizQuestionType;
+  difficulty: QuizDifficulty;
+  content: string;
+  options: string[] | null;
+  correct_answer: string | null;
+  explanation: string | null;
+}
+
+/** 화면에 보이는 대화 1턴. user = 교수자, assistant = 클로드. */
+export interface SocraticMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** 우측 패널의 삽입 지점 1개 (설정 + 저작 결과). */
+export interface QuizInsertionPoint {
+  /** 슬라이드 N↔N+1 사이의 0-based N. */
+  boundaryIndex: number;
+  questionType: QuizQuestionType;
+  difficulty: QuizDifficulty;
+  /** 저장된 문제 id. null = 아직 미작성. */
+  authoredId: string | null;
+}
+
+/** GET /api/lectures/{id}/quiz 의 항목 (교수자 — 정답·해설 포함). */
+export interface AuthoredQuiz {
+  id: string;
+  insert_after_slide_index: number | null;
+  question_type: QuizQuestionType;
+  difficulty: QuizDifficulty;
+  content: string;
+  options: string[] | null;
+  correct_answer: string | null;
+  explanation: string | null;
+  timestamp_seconds: number | null;
+}
