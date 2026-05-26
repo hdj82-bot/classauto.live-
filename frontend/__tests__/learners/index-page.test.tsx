@@ -55,11 +55,11 @@ describe("LearnersIndexPage", () => {
           data: [{ id: "c1", title: "현대중국사회의이해" }],
         };
       }
-      if (url === "/api/courses/c1/lectures") {
+      if (url === "/api/me/lectures" || url === "/api/courses/c1/lectures") {
         return {
           data: [
-            { id: "lec1", title: "1주차 — 디지털 위안화", slug: "wk1", is_published: true },
-            { id: "lec2", title: "2주차 — 핀테크 규제", slug: "wk2", is_published: false },
+            { id: "lec1", title: "1주차 — 디지털 위안화", slug: "wk1", is_published: true, course_id: "c1" },
+            { id: "lec2", title: "2주차 — 핀테크 규제", slug: "wk2", is_published: false, course_id: "c1" },
           ],
         };
       }
@@ -83,9 +83,9 @@ describe("LearnersIndexPage", () => {
       if (url === "/api/courses") {
         return { data: [{ id: "c1", title: "강좌 A" }] };
       }
-      if (url === "/api/courses/c1/lectures") {
+      if (url === "/api/me/lectures" || url === "/api/courses/c1/lectures") {
         return {
-          data: [{ id: "lec1", title: "1주차", slug: "x", is_published: true }],
+          data: [{ id: "lec1", title: "1주차", slug: "x", is_published: true, course_id: "c1" }],
         };
       }
       return { data: [] };

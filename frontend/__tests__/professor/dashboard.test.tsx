@@ -72,7 +72,7 @@ describe("ProfessorDashboardPage", () => {
       if (url === "/api/courses") {
         return { data: [{ id: "c1", title: "강좌 A" }] };
       }
-      if (url === "/api/courses/c1/lectures") {
+      if (url === "/api/me/lectures" || url === "/api/courses/c1/lectures") {
         return {
           data: [
             {
@@ -82,6 +82,7 @@ describe("ProfessorDashboardPage", () => {
               is_published: true,
               video_url: "https://cdn/x.mp4",
               pipeline_task_id: "task-1",
+              course_id: "c1",
             },
           ],
         };

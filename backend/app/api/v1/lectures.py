@@ -25,11 +25,33 @@ from app.services.lecture import (
     delete_lecture,
     get_public_lecture_by_slug,
     list_course_lectures,
+    list_my_lectures,
     update_lecture,
 )
 from app.services.pipeline.s3 import presign_stored_s3_url
 
 router = APIRouter(tags=["lectures"])
+
+
+# ── 내 전체 강의 목록 (교수자 전용) ─────────────────────────────────────────
+
+@router.get(
+    "/api/me/lectures",
+    response_model=list[LectureResponse],
+    summary="내 전체 강의 목록 (교수자 전용)",
+)
+async def get_my_lectures(
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """현재 교수자가 소유한 모든 강의를 강좌 구분 없이 한 번에 반환한다.
+
+    교수자 대시보드·보관함·스튜디오 등이 ``GET /api/courses`` 후 강좌별
+    ``GET /api/courses/{id}/lectures`` 를 강좌 수만큼 호출하던 fan-out 워터폴을
+    단일 호출로 대체하기 위한 엔드포인트. 응답 모양은 강좌별 목록과 동일한
+    ``LectureResponse`` (각 항목에 course_id 포함).
+    """
+    return await list_my_lectures(db, professor)
 
 
 # ── 강좌별 강의 목록 ──────────────────────────────────────────────────────────

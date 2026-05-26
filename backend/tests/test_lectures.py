@@ -45,6 +45,58 @@ async def test_student_sees_only_published(client, student, course, lecture):
     assert len(data) == 1
 
 
+# ── GET /api/me/lectures ─────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_list_my_lectures(client, professor, course, lecture):
+    """교수자 본인 전체 강의를 강좌 fan-out 없이 한 번에 반환 + course_id 포함."""
+    resp = await client.get(
+        "/api/me/lectures",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 1
+    assert data[0]["title"] == "통합테스트 강의"
+    assert data[0]["course_id"] == str(course.id)
+
+
+@pytest.mark.asyncio
+async def test_list_my_lectures_excludes_other_professors(
+    client, professor, course, lecture, db,
+):
+    """다른 교수자에게는 자신 소유 강의만 — 빈 목록."""
+    from app.models.user import User, UserRole
+
+    other = User(
+        id=uuid.uuid4(),
+        google_sub="other-me-lectures",
+        email="other-me@test.ac.kr",
+        name="다른교수",
+        role=UserRole.professor,
+        is_active=True,
+    )
+    db.add(other)
+    await db.flush()
+
+    resp = await client.get(
+        "/api/me/lectures",
+        headers=make_auth_header(other),
+    )
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_list_my_lectures_student_forbidden(client, student):
+    """교수자 전용 — 학습자는 403."""
+    resp = await client.get(
+        "/api/me/lectures",
+        headers=make_auth_header(student),
+    )
+    assert resp.status_code == 403
+
+
 # ── POST /api/lectures ────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
