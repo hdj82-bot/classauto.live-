@@ -144,6 +144,9 @@ export default function StudioWizardPage() {
   const [genPercent, setGenPercent] = useState(0);
   const [genStage, setGenStage] = useState<1 | 2 | 3 | 4>(1);
   const [genDone, setGenDone] = useState(false);
+  // 실제로 ready 까지 끝난 슬라이드 수 — 진행 정보 박스의 "X / N 슬라이드" 에
+  // 쓴다. 원형 막대(genPercent)는 중간 단계 가중치까지 더한 값이라 따로 둔다.
+  const [genCompleted, setGenCompleted] = useState(0);
   const [approved, setApproved] = useState(false);
   const renderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -790,15 +793,43 @@ export default function StudioWizardPage() {
         const { data } = await api.get<RenderStatus>(
           `/api/v1/render/lecture/${lectureId}`,
         );
-        const total = data.total || slides.length || 1;
+        const renders = data.renders ?? [];
+        const total = data.total || renders.length || slides.length || 1;
         const completed = data.completed;
-        const pct = Math.min(100, Math.round((completed / total) * 100));
-        setGenPercent(pct);
-        if (pct < 25) setGenStage(1);
-        else if (pct < 70) setGenStage(2);
-        else if (pct < 95) setGenStage(3);
+        setGenCompleted(completed);
+
+        // 슬라이드별 진행 가중치 — completed(ready)만 세면 첫 슬라이드가 완전히
+        // 끝나기 전까지 막대가 0% 에 멈춰 보인다(슬라이드당 TTS→HeyGen 합성→
+        // 다운로드가 수 분). 중간 단계에도 부분 점수를 줘서 단계별로 막대가
+        // 실제로 움직이게 한다. 백엔드 RenderStatus enum 과 1:1.
+        const WEIGHT: Record<string, number> = {
+          pending: 0,
+          queued: 0,
+          tts_processing: 0.25,
+          rendering: 0.6,
+          uploading: 0.9,
+          ready: 1,
+          failed: 0,
+          cancelled: 0,
+        };
+        const weighted = renders.length
+          ? renders.reduce((sum, r) => sum + (WEIGHT[r.status] ?? 0), 0)
+          : completed;
+        let pct = Math.round((weighted / total) * 100);
+        // 전부 ready 가 되기 전엔 99% 를 넘지 않게(완료 처리는 아래 조건에서만).
+        if (completed < total) pct = Math.min(pct, 99);
+        setGenPercent(Math.max(0, Math.min(100, pct)));
+
+        // 단계 표시 — 아직 진행 중인 가장 이른 단계를 활성으로(순차적 의미 보존).
+        // 한 슬라이드라도 TTS 단계면 stage 2, 전부 통과했으면 합성(3)/인코딩(4).
+        const has = (s: string) => renders.some((r) => r.status === s);
+        if (renders.length === 0) setGenStage(1);
+        else if (has("pending") || has("queued") || has("tts_processing")) setGenStage(2);
+        else if (has("rendering")) setGenStage(3);
         else setGenStage(4);
+
         if (total > 0 && completed === total) {
+          setGenPercent(100);
           setGenDone(true);
           if (renderPollRef.current) {
             clearInterval(renderPollRef.current);
@@ -1045,20 +1076,25 @@ export default function StudioWizardPage() {
         eta={genDone ? undefined : "약 2분 30초"}
         lectureTitle={lecture.title}
         slideCount={slides.length}
-        processedSlides={Math.min(
-          Math.round((genPercent / 100) * slides.length),
-          slides.length,
-        )}
+        processedSlides={Math.min(genCompleted, slides.length)}
         expectedDuration="약 5분 12초"
         done={genDone}
         onBackground={() => setGenOpen(false)}
         onViewVideo={handleViewVideo}
-        onDevAdd={(d) => setGenPercent((p) => Math.min(100, p + d))}
-        onDevComplete={() => {
-          setGenPercent(100);
-          setGenDone(true);
-        }}
-        onDevBackground={() => setGenOpen(false)}
+        // DEV 시뮬레이션 버튼은 로컬 개발에서만 노출 — 프로덕션 빌드에서는
+        // process.env.NODE_ENV 가 "production" 으로 정적 치환돼 props 자체가
+        // 안 넘어가므로 모달의 DEV 컨트롤 박스가 렌더되지 않는다.
+        {...(process.env.NODE_ENV === "development"
+          ? {
+              onDevAdd: (d: number) =>
+                setGenPercent((p) => Math.min(100, p + d)),
+              onDevComplete: () => {
+                setGenPercent(100);
+                setGenDone(true);
+              },
+              onDevBackground: () => setGenOpen(false),
+            }
+          : {})}
       />
 
       <SocraticQuizModal
