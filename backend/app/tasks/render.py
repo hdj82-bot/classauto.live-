@@ -76,12 +76,12 @@ def render_slide(
             if lecture and isinstance(lecture.voice_gender, VoiceGender)
             else (str(lecture.voice_gender) if lecture and lecture.voice_gender else "male")
         )
-        # 교수자가 고른 보이스·속도. NULL/누락이면 기본(성별 보이스 / 1.0배속).
+        # 교수자가 고른 보이스·속도. NULL/누락이면 기본(성별 보이스 / 1.3배속).
         # voice_speed 컬럼이 없는 구버전 row 대비 getattr 로 안전 접근.
         voice_id = (lecture.voice_id or None) if lecture else None
         voice_speed = (
             getattr(lecture, "voice_speed", None) if lecture else None
-        ) or 1.0
+        ) or 1.3
 
         # ── Critical 7: 호출자 소유권 검증 ──
         if caller_user_id is not None:
