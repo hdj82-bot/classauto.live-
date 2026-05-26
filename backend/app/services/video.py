@@ -151,7 +151,11 @@ async def translate_subtitles(
     )
     source_lang = lec_result.scalar_one_or_none() or "ko"
 
-    texts = [s.text for s in segments]
+    # 한자 뒤 병음 괄호 표기는 번역 입력에서도 제거 — 번역 결과 자막에 병음이
+    # 새어나가지 않도록(기존 스크립트가 병음을 포함한 경우 대비).
+    from app.services.pipeline.text_cleanup import strip_pinyin_annotations
+
+    texts = [strip_pinyin_annotations(s.text) for s in segments]
     # translate_batch 는 동기(blocking) 호출 — 이벤트 루프를 막지 않도록 thread 로.
     results = await asyncio.to_thread(
         translate_batch, texts, target_lang, source_lang
