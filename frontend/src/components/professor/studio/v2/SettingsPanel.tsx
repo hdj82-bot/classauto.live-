@@ -43,6 +43,9 @@ export interface SettingsPanelProps {
   onChangeVoiceSpeed?: (speed: number) => void;
   // ───────────────────────────────────────────────────────────────────────────
   onChangeAvatar?: () => void;
+  /** 영상에서 아바타 크기 배율 (1.0 = 기본). 미리보기 PiP·렌더에 함께 반영. */
+  avatarScale?: number;
+  onChangeAvatarScale?: (scale: number) => void;
   onChangeExpires?: (iso: string | null) => void;
   onToggleQaScope?: (on: boolean) => void;
   onToggleBlockExternal?: (on: boolean) => void;
@@ -258,6 +261,8 @@ export default function SettingsPanel({
   onChangeVoiceId,
   onChangeVoiceSpeed,
   onChangeAvatar,
+  avatarScale = 1.0,
+  onChangeAvatarScale,
   onChangeExpires,
   onToggleQaScope,
   onToggleBlockExternal,
@@ -331,6 +336,19 @@ export default function SettingsPanel({
               </svg>
               페르소나 변경
             </button>
+
+            {/* 영상에서 아바타가 차지하는 크기 — 미리보기 PiP·렌더에 함께 반영 */}
+            <div style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <div style={subSectionLabelStyle}>
+                <span style={subTagStyle("gold")}>크기</span>
+                <span>영상에서 아바타 크기</span>
+              </div>
+              <SizeSlider
+                value={avatarScale}
+                onChange={(v) => onChangeAvatarScale?.(v)}
+              />
+            </div>
           </div>
         </details>
 
@@ -611,6 +629,75 @@ function SpeedSlider({
         <span>0.7× 느림</span>
         <span>1.0× 원배속</span>
         <span>빠름 2.0×</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 아바타 크기 슬라이더. 1.0배(기본) 기준 좌(작게)·우(크게). 범위 0.5~1.5,
+ * step 0.1. 값은 미리보기 PiP 크기와 강의 렌더(HeyGen character.scale)에 함께
+ * 반영된다. 표기는 퍼센트(50%~150%).
+ */
+const SIZE_MIN = 0.5;
+const SIZE_MAX = 1.5;
+const SIZE_STEP = 0.1;
+
+function SizeSlider({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  const clamped = Math.min(SIZE_MAX, Math.max(SIZE_MIN, value || 1.0));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 5, paddingTop: 2 }}>
+      <div
+        className="flex items-center justify-between"
+        style={{ fontSize: 12, fontWeight: 600, color: "var(--text-subtle)" }}
+      >
+        <span>크기 배율</span>
+        <span
+          style={{
+            color: "var(--text)",
+            fontWeight: 700,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {Math.round(clamped * 100)}%
+        </span>
+      </div>
+      <input
+        type="range"
+        min={SIZE_MIN}
+        max={SIZE_MAX}
+        step={SIZE_STEP}
+        value={clamped}
+        aria-label="아바타 크기"
+        onChange={(e) => {
+          const raw = parseFloat(e.target.value);
+          const snapped = Math.round(raw / SIZE_STEP) * SIZE_STEP;
+          const next = Math.min(SIZE_MAX, Math.max(SIZE_MIN, Number(snapped.toFixed(2))));
+          onChange(next);
+        }}
+        style={{
+          width: "100%",
+          accentColor: "var(--gold-on-light, #B88308)",
+          cursor: "pointer",
+        }}
+      />
+      <div
+        className="flex items-center justify-between"
+        style={{
+          fontSize: 10,
+          color: "var(--text-faint)",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        <span>50% 작게</span>
+        <span>100%</span>
+        <span>크게 150%</span>
       </div>
     </div>
   );

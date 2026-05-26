@@ -61,6 +61,13 @@ class Lecture(Base):
     # 우측 패널·갤러리에 노출할 강의별 아바타 표시 이름 (교수자 자유 편집).
     # NULL = 기본 표시명. 영상 생성 로직과 무관한 라벨 전용.
     avatar_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # 영상에서 아바타가 차지하는 크기 배율. 1.0 = 기본. studio 미리보기의 PiP
+    # 크기와 1:1로 매핑되며, render.py 가 heygen.create_video(avatar_scale=) 로
+    # 전달해 HeyGen character.scale 에 반영한다(작을수록 프레임 안에서 아바타가
+    # 작아짐). 합성 시 0.3~2.0 으로 클램프.
+    avatar_scale: Mapped[float] = mapped_column(
+        Float, nullable=False, default=1.0, server_default="1.0"
+    )
     # 영상에서 나올 음성(TTS)의 언어. ISO 639-1 (ko/zh/en/ja/de/fr/ru). 기본 ko.
     voice_lang: Mapped[str] = mapped_column(
         String(10), nullable=False, default="ko", server_default="ko"

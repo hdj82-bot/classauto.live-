@@ -103,6 +103,7 @@ async def create_video(
     gender: str | None = None,
     callback_id: str | None = None,
     talking_photo_id: str | None = None,
+    avatar_scale: float | None = None,
 ) -> str:
     """HeyGen v2 API로 아바타 립싱크 비디오 생성 요청. video_id를 반환.
 
@@ -111,6 +112,10 @@ async def create_video(
         (본인 아바타 1차 범위의 후속 연결 지점 — 현재 호출자는 미사용).
     avatar_id: 명시 시 그것 우선(custom 아바타 등), 아니면 ``pick_avatar_id(gender)``.
     gender:    ``"male"`` | ``"female"`` — avatar_id 가 None 일 때 _MALE/_FEMALE 분기 키.
+    avatar_scale: 프레임 안에서 아바타가 차지하는 크기 배율. None 또는 1.0 이면
+        기본 크기. 1.0 미만이면 작아지고(배경 여백 늘어남) 초과면 커진다. HeyGen
+        character.scale 로 전달하며 [0.3, 2.0] 으로 클램프한다(avatar/talking_photo
+        공통).
     """
     if talking_photo_id:
         character: dict[str, Any] = {
@@ -122,6 +127,11 @@ async def create_video(
         avatar = avatar_id or pick_avatar_id(gender)
         character = {"type": "avatar", "avatar_id": avatar, "avatar_style": "normal"}
         character_label = f"avatar:{avatar}"
+
+    # 아바타 크기 배율 — 기본(1.0/None)이 아닐 때만 character.scale 을 실어
+    # 기존 호출의 페이로드를 그대로 유지한다. 유효범위 [0.3, 2.0] 로 클램프.
+    if avatar_scale is not None and abs(avatar_scale - 1.0) > 1e-6:
+        character["scale"] = max(0.3, min(2.0, float(avatar_scale)))
     url = f"{settings.HEYGEN_BASE_URL}/v2/video/generate"
     payload = {
         "video_inputs": [

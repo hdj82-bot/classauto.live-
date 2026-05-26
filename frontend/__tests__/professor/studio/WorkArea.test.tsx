@@ -80,3 +80,70 @@ describe("WorkArea broken-image fallback", () => {
     expect(screen.getByText(/Slide\s*3/i)).toBeTruthy();
   });
 });
+
+describe("WorkArea avatar PiP overlay", () => {
+  const base = {
+    slideNumber: 1,
+    totalSlides: 5,
+    slideTitle: "把字句 분석",
+    aiText: "안녕하세요.",
+  } as const;
+
+  it("does not render the overlay when no avatar media is given", () => {
+    render(<WorkArea {...base} />);
+    expect(screen.queryByTestId("workarea-avatar-overlay")).toBeNull();
+  });
+
+  it("renders a looping muted video when an avatar video URL is given (motion allowed)", () => {
+    const { container } = render(
+      <WorkArea
+        {...base}
+        avatarVideoUrl="https://cdn.example.com/avatar.mp4"
+        avatarImageUrl="https://cdn.example.com/avatar.webp"
+        avatarLabel="Daniel"
+        reducedMotion={false}
+      />,
+    );
+    const overlay = screen.getByTestId("workarea-avatar-overlay");
+    expect(overlay.getAttribute("aria-label")).toContain("Daniel");
+    const video = container.querySelector("video") as HTMLVideoElement;
+    expect(video).toBeTruthy();
+    expect(video.muted).toBe(true);
+    expect(video.loop).toBe(true);
+    expect(video.getAttribute("src")).toBe("https://cdn.example.com/avatar.mp4");
+  });
+
+  it("falls back to a static image (no video) when reducedMotion is true", () => {
+    const { container } = render(
+      <WorkArea
+        {...base}
+        avatarVideoUrl="https://cdn.example.com/avatar.mp4"
+        avatarImageUrl="https://cdn.example.com/avatar.webp"
+        avatarLabel="Daniel"
+        reducedMotion
+      />,
+    );
+    expect(screen.getByTestId("workarea-avatar-overlay")).toBeTruthy();
+    expect(container.querySelector("video")).toBeNull();
+    const img = container.querySelector(
+      "[data-testid='workarea-avatar-overlay'] img",
+    ) as HTMLImageElement;
+    expect(img).toBeTruthy();
+    expect(img.getAttribute("src")).toBe("https://cdn.example.com/avatar.webp");
+  });
+
+  it("scales the overlay height with avatarScale (larger scale → taller box)", () => {
+    const { rerender } = render(
+      <WorkArea {...base} avatarImageUrl="https://x/a.webp" avatarScale={0.5} reducedMotion />,
+    );
+    const small = screen.getByTestId("workarea-avatar-overlay").style.height;
+    rerender(
+      <WorkArea {...base} avatarImageUrl="https://x/a.webp" avatarScale={1.5} reducedMotion />,
+    );
+    const large = screen.getByTestId("workarea-avatar-overlay").style.height;
+    expect(parseFloat(small)).toBeLessThan(parseFloat(large));
+    // 0.5×→25%, 1.5×→75% (base 50%).
+    expect(small).toBe("25%");
+    expect(large).toBe("75%");
+  });
+});

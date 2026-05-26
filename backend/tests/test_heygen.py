@@ -70,6 +70,51 @@ async def test_create_video_uses_talking_photo_character():
     assert character["talking_photo_id"] == "tp_self"
 
 
+@pytest.mark.asyncio
+async def test_create_video_avatar_scale_sets_character_scale():
+    """avatar_scale 이 기본(1.0) 이 아니면 character.scale 로 클램프돼 실린다."""
+    captured: dict = {}
+
+    async def fake_req(method, url, **kwargs):
+        captured["json"] = kwargs.get("json")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"data": {"video_id": "vid_s"}}
+        return resp
+
+    with patch("app.services.pipeline.heygen._request_with_retry", new=fake_req):
+        # 유효범위 초과(2.5)는 2.0 으로 클램프돼야 한다.
+        await create_video(
+            "https://audio.example/a.mp3", avatar_id="av_1", avatar_scale=2.5
+        )
+    character = captured["json"]["video_inputs"][0]["character"]
+    assert character["scale"] == 2.0
+
+
+@pytest.mark.asyncio
+async def test_create_video_default_scale_omits_field():
+    """avatar_scale 미지정/1.0 이면 character 에 scale 키를 넣지 않는다(기존 페이로드 유지)."""
+    captured: dict = {}
+
+    async def fake_req(method, url, **kwargs):
+        captured["json"] = kwargs.get("json")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {"data": {"video_id": "vid_d"}}
+        return resp
+
+    with patch("app.services.pipeline.heygen._request_with_retry", new=fake_req):
+        await create_video("https://audio.example/a.mp3", avatar_id="av_1")
+        character_default = captured["json"]["video_inputs"][0]["character"]
+        assert "scale" not in character_default
+
+        await create_video(
+            "https://audio.example/a.mp3", avatar_id="av_1", avatar_scale=1.0
+        )
+        character_one = captured["json"]["video_inputs"][0]["character"]
+        assert "scale" not in character_one
+
+
 # ── _request_with_retry ──────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

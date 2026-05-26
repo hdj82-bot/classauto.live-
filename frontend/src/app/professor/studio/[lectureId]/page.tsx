@@ -15,6 +15,9 @@ import {
 } from "@/components/professor/studio/v2";
 import { useStudioI18n } from "@/components/professor/studio/useStudioI18n";
 import { langLabel } from "@/components/professor/studio/studioTypes";
+import { listAvatars } from "@/components/professor/avatars/avatarsApi";
+import type { Avatar } from "@/components/professor/avatars/avatarsTypes";
+import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
 import type {
   LangCode,
   Lecture,
@@ -37,6 +40,8 @@ import type {
 type LectureWithAvatar = Lecture & {
   avatar_id?: string | null;
   avatar_name?: string | null;
+  /** 영상에서 아바타 크기 배율 (1.0 = 기본). 미배포 동안 undefined → 1.0 폴백. */
+  avatar_scale?: number | null;
 };
 
 const SCRIPT_POLL_MS = 6000;
@@ -77,6 +82,7 @@ export default function StudioWizardPage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { t } = useStudioI18n();
+  const reducedMotion = useReducedMotion();
 
   // ── 강의 + 비디오 ID ─────────────────────────────────────────────────────────
   const [lecture, setLecture] = useState<LectureWithAvatar | null>(null);
@@ -102,6 +108,10 @@ export default function StudioWizardPage() {
     Record<number, SlideReviewStatus>
   >({});
   const [voiceGender, setVoiceGender] = useState<VoiceGender>("male");
+  // 영상 아바타 크기 배율 (1.0 = 기본). SettingsPanel 슬라이더 + WorkArea PiP +
+  // 렌더(HeyGen scale)에 함께 반영. 슬라이더 드래그 중 PATCH 폭주는 디바운스.
+  const [avatarScale, setAvatarScale] = useState<number>(1.0);
+  const avatarScaleSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [qaScopeOnUploaded, setQaScopeOnUploaded] = useState(true);
   const [blockExternalSearch, setBlockExternalSearch] = useState(true);
@@ -115,6 +125,9 @@ export default function StudioWizardPage() {
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.3);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(true);
+  // 아바타 목록 (GET /api/avatars) — WorkArea 미리보기 PiP 에 쓸 preview 영상·
+  // 이미지를 강의의 avatar_id 로 해석하기 위해 가져온다. 미배포 시 fixture 폴백.
+  const [avatars, setAvatars] = useState<Avatar[]>([]);
   const [translatingSubtitle, setTranslatingSubtitle] = useState(false);
   const [savingSubtitle, setSavingSubtitle] = useState(false);
   // 속도 슬라이더 드래그 중 PATCH 폭주 방지용 디바운스 타이머.
@@ -153,6 +166,7 @@ export default function StudioWizardPage() {
               setSubtitleLang(found.subtitle_lang ?? null);
               setVoiceId(found.voice_id ?? null);
               setVoiceSpeed(found.voice_speed ?? 1.3);
+              setAvatarScale(found.avatar_scale ?? 1.0);
             }
             break;
           }
@@ -187,6 +201,24 @@ export default function StudioWizardPage() {
         /* 빈 목록 유지 — 기본 보이스로 생성 */
       } finally {
         if (!cancelled) setVoicesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 아바타 목록 — 미리보기 PiP 의 움직이는 클립(preview_video_url)을 강의의
+  // avatar_id 로 찾기 위해 1회 로드. 실패/미배포 시 fixture 가 폴백돼 시각만
+  // 확인되며, 빈 목록이어도 미리보기 오버레이만 비고 나머지는 정상 동작.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { avatars: list } = await listAvatars();
+        if (!cancelled) setAvatars(list);
+      } catch {
+        /* 빈 목록 유지 — 미리보기 오버레이만 표시 안 됨 */
       }
     })();
     return () => {
@@ -384,6 +416,22 @@ export default function StudioWizardPage() {
     [voices, voiceId],
   );
 
+  // 미리보기 PiP 에 띄울 아바타 — 강의의 avatar_id 로 목록에서 찾고, 없거나
+  // (아직 미선택) 일치하지 않으면 voice_gender 기준 기본 아바타로 폴백한다
+  // (렌더의 pick_avatar_id 와 같은 취지 — 기본값도 미리 보여줌).
+  const resolvedAvatar = useMemo<Avatar | null>(() => {
+    if (avatars.length === 0) return null;
+    const byId = lecture?.avatar_id
+      ? avatars.find((a) => a.id === lecture.avatar_id)
+      : null;
+    if (byId) return byId;
+    const byGender = avatars.find(
+      (a) => !a.is_custom && (a.gender ?? "").toLowerCase() === voiceGender,
+    );
+    return byGender ?? avatars.find((a) => !a.is_custom) ?? avatars[0] ?? null;
+  }, [avatars, lecture?.avatar_id, voiceGender]);
+  const avatarLabel = lecture?.avatar_name ?? resolvedAvatar?.name ?? "아바타";
+
   // 미리듣기 캐시 키 — 보이스·속도·활성 슬라이드·본문이 바뀌면 재합성.
   const activeAiText = activeSegment?.text ?? "";
   const voicePreviewKey = `${voiceId ?? "default"}|${voiceSpeed}|${activeIndex}|${activeAiText.length}`;
@@ -537,10 +585,24 @@ export default function StudioWizardPage() {
     [persistLecture],
   );
 
-  // 언마운트 시 대기 중인 속도 저장 타이머 정리.
+  // 아바타 크기도 슬라이더 드래그 중 연속으로 바뀌므로 로컬 state 는 즉시,
+  // 서버 PATCH 는 마지막 값으로 디바운스(500ms)해 호출 폭주를 막는다.
+  const handleChangeAvatarScale = useCallback(
+    (scale: number) => {
+      setAvatarScale(scale);
+      if (avatarScaleSaveRef.current) clearTimeout(avatarScaleSaveRef.current);
+      avatarScaleSaveRef.current = setTimeout(() => {
+        void persistLecture({ avatar_scale: scale });
+      }, 500);
+    },
+    [persistLecture],
+  );
+
+  // 언마운트 시 대기 중인 속도·크기 저장 타이머 정리.
   useEffect(() => {
     return () => {
       if (voiceSpeedSaveRef.current) clearTimeout(voiceSpeedSaveRef.current);
+      if (avatarScaleSaveRef.current) clearTimeout(avatarScaleSaveRef.current);
     };
   }, []);
 
@@ -784,6 +846,11 @@ export default function StudioWizardPage() {
         onTranslateSubtitle={handleTranslateSubtitle}
         translatingSubtitle={translatingSubtitle}
         savingSubtitle={savingSubtitle}
+        avatarVideoUrl={resolvedAvatar?.preview_video_url ?? null}
+        avatarImageUrl={resolvedAvatar?.preview_image_url ?? null}
+        avatarLabel={avatarLabel}
+        avatarScale={avatarScale}
+        reducedMotion={reducedMotion}
       />
 
       <SettingsPanel
@@ -806,6 +873,8 @@ export default function StudioWizardPage() {
         onChangeAvatar={() =>
           router.push(`/professor/avatars?lecture=${lectureId}`)
         }
+        avatarScale={avatarScale}
+        onChangeAvatarScale={handleChangeAvatarScale}
         onChangeExpires={setExpiresAt}
         onToggleQaScope={setQaScopeOnUploaded}
         onToggleBlockExternal={setBlockExternalSearch}
