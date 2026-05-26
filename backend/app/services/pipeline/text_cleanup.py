@@ -62,6 +62,15 @@ def _has_speech_letter(s: str) -> bool:
     return bool(_HANZI_CHAR.search(s) or _HANGUL_CHAR.search(s))
 
 
+def contains_chinese(text: str) -> bool:
+    """텍스트에 한자(중국어 글자)가 하나라도 있으면 True.
+
+    tts.synthesize 가 중국어 포함 스크립트를 eleven_v3(코드스위칭) 경로로 보낼지
+    판단하는 데 쓴다.
+    """
+    return bool(text) and _HANZI_CHAR.search(text) is not None
+
+
 def split_by_language(text: str) -> list[tuple[str, str]]:
     """발화 텍스트를 중국어(한자) 구간과 그 외(한국어 등) 구간으로 분리한다.
 

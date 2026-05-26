@@ -22,12 +22,14 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from app.core.config import settings
 from app.services.pipeline import elevenlabs_client, google_tts_client
 from app.services.pipeline.text_cleanup import (
+    contains_chinese,
     split_by_language,
     strip_pinyin_annotations,
 )
@@ -104,18 +106,20 @@ async def synthesize(
     text = strip_pinyin_annotations(text)
 
     fallback_reason: str | None = None
+    speed_provider = "elevenlabs"
     start = time.monotonic()
     try:
-        # 한국어 설명에 박힌 한자가 한국어 한자음으로 발음되는 문제를 막기 위해,
-        # 중국어(한자) 구간을 떼어 따로 합성하고 오디오를 이어붙인다. 순수
-        # 한국어/중국어 텍스트는 분리 없이 한 번에 합성한다(기존 동작과 동일).
-        audio_bytes = await _elevenlabs_synthesize_segmented(
+        # 중국어가 섞인 스크립트는 eleven_v3 단일 호출(코드스위칭)로 합성해 한·중
+        # 전환을 한 음원에서 처리한다(구간 분리·이어붙임 없음 → 멈춤/끊김 제거).
+        # 순수 한국어 등은 기존 multilingual_v2. v3 실패 시 v2 구간 분리로 폴백.
+        audio_bytes, speed_provider = await _elevenlabs_primary(
             text, voice_id=voice_id, gender=gender, speed=speed,
         )
         provider = "elevenlabs"
         logger.info(
-            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s, speed=%s",
+            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s, speed=%s, path=%s",
             len(text), voice_id or "<default>", gender or "<default>", speed or 1.0,
+            speed_provider,
         )
     except Exception as exc:
         # ElevenLabsError 뿐 아니라 httpx.ConnectError 등 변환 안 된 네트워크 예외도
@@ -129,6 +133,7 @@ async def synthesize(
         try:
             audio_bytes = await _run_google_tts(text, speed=speed)
             provider = "google_tts"
+            speed_provider = "google_tts"
             logger.info(
                 "Google TTS 폴백 합성 성공: chars=%d, original_failure=%s",
                 len(text), fallback_reason,
@@ -146,10 +151,10 @@ async def synthesize(
     elapsed = time.monotonic() - start
 
     # ── 발화 속도 후처리 (ffmpeg atempo) ──────────────────────────────────
-    # provider 가 네이티브로 적용하지 못한 속도(특히 ElevenLabs 는 0.7~1.2 로
-    # 클램프)는 ffmpeg 로 추가 가속/감속해 교수자가 고른 배율(최대 2.0)에 맞춘다.
-    # Google TTS 는 speaking_rate 로 4.0 까지 네이티브 지원하므로 보통 잔여 없음.
-    audio_bytes = await _postprocess_speed(audio_bytes, speed, provider)
+    # provider 가 네이티브로 적용하지 못한 속도를 ffmpeg 로 추가 가속/감속한다.
+    # multilingual_v2 는 0.7~1.2 네이티브, Google 은 speaking_rate, eleven_v3 는
+    # speed 미지원이라 네이티브 1.0 → 전량 atempo 로 적용(speed_provider 로 구분).
+    audio_bytes = await _postprocess_speed(audio_bytes, speed, speed_provider)
 
     result = TTSResult(
         audio_bytes=audio_bytes,
@@ -195,6 +200,58 @@ async def synthesize(
         provider, len(text), elapsed, bool(fallback_reason),
     )
     return result
+
+
+# ── ElevenLabs 1차 합성 (중국어=v3 코드스위칭 / 그 외=multilingual_v2) ──────────
+# eleven_v3 는 한 번의 합성으로 문장 안 한·중 언어 전환(code-switching)을 처리한다.
+# 그래서 중국어가 섞인 스크립트는 구간을 쪼개 따로 합성·이어붙일 필요 없이 v3 로
+# 통째 합성하면 멈춤/끊김도, 짧은 조각 발음 손상도 없다. v3 미지원 항목(speed,
+# use_speaker_boost)은 voice_settings 에 넣지 않고, 속도는 합성 후 atempo 로 적용한다.
+_V3_MAX_CHARS = 5000  # eleven_v3 단일 요청 글자 한도
+
+
+def _v3_voice_settings() -> dict[str, Any]:
+    """eleven_v3 용 voice_settings. v3 미지원인 ``speed``·``use_speaker_boost``·
+    ``style`` 은 빼고 stability/similarity_boost 만 보낸다(속도는 atempo 로 처리)."""
+    return {"stability": 0.5, "similarity_boost": 0.75}
+
+
+async def _elevenlabs_primary(
+    text: str,
+    *,
+    voice_id: str | None,
+    gender: str | None,
+    speed: float | None,
+) -> tuple[bytes, str]:
+    """ElevenLabs 1차 합성. 반환 ``(audio_bytes, speed_provider)``.
+
+    - 중국어(한자) 포함 + v3 설정됨 + 5000자 이하 → **eleven_v3 단일 호출**
+      (문장 내 한·중 코드스위칭 → 분리·이어붙임 불필요). speed 는 안 보내고 atempo
+      로 처리하므로 ``speed_provider="elevenlabs_v3"``. v3 호출 실패 시 아래 v2
+      구간 분리 경로로 폴백한다(중국어 정확·멈춤 있음 — 회귀 방지).
+    - 그 외(순수 한국어 등) → multilingual_v2 (필요 시 구간 분리).
+      ``speed_provider="elevenlabs"``.
+    """
+    model_zh = (settings.ELEVENLABS_MODEL_ID_ZH or "").strip()
+    if model_zh and contains_chinese(text) and len(text) <= _V3_MAX_CHARS:
+        try:
+            audio = await elevenlabs_client.synthesize(
+                text,
+                voice_id=voice_id,
+                gender=gender,
+                model_id=model_zh,
+                voice_settings=_v3_voice_settings(),
+            )
+            logger.info(
+                "ElevenLabs %s 코드스위칭 합성(중국어 포함): chars=%d", model_zh, len(text),
+            )
+            return audio, "elevenlabs_v3"
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("v3 합성 실패 → v2 구간 분리 폴백: %s", exc)
+    audio = await _elevenlabs_synthesize_segmented(
+        text, voice_id=voice_id, gender=gender, speed=speed,
+    )
+    return audio, "elevenlabs"
 
 
 # ── 언어 구간 분리 합성 (중국어 발음 정확화) ─────────────────────────────────────
@@ -317,6 +374,10 @@ def _provider_native_speed(target: float, provider: str) -> float:
     """provider 가 합성 단계에서 실제 적용한 속도 배율(클램프 반영)."""
     if provider == "elevenlabs":
         lo, hi = _ELEVENLABS_NATIVE_SPEED
+    elif provider == "elevenlabs_v3":
+        # eleven_v3 는 speed 를 안 보내므로 네이티브 적용분이 없다(1.0) → 목표 배율
+        # 전체를 ffmpeg atempo 로 적용한다.
+        return 1.0
     elif provider == "google_tts":
         lo, hi = _GOOGLE_NATIVE_SPEED
     else:
