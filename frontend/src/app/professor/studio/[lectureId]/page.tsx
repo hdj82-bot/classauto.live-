@@ -728,10 +728,6 @@ export default function StudioWizardPage() {
     [videoId, script, activeIndex, toast],
   );
 
-  const handleNext = useCallback(() => {
-    setActiveIndex((i) => Math.min(slides.length - 1, i + 1));
-  }, [slides.length]);
-
   const handlePrev = useCallback(() => {
     setActiveIndex((i) => Math.max(0, i - 1));
   }, []);
@@ -1037,9 +1033,7 @@ export default function StudioWizardPage() {
           total={slides.length}
           acceptedCount={acceptedCount}
           canPrev={activeIndex > 0}
-          canNext={activeIndex < slides.length - 1}
           onPrev={handlePrev}
-          onNext={handleNext}
           onGenerate={handleGenerate}
         />
       </div>
