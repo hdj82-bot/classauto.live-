@@ -185,14 +185,21 @@ async def test_reset_script(client, professor, video_pending, db):
 
 @pytest.mark.asyncio
 async def test_approve_video(client, professor, video_pending):
-    """pending_review → rendering 승인."""
-    resp = await client.post(
-        f"/api/videos/{video_pending.id}/approve",
-        headers=make_auth_header(professor),
-    )
+    """pending_review → rendering 승인 + 슬라이드별 render_slide enqueue."""
+    from unittest.mock import patch
+
+    # 승인은 이제 렌더를 실제 시작한다(VideoRender 생성 + render_slide.delay).
+    # 브로커 호출 없이 enqueue 여부만 검증하도록 태스크를 모킹.
+    with patch("app.tasks.render.render_slide") as mock_render:
+        resp = await client.post(
+            f"/api/videos/{video_pending.id}/approve",
+            headers=make_auth_header(professor),
+        )
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "rendering"
+    # 세그먼트가 있으므로 슬라이드별 렌더가 enqueue 돼야 한다.
+    assert mock_render.delay.called
 
 
 @pytest.mark.asyncio

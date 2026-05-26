@@ -353,11 +353,50 @@ async def approve_video(
             detail="스크립트가 비어 있습니다. 승인 전에 스크립트를 확인하세요.",
         )
 
+    # 승인 = 렌더 시작. 슬라이드(세그먼트)별 VideoRender 행을 만들고 render_slide
+    # 태스크를 enqueue 한다. (과거엔 상태만 rendering 으로 바꾸고 아무도 렌더를
+    # 실제로 시작시키지 않아 TTS 0/N 에서 영구히 멈췄다 — render.py 의
+    # create_render_request 와 동일한 VideoRender 생성 + render_slide.delay 패턴.)
+    from app.models.lecture import Lecture  # noqa: PLC0415
+    from app.models.video_render import VideoRender  # noqa: PLC0415
+
+    segments = video.script.segments
+    lecture = await db.get(Lecture, video.lecture_id)
+    # render_slide → HeyGen 은 VideoRender.avatar_id 를 쓴다(NOT NULL). 강의가 고른
+    # 아바타를 싣고, 없으면 빈 문자열(heygen 이 기본 아바타로 폴백).
+    avatar_id = (lecture.avatar_id if lecture else None) or ""
+
     video.status = VideoStatus.rendering
     video.script.approved_at = datetime.now(tz=timezone.utc)
     video.script.approved_by_id = professor_id
+
+    # 세그먼트 형식: {"slide_index": 0, "text": "발화 텍스트", ...}
+    renders: list[tuple[str, str]] = []  # (render_id, script_text)
+    for seg in segments:
+        script_text = (seg.get("text") or "") if isinstance(seg, dict) else ""
+        slide_number = seg.get("slide_index") if isinstance(seg, dict) else None
+        render = VideoRender(
+            lecture_id=video.lecture_id,
+            instructor_id=professor_id,
+            avatar_id=avatar_id,
+            tts_provider="elevenlabs",
+            script_text=script_text,
+            slide_number=slide_number,
+        )
+        db.add(render)
+        await db.flush()  # render.id 확보
+        renders.append((str(render.id), script_text))
+
     await db.commit()
     await db.refresh(video)
+
+    # 커밋 후 enqueue — render_slide(render_id, script_text, caller_user_id).
+    # caller_user_id 로 태스크에서 instructor 일치 검증(Critical 7).
+    from app.tasks.render import render_slide  # noqa: PLC0415
+
+    for rid, text in renders:
+        render_slide.delay(rid, text, str(professor_id))
+
     return video
 
 
