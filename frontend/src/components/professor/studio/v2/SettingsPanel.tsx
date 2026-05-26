@@ -20,7 +20,9 @@ import { setVoiceFavorite } from "@/components/professor/avatars/voicesApi";
  * Studio v2 — 우측 settings panel.
  *
  * docs/prototypes/05-studio-flow.extracted.html `.settings` + accordion 그대로.
- * 4개 아코디언: 아바타 · 음성(이중 TTS) · 강의 설정 · Q&A 범위.
+ * 아코디언: 아바타 · 음성(이중 TTS) · 퀴즈/문제.
+ * (강의 설정·Q&A 범위 섹션은 제거 — 링크 만료/집중 경고는 미사용, Q&A 는
+ *  업로드 자료 제한·외부 차단이 백엔드 기본 가드레일이라 토글이 불필요했다.)
  *
  * 비용 미터(`.cost`) 는 planning/05 §1.1 비용 표시 금지 정책에 따라 제외.
  * 대신 우측 패널 하단에 "월 한도" 진행 표시만 남긴다 (편수 기반).
@@ -29,9 +31,6 @@ export interface SettingsPanelProps {
   avatarName: string;
   ttsProvider?: TtsProvider;
   voiceGender?: VoiceGender;
-  expiresAt: string | null;
-  qaScopeOnUploaded: boolean;
-  blockExternalSearch: boolean;
   monthlyUsed?: number;
   monthlyLimit?: number | null;
   // ── 음성·자막 ──────────────────────────────────────────────────────────────
@@ -57,11 +56,6 @@ export interface SettingsPanelProps {
   /** 영상에서 아바타 크기 배율 (1.0 = 기본). 미리보기 PiP·렌더에 함께 반영. */
   avatarScale?: number;
   onChangeAvatarScale?: (scale: number) => void;
-  onChangeExpires?: (iso: string | null) => void;
-  onToggleQaScope?: (on: boolean) => void;
-  onToggleBlockExternal?: (on: boolean) => void;
-  onToggleAttentionWarn?: (on: boolean) => void;
-  attentionWarn?: boolean;
   // ── 퀴즈/문제 (인터랙티브 퀴즈 저작) ──────────────────────────────────────────
   /** 영상 슬라이드 총 개수 — 삽입 경계 드롭다운 생성용. */
   slideCount?: number;
@@ -271,9 +265,6 @@ function H4Icon({ children }: { children: ReactNode }) {
 
 export default function SettingsPanel({
   avatarName,
-  expiresAt,
-  qaScopeOnUploaded,
-  blockExternalSearch,
   voiceLang,
   subtitleLang,
   voiceId,
@@ -286,11 +277,6 @@ export default function SettingsPanel({
   onChangeAvatar,
   avatarScale = 1.0,
   onChangeAvatarScale,
-  onChangeExpires,
-  onToggleQaScope,
-  onToggleBlockExternal,
-  onToggleAttentionWarn,
-  attentionWarn = true,
   slideCount = 0,
   quizPoints = [],
   onAddQuizPoint,
@@ -298,7 +284,6 @@ export default function SettingsPanel({
   onChangeQuizPoint,
   onOpenSocratic,
 }: SettingsPanelProps) {
-  const expDays = expiresAtToDays(expiresAt);
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
   // 아코디언 헤더 요약: 선택한 보이스 이름 + 속도 배율.
@@ -470,113 +455,6 @@ export default function SettingsPanel({
                 />
               )}
             </div>
-          </div>
-        </details>
-
-        {/* 강의 설정 */}
-        <details style={accordionStyle}>
-          <summary style={summaryStyle}>
-            <CaretIcon />
-            <H4Icon>
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="url(#grad-cyan)"
-                strokeWidth={2.2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-              </svg>
-            </H4Icon>
-            <h4 style={summaryTitleStyle}>강의 설정</h4>
-            <span style={summaryValStyle}>{expDays}일 · 중</span>
-          </summary>
-          <div style={aBodyStyle}>
-            <div className="flex items-center justify-between" style={{ padding: "6px 0", fontSize: 12.5 }}>
-              <span style={{ fontWeight: 500 }}>링크 만료</span>
-              <div style={segStyle}>
-                {[7, 30, "학기말" as const].map((opt) => {
-                  const isStr = typeof opt === "string";
-                  const optDays = isStr ? null : opt;
-                  const on =
-                    (optDays === null && expiresAt === null) ||
-                    (optDays !== null && expDays === optDays);
-                  return (
-                    <button
-                      key={String(opt)}
-                      type="button"
-                      style={segOptStyle(on)}
-                      onClick={() =>
-                        onChangeExpires?.(
-                          optDays === null
-                            ? null
-                            : new Date(Date.now() + optDays * 86400 * 1000).toISOString(),
-                        )
-                      }
-                    >
-                      {isStr ? opt : `${opt}일`}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="flex items-center justify-between" style={{ padding: "6px 0", fontSize: 12.5 }}>
-              <span style={{ fontWeight: 500 }}>집중 경고</span>
-              <Switch
-                on={attentionWarn}
-                onClick={() => onToggleAttentionWarn?.(!attentionWarn)}
-                label="집중 경고"
-              />
-            </div>
-          </div>
-        </details>
-
-        {/* Q&A 범위 */}
-        <details style={accordionStyle}>
-          <summary style={summaryStyle}>
-            <CaretIcon />
-            <H4Icon>
-              <svg
-                viewBox="0 0 24 24"
-                width="18"
-                height="18"
-                fill="none"
-                stroke="url(#grad-pink)"
-                strokeWidth={2.2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </H4Icon>
-            <h4 style={summaryTitleStyle}>Q&amp;A 범위</h4>
-            <span style={summaryValStyle}>업로드 자료만</span>
-          </summary>
-          <div style={aBodyStyle}>
-            <div className="flex items-center justify-between" style={{ padding: "6px 0", fontSize: 12.5 }}>
-              <span style={{ fontWeight: 500 }}>업로드 자료만</span>
-              <Switch
-                on={qaScopeOnUploaded}
-                onClick={() => onToggleQaScope?.(!qaScopeOnUploaded)}
-                label="업로드 자료만"
-              />
-            </div>
-            <div className="flex items-center justify-between" style={{ padding: "6px 0", fontSize: 12.5 }}>
-              <span style={{ fontWeight: 500 }}>외부 검색 차단</span>
-              <Switch
-                on={blockExternalSearch}
-                onClick={() => onToggleBlockExternal?.(!blockExternalSearch)}
-                label="외부 검색 차단"
-              />
-            </div>
-            <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5, paddingTop: 4 }}>
-              학생 질문은 이 강의의 PPT·노트·스크립트 범위 안에서만 답변됩니다.
-              (가드레일 2차 — RAG 임계값 0.7)
-            </p>
           </div>
         </details>
 
@@ -835,14 +713,6 @@ function QuizPointCard({
 }
 
 /* ───────── helpers ───────── */
-
-function expiresAtToDays(iso: string | null): number | "∞" {
-  if (!iso) return "∞" as const;
-  const days = Math.round(
-    (new Date(iso).getTime() - Date.now()) / (86400 * 1000),
-  );
-  return days > 0 ? days : 0;
-}
 
 /** 속도 배율을 보기 좋게 표기 (1.0→"1.0", 1.05→"1.05", 0.7→"0.7"). */
 function formatSpeed(v: number): string {
