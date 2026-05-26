@@ -108,6 +108,12 @@ export interface WorkAreaProps {
   avatarScale?: number;
   /** prefers-reduced-motion — true 면 오버레이는 자동재생 대신 정지 이미지. */
   reducedMotion?: boolean;
+  /**
+   * 아바타 오버레이 관련 안내 문구(없으면 null). 예: 본인(사진) 아바타인데 아직
+   * '움직이는 미리보기'를 만들지 않아 정지로 보일 때 아바타 페이지로 유도. 미리보기
+   * 좌측 하단에 작은 pill 로 표시한다.
+   */
+  avatarHint?: string | null;
 }
 
 const workStyle: CSSProperties = {
@@ -251,6 +257,7 @@ export default function WorkArea({
   avatarLabel,
   avatarScale = 1.0,
   reducedMotion = false,
+  avatarHint = null,
 }: WorkAreaProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(aiText);
@@ -534,6 +541,32 @@ export default function WorkArea({
                 reducedMotion={reducedMotion}
                 speaking={voicePreviewPlaying}
               />
+            )}
+            {/* 본인 아바타 미생성 등 안내 — 좌측 하단(아바타 PiP 반대편)에 표시. */}
+            {!isLoading && avatarHint && (
+              <span
+                data-testid="workarea-avatar-hint"
+                style={{
+                  position: "absolute",
+                  bottom: 14,
+                  left: 14,
+                  maxWidth: "52%",
+                  zIndex: 1,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "4px 9px",
+                  borderRadius: 8,
+                  fontSize: 10.5,
+                  lineHeight: 1.35,
+                  fontWeight: 600,
+                  color: "var(--text-muted)",
+                  background: "rgba(250, 250, 247, 0.92)",
+                  border: "1px solid var(--line)",
+                  backdropFilter: "blur(2px)",
+                }}
+              >
+                {avatarHint}
+              </span>
             )}
             {!isLoading && activeSlidePending && (
               <PendingPreviewOverlay slideNumber={slideNumber} />

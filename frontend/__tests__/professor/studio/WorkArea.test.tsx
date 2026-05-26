@@ -146,4 +146,22 @@ describe("WorkArea avatar PiP overlay", () => {
     expect(small).toBe("25%");
     expect(large).toBe("75%");
   });
+
+  it("shows the avatar hint pill when avatarHint is provided", () => {
+    render(
+      <WorkArea
+        {...base}
+        avatarImageUrl="https://x/a.webp"
+        avatarHint="아바타 페이지에서 ‘움직이는 미리보기’를 만들면 여기서도 말하는 모습이 보여요"
+      />,
+    );
+    expect(
+      screen.getByTestId("workarea-avatar-hint").textContent,
+    ).toContain("움직이는 미리보기");
+  });
+
+  it("does not render the hint when avatarHint is omitted", () => {
+    render(<WorkArea {...base} avatarImageUrl="https://x/a.webp" />);
+    expect(screen.queryByTestId("workarea-avatar-hint")).toBeNull();
+  });
 });
