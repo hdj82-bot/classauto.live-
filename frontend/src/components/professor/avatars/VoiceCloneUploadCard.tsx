@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 import type { VoiceCloneStatus } from "./avatarsTypes";
 
 interface VoiceCloneUploadCardProps {
@@ -36,12 +36,14 @@ export default function VoiceCloneUploadCard({
   const [gender, setGender] = useState<"male" | "female">("male");
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // 같은 파일 재선택도 onChange 가 다시 불리도록 input 을 비운다.
-  useEffect(() => {
-    if (!uploading && status === "ready") setFile(null);
-  }, [uploading, status]);
-
   const pick = () => inputRef.current?.click();
+
+  // 제출 시 선택 파일을 비워 중복 제출을 막는다(부모가 uploading/status 로 진행 표시).
+  const submit = () => {
+    if (!file) return;
+    onSubmit(file, gender);
+    setFile(null);
+  };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
@@ -170,7 +172,7 @@ export default function VoiceCloneUploadCard({
             </button>
             <button
               type="button"
-              onClick={() => file && onSubmit(file, gender)}
+              onClick={submit}
               disabled={!file || uploading}
               style={{
                 ...primaryBtn,
