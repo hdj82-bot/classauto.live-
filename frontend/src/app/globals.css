@@ -289,3 +289,53 @@ button, input, select, textarea, optgroup {
     scroll-behavior: auto !important;
   }
 }
+
+/* ── 빨강→파랑 그라데이션 슬라이더 (스튜디오 발화 속도·크기 배율) ───────────────
+   왼쪽(작게·느리게)=빨강, 오른쪽(크게·빠르게)=파랑. 트랙은 가상요소로만 그라데이션을
+   줄 수 있어 전역 클래스로 정의한다(인라인 스타일 불가). thumb 은 흰 원으로 통일. */
+input[type="range"].slider-rb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"].slider-rb::-webkit-slider-runnable-track {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #ef4444, #3b82f6);
+}
+input[type="range"].slider-rb::-moz-range-track {
+  height: 7px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #ef4444, #3b82f6);
+}
+input[type="range"].slider-rb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--text, #0a0a0a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+input[type="range"].slider-rb::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--text, #0a0a0a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+input[type="range"].slider-rb:focus {
+  outline: none;
+}
+input[type="range"].slider-rb:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px var(--gold-medium, rgba(184, 131, 8, 0.4));
+}
+input[type="range"].slider-rb:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 3px var(--gold-medium, rgba(184, 131, 8, 0.4));
+}

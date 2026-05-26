@@ -614,11 +614,7 @@ function SpeedSlider({
           const next = Math.min(SPEED_MAX, Math.max(SPEED_MIN, Number(snapped.toFixed(2))));
           onChange(next);
         }}
-        style={{
-          width: "100%",
-          accentColor: "var(--gold-on-light, #B88308)",
-          cursor: "pointer",
-        }}
+        className="slider-rb"
       />
       <div
         className="flex items-center justify-between"
@@ -683,11 +679,7 @@ function SizeSlider({
           const next = Math.min(SIZE_MAX, Math.max(SIZE_MIN, Number(snapped.toFixed(2))));
           onChange(next);
         }}
-        style={{
-          width: "100%",
-          accentColor: "var(--gold-on-light, #B88308)",
-          cursor: "pointer",
-        }}
+        className="slider-rb"
       />
       <div
         className="flex items-center justify-between"
