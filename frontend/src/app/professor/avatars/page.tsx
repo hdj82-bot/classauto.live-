@@ -328,14 +328,14 @@ export default function AvatarsPage() {
           </p>
         )}
 
-        {/* 본인 아바타(사진) + 본인 음성(mp3 클론) 만들기 — 나란히 배치 */}
+        {/* 본인 아바타(사진) + 본인 음성(mp3 클론) 만들기 — 같은 높이로 나란히 배치 */}
         <div
           style={{
             display: "grid",
             gridTemplateColumns:
               "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
             gap: 18,
-            alignItems: "start",
+            alignItems: "stretch",
           }}
         >
           <ProfilePhotoUploadCard
