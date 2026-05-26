@@ -82,6 +82,23 @@ async def list_course_lectures(
     return list(result.scalars().all())
 
 
+async def list_my_lectures(db: AsyncSession, professor: User) -> list[Lecture]:
+    """교수자 본인이 소유한 모든 강의를 강좌 구분 없이 한 번에 반환.
+
+    프론트가 ``GET /api/courses`` 후 강좌별 ``GET /api/courses/{id}/lectures`` 를
+    N번 호출하던 fan-out 워터폴을 단일 JOIN 쿼리로 대체한다. 소유 범위는
+    Course.instructor_id 로 한정(미게시 포함 — 본인 소유라서). 최신순 정렬.
+    """
+    stmt = (
+        select(Lecture)
+        .join(Course, Lecture.course_id == Course.id)
+        .where(Course.instructor_id == professor.id)
+        .order_by(Lecture.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
 async def get_lecture_or_404(db: AsyncSession, lecture_id: uuid.UUID) -> Lecture:
     result = await db.execute(select(Lecture).where(Lecture.id == lecture_id))
     lecture = result.scalar_one_or_none()

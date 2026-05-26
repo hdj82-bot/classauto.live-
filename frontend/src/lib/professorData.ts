@@ -35,19 +35,39 @@ let cache: { data: ProfessorData; ts: number } | null = null;
 let inflight: Promise<ProfessorData> | null = null;
 
 async function load(): Promise<ProfessorData> {
-  const { data: courses } = await api.get<CourseLite[]>("/api/courses");
-  // 강좌별 fan-out 은 병렬. 개별 강좌 조회가 실패하면 그 강좌만 건너뛰고
-  // (best-effort) 나머지로 진행한다 — 한 강좌 오류로 전체 화면이 깨지지 않게.
-  // courses 자체의 실패는 위에서 throw 되어 호출자(에러 화면)가 처리한다.
-  const lists = await Promise.all(
-    courses.map((c) =>
+  // 강좌 목록은 항상 필요(강의 0개인 빈 강좌 포함). 강의는 단일 엔드포인트
+  // GET /api/me/lectures 로 한 번에 받아 둘을 병렬 호출 → 1+N 워터폴 제거.
+  const coursesPromise = api
+    .get<CourseLite[]>("/api/courses")
+    .then((r) => r.data);
+
+  let lectures: Record<string, unknown>[];
+  try {
+    const [, lecturesData] = await Promise.all([
+      coursesPromise,
       api
-        .get<Record<string, unknown>[]>(`/api/courses/${c.id}/lectures`)
-        .then((r) => r.data.map((l) => ({ ...l, course_id: c.id })))
-        .catch(() => [] as Record<string, unknown>[]),
-    ),
-  );
-  return { courses, lectures: lists.flat() };
+        .get<Record<string, unknown>[]>("/api/me/lectures")
+        .then((r) => r.data),
+    ]);
+    lectures = lecturesData;
+  } catch {
+    // 폴백: /api/me/lectures 미배포(404 등) 시 기존 강좌별 fan-out 으로 진행해
+    // 프론트/백엔드 배포 시점 차이에도 안전. 개별 강좌 실패는 건너뛴다.
+    // (courses 자체 실패면 아래 await 에서 throw → 호출자 에러 화면)
+    const courses = await coursesPromise;
+    const lists = await Promise.all(
+      courses.map((c) =>
+        api
+          .get<Record<string, unknown>[]>(`/api/courses/${c.id}/lectures`)
+          .then((r) => r.data.map((l) => ({ ...l, course_id: c.id })))
+          .catch(() => [] as Record<string, unknown>[]),
+      ),
+    );
+    lectures = lists.flat();
+  }
+
+  const courses = await coursesPromise;
+  return { courses, lectures };
 }
 
 function revalidate(): Promise<ProfessorData> {
