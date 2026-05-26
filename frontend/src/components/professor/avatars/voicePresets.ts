@@ -25,6 +25,8 @@ export interface VoiceOption {
   meta?: string | null;
   /** 실제 음원 미리듣기 URL (ElevenLabs preview). 있으면 합성 대신 재생. */
   previewUrl?: string | null;
+  /** 현재 교수자가 즐겨찾기한 보이스인지. */
+  favorite?: boolean;
   // ── 합성(Web Speech) 폴백 파라미터 (previewUrl 이 없을 때만 사용) ──
   ttsLang?: string;
   ttsPitch?: number;
@@ -51,6 +53,7 @@ export function fromTtsVoice(v: TtsVoice): VoiceOption {
     gender: normalizeGender(v),
     meta,
     previewUrl: v.preview_url ?? null,
+    favorite: v.is_favorite ?? false,
   };
 }
 

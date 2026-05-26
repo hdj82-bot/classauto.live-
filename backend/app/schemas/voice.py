@@ -26,6 +26,9 @@ class TtsVoice(BaseModel):
     )
     gender_ko: str | None = Field(default=None, description="성별 한국어 (남성/여성/중성).")
     accent_ko: str | None = Field(default=None, description="국적/억양 한국어 (미국/영국/호주 등).")
+    is_favorite: bool = Field(
+        default=False, description="현재 교수자가 이 보이스를 즐겨찾기 했는지."
+    )
 
 
 class TtsVoicesResponse(BaseModel):

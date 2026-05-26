@@ -12,11 +12,15 @@ ElevenLabs 보이스를 나열하되, 키 미설정·장애 시에는 빈 목록
 import asyncio
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Response
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_professor
 from app.core.config import settings
+from app.db.session import get_db
 from app.models.user import User
+from app.models.voice_favorite import VoiceFavorite
 from app.schemas.voice import (
     VOICE_PREVIEW_MAX_CHARS,
     TtsVoice,
@@ -157,13 +161,17 @@ async def _translate_descriptions(descs: list[str]) -> dict[str, str]:
     response_model=TtsVoicesResponse,
     summary="ElevenLabs TTS 보이스 목록 (교수자 음성 선택용)",
 )
-async def list_tts_voices(user: User = Depends(require_professor)):
+async def list_tts_voices(
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
     from app.services.pipeline.elevenlabs_client import ElevenLabsError, list_voices
 
     # 0) 계정 보이스(교수자 커스텀 포함). 실패해도 빈 목록으로 진행 — 큐레이션
     #    보이스만으로도 목록을 구성할 수 있다.
     try:
-        account_raw = await list_voices()
+        # show_legacy=True 로 레거시 premade 보이스까지 포함해 선택 폭을 넓힌다.
+        account_raw = await list_voices(show_legacy=True)
     except ElevenLabsError:
         account_raw = []
     account_by_id: dict[str, dict] = {
@@ -241,7 +249,63 @@ async def list_tts_voices(user: User = Depends(require_professor)):
                 category=p["category"],
             )
         )
+
+    # 4) 즐겨찾기 표시 + 정렬. 현재 교수자의 즐겨찾기 voice_id 를 조회해 각 보이스에
+    #    is_favorite 를 채우고, 즐겨찾기를 목록 맨 앞으로(나머지 상대순서는 유지)
+    #    끌어올린다. studio 패널의 "즐겨찾기만" 토글과 /professor/voices 가 사용.
+    fav_ids = await _favorite_voice_ids(db, user.id)
+    if fav_ids:
+        for v in voices:
+            if v.voice_id in fav_ids:
+                v.is_favorite = True
+        voices.sort(key=lambda v: 0 if v.is_favorite else 1)
+
     return TtsVoicesResponse(voices=voices, total=len(voices))
+
+
+async def _favorite_voice_ids(db: AsyncSession, user_id) -> set[str]:
+    """주어진 교수자의 즐겨찾기 voice_id 집합."""
+    result = await db.execute(
+        select(VoiceFavorite.voice_id).where(VoiceFavorite.user_id == user_id)
+    )
+    return set(result.scalars().all())
+
+
+@router.put(
+    "/api/voices/{voice_id}/favorite",
+    status_code=204,
+    summary="보이스 즐겨찾기 추가 (교수자별)",
+)
+async def add_voice_favorite(
+    voice_id: str = Path(..., max_length=255),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    existing = await db.get(VoiceFavorite, (user.id, voice_id))
+    if existing is None:
+        db.add(VoiceFavorite(user_id=user.id, voice_id=voice_id))
+        await db.commit()
+    return Response(status_code=204)
+
+
+@router.delete(
+    "/api/voices/{voice_id}/favorite",
+    status_code=204,
+    summary="보이스 즐겨찾기 해제 (교수자별)",
+)
+async def remove_voice_favorite(
+    voice_id: str = Path(..., max_length=255),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await db.execute(
+        delete(VoiceFavorite).where(
+            VoiceFavorite.user_id == user.id,
+            VoiceFavorite.voice_id == voice_id,
+        )
+    )
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.post(

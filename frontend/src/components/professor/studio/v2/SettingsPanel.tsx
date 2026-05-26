@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import Link from "next/link";
 import { LANGUAGES } from "../studioTypes";
 import type { LangCode, TtsProvider, TtsVoice, VoiceGender } from "../studioTypes";
+import { setVoiceFavorite } from "@/components/professor/avatars/voicesApi";
 
 /**
  * Studio v2 — 우측 settings panel.
@@ -804,6 +806,13 @@ function VoiceSelect({
   const [playingId, setPlayingId] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  // 사용자가 이 세션에서 토글한 즐겨찾기 override. 미지정 보이스는 props 의
+  // is_favorite 를 그대로 사용한다(effect 로 state 를 시드하지 않음 — cascading
+  // render·react-hooks/set-state-in-effect 회피).
+  const [favOverrides, setFavOverrides] = useState<Map<string, boolean>>(
+    new Map(),
+  );
 
   const selected = voices.find((v) => v.voice_id === value) ?? null;
 
@@ -851,6 +860,12 @@ function VoiceSelect({
     };
   }, []);
 
+  // override 가 있으면 그것을, 없으면 백엔드 is_favorite 를 사용.
+  const isFav = (v: TtsVoice): boolean => {
+    const override = favOverrides.get(v.voice_id);
+    return override !== undefined ? override : !!v.is_favorite;
+  };
+
   if (loading) {
     return (
       <div style={{ fontSize: 11.5, color: "var(--text-subtle)" }}>
@@ -867,6 +882,19 @@ function VoiceSelect({
     );
   }
 
+  const toggleFavorite = async (v: TtsVoice) => {
+    const next = !isFav(v);
+    setFavOverrides((prev) => new Map(prev).set(v.voice_id, next));
+    try {
+      await setVoiceFavorite(v.voice_id, next);
+    } catch {
+      // 실패 시 롤백 (네트워크/권한 오류 등)
+      setFavOverrides((prev) => new Map(prev).set(v.voice_id, !next));
+    }
+  };
+
+  const shown = favoritesOnly ? voices.filter((v) => isFav(v)) : voices;
+
   const triggerLabel = selected
     ? `${voiceTitle(selected)}${selected.gender_ko ? ` · ${selected.gender_ko}` : ""}${
         selected.accent_ko ? ` · ${selected.accent_ko}` : ""
@@ -875,6 +903,41 @@ function VoiceSelect({
 
   return (
     <div ref={rootRef} style={{ position: "relative" }}>
+      {/* 즐겨찾기만 보기 토글 + 음성 라이브러리 페이지 링크 */}
+      <div
+        className="flex items-center justify-between"
+        style={{ marginBottom: 6 }}
+      >
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 11.5,
+            color: "var(--text-subtle)",
+            fontWeight: 500,
+          }}
+        >
+          <Switch
+            on={favoritesOnly}
+            onClick={() => setFavoritesOnly((o) => !o)}
+            label="즐겨찾기한 보이스만 보기"
+          />
+          즐겨찾기만
+        </span>
+        <Link
+          href="/professor/voices"
+          style={{
+            fontSize: 11.5,
+            fontWeight: 600,
+            color: "var(--gold-on-light, #B88308)",
+            textDecoration: "none",
+          }}
+        >
+          더 많은 음성 →
+        </Link>
+      </div>
+
       <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
         <button
           type="button"
@@ -936,39 +999,87 @@ function VoiceSelect({
           >
             <span style={{ fontWeight: 600, fontSize: 12.5 }}>기본 보이스 (성별 기준)</span>
           </button>
-          {voices.map((v) => {
-            const meta = voiceMeta(v);
-            const isSel = v.voice_id === value;
-            return (
-              <div key={v.voice_id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <button
-                  type="button"
-                  role="option"
-                  aria-selected={isSel}
-                  onClick={() => {
-                    onChange(v.voice_id);
-                    setOpen(false);
-                  }}
-                  style={{ ...voiceRowStyle(isSel), flex: 1 }}
-                >
-                  <span style={{ fontWeight: 600, fontSize: 12.5 }}>{voiceTitle(v)}</span>
-                  {meta && (
-                    <span style={{ fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.4 }}>
-                      {meta}
-                    </span>
-                  )}
-                </button>
-                <PreviewButton
-                  url={v.preview_url}
-                  playing={playingId === v.voice_id}
-                  onToggle={() => togglePreview(v)}
-                />
-              </div>
-            );
-          })}
+          {shown.length === 0 ? (
+            <div style={{ padding: "10px 9px", fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+              즐겨찾기한 보이스가 없습니다. 별표(☆)로 추가하거나 “더 많은 음성”에서 고르세요.
+            </div>
+          ) : (
+            shown.map((v) => {
+              const meta = voiceMeta(v);
+              const isSel = v.voice_id === value;
+              const favRow = isFav(v);
+              return (
+                <div key={v.voice_id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isSel}
+                    onClick={() => {
+                      onChange(v.voice_id);
+                      setOpen(false);
+                    }}
+                    style={{ ...voiceRowStyle(isSel), flex: 1 }}
+                  >
+                    <span style={{ fontWeight: 600, fontSize: 12.5 }}>{voiceTitle(v)}</span>
+                    {meta && (
+                      <span style={{ fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.4 }}>
+                        {meta}
+                      </span>
+                    )}
+                  </button>
+                  <FavoriteStar
+                    favorite={favRow}
+                    onToggle={() => toggleFavorite(v)}
+                  />
+                  <PreviewButton
+                    url={v.preview_url}
+                    playing={playingId === v.voice_id}
+                    onToggle={() => togglePreview(v)}
+                  />
+                </div>
+              );
+            })
+          )}
         </div>
       )}
     </div>
+  );
+}
+
+function FavoriteStar({
+  favorite,
+  onToggle,
+}: {
+  favorite: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      aria-pressed={favorite}
+      aria-label={favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+      title={favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+      style={{
+        flexShrink: 0,
+        display: "inline-grid",
+        placeItems: "center",
+        width: 28,
+        height: 28,
+        borderRadius: 7,
+        border: "1px solid var(--line-strong)",
+        background: favorite ? "var(--gold-soft)" : "var(--bg-card)",
+        color: favorite ? "var(--gold-on-light, #B88308)" : "var(--text-faint)",
+        cursor: "pointer",
+        fontSize: 14,
+        lineHeight: 1,
+      }}
+    >
+      {favorite ? "★" : "☆"}
+    </button>
   );
 }
 

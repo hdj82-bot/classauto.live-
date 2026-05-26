@@ -217,7 +217,9 @@ def _status_from_exc(exc: BaseException) -> int | None:
 # ── 보이스 목록 (선택 UI) ─────────────────────────────────────────────────────
 
 
-async def list_voices(timeout: float = 30.0) -> list[dict[str, Any]]:
+async def list_voices(
+    timeout: float = 30.0, *, show_legacy: bool = False
+) -> list[dict[str, Any]]:
     """ElevenLabs 보이스 목록 조회 (``GET /v1/voices``).
 
     교수자 음성 선택 UI 용. 각 항목의 raw dict (voice_id / name / labels /
@@ -233,9 +235,12 @@ async def list_voices(timeout: float = 30.0) -> list[dict[str, Any]]:
         "xi-api-key": settings.ELEVENLABS_API_KEY,
         "Accept": "application/json",
     }
+    # show_legacy=true 면 레거시 premade 보이스까지 포함해 더 많은 기본 보이스를
+    # 노출한다(교수자 음성 선택 폭 확대). 공유 라이브러리(shared-voices)는 제외.
+    params = {"show_legacy": "true"} if show_legacy else None
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            resp = await client.get(url, headers=headers)
+            resp = await client.get(url, headers=headers, params=params)
     except httpx.TimeoutException as exc:
         raise ElevenLabsServerError(f"ElevenLabs 보이스 목록 타임아웃: {exc}") from exc
 
