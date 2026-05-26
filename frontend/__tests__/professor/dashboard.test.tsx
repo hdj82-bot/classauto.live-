@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import ProfessorDashboardPage from "@/app/professor/dashboard/page";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ToastProvider } from "@/components/ui/Toast";
+import { invalidateProfessorData } from "@/lib/professorData";
 
 // API 모킹 — 강의 0개 케이스 vs 1개 케이스 테스트별로 변경
 const apiGet = vi.fn();
@@ -25,6 +26,8 @@ const renderPage = (ui: ReactNode) =>
 beforeEach(() => {
   apiGet.mockReset();
   apiPatch.mockClear();
+  // 강좌·강의 공유 캐시는 모듈 레벨 상태라 테스트 간 누수된다 → 매 테스트 전 초기화.
+  invalidateProfessorData();
 });
 
 afterEach(() => {
