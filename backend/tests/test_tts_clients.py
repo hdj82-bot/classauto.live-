@@ -16,6 +16,7 @@ import pytest
 
 respx = pytest.importorskip("respx")
 
+from app.core.config import settings  # noqa: E402
 from app.services.pipeline import elevenlabs_client, google_tts_client  # noqa: E402
 
 
@@ -258,3 +259,19 @@ def test_google_tts_synthesize_returns_audio_content_on_success():
         audio = google_tts_client.synthesize("hi")
 
     assert audio == b"google-bytes"
+
+
+def test_build_client_without_credentials_raises_auth_error_fast(monkeypatch):
+    """자격증명 미설정 시 ADC 메타데이터 타임아웃 대신 즉시 명확한 인증 오류."""
+    monkeypatch.setattr(settings, "GOOGLE_TTS_CREDENTIALS_JSON", "")
+
+    with pytest.raises(google_tts_client.GoogleTTSAuthError) as ei:
+        google_tts_client._build_client()
+    assert "GOOGLE_TTS_CREDENTIALS_JSON" in str(ei.value)
+
+
+def test_build_client_with_malformed_json_raises_auth_error(monkeypatch):
+    monkeypatch.setattr(settings, "GOOGLE_TTS_CREDENTIALS_JSON", "{not-json")
+
+    with pytest.raises(google_tts_client.GoogleTTSAuthError):
+        google_tts_client._build_client()

@@ -40,18 +40,34 @@ class GoogleTTSServerError(GoogleTTSError):
 
 
 def _build_client():
-    """서비스 계정 JSON 이 있으면 그것으로, 없으면 ADC 로 클라이언트 생성.
+    """서비스 계정 JSON 으로 클라이언트 생성.
 
     지연 임포트 — google-cloud-texttospeech 가 미설치된 환경(예: 단위 테스트)
     에서 모듈 임포트 단계의 실패를 막기 위해 함수 내부에서 import.
+
+    ``GOOGLE_TTS_CREDENTIALS_JSON`` 이 비어 있으면 즉시 명확한 인증 오류로
+    실패한다. (과거엔 인자 없는 ``TextToSpeechClient()`` 로 ADC 폴백을 시도해,
+    GCP 가 아닌 배포 환경(Railway 등)에서 GCE 메타데이터 서버
+    ``metadata.google.internal`` 조회가 3초 타임아웃 → 정체불명의 503 으로
+    번졌다. 이 프로젝트는 ADC 파일 경로(GOOGLE_APPLICATION_CREDENTIALS)를
+    쓰지 않으므로, 자격증명 미설정은 폴백을 못 쓰는 설정 오류로 본다.)
     """
+    creds = (settings.GOOGLE_TTS_CREDENTIALS_JSON or "").strip()
+    if not creds:
+        raise GoogleTTSAuthError(
+            "Google TTS 자격증명(GOOGLE_TTS_CREDENTIALS_JSON) 미설정 — "
+            "ElevenLabs 폴백이 동작하지 않습니다. 서비스 계정 JSON 을 설정하세요."
+        )
+
     from google.cloud import texttospeech  # noqa: PLC0415
 
-    creds = (settings.GOOGLE_TTS_CREDENTIALS_JSON or "").strip()
-    if creds:
+    try:
         info = json.loads(creds)
-        return texttospeech.TextToSpeechClient.from_service_account_info(info)
-    return texttospeech.TextToSpeechClient()
+    except (ValueError, TypeError) as exc:
+        raise GoogleTTSAuthError(
+            f"GOOGLE_TTS_CREDENTIALS_JSON 파싱 실패 (유효한 JSON 이 아님): {exc}"
+        ) from exc
+    return texttospeech.TextToSpeechClient.from_service_account_info(info)
 
 
 @track_external_api("google_tts")

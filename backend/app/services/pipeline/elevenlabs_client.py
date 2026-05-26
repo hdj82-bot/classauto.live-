@@ -351,6 +351,34 @@ async def _clone_voice_with_retry(
     return _interpret_clone_response(resp)
 
 
+async def delete_voice(voice_id: str, timeout: float = 30.0) -> None:
+    """cloned voice 삭제 (``DELETE /v1/voices/{voice_id}``).
+
+    본인 음성 교체/삭제 시 이전 voice 정리에 쓴다. 합성 hot-path 가 아니므로
+    재시도 데코는 생략하고, 실패 시 도메인 예외를 던져 호출부가 best-effort 로
+    삼키게 한다(이미 삭제됐거나 없는 voice 의 404 도 예외로 올라온다).
+    """
+    if not (settings.ELEVENLABS_API_KEY or "").strip():
+        raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
+    if not (voice_id or "").strip():
+        raise ElevenLabsError("delete_voice: voice_id 가 비어있음")
+    url = f"{_BASE_URL}/voices/{voice_id}"
+    headers = {"xi-api-key": settings.ELEVENLABS_API_KEY, "Accept": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.delete(url, headers=headers)
+    except httpx.TimeoutException as exc:
+        raise ElevenLabsServerError(f"ElevenLabs voice 삭제 타임아웃: {exc}") from exc
+
+    if resp.status_code == 200:
+        return
+    if resp.status_code == 401:
+        raise ElevenLabsAuthError(f"ElevenLabs voice 삭제 401: {resp.text[:200]}")
+    raise ElevenLabsError(
+        f"ElevenLabs voice 삭제 HTTP {resp.status_code}: {resp.text[:200]}"
+    )
+
+
 def _interpret_clone_response(resp: httpx.Response) -> dict[str, Any]:
     if resp.status_code == 200:
         return resp.json()

@@ -6,7 +6,7 @@
 """
 import uuid
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_professor
@@ -19,6 +19,7 @@ from app.schemas.avatar import (
     AvatarPreviewResponse,
     AvatarsResponse,
     ProfilePhotoResponse,
+    VoiceCloneResponse,
 )
 from app.services.pipeline import s3 as s3_svc
 
@@ -28,6 +29,42 @@ router = APIRouter(tags=["avatars"])
 _MAX_PROFILE_PHOTO = 8 * 1024 * 1024  # 8MB
 _JPEG_MAGIC = b"\xff\xd8\xff"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+# 본인 음성 샘플 한도 — 1분 내외 mp3 는 보통 1~3MB. 고비트레이트/긴 샘플 여유로 25MB.
+_MAX_VOICE_SAMPLE = 25 * 1024 * 1024  # 25MB
+# 허용 확장자 → S3 저장 확장자/Content-Type. ElevenLabs IVC 는 mp3·m4a·wav 등을 받는다.
+_VOICE_EXT_CTYPE: dict[str, str] = {
+    "mp3": "audio/mpeg",
+    "m4a": "audio/mp4",
+    "mp4": "audio/mp4",
+    "wav": "audio/wav",
+    "webm": "audio/webm",
+    "ogg": "audio/ogg",
+}
+
+
+def _looks_like_audio(content: bytes) -> bool:
+    """업로드 바이트가 흔한 오디오 컨테이너인지 magic byte 로 느슨히 검증.
+
+    엄밀한 디코딩은 ElevenLabs 가 수행하므로, 여기서는 이미지/문서/빈 파일 같은
+    명백한 비-오디오만 거른다.
+    """
+    if len(content) < 12:
+        return False
+    head = content[:12]
+    if head[:3] == b"ID3":  # mp3 with ID3 tag
+        return True
+    if head[0] == 0xFF and (head[1] & 0xE0) == 0xE0:  # mp3 frame sync
+        return True
+    if head[:4] == b"RIFF" and head[8:12] == b"WAVE":  # wav
+        return True
+    if head[4:8] == b"ftyp":  # m4a / mp4 audio
+        return True
+    if head[:4] == b"OggS":  # ogg
+        return True
+    if head[:4] == b"\x1aE\xdf\xa3":  # webm / matroska (EBML)
+        return True
+    return False
 
 # "움직이는 미리보기" 렌더에 쓰는 짧은 샘플 문장 — 렌더 시간·비용을 줄이려 짧게.
 _PREVIEW_TEXT = "안녕하세요. 이 모습으로 강의를 진행하겠습니다."
@@ -359,3 +396,163 @@ async def get_avatar_preview(
     return AvatarPreviewResponse(
         status="processing", voice_id=user.photo_avatar_preview_voice_id
     )
+
+
+# ── 본인 음성 클로닝 (ElevenLabs Instant Voice Cloning) ───────────────────────
+
+
+def _voice_clone_response(user: User) -> VoiceCloneResponse:
+    """현재 user 의 cloned voice 상태를 응답 스키마로 변환."""
+    if not user.cloned_voice_id:
+        return VoiceCloneResponse(status="none")
+    return VoiceCloneResponse(
+        status="ready",
+        voice_id=user.cloned_voice_id,
+        name=user.cloned_voice_name,
+        sample_url=s3_svc.presign_stored_s3_url(user.cloned_voice_sample_url),
+    )
+
+
+@router.get(
+    "/api/avatars/me/voice",
+    response_model=VoiceCloneResponse,
+    summary="본인 음성(클론) 상태 조회",
+)
+async def get_my_voice(user: User = Depends(require_professor)):
+    """교수자가 만든 본인 음성(ElevenLabs cloned voice) 상태를 반환한다.
+
+    ``status="ready"`` 면 ``voice_id`` 가 ``GET /api/voices`` 계정 보이스로도
+    노출돼 음성 패널·미리보기에서 바로 선택할 수 있다.
+    """
+    return _voice_clone_response(user)
+
+
+@router.post(
+    "/api/avatars/me/voice",
+    response_model=VoiceCloneResponse,
+    summary="음성 샘플(mp3 등) 업로드 → 본인 음성 클론 생성/교체",
+)
+async def create_my_voice(
+    file: UploadFile = File(...),
+    gender: str | None = Form(default=None),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """업로드한 음성 샘플로 ElevenLabs Instant Voice Cloning(IVC)을 수행한다.
+
+    - 1인 1개: 이미 본인 음성이 있으면 새 샘플로 교체하고, 이전 ElevenLabs
+      voice 는 best-effort 로 삭제한다(쿼터·목록 정리).
+    - 원본 샘플은 S3 에 보관(``cloned_voice_sample_url``).
+    - 성공 시 ``cloned_voice_id`` 가 채워지고, 이후 ``GET /api/voices`` 에
+      계정 보이스로 자동 노출된다(별도 연결 불필요).
+    - ``gender`` ("male"|"female") 는 ElevenLabs label 로 전달해 음성 패널의
+      남/여 그룹 분류에 쓰인다(선택).
+    """
+    content = await file.read()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="빈 파일입니다."
+        )
+    if len(content) > _MAX_VOICE_SAMPLE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"음성 파일은 {_MAX_VOICE_SAMPLE // (1024 * 1024)}MB 이하여야 합니다.",
+        )
+    if not _looks_like_audio(content):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="mp3·m4a·wav 등 음성 파일만 업로드할 수 있습니다.",
+        )
+
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "mp3"
+    if ext not in _VOICE_EXT_CTYPE:
+        ext = "mp3"
+    ctype = _VOICE_EXT_CTYPE[ext]
+
+    # 원본 샘플 보관 — thumbnails/ 와 같은 사적 prefix 아래(응답은 presigned).
+    s3_key = f"voice-samples/{user.id}/{uuid.uuid4().hex[:8]}.{ext}"
+    s3_svc.upload_file(content, s3_key, content_type=ctype)
+    sample_url = (
+        f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
+    )
+
+    from app.services.pipeline.elevenlabs_client import (
+        ElevenLabsError,
+        clone_voice,
+        delete_voice,
+    )
+
+    labels: dict[str, str] | None = None
+    g = (gender or "").strip().lower()
+    if g in ("male", "female"):
+        labels = {"gender": g}
+
+    voice_name = f"{user.name} (본인 목소리)"
+    try:
+        result = await clone_voice(
+            voice_name,
+            [(file.filename or f"sample.{ext}", content)],
+            description="ClassAuto 교수자 본인 음성 (IVC)",
+            labels=labels,
+        )
+    except ElevenLabsError as e:
+        # 샘플은 S3 에 남겨 둔다(원인 진단·재시도용). voice_id 는 미갱신.
+        return VoiceCloneResponse(
+            status="failed",
+            sample_url=s3_svc.presign_stored_s3_url(sample_url),
+            message=f"본인 음성 생성에 실패했습니다: {e}",
+        )
+
+    new_voice_id = result.get("voice_id")
+    if not new_voice_id:
+        return VoiceCloneResponse(
+            status="failed",
+            sample_url=s3_svc.presign_stored_s3_url(sample_url),
+            message="본인 음성 생성에 실패했습니다: ElevenLabs 가 voice_id 를 반환하지 않았습니다.",
+        )
+
+    # 교체: 이전 cloned voice 는 best-effort 삭제(실패해도 진행).
+    old_voice_id = user.cloned_voice_id
+    if old_voice_id and old_voice_id != new_voice_id:
+        try:
+            await delete_voice(old_voice_id)
+        except ElevenLabsError:
+            pass
+
+    user.cloned_voice_id = new_voice_id
+    user.cloned_voice_name = voice_name
+    user.cloned_voice_sample_url = sample_url
+    await db.commit()
+
+    return VoiceCloneResponse(
+        status="ready",
+        voice_id=new_voice_id,
+        name=voice_name,
+        sample_url=s3_svc.presign_stored_s3_url(sample_url),
+        message="본인 음성이 생성되었습니다. 음성 목록에서 선택해 미리보기를 만들어 보세요.",
+    )
+
+
+@router.delete(
+    "/api/avatars/me/voice",
+    response_model=VoiceCloneResponse,
+    summary="본인 음성(클론) 삭제",
+)
+async def delete_my_voice(
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """본인 음성 클론을 제거한다. ElevenLabs voice 도 best-effort 로 삭제."""
+    voice_id = user.cloned_voice_id
+    if voice_id:
+        from app.services.pipeline.elevenlabs_client import ElevenLabsError, delete_voice
+
+        try:
+            await delete_voice(voice_id)
+        except ElevenLabsError:
+            pass
+    user.cloned_voice_id = None
+    user.cloned_voice_name = None
+    user.cloned_voice_sample_url = None
+    await db.commit()
+    return VoiceCloneResponse(status="none", message="본인 음성을 삭제했습니다.")

@@ -42,3 +42,20 @@ export interface AvatarListResult {
   /** 백엔드 미배포(404/네트워크 실패) 로 fixture 를 쓰는 중인지. */
   deferred: boolean;
 }
+
+/** 본인 음성(ElevenLabs cloned voice) 상태. */
+export type VoiceCloneStatus = "none" | "ready" | "failed";
+
+/**
+ * GET/POST /api/avatars/me/voice 응답 (snake_case 그대로 소비).
+ *
+ * status="ready" 면 voice_id 가 GET /api/voices 계정 보이스로도 노출돼 음성
+ * 패널에서 바로 선택할 수 있다.
+ */
+export interface VoiceClone {
+  status: VoiceCloneStatus;
+  voice_id?: string | null;
+  name?: string | null;
+  sample_url?: string | null;
+  message?: string | null;
+}

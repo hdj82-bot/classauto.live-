@@ -80,6 +80,24 @@
     "uploadTooLarge": "사진 용량은 25MB 이하여야 합니다.",
     "uploadPreviewAlt": "업로드한 프로필 사진 미리보기",
 
+    "voiceUploadTitle": "내 목소리로 음성 만들기",
+    "voiceUploadDescription": "본인 목소리가 담긴 음성 파일(mp3)을 업로드하면 본인 목소리를 복제합니다. 만들어진 음성은 오른쪽 음성 목록에 '내 목소리'로 나타나, 아바타가 본인 목소리로 말하게 할 수 있습니다.",
+    "voiceUploadSelect": "음성 파일 선택",
+    "voiceUploadChange": "다른 파일 선택",
+    "voiceUploadButton": "내 목소리 만들기",
+    "voiceUploading": "만드는 중...",
+    "voiceUploadStatusReady": "내 목소리가 준비되었습니다. 오른쪽 음성 목록에서 선택해 미리보기를 만들어 보세요.",
+    "voiceUploadStatusFailed": "음성 생성에 실패했습니다. 다른 파일로 다시 시도해 주세요.",
+    "voiceUploadError": "음성 파일 업로드에 실패했습니다.",
+    "voiceUploadInvalidType": "mp3·m4a·wav 등 음성 파일만 업로드할 수 있습니다.",
+    "voiceUploadTooLarge": "음성 파일 용량은 25MB 이하여야 합니다.",
+    "voiceUploadHint": "잡음·배경음악 없이 본인 말만 담긴 1분 내외 샘플일 때 가장 잘 닮습니다.",
+    "voiceMyBadge": "내 목소리",
+    "voiceReadyHint": "음성 목록에서 선택해 미리보기를 만드세요.",
+    "voiceDelete": "삭제",
+    "voiceDeleteError": "본인 음성을 삭제하지 못했습니다.",
+    "voiceCloneHint": "음성 파일을 업로드해 본인 목소리를 만들면 여기에 표시됩니다.",
+
     "backToStudio": "편집기로 돌아가기"
   }
 }
