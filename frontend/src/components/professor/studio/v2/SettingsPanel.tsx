@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { LANGUAGES } from "../studioTypes";
 import type { LangCode, TtsProvider, TtsVoice, VoiceGender } from "../studioTypes";
 import { setVoiceFavorite } from "@/components/professor/avatars/voicesApi";
@@ -807,6 +808,13 @@ function VoiceSelect({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  // 현재 강의 편집 경로(/professor/studio/{id})면 음성 라이브러리 링크에 lecture
+  // 를 실어, 거기서 '강의 편집으로 돌아가기'가 가능하게 한다.
+  const pathname = usePathname();
+  const studioMatch = pathname?.match(/\/professor\/studio\/([^/?#]+)/);
+  const voicesHref = studioMatch
+    ? `/professor/voices?lecture=${encodeURIComponent(studioMatch[1])}`
+    : "/professor/voices";
   // 사용자가 이 세션에서 토글한 즐겨찾기 override. 미지정 보이스는 props 의
   // is_favorite 를 그대로 사용한다(effect 로 state 를 시드하지 않음 — cascading
   // render·react-hooks/set-state-in-effect 회피).
@@ -926,7 +934,7 @@ function VoiceSelect({
           즐겨찾기만
         </span>
         <Link
-          href="/professor/voices"
+          href={voicesHref}
           style={{
             fontSize: 11.5,
             fontWeight: 600,

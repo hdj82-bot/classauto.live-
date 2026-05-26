@@ -18,6 +18,7 @@ import {
   listLibraryVoices,
   listVoiceOptions,
   setVoiceFavorite,
+  type LibraryQuery,
   type LibraryVoice,
 } from "@/components/professor/avatars/voicesApi";
 import type { VoiceOption } from "@/components/professor/avatars/voicePresets";
@@ -26,13 +27,20 @@ import type { VoiceOption } from "@/components/professor/avatars/voicePresets";
  * /professor/voices — 음성 라이브러리.
  *
  * 두 모드:
- *  - "내 보이스": 계정에 있는 보이스(premade/추가/클론) 미리듣기 + ★ 즐겨찾기.
+ *  - "내 보이스": 계정 보이스(premade/추가/클론) 미리듣기 + ★ 즐겨찾기 토글.
  *  - "라이브러리": ElevenLabs 공유 라이브러리(수천 종)를 검색·필터·페이지로
- *    둘러보고, 쓰고 싶은 음성만 '내 보이스에 추가'(요금제 한도 내). 설명은
- *    한국어로만 노출.
+ *    둘러보고, ★(= 내 보이스에 추가 + 즐겨찾기)로 바로 사용 가능하게 한다.
+ *
+ * 강의 편집 화면(음성 패널의 '더 많은 음성')에서 ``?lecture={id}`` 로 진입하면
+ * 상단에 '강의 편집으로 돌아가기' 버튼을 노출한다.
  */
 
 const SAMPLE_TEXT = "안녕하세요. 이 목소리로 강의 영상을 만들 수 있어요.";
+
+// 카드 강조색 — 골드 일색 톤과 대비되도록 스카이 블루.
+const SKY = "#0EA5E9";
+const SKY_SOFT = "rgba(14,165,233,0.12)";
+const SKY_TEXT = "#0369A1";
 
 type Mode = "mine" | "library";
 type MineFilter = "all" | "favorites" | "male" | "female";
@@ -48,6 +56,56 @@ function isFallbackVoice(id: string): boolean {
   return id.startsWith("tts-");
 }
 
+// 검색창에서 한국어로 남성/여성/국가 검색 지원. 예) "여성 미국" → gender=female,
+// search="american". 인식 못한 단어는 그대로 검색어로 넘긴다.
+const GENDER_WORDS: Record<string, "male" | "female"> = {
+  남성: "male",
+  남자: "male",
+  남: "male",
+  여성: "female",
+  여자: "female",
+  여: "female",
+};
+const COUNTRY_WORDS: Record<string, { search?: string; language?: string }> = {
+  미국: { search: "american" },
+  영국: { search: "british" },
+  호주: { search: "australian" },
+  한국: { search: "korean", language: "ko" },
+  인도: { search: "indian" },
+  일본: { search: "japanese", language: "ja" },
+  중국: { search: "chinese", language: "zh" },
+  캐나다: { search: "canadian" },
+  아일랜드: { search: "irish" },
+  스코틀랜드: { search: "scottish" },
+  프랑스: { search: "french", language: "fr" },
+  독일: { search: "german", language: "de" },
+  스페인: { search: "spanish", language: "es" },
+};
+
+function parseKoreanVoiceQuery(input: string): {
+  gender: "" | "male" | "female";
+  language: string;
+  search: string;
+} {
+  let gender: "" | "male" | "female" = "";
+  let language = "";
+  const terms: string[] = [];
+  for (const tok of input.trim().split(/\s+/).filter(Boolean)) {
+    if (GENDER_WORDS[tok]) {
+      gender = GENDER_WORDS[tok];
+      continue;
+    }
+    const c = COUNTRY_WORDS[tok];
+    if (c) {
+      if (c.language) language = c.language;
+      if (c.search) terms.push(c.search);
+      continue;
+    }
+    terms.push(tok);
+  }
+  return { gender, language, search: terms.join(" ") };
+}
+
 export default function VoicesPage() {
   const { toast } = useToast();
   const { supported, play, stop } = useVoicePreview();
@@ -55,6 +113,7 @@ export default function VoicesPage() {
 
   const [mode, setMode] = useState<Mode>("mine");
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [lectureId, setLectureId] = useState<string | null>(null);
 
   // ── 내 보이스 ──
   const [voices, setVoices] = useState<VoiceOption[]>([]);
@@ -67,15 +126,17 @@ export default function VoicesPage() {
   const [lib, setLib] = useState<LibraryVoice[]>([]);
   const [libLoading, setLibLoading] = useState(false);
   const [libSearch, setLibSearch] = useState("");
-  const [libQuery, setLibQuery] = useState("");
-  const [libGender, setLibGender] = useState<"" | "male" | "female">("");
-  const [libPage, setLibPage] = useState(0);
+  const [libQuery, setLibQuery] = useState<LibraryQuery>({ page: 0 });
   const [libHasMore, setLibHasMore] = useState(false);
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<string | null>(null);
 
-  // 라이브러리 응답의 즐겨찾기 플래그를 공용 favIds 에 병합(setState in effect 회피용
-  // 안정 콜백 — async 콜백에서만 호출).
+  // 진입 시 ?lecture= 읽기 (client-only — useSearchParams Suspense 요구 회피).
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("lecture");
+    setLectureId(id);
+  }, []);
+
   const mergeLibFavorites = useCallback((list: LibraryVoice[]) => {
     setFavIds((prev) => {
       const s = new Set(prev);
@@ -101,20 +162,17 @@ export default function VoicesPage() {
 
   useEffect(() => () => stop(), [stop]);
 
-  // 라이브러리: 모드/검색/필터/페이지 변화 시 조회(page 0 교체, 이후 누적).
-  // 로딩 표시는 트리거(탭·검색·필터·더보기)에서 켜고 여기서 끈다 — effect 본문에서
-  // 동기 setState 를 호출하지 않아 react-hooks/set-state-in-effect 를 준수.
+  // 라이브러리 조회 — 로딩 표시는 트리거에서 켜고 여기서 끈다(effect 동기 setState
+  // 회피). page 0 은 교체, 이후는 누적.
   useEffect(() => {
     if (mode !== "library") return;
     let cancelled = false;
     (async () => {
-      const res = await listLibraryVoices({
-        page: libPage,
-        search: libQuery,
-        gender: libGender,
-      });
+      const res = await listLibraryVoices(libQuery);
       if (cancelled) return;
-      setLib((prev) => (libPage === 0 ? res.voices : [...prev, ...res.voices]));
+      setLib((prev) =>
+        (libQuery.page ?? 0) === 0 ? res.voices : [...prev, ...res.voices],
+      );
       setLibHasMore(res.hasMore);
       mergeLibFavorites(res.voices);
       setLibLoading(false);
@@ -122,7 +180,7 @@ export default function VoicesPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, libPage, libQuery, libGender, mergeLibFavorites]);
+  }, [mode, libQuery, mergeLibFavorites]);
 
   const goLibrary = () => {
     setMode("library");
@@ -130,15 +188,19 @@ export default function VoicesPage() {
   };
 
   const onSearch = () => {
+    const parsed = parseKoreanVoiceQuery(libSearch);
     setLibLoading(true);
-    setLibPage(0);
-    setLibQuery(libSearch.trim());
+    setLibQuery({
+      page: 0,
+      search: parsed.search,
+      gender: parsed.gender,
+      language: parsed.language,
+    });
   };
 
   const onPickGender = (g: "" | "male" | "female") => {
     setLibLoading(true);
-    setLibGender(g);
-    setLibPage(0);
+    setLibQuery((q) => ({ ...q, page: 0, gender: g }));
   };
 
   const mineShown = useMemo(() => {
@@ -183,13 +245,17 @@ export default function VoicesPage() {
     );
   };
 
-  const onAddLibraryVoice = async (v: LibraryVoice) => {
+  // 라이브러리 ★ = 내 보이스에 추가 + 즐겨찾기(추가된 계정 보이스 id 로). 추가해야
+  // 강의 패널·목록에서 일관되게 보인다. 실패(요금제 한도 등) 시 토스트.
+  const onAddFavorite = async (v: LibraryVoice) => {
     setAdding(v.voiceId);
     try {
-      await addLibraryVoice(v.publicOwnerId, v.voiceId, v.name);
+      const newId = await addLibraryVoice(v.publicOwnerId, v.voiceId, v.name);
+      await setVoiceFavorite(newId, true);
       setAdded((prev) => new Set(prev).add(v.voiceId));
+      setFavIds((prev) => new Set(prev).add(newId));
       toast(
-        `'${v.name}'을(를) 내 보이스에 추가했어요. 강의 만들기에서 고를 수 있어요.`,
+        `'${v.name}'을(를) 내 보이스에 추가하고 즐겨찾기했어요. 강의 패널 ‘즐겨찾기만’에서 고를 수 있어요.`,
         "success",
       );
     } catch {
@@ -211,11 +277,24 @@ export default function VoicesPage() {
       <PageHeader
         eyebrow="음성 라이브러리"
         title="음성 고르기"
-        subtitle="‘라이브러리’ 탭에서 ElevenLabs 전체 음성을 검색·미리듣고, 쓰고 싶은 음성을 ‘내 보이스에 추가’하세요. ★ 즐겨찾기한 음성은 강의 만들기 화면의 ‘즐겨찾기만’에서 바로 고를 수 있어요."
+        subtitle="‘라이브러리’ 탭에서 ElevenLabs 전체 음성을 검색·미리듣고, ★로 ‘내 보이스에 추가+즐겨찾기’ 하세요. 즐겨찾기한 음성은 강의 만들기 화면의 ‘즐겨찾기만’에서 바로 고를 수 있어요."
         actions={
-          <Link href="/professor/dashboard" style={linkBtnStyle}>
-            ← 대시보드
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {lectureId && (
+              <Link
+                href={`/professor/studio/${lectureId}`}
+                style={{ ...linkBtnStyle, borderColor: SKY, color: SKY_TEXT, background: SKY_SOFT }}
+              >
+                ← 강의 편집으로
+              </Link>
+            )}
+            <Link href="/professor/studio" style={linkBtnStyle}>
+              스튜디오
+            </Link>
+            <Link href="/professor/dashboard" style={linkBtnStyle}>
+              대시보드
+            </Link>
+          </div>
         }
       />
 
@@ -263,7 +342,7 @@ export default function VoicesPage() {
           {mineShown.length === 0 ? (
             <p style={emptyStyle}>
               {mineFilter === "favorites"
-                ? "아직 즐겨찾기한 음성이 없어요. ★를 눌러 추가하세요."
+                ? "아직 즐겨찾기한 음성이 없어요. ‘라이브러리 둘러보기’에서 ★로 추가하세요."
                 : "표시할 음성이 없습니다."}
             </p>
           ) : (
@@ -275,11 +354,11 @@ export default function VoicesPage() {
                   title={v.name}
                   meta={v.meta ?? null}
                   genderLabel={v.gender === "male" ? "남성" : "여성"}
-                  favorite={favIds.has(v.id)}
-                  canFavorite={!isFallbackVoice(v.id)}
                   playing={playingId === v.id}
                   canPreview={supported}
                   onPreview={() => previewOption(v)}
+                  favorite={favIds.has(v.id)}
+                  canFavorite={!isFallbackVoice(v.id)}
                   onToggleFavorite={() => toggleFavorite(v.id, isFallbackVoice(v.id))}
                 />
               ))}
@@ -298,8 +377,8 @@ export default function VoicesPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") onSearch();
               }}
-              placeholder="음성 검색 (예: warm, narration, korean)"
-              aria-label="라이브러리 음성 검색"
+              placeholder="검색: 남성 / 여성 / 미국·영국·한국 등, 또는 영어 키워드"
+              aria-label="라이브러리 음성 검색 (남성/여성/국가 가능)"
               style={searchStyle}
             />
             <button type="button" onClick={onSearch} style={searchBtnStyle}>
@@ -314,8 +393,8 @@ export default function VoicesPage() {
                 key={g.key || "all"}
                 type="button"
                 onClick={() => onPickGender(g.key)}
-                aria-pressed={libGender === g.key}
-                style={chipBtn(libGender === g.key)}
+                aria-pressed={(libQuery.gender ?? "") === g.key}
+                style={chipBtn((libQuery.gender ?? "") === g.key)}
               >
                 {g.label}
               </button>
@@ -347,12 +426,9 @@ export default function VoicesPage() {
                       title={v.name}
                       meta={meta || null}
                       genderLabel={v.genderKo ?? "음성"}
-                      favorite={favIds.has(v.voiceId)}
-                      canFavorite
                       playing={playingId === v.voiceId}
                       canPreview={supported && !!v.previewUrl}
                       onPreview={() => previewOption(opt)}
-                      onToggleFavorite={() => toggleFavorite(v.voiceId, false)}
                       addState={
                         added.has(v.voiceId)
                           ? "added"
@@ -360,7 +436,7 @@ export default function VoicesPage() {
                             ? "adding"
                             : "idle"
                       }
-                      onAdd={() => onAddLibraryVoice(v)}
+                      onAddFavorite={() => onAddFavorite(v)}
                     />
                   );
                 })}
@@ -371,7 +447,7 @@ export default function VoicesPage() {
                     type="button"
                     onClick={() => {
                       setLibLoading(true);
-                      setLibPage((p) => p + 1);
+                      setLibQuery((q) => ({ ...q, page: (q.page ?? 0) + 1 }));
                     }}
                     disabled={libLoading}
                     style={{
@@ -399,27 +475,29 @@ function VoiceCard({
   title,
   meta,
   genderLabel,
-  favorite,
-  canFavorite,
   playing,
   canPreview,
   onPreview,
+  favorite,
+  canFavorite,
   onToggleFavorite,
   addState,
-  onAdd,
+  onAddFavorite,
 }: {
   reduced: boolean;
   title: string;
   meta: string | null;
   genderLabel: string;
-  favorite: boolean;
-  canFavorite: boolean;
   playing: boolean;
   canPreview: boolean;
   onPreview: () => void;
-  onToggleFavorite: () => void;
+  // 내 보이스 모드: ★ 토글
+  favorite?: boolean;
+  canFavorite?: boolean;
+  onToggleFavorite?: () => void;
+  // 라이브러리 모드: ★ = 추가 + 즐겨찾기
   addState?: AddState;
-  onAdd?: () => void;
+  onAddFavorite?: () => void;
 }) {
   const [hover, setHover] = useState(false);
   const lifted = hover && !reduced;
@@ -429,19 +507,17 @@ function VoiceCard({
       onMouseLeave={() => setHover(false)}
       style={{
         position: "relative",
-        background: "linear-gradient(165deg, #FFFFFF 0%, #FBF6E8 100%)",
+        background: "var(--bg-card)",
         border: "1px solid",
-        borderColor: lifted ? "var(--gold)" : "var(--line)",
-        borderTop: "3px solid var(--gold)",
+        borderColor: lifted ? SKY : "var(--line)",
+        borderTop: `3px solid ${SKY}`,
         borderRadius: 14,
         padding: 14,
         display: "flex",
         flexDirection: "column",
         gap: 10,
         transform: lifted ? "translateY(-4px)" : "translateY(0)",
-        boxShadow: lifted
-          ? "0 12px 28px rgba(184,131,8,0.18)"
-          : "var(--shadow-sm)",
+        boxShadow: lifted ? "0 12px 28px rgba(14,165,233,0.22)" : "var(--shadow-sm)",
         transition:
           "transform 180ms var(--ease-out), box-shadow 180ms var(--ease-out), border-color 180ms var(--ease-out)",
       }}
@@ -484,8 +560,8 @@ function VoiceCard({
             fontWeight: 700,
             padding: "2px 8px",
             borderRadius: 999,
-            background: "var(--gold-soft)",
-            color: "var(--gold-on-light, #B88308)",
+            background: SKY_SOFT,
+            color: SKY_TEXT,
           }}
         >
           {genderLabel}
@@ -506,63 +582,60 @@ function VoiceCard({
           {playing ? "■ 정지" : "▶ 미리듣기"}
         </button>
         <span style={{ flex: 1 }} />
-        {onAdd && (
+
+        {onAddFavorite ? (
           <button
             type="button"
-            onClick={onAdd}
+            onClick={onAddFavorite}
             disabled={addState !== "idle"}
             style={{
               ...pillBtn,
-              background:
-                addState === "added" ? "var(--gold-soft)" : "var(--bg-card)",
-              borderColor:
-                addState === "added" ? "var(--gold)" : "var(--line-strong)",
-              color:
-                addState === "added"
-                  ? "var(--gold-on-light, #B88308)"
-                  : "var(--text)",
+              borderColor: addState === "added" ? SKY : "var(--line-strong)",
+              background: addState === "added" ? SKY_SOFT : "var(--bg-card)",
+              color: addState === "added" ? SKY_TEXT : "var(--text)",
               cursor: addState === "idle" ? "pointer" : "default",
             }}
           >
             {addState === "added"
-              ? "추가됨"
+              ? "★ 추가됨"
               : addState === "adding"
                 ? "추가 중…"
-                : "+ 내 보이스"}
+                : "★ 내 보이스에 추가"}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            disabled={!canFavorite}
+            aria-pressed={!!favorite}
+            aria-label={favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
+            title={
+              canFavorite
+                ? favorite
+                  ? "즐겨찾기 해제"
+                  : "즐겨찾기 추가"
+                : "기본 음성은 즐겨찾기할 수 없어요"
+            }
+            style={{
+              flexShrink: 0,
+              display: "inline-grid",
+              placeItems: "center",
+              width: 34,
+              height: 34,
+              borderRadius: 9,
+              border: "1px solid",
+              borderColor: favorite ? SKY : "var(--line-strong)",
+              background: favorite ? SKY_SOFT : "var(--bg-card)",
+              color: favorite ? SKY_TEXT : "var(--text-faint)",
+              cursor: canFavorite ? "pointer" : "not-allowed",
+              opacity: canFavorite ? 1 : 0.4,
+              fontSize: 16,
+              lineHeight: 1,
+            }}
+          >
+            {favorite ? "★" : "☆"}
           </button>
         )}
-        <button
-          type="button"
-          onClick={onToggleFavorite}
-          disabled={!canFavorite}
-          aria-pressed={favorite}
-          aria-label={favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-          title={
-            canFavorite
-              ? favorite
-                ? "즐겨찾기 해제"
-                : "즐겨찾기 추가"
-              : "기본 음성은 즐겨찾기할 수 없어요"
-          }
-          style={{
-            flexShrink: 0,
-            display: "inline-grid",
-            placeItems: "center",
-            width: 34,
-            height: 34,
-            borderRadius: 9,
-            border: "1px solid",
-            borderColor: favorite ? "var(--gold)" : "var(--line-strong)",
-            background: favorite ? "var(--gold-soft)" : "var(--bg-card)",
-            color: favorite ? "var(--gold-on-light, #B88308)" : "var(--text-faint)",
-            cursor: canFavorite ? "pointer" : "not-allowed",
-            opacity: canFavorite ? 1 : 0.4,
-            fontSize: 16,
-            lineHeight: 1,
-          }}
-        >
-          {favorite ? "★" : "☆"}
-        </button>
       </div>
     </div>
   );
