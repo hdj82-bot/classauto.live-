@@ -246,13 +246,22 @@ async def _elevenlabs_synthesize_segmented(
     return await asyncio.to_thread(_concat_mp3, list(parts))
 
 
+# 조각 경계 무음 트리밍 임계값(RMS). 이보다 조용한 앞뒤 구간을 잘라낸다.
+_CONCAT_SILENCE_THRESHOLD = "-50dB"
+
+
 def _concat_mp3(parts: list[bytes]) -> bytes:
     """여러 mp3 조각을 하나로 이어붙여 반환 (동기 — to_thread 로 오프로드).
 
-    ffmpeg concat demuxer(``-c copy``) 로 무손실 결합한다. ElevenLabs 조각은 모두
-    동일 포맷(mp3_44100_128)이라 재인코딩 없이 복사 결합이 안전하다. ffmpeg
-    미설치·실패·타임아웃 시 바이트 단순 연결로 폴백한다(대부분 플레이어·HeyGen
-    에서 재생 가능 — 크래시보다 graceful degrade).
+    구간 분리 합성의 조각을 그냥 ``-c copy`` 로 이으면 (1) MP3 인코더 패딩 때문에
+    조각 경계마다 수십 ms 틈이 생기고 (2) ElevenLabs 가 각 조각 앞뒤에 붙이는
+    무음이 그대로 남아, 한국어→중국어 전환 직전에 들리는 멈춤·끊김의 원인이 된다.
+
+    그래서 ffmpeg ``filter_complex`` 로 (a) 조각별 앞뒤 무음을 ``silenceremove``
+    (+``areverse`` 왕복)로 잘라내고 (b) ``concat`` 필터로 재인코딩 결합해 틈 없는
+    연속 음원을 만든다. 구간 경계는 항상 문장 중간(언어 전환)이라 바짝 붙여도
+    자연스럽다. ffmpeg 미설치·실패·타임아웃 시 바이트 단순 연결로 폴백한다
+    (대부분 플레이어·HeyGen 에서 재생 가능 — 크래시보다 graceful degrade).
     """
     parts = [p for p in parts if p]
     if not parts:
@@ -274,18 +283,30 @@ def _concat_mp3(parts: list[bytes]) -> bytes:
             p = Path(tmpdir) / f"seg_{idx:03d}.mp3"
             p.write_bytes(data)
             seg_paths.append(p)
-        list_path = Path(tmpdir) / "list.txt"
-        # concat demuxer 포맷: 한 줄에 ``file '<path>'``. 경로는 POSIX 슬래시로.
-        list_path.write_text(
-            "".join(f"file '{p.as_posix()}'\n" for p in seg_paths),
-            encoding="utf-8",
-        )
         out_path = Path(tmpdir) / "out.mp3"
-        cmd = [
-            ffmpeg, "-y", "-loglevel", "error",
-            "-f", "concat", "-safe", "0",
-            "-i", str(list_path),
-            "-c", "copy",
+
+        n = len(seg_paths)
+        thr = _CONCAT_SILENCE_THRESHOLD
+        # 조각별: 샘플레이트 정규화 후 앞 무음 제거 → 뒤집어 앞(=원래 뒤) 무음 제거
+        # → 다시 뒤집기. concat 필터는 입력 포맷이 동일해야 하므로 aformat 으로 통일.
+        trim = (
+            f"aresample=44100,aformat=sample_fmts=fltp:channel_layouts=mono,"
+            f"silenceremove=start_periods=1:start_threshold={thr},"
+            f"areverse,"
+            f"silenceremove=start_periods=1:start_threshold={thr},"
+            f"areverse"
+        )
+        chains = ";".join(f"[{i}:a]{trim}[a{i}]" for i in range(n))
+        concat_in = "".join(f"[a{i}]" for i in range(n))
+        filter_complex = f"{chains};{concat_in}concat=n={n}:v=0:a=1[out]"
+
+        cmd = [ffmpeg, "-y", "-loglevel", "error"]
+        for p in seg_paths:
+            cmd += ["-i", str(p)]
+        cmd += [
+            "-filter_complex", filter_complex,
+            "-map", "[out]",
+            "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100",
             str(out_path),
         ]
         proc = subprocess.run(
@@ -293,7 +314,7 @@ def _concat_mp3(parts: list[bytes]) -> bytes:
         )
         if proc.returncode != 0 or not out_path.exists():
             logger.warning(
-                "ffmpeg concat 실패(rc=%s) — 바이트 단순 연결로 폴백: %s",
+                "ffmpeg concat(트리밍) 실패(rc=%s) — 바이트 단순 연결로 폴백: %s",
                 proc.returncode, proc.stderr[-500:],
             )
             return b"".join(parts)
