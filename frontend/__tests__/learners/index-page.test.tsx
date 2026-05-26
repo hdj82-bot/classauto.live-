@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import LearnersIndexPage from "@/app/professor/learners/page";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ToastProvider } from "@/components/ui/Toast";
+import { invalidateProfessorData } from "@/lib/professorData";
 
 const apiGet = vi.fn();
 vi.mock("@/lib/api", () => ({
@@ -20,6 +21,8 @@ const wrap = (ui: React.ReactNode) =>
 
 beforeEach(() => {
   apiGet.mockReset();
+  // 강좌·강의 공유 캐시는 모듈 레벨 상태라 테스트 간 누수된다 → 매 테스트 전 초기화.
+  invalidateProfessorData();
 });
 
 describe("LearnersIndexPage", () => {

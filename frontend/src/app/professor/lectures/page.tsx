@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import {
+  fetchProfessorData,
+  getCachedProfessorData,
+  invalidateProfessorData,
+} from "@/lib/professorData";
 import { useI18n } from "@/contexts/I18nContext";
 import { useToast } from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -18,11 +23,6 @@ import {
 import LectureCard, {
   type LectureCardData,
 } from "@/components/professor/LectureCard";
-
-interface Course {
-  id: string;
-  title: string;
-}
 
 interface Lecture extends LectureCardData {
   slug: string;
@@ -55,9 +55,13 @@ export default function LectureLibraryPage() {
   const { t } = useI18n();
   const { toast } = useToast();
 
-  const [lectures, setLectures] = useState<Lecture[]>([]);
+  const [lectures, setLectures] = useState<Lecture[]>(
+    () => getCachedProfessorData<Lecture>()?.lectures ?? [],
+  );
   const [folders, setFolders] = useState<Folder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(
+    () => getCachedProfessorData<Lecture>() === null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -72,19 +76,21 @@ export default function LectureLibraryPage() {
   //   - courses 실패 → 보관함 자체가 불가능 → 에러 화면.
   //   - folders 실패 → 폴더 메타만 비우고 강의 목록은 계속 로딩 (degrade).
   //   - lectures(course 단위) 실패 → 해당 course 만 스킵 (best-effort).
+  // 강의 목록은 공유 캐시(fetchProfessorData)에서 — 다른 교수자 페이지와
+  // 공유되어 재방문 시 재요청이 없다. 폴더는 보관함 전용이라 그대로 병렬 조회.
+  //   - 강의(courses) 로드 실패 → 보관함 불가 → 에러 화면.
+  //   - folders 실패 → 폴더 메타만 비우고 강의 목록은 계속 로딩 (degrade).
+  //   - 개별 강좌 강의 실패 → 해당 강좌만 스킵 (fetchProfessorData 내부 처리).
   const reloadAll = useCallback(async () => {
     setError(null);
 
-    const [coursesResult, foldersResult] = await Promise.allSettled([
-      api.get<Course[]>("/api/courses"),
+    const [dataResult, foldersResult] = await Promise.allSettled([
+      fetchProfessorData<Lecture>(),
       api.get<Folder[]>("/api/folders"),
     ]);
 
-    if (coursesResult.status === "rejected") {
-      console.error(
-        "[library] GET /api/courses failed:",
-        coursesResult.reason,
-      );
+    if (dataResult.status === "rejected") {
+      console.error("[library] professor data load failed:", dataResult.reason);
       setError(t("library.loadError"));
       setLoading(false);
       return;
@@ -101,23 +107,7 @@ export default function LectureLibraryPage() {
       fs = foldersResult.value.data;
     }
 
-    const cs = coursesResult.value.data;
-    const allLectures: Lecture[] = [];
-    for (const c of cs) {
-      try {
-        const { data: lecs } = await api.get<Lecture[]>(
-          `/api/courses/${c.id}/lectures`,
-        );
-        allLectures.push(...lecs);
-      } catch (e) {
-        console.error(
-          `[library] GET /api/courses/${c.id}/lectures failed:`,
-          e,
-        );
-      }
-    }
-
-    setLectures(allLectures);
+    setLectures(dataResult.value.lectures);
     setFolders(fs);
     setLoading(false);
   }, [t, toast]);
@@ -217,6 +207,8 @@ export default function LectureLibraryPage() {
           l.folder_id === folder.id ? { ...l, folder_id: null } : l,
         ),
       );
+      // 강의의 folder_id 가 바뀌었으니 공유 캐시 무효화 (재방문 시 정확한 그룹).
+      invalidateProfessorData();
       if (activeFolder === folder.id) setActiveFolder(null);
       toast(t("library.folderDeleted"), "success");
     } catch {
@@ -249,6 +241,8 @@ export default function LectureLibraryPage() {
             : f;
         }),
       );
+      // folder_id 변경 → 공유 캐시 무효화 (재방문 시 정확한 폴더 그룹).
+      invalidateProfessorData();
       toast(t("library.moveSuccess"), "success");
     } catch {
       toast(t("library.moveError"), "error");

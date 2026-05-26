@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import {
+  fetchProfessorData,
+  getCachedProfessorData,
+} from "@/lib/professorData";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import PrivacyNotice from "@/components/professor/learners/PrivacyNotice";
 import { useLearnersI18n } from "@/components/professor/learners/useLearnersI18n";
@@ -39,30 +42,29 @@ interface Lecture {
 export default function LearnersIndexPage() {
   const router = useRouter();
   const { t } = useLearnersI18n();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [lectures, setLectures] = useState<Lecture[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [courses, setCourses] = useState<Course[]>(
+    () => getCachedProfessorData<Lecture>()?.courses ?? [],
+  );
+  const [lectures, setLectures] = useState<Lecture[]>(
+    () => getCachedProfessorData<Lecture>()?.lectures ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => getCachedProfessorData<Lecture>() === null,
+  );
   const [error, setError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setError(false);
+    // 캐시가 없을 때만 스피너 — 재방문 시 캐시로 즉시 렌더.
+    if (getCachedProfessorData() === null) setLoading(true);
     (async () => {
       try {
-        setError(false);
-        const { data: cs } = await api.get<Course[]>("/api/courses");
+        const { courses: cs, lectures: lecs } =
+          await fetchProfessorData<Lecture>();
         if (cancelled) return;
         setCourses(cs);
-        // 강좌별 강의 fan-out 병렬화 — 강좌 수만큼 RTT 직렬 누적 차단
-        // (메뉴 진입 체감 지연 최대 원인).
-        const lecsByCourse = await Promise.all(
-          cs.map((c) =>
-            api
-              .get<Lecture[]>(`/api/courses/${c.id}/lectures`)
-              .then((r) => r.data.map((l) => ({ ...l, course_id: c.id }))),
-          ),
-        );
-        if (cancelled) return;
-        setLectures(lecsByCourse.flat());
+        setLectures(lecs);
       } catch {
         if (!cancelled) setError(true);
       } finally {

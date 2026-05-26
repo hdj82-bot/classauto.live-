@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
-import { api } from "@/lib/api";
+import { fetchProfessorData } from "@/lib/professorData";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
 /**
@@ -54,24 +54,15 @@ interface LectureLite {
  * 최신순(updated_at → created_at)으로 가장 위를 골라 마법사
  * `/professor/studio/{id}` 로 이어서 진행한다. 없으면 진입 페이지로 폴백.
  *
- * 강좌별 강의 fan-out 은 대시보드·보관함과 같은 패턴이며, 한 강좌 조회가
- * 실패해도 해당 강좌만 건너뛰고(best-effort) 나머지로 해석을 이어간다.
+ * 강좌·강의 목록은 공유 캐시(fetchProfessorData)에서 받는다 — 다른 교수자
+ * 페이지가 이미 로드해 두었으면 네트워크 없이 즉시 해석된다.
  */
 async function resolveStudioContinueHref(): Promise<string> {
   try {
-    const { data: courses } = await api.get<{ id: string }[]>("/api/courses");
-    const lists = await Promise.all(
-      courses.map((c) =>
-        api
-          .get<LectureLite[]>(`/api/courses/${c.id}/lectures`)
-          .then((r) => r.data)
-          .catch(() => [] as LectureLite[]),
-      ),
-    );
+    const { lectures } = await fetchProfessorData<LectureLite>();
     const ts = (l: LectureLite) =>
       Date.parse(l.updated_at || l.created_at || "") || 0;
-    const inProgress = lists
-      .flat()
+    const inProgress = lectures
       .filter(
         (l) =>
           !l.is_published && (Boolean(l.pipeline_task_id) || !l.video_url),
