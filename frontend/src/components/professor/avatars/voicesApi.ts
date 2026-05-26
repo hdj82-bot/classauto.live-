@@ -67,3 +67,97 @@ export async function setVoiceFavorite(
   if (favorite) await api.put(path);
   else await api.delete(path);
 }
+
+// ── 공유 보이스 라이브러리 (GET /api/voices/library) ───────────────────────────
+
+export interface LibraryVoice {
+  voiceId: string;
+  publicOwnerId: string;
+  name: string;
+  previewUrl: string | null;
+  language: string | null;
+  /** 성별/억양/설명은 모두 한국어로만 (백엔드가 영문은 숨김). */
+  genderKo: string | null;
+  accentKo: string | null;
+  descriptionKo: string | null;
+  favorite: boolean;
+}
+
+export interface LibraryResult {
+  voices: LibraryVoice[];
+  page: number;
+  hasMore: boolean;
+}
+
+export interface LibraryQuery {
+  page?: number;
+  search?: string;
+  gender?: "male" | "female" | "";
+  language?: string;
+}
+
+interface SharedVoiceWire {
+  voice_id: string;
+  public_owner_id: string;
+  name: string;
+  preview_url?: string | null;
+  language?: string | null;
+  gender_ko?: string | null;
+  accent_ko?: string | null;
+  description_ko?: string | null;
+  is_favorite: boolean;
+}
+interface SharedVoicesWire {
+  voices: SharedVoiceWire[];
+  page: number;
+  has_more: boolean;
+}
+
+/** 공유 라이브러리 검색·페이지네이션. 실패 시 빈 결과로 degrade. */
+export async function listLibraryVoices(
+  q: LibraryQuery = {},
+): Promise<LibraryResult> {
+  const params: Record<string, string | number> = { page: q.page ?? 0 };
+  if (q.search) params.search = q.search;
+  if (q.gender) params.gender = q.gender;
+  if (q.language) params.language = q.language;
+  try {
+    const { data } = await api.get<SharedVoicesWire>("/api/voices/library", {
+      params,
+    });
+    return {
+      voices: (data.voices ?? []).map((v) => ({
+        voiceId: v.voice_id,
+        publicOwnerId: v.public_owner_id,
+        name: v.name,
+        previewUrl: v.preview_url ?? null,
+        language: v.language ?? null,
+        genderKo: v.gender_ko ?? null,
+        accentKo: v.accent_ko ?? null,
+        descriptionKo: v.description_ko ?? null,
+        favorite: v.is_favorite,
+      })),
+      page: data.page ?? q.page ?? 0,
+      hasMore: !!data.has_more,
+    };
+  } catch {
+    return { voices: [], page: q.page ?? 0, hasMore: false };
+  }
+}
+
+/**
+ * 공유 라이브러리 보이스를 내 계정에 추가 → 새 account voice_id 반환.
+ * 요금제 보이스 한도 초과 등은 throw(호출부가 토스트로 안내).
+ */
+export async function addLibraryVoice(
+  publicOwnerId: string,
+  voiceId: string,
+  name: string,
+): Promise<string> {
+  const { data } = await api.post<{ voice_id: string }>(
+    `/api/voices/library/${encodeURIComponent(publicOwnerId)}/${encodeURIComponent(voiceId)}/add`,
+    null,
+    { params: { name } },
+  );
+  return data.voice_id;
+}
