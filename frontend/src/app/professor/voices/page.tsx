@@ -52,6 +52,16 @@ const MINE_FILTERS: { key: MineFilter; label: string }[] = [
   { key: "female", label: "여성" },
 ];
 
+// 라이브러리 언어 필터 — 클릭하면 language 파라미터로 ElevenLabs 공유 라이브러리를
+// 언어별로 거른다(검색창 한국어 타이핑 외에 한눈에 보이는 버튼 제공).
+const LIB_LANGUAGES: { key: string; label: string }[] = [
+  { key: "", label: "전체 언어" },
+  { key: "ko", label: "한국어" },
+  { key: "zh", label: "중국어" },
+  { key: "en", label: "영어" },
+  { key: "ja", label: "일본어" },
+];
+
 function isFallbackVoice(id: string): boolean {
   return id.startsWith("tts-");
 }
@@ -201,6 +211,11 @@ export default function VoicesPage() {
   const onPickGender = (g: "" | "male" | "female") => {
     setLibLoading(true);
     setLibQuery((q) => ({ ...q, page: 0, gender: g }));
+  };
+
+  const onPickLanguage = (lang: string) => {
+    setLibLoading(true);
+    setLibQuery((q) => ({ ...q, page: 0, language: lang }));
   };
 
   const mineShown = useMemo(() => {
@@ -397,6 +412,26 @@ export default function VoicesPage() {
                 style={chipBtn((libQuery.gender ?? "") === g.key)}
               >
                 {g.label}
+              </button>
+            ))}
+          </div>
+
+          <div
+            className="flex flex-wrap items-center gap-2"
+            style={{ marginBottom: 16 }}
+          >
+            <span style={{ fontSize: 12, color: "var(--text-muted)", marginRight: 2 }}>
+              언어
+            </span>
+            {LIB_LANGUAGES.map((l) => (
+              <button
+                key={l.key || "all"}
+                type="button"
+                onClick={() => onPickLanguage(l.key)}
+                aria-pressed={(libQuery.language ?? "") === l.key}
+                style={chipBtn((libQuery.language ?? "") === l.key)}
+              >
+                {l.label}
               </button>
             ))}
           </div>
