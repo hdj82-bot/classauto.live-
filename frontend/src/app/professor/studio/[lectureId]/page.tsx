@@ -120,10 +120,9 @@ export default function StudioWizardPage() {
   // 렌더(HeyGen scale)에 함께 반영. 슬라이더 드래그 중 PATCH 폭주는 디바운스.
   const [avatarScale, setAvatarScale] = useState<number>(1.0);
   const avatarScaleSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // expires_at 은 UI 에서 제거됐지만(강의 설정 섹션 삭제) 음성/만료 저장 effect 가
+  // voice_gender 와 함께 보내므로 강의의 기존 값을 보존하기 위해 상태는 유지한다.
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
-  const [qaScopeOnUploaded, setQaScopeOnUploaded] = useState(true);
-  const [blockExternalSearch, setBlockExternalSearch] = useState(true);
-  const [attentionWarn, setAttentionWarn] = useState(true);
 
   // ── 음성·자막 ──────────────────────────────────────────────────────────────
   const [voiceLang, setVoiceLang] = useState<LangCode>("ko");
@@ -1010,10 +1009,6 @@ export default function StudioWizardPage() {
         avatarName={lecture.avatar_name ?? "기본 아바타"}
         ttsProvider="elevenlabs"
         voiceGender={voiceGender}
-        expiresAt={expiresAt}
-        qaScopeOnUploaded={qaScopeOnUploaded}
-        blockExternalSearch={blockExternalSearch}
-        attentionWarn={attentionWarn}
         voiceLang={voiceLang}
         subtitleLang={subtitleLang}
         voiceId={voiceId}
@@ -1028,10 +1023,6 @@ export default function StudioWizardPage() {
         }
         avatarScale={avatarScale}
         onChangeAvatarScale={handleChangeAvatarScale}
-        onChangeExpires={setExpiresAt}
-        onToggleQaScope={setQaScopeOnUploaded}
-        onToggleBlockExternal={setBlockExternalSearch}
-        onToggleAttentionWarn={setAttentionWarn}
         slideCount={slides.length}
         quizPoints={quizPoints}
         onAddQuizPoint={handleAddQuizPoint}
