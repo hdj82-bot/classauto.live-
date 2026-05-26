@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import type { CSSProperties } from "react";
 import { tabularStyle, hanStyle } from "@/components/professor/shell";
 
@@ -36,10 +37,18 @@ export interface StudioSlide {
   status: "adopted" | "warn" | "empty" | "pending";
 }
 
+/** 슬라이드 N↔N+1 사이에 삽입된 인터랙티브 퀴즈 표시. boundaryIndex = 0-based "슬라이드 N 다음". */
+export interface QuizMarker {
+  boundaryIndex: number;
+  label: string;
+}
+
 interface SlidePanelProps {
   slides: StudioSlide[];
   activeIndex: number;
   onSelect: (index: number) => void;
+  /** 슬라이드 사이에 표시할 퀴즈 마커(작성된 퀴즈만). 해당 슬라이드 카드 아래에 삽입. */
+  quizMarkers?: QuizMarker[];
   /**
    * 초기 슬라이드 메타가 아직 도착하지 않았을 때 — 카드 자리에 skeleton 3장.
    * 종전: scriptLoading 동안 SlidePanel 이 0장만 표시 → 페이지가 비어 보였음.
@@ -122,6 +131,7 @@ export default function SlidePanel({
   slides,
   activeIndex,
   onSelect,
+  quizMarkers = [],
   loading = false,
   isLoading = false,
 }: SlidePanelProps) {
@@ -179,8 +189,10 @@ export default function SlidePanel({
         {slides.map((s) => {
           const active = s.index === activeIndex;
           const num = String(s.index + 1).padStart(2, "0");
+          const markers = quizMarkers.filter((m) => m.boundaryIndex === s.index);
           return (
-            <li key={s.index}>
+            <Fragment key={s.index}>
+            <li>
               <button
                 type="button"
                 onClick={() => onSelect(s.index)}
@@ -293,6 +305,12 @@ export default function SlidePanel({
                 </span>
               </button>
             </li>
+            {markers.map((m, mi) => (
+              <li key={`q-${s.index}-${mi}`}>
+                <QuizMarkerRow label={m.label} />
+              </li>
+            ))}
+            </Fragment>
           );
         })}
       </ul>
@@ -356,6 +374,35 @@ function AnalyzingSkeletonCard() {
         className="studio-skeleton-block"
         style={{ width: 18, height: 11, borderRadius: 3, flexShrink: 0 }}
       />
+    </div>
+  );
+}
+
+/** 슬라이드 사이에 삽입된 퀴즈 표시 — 골드 점선 칩으로 "여기에 문제가 들어간다"를 명확히. */
+function QuizMarkerRow({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        padding: "7px 8px",
+        borderRadius: 9,
+        background: "var(--gold-soft)",
+        border: "1px dashed var(--gold-on-light, #B88308)",
+        color: "var(--gold-on-light, #B88308)",
+        fontSize: 11.5,
+        fontWeight: 700,
+      }}
+      aria-label={`${label} 삽입됨`}
+    >
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+      {label}
     </div>
   );
 }

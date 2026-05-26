@@ -98,6 +98,7 @@ def _build_system_prompt(slide_context: str, n: int, question_type: str, difficu
 - 주관식이면 options 는 null, correct_answer 는 핵심 키워드를 담은 모범답안.
 - 아직 초안을 제시하기 이르면 draft 를 null 로 두어도 됩니다.
 - 자연어 메시지에는 코드블록이나 JSON 을 노출하지 말고, 사람에게 말하듯 자연스럽게 작성하세요.
+- 자연어 메시지에는 마크다운 강조 기호(**, __, ##, 백틱 등)를 절대 쓰지 말고, 굵게/제목 없이 일반 문장으로만 작성하세요.
 - 항상 한국어로 대화합니다.
 """
 

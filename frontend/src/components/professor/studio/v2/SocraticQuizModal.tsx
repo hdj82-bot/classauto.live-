@@ -13,6 +13,15 @@ import type {
 } from "../studioTypes";
 import { confirmQuiz, socraticTurn } from "../quizApi";
 
+/** 클로드 응답의 마크다운 강조 기호 제거 — 채팅 버블엔 일반 문장만 표시. */
+function stripMarkdown(s: string): string {
+  return s
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/`+/g, "");
+}
+
 /**
  * Studio v2 — 소크라테스식 퀴즈 저작 대화 모달.
  *
@@ -88,7 +97,7 @@ export default function SocraticQuizModal({
           difficulty: pt.difficulty,
           messages: visible,
         });
-        setMessages([...visible, { role: "assistant", content: res.reply }]);
+        setMessages([...visible, { role: "assistant", content: stripMarkdown(res.reply) }]);
         if (res.draft) setDraft(res.draft);
         setDone(res.done);
       } catch {
