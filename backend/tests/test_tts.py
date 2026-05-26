@@ -317,14 +317,30 @@ def test_google_tts_synthesize_helper_translates_errors():
 
 
 @pytest.mark.asyncio
-async def test_synthesize_forwards_speed_to_elevenlabs():
-    """caller 가 넘긴 speed 가 ElevenLabs client 까지 그대로 전달된다."""
+async def test_synthesize_v3_applies_speed_via_atempo_not_api():
+    """전체 v3 정책: v3 는 speed 를 API 로 안 보내고(미지원) ffmpeg atempo 로 적용한다."""
+    captured: dict = {}
+
+    def fake_el(text, **kwargs):
+        captured["speed"] = kwargs.get("speed")
+        captured["model_id"] = kwargs.get("model_id")
+        return b"v3"
+
+    atempo: dict = {}
+
+    def fake_atempo(audio, factor):  # noqa: ARG001
+        atempo["factor"] = factor
+        return b"sped"
+
     with patch.object(
-        elevenlabs_client, "synthesize", new_callable=AsyncMock, return_value=b"a",
-    ) as el_mock:
-        await synthesize("속도 적용", speed=0.85)
-    _, kwargs = el_mock.call_args
-    assert kwargs.get("speed") == 0.85
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=fake_el,
+    ), patch.object(tts, "_apply_atempo", side_effect=fake_atempo):
+        result = await synthesize("속도 적용 테스트", speed=0.85)
+
+    assert captured["model_id"] == "eleven_v3"  # v3 모델로 합성
+    assert captured["speed"] is None            # speed 는 API 로 미전달
+    assert round(atempo["factor"], 3) == 0.85   # atempo 로 0.85 적용
+    assert result.audio_bytes == b"sped"
 
 
 @pytest.mark.asyncio
