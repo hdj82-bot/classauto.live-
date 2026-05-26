@@ -1,10 +1,20 @@
-"""발화 스크립트·자막용 텍스트 정리 — 한자 뒤 병음(로마자) 괄호 표기 제거.
+"""발화 스크립트·자막용 텍스트 정리 + 언어 구간 분리(TTS 발음 정확화).
 
-스크립트에 ``한자(병음)`` 형태가 섞이면 ElevenLabs(eleven_multilingual_v2)가
-괄호 안 로마자를 그대로 읽어 중국어 발음이 깨진다. 한자만 남기면 멀티링구얼
-모델이 한자를 중국어로 정확히 발음한다. 생성 단계(script_generator)·합성 단계
-(tts.synthesize)·자막 번역(video.translate_subtitles) 에서 공통으로 이 함수를
-거쳐 병음 주석을 제거한다.
+두 가지 책임:
+
+1. ``strip_pinyin_annotations`` — ``한자(병음)`` 형태의 로마자 괄호 표기 제거.
+   괄호 안 로마자를 ElevenLabs 가 그대로 읽어 발음이 깨지는 것을 막는다.
+2. ``split_by_language`` — 한국어 설명에 박힌 중국어(한자) 구간을 분리.
+
+   ElevenLabs(eleven_multilingual_v2) 는 합성 요청마다 언어를 하나로 자동
+   판별하므로, 한국어가 대부분인 문장에 한자 몇 글자가 섞이면 전체가 한국어로
+   판정돼 한자가 한국어 한자음(我→'아')으로 발음된다. 병음을 지워 한자만
+   남겨도 이 문제는 그대로다(혼합문에서는 한자를 중국어로 안 읽음). 그래서
+   한자 구간을 떼어 따로 합성해야(격리된 한자 텍스트는 모델이 중국어로 판별)
+   만다린이 정확히 나온다. 실제 구간별 합성·병합은 ``tts.synthesize`` 가 한다.
+
+생성 단계(script_generator)·합성 단계(tts.synthesize)·자막 번역
+(video.translate_subtitles) 에서 공통으로 ``strip_pinyin_annotations`` 를 거친다.
 """
 from __future__ import annotations
 
@@ -38,3 +48,83 @@ def strip_pinyin_annotations(text: str) -> str:
     if not text:
         return text
     return _RE_PINYIN_PAREN.sub("", text)
+
+
+# ── 언어 구간 분리 (중국어 발음 정확화) ───────────────────────────────────────
+# 한자(CJK 통합 한자 + 확장 A + 호환 한자)와 한글 음절 판별. strip 의 _HANZI
+# 와 별개로, 합성기에 보낼 구간을 나누기 위한 글자 단위 매처.
+_HANZI_CHAR = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
+_HANGUL_CHAR = re.compile(r"[가-힣]")
+
+
+def _has_speech_letter(s: str) -> bool:
+    """한글 또는 한자가 1자 이상 있으면 True (순수 문장부호/공백 구간 판별용)."""
+    return bool(_HANZI_CHAR.search(s) or _HANGUL_CHAR.search(s))
+
+
+def split_by_language(text: str) -> list[tuple[str, str]]:
+    """발화 텍스트를 중국어(한자) 구간과 그 외(한국어 등) 구간으로 분리한다.
+
+    반환: ``[(lang, chunk), ...]`` (lang ∈ ``{"zh", "other"}``). 모든 chunk 를
+    순서대로 이으면 원문과 정확히 같다(문자 손실 없음 — 호출부가 오디오를
+    이어붙이면 원문 발화가 복원된다).
+
+    규칙:
+    - 한자 사이에 낀 문장부호·공백(예 ``我、你``)은 중국어 구간에 붙인다.
+    - 그 밖의 문장부호·공백·로마자·숫자는 인접 구간에 붙여, 순수 문장부호만으로
+      이뤄진 구간이 따로 생기지 않게 한다(빈 합성 호출 방지).
+    - 순수 한국어/순수 중국어 텍스트는 구간이 1개 → 호출부가 분리 없이 한 번에
+      합성하면 된다(기존 동작과 동일).
+    """
+    if not text:
+        return []
+
+    # 1) 글자별 1차 분류: H(한자) / K(한글) / N(중립: 공백·부호·로마자·숫자)
+    cls: list[str] = []
+    for ch in text:
+        if _HANZI_CHAR.match(ch):
+            cls.append("H")
+        elif _HANGUL_CHAR.match(ch):
+            cls.append("K")
+        else:
+            cls.append("N")
+
+    n = len(text)
+    eff = cls[:]
+    i = 0
+    while i < n:
+        if cls[i] != "N":
+            i += 1
+            continue
+        j = i
+        while j < n and cls[j] == "N":
+            j += 1
+        left = cls[i - 1] if i > 0 else None
+        right = cls[j] if j < n else None
+        # 한자와 한자 사이에 낀 중립 문자만 중국어로, 나머지는 한국어로 귀속.
+        run = "H" if (left == "H" and right == "H") else "K"
+        for k in range(i, j):
+            eff[k] = run
+        i = j
+
+    # 2) 같은 분류가 연속된 구간으로 병합
+    raw: list[tuple[str, str]] = []
+    start = 0
+    for idx in range(1, n + 1):
+        if idx == n or eff[idx] != eff[start]:
+            lang = "zh" if eff[start] == "H" else "other"
+            raw.append((lang, text[start:idx]))
+            start = idx
+
+    # 3) 순수 문장부호 구간을 인접 구간에 흡수 (선행 따옴표 등 → 빈 합성 호출 방지)
+    merged: list[list[str]] = []
+    for lang, chunk in raw:
+        if not _has_speech_letter(chunk) and merged:
+            merged[-1][1] += chunk
+        elif merged and not _has_speech_letter(merged[-1][1]):
+            # 직전이 순수 부호 구간(선행 따옴표 등)이면 이번 구간 언어를 채택
+            merged[-1][1] += chunk
+            merged[-1][0] = lang
+        else:
+            merged.append([lang, chunk])
+    return [(lang, chunk) for lang, chunk in merged]

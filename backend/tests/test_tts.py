@@ -366,6 +366,87 @@ async def test_synthesize_falls_back_on_non_domain_elevenlabs_error():
     assert "ConnectError" in (result.fallback_reason or "")
 
 
+# ── 언어 구간 분리 합성 (중국어 발음 정확화) ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_synthesize_korean_only_is_single_elevenlabs_call():
+    """순수 한국어는 구간이 1개 → ElevenLabs 1회 호출(기존 동작 유지)."""
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        return_value=b"ko-audio",
+    ) as el_mock:
+        result = await synthesize("안녕하세요. 어순을 배웁니다.")
+
+    assert result.audio_bytes == b"ko-audio"
+    el_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_synthesize_splits_mixed_korean_chinese_segments():
+    """한국어+중국어 혼합 스크립트는 한자 구간을 떼어 따로 합성한다.
+
+    각 구간이 별도 합성되고(한자 구간이 한국어와 분리), 합성 오디오가 구간
+    순서대로 병합되는지 검증. 한자 구간이 고립돼야 ElevenLabs 가 중국어로 발음한다.
+    """
+    from app.services.pipeline.text_cleanup import split_by_language
+
+    text = '여기서 "我"는 나는 이라는 뜻입니다.'
+    expected_chunks = [chunk for _, chunk in split_by_language(text)]
+    calls: list[str] = []
+
+    def fake_el(chunk, **kwargs):
+        calls.append(chunk)
+        return f"[{chunk}]".encode()
+
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=fake_el,
+    ), patch.object(
+        tts, "_concat_mp3", side_effect=lambda parts: b"".join(parts),
+    ):
+        result = await synthesize(text)
+
+    assert result.provider == "elevenlabs"
+    # 한자 "我" 가 한국어 설명과 분리돼 별도 구간으로 합성됐다.
+    assert "我" in expected_chunks
+    assert len(expected_chunks) >= 2
+    # 모든 구간이 합성됐다(동시 실행이라 순서 무관 비교).
+    assert sorted(calls) == sorted(expected_chunks)
+    # gather 는 입력 순서를 보존하므로 구간 순서대로 병합돼 원문이 복원된다.
+    assert result.audio_bytes == b"".join(
+        f"[{c}]".encode() for c in expected_chunks
+    )
+
+
+@pytest.mark.asyncio
+async def test_synthesize_mixed_falls_back_to_google_when_a_segment_fails():
+    """혼합 텍스트의 한 구간이라도 ElevenLabs 실패 → 전체 텍스트 Google 폴백."""
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        side_effect=elevenlabs_client.ElevenLabsServerError("5xx"),
+    ), patch.object(
+        google_tts_client, "synthesize", return_value=b"google-whole",
+    ):
+        result = await synthesize('"我"는 나는 이라는 뜻입니다.')
+
+    assert result.provider == "google_tts"
+    assert result.audio_bytes == b"google-whole"
+    assert result.fallback_reason and "ElevenLabsServerError" in result.fallback_reason
+
+
+def test_concat_mp3_single_and_empty():
+    """_concat_mp3: 1개면 그대로, 빈 입력이면 b''."""
+    assert tts._concat_mp3([b"only"]) == b"only"
+    assert tts._concat_mp3([]) == b""
+    assert tts._concat_mp3([b"", b""]) == b""
+
+
+def test_concat_mp3_byte_join_fallback_when_no_ffmpeg():
+    """ffmpeg 미설치 시 바이트 단순 연결로 병합(graceful degrade)."""
+    with patch.object(tts.shutil, "which", return_value=None):
+        assert tts._concat_mp3([b"aa", b"bb", b"cc"]) == b"aabbcc"
+
+
 # ── 모듈 export sanity ──────────────────────────────────────────────────────
 
 

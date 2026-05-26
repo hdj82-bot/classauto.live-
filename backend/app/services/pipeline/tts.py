@@ -27,7 +27,10 @@ from typing import TYPE_CHECKING
 import httpx
 
 from app.services.pipeline import elevenlabs_client, google_tts_client
-from app.services.pipeline.text_cleanup import strip_pinyin_annotations
+from app.services.pipeline.text_cleanup import (
+    split_by_language,
+    strip_pinyin_annotations,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -103,7 +106,10 @@ async def synthesize(
     fallback_reason: str | None = None
     start = time.monotonic()
     try:
-        audio_bytes = await elevenlabs_client.synthesize(
+        # 한국어 설명에 박힌 한자가 한국어 한자음으로 발음되는 문제를 막기 위해,
+        # 중국어(한자) 구간을 떼어 따로 합성하고 오디오를 이어붙인다. 순수
+        # 한국어/중국어 텍스트는 분리 없이 한 번에 합성한다(기존 동작과 동일).
+        audio_bytes = await _elevenlabs_synthesize_segmented(
             text, voice_id=voice_id, gender=gender, speed=speed,
         )
         provider = "elevenlabs"
@@ -189,6 +195,114 @@ async def synthesize(
         provider, len(text), elapsed, bool(fallback_reason),
     )
     return result
+
+
+# ── 언어 구간 분리 합성 (중국어 발음 정확화) ─────────────────────────────────────
+# eleven_multilingual_v2 는 합성 요청마다 언어를 하나로 자동 판별한다. 한국어가
+# 대부분인 문장에 한자가 섞이면 전체가 한국어로 판정돼 한자가 한국어 한자음
+# (我→'아')으로 발음된다. 한자 구간을 떼어 따로 합성하면(격리된 한자 텍스트는
+# 중국어로 판별) 같은 voice_id 로도 만다린이 정확히 나온다. 합성 후 ffmpeg 로
+# 이어붙인다. 폴백(Google)은 전체 텍스트 단위 유지 — 비상 degrade 경로이며
+# (자격증명 미설정 시) 현재 비활성. 중국어 발음 정확성은 1차 ElevenLabs 가 책임.
+_SEGMENT_SYNTH_CONCURRENCY = 4
+
+
+async def _elevenlabs_synthesize_segmented(
+    text: str,
+    *,
+    voice_id: str | None,
+    gender: str | None,
+    speed: float | None,
+) -> bytes:
+    """언어 구간별로 ElevenLabs 합성 후 오디오를 이어붙여 반환.
+
+    순수 한국어/중국어(구간 1개) 텍스트는 분리 없이 한 번에 합성한다(기존 동작
+    동일). 혼합 텍스트만 구간별로 나눠 합성하고 ``_concat_mp3`` 로 병합한다.
+    어느 한 구간이라도 실패하면 예외가 그대로 전파돼 호출부(synthesize)의 Google
+    폴백으로 흘러간다.
+    """
+    segments = split_by_language(text)
+    if len(segments) <= 1:
+        return await elevenlabs_client.synthesize(
+            text, voice_id=voice_id, gender=gender, speed=speed,
+        )
+
+    zh_count = sum(1 for lang, _ in segments if lang == "zh")
+    logger.info(
+        "혼합 언어 스크립트 구간 분리 합성: 총 %d구간(중국어 %d) — 구간별 합성 후 병합",
+        len(segments), zh_count,
+    )
+
+    sem = asyncio.Semaphore(_SEGMENT_SYNTH_CONCURRENCY)
+
+    async def _one(chunk: str) -> bytes:
+        async with sem:
+            return await elevenlabs_client.synthesize(
+                chunk, voice_id=voice_id, gender=gender, speed=speed,
+            )
+
+    # gather 는 입력 순서를 보존하므로 구간 순서대로 이어붙일 수 있다.
+    parts = await asyncio.gather(*(_one(chunk) for _, chunk in segments))
+    return await asyncio.to_thread(_concat_mp3, list(parts))
+
+
+def _concat_mp3(parts: list[bytes]) -> bytes:
+    """여러 mp3 조각을 하나로 이어붙여 반환 (동기 — to_thread 로 오프로드).
+
+    ffmpeg concat demuxer(``-c copy``) 로 무손실 결합한다. ElevenLabs 조각은 모두
+    동일 포맷(mp3_44100_128)이라 재인코딩 없이 복사 결합이 안전하다. ffmpeg
+    미설치·실패·타임아웃 시 바이트 단순 연결로 폴백한다(대부분 플레이어·HeyGen
+    에서 재생 가능 — 크래시보다 graceful degrade).
+    """
+    parts = [p for p in parts if p]
+    if not parts:
+        return b""
+    if len(parts) == 1:
+        return parts[0]
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        logger.warning(
+            "ffmpeg 미설치 — mp3 %d개 조각을 바이트 단순 연결로 병합", len(parts),
+        )
+        return b"".join(parts)
+
+    tmpdir = tempfile.mkdtemp(prefix="tts-concat-")
+    try:
+        seg_paths: list[Path] = []
+        for idx, data in enumerate(parts):
+            p = Path(tmpdir) / f"seg_{idx:03d}.mp3"
+            p.write_bytes(data)
+            seg_paths.append(p)
+        list_path = Path(tmpdir) / "list.txt"
+        # concat demuxer 포맷: 한 줄에 ``file '<path>'``. 경로는 POSIX 슬래시로.
+        list_path.write_text(
+            "".join(f"file '{p.as_posix()}'\n" for p in seg_paths),
+            encoding="utf-8",
+        )
+        out_path = Path(tmpdir) / "out.mp3"
+        cmd = [
+            ffmpeg, "-y", "-loglevel", "error",
+            "-f", "concat", "-safe", "0",
+            "-i", str(list_path),
+            "-c", "copy",
+            str(out_path),
+        ]
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=_FFMPEG_TIMEOUT_SEC, check=False,
+        )
+        if proc.returncode != 0 or not out_path.exists():
+            logger.warning(
+                "ffmpeg concat 실패(rc=%s) — 바이트 단순 연결로 폴백: %s",
+                proc.returncode, proc.stderr[-500:],
+            )
+            return b"".join(parts)
+        return out_path.read_bytes()
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("ffmpeg concat 예외 — 바이트 단순 연결로 폴백: %s", exc)
+        return b"".join(parts)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 # ── 발화 속도 후처리 ────────────────────────────────────────────────────────────
