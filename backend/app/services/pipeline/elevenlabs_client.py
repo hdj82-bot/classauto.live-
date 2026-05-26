@@ -286,6 +286,98 @@ async def get_voice(voice_id: str, timeout: float = 30.0) -> dict[str, Any]:
     )
 
 
+# ── 공유 보이스 라이브러리 (Shared Voice Library) ────────────────────────────
+
+
+async def list_shared_voices(
+    *,
+    page: int = 0,
+    page_size: int = 30,
+    search: str | None = None,
+    gender: str | None = None,
+    language: str | None = None,
+    timeout: float = 30.0,
+) -> dict[str, Any]:
+    """공유 보이스 라이브러리 조회 (``GET /v1/shared-voices``).
+
+    수천 개 커뮤니티 보이스를 검색·필터·페이지네이션으로 가져온다. 반환:
+    ``{"voices": [...raw...], "has_more": bool}``. raw 항목엔 public_owner_id /
+    voice_id / name / description / preview_url / gender / accent / language /
+    use_case 등이 있고, 필드 누락은 호출부가 ``.get`` 으로 방어한다. 키 미설정·
+    장애 시 도메인 예외 → 호출부가 빈 목록으로 degrade.
+    """
+    if not (settings.ELEVENLABS_API_KEY or "").strip():
+        raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
+    url = f"{_BASE_URL}/shared-voices"
+    headers = {"xi-api-key": settings.ELEVENLABS_API_KEY, "Accept": "application/json"}
+    params: dict[str, Any] = {
+        "page_size": max(1, min(100, page_size)),
+        "page": max(0, page),
+    }
+    if search:
+        params["search"] = search
+    if gender:
+        params["gender"] = gender
+    if language:
+        params["language"] = language
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, headers=headers, params=params)
+    except httpx.TimeoutException as exc:
+        raise ElevenLabsServerError(f"ElevenLabs shared-voices 타임아웃: {exc}") from exc
+
+    if resp.status_code == 200:
+        data = resp.json()
+        if not isinstance(data, dict):
+            return {"voices": [], "has_more": False}
+        voices = data.get("voices")
+        return {
+            "voices": voices if isinstance(voices, list) else [],
+            "has_more": bool(data.get("has_more", False)),
+        }
+    if resp.status_code == 401:
+        raise ElevenLabsAuthError(f"ElevenLabs shared-voices 401: {resp.text[:200]}")
+    raise ElevenLabsServerError(
+        f"ElevenLabs shared-voices HTTP {resp.status_code}: {resp.text[:200]}"
+    )
+
+
+async def add_shared_voice(
+    public_owner_id: str,
+    voice_id: str,
+    new_name: str,
+    timeout: float = 30.0,
+) -> str:
+    """공유 라이브러리 보이스를 내 계정에 추가
+    (``POST /v1/voices/add/{public_owner_id}/{voice_id}``).
+
+    추가되면 새 account voice_id 를 받아 GET /v1/voices 에 노출되고 합성/렌더에
+    쓸 수 있다. 반환: 새 voice_id. 요금제 보이스 한도 초과 등은 ElevenLabsError
+    로 변환해 호출부가 사용자 메시지로 처리하게 한다.
+    """
+    if not (settings.ELEVENLABS_API_KEY or "").strip():
+        raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
+    url = f"{_BASE_URL}/voices/add/{public_owner_id}/{voice_id}"
+    headers = {"xi-api-key": settings.ELEVENLABS_API_KEY, "Accept": "application/json"}
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.post(url, headers=headers, json={"new_name": new_name})
+    except httpx.TimeoutException as exc:
+        raise ElevenLabsServerError(f"ElevenLabs add voice 타임아웃: {exc}") from exc
+
+    if resp.status_code in (200, 201):
+        data = resp.json()
+        vid = data.get("voice_id") if isinstance(data, dict) else None
+        if not vid:
+            raise ElevenLabsServerError("ElevenLabs add voice: 응답에 voice_id 누락")
+        return vid
+    if resp.status_code == 401:
+        raise ElevenLabsAuthError(f"ElevenLabs add voice 401: {resp.text[:200]}")
+    raise ElevenLabsError(
+        f"ElevenLabs add voice HTTP {resp.status_code}: {resp.text[:300]}"
+    )
+
+
 # ── Instant Voice Cloning (IVC) ──────────────────────────────────────────────
 
 

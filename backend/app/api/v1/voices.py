@@ -11,8 +11,9 @@ ElevenLabs 보이스를 나열하되, 키 미설정·장애 시에는 빈 목록
 """
 import asyncio
 import logging
+import re
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,9 @@ from app.models.user import User
 from app.models.voice_favorite import VoiceFavorite
 from app.schemas.voice import (
     VOICE_PREVIEW_MAX_CHARS,
+    AddSharedVoiceResponse,
+    SharedVoice,
+    SharedVoicesResponse,
     TtsVoice,
     TtsVoicesResponse,
     VoicePreviewRequest,
@@ -118,11 +122,38 @@ _ACCENT_KO = {
     "swedish": "스웨덴",
     "korean": "한국",
     "jamaican": "자메이카",
+    "us": "미국",
+    "uk": "영국",
+    "gb": "영국",
+    "en-us": "미국",
+    "en-gb": "영국",
+    "en-british": "영국",
+    "en-american": "미국",
+    "new zealand": "뉴질랜드",
+    "nigerian": "나이지리아",
+    "filipino": "필리핀",
+    "french": "프랑스",
+    "german": "독일",
+    "italian": "이탈리아",
+    "spanish": "스페인",
+    "portuguese": "포르투갈",
+    "chinese": "중국",
+    "japanese": "일본",
 }
 
 # 영문 보이스 설명 → 한국어 번역 캐시 (프로세스 수명). 목록이 거의 안 바뀌므로
 # 첫 호출에만 번역 비용이 들고 이후엔 캐시 히트.
 _DESC_KO_CACHE: dict[str, str] = {}
+
+_HANGUL_RE = re.compile(r"[가-힣]")
+
+
+def _ko_only(text: str | None) -> str | None:
+    """한글이 포함된 경우에만 반환. 번역이 실패해 영문이 남은 경우는 숨겨
+    설명을 '한국어로만' 노출한다(요구사항). 한글 없으면 None."""
+    if text and _HANGUL_RE.search(text):
+        return text.strip()
+    return None
 
 
 def _split_name(name: str) -> tuple[str, str]:
@@ -242,9 +273,9 @@ async def list_tts_voices(
                 gender=gender,
                 accent=accent,
                 description=p["desc_en"] or None,
-                description_ko=desc_ko_map.get(p["desc_en"]) if p["desc_en"] else None,
+                description_ko=_ko_only(desc_ko_map.get(p["desc_en"])) if p["desc_en"] else None,
                 gender_ko=_GENDER_KO.get((gender or "").lower()) if gender else None,
-                accent_ko=_ACCENT_KO.get((accent or "").lower(), accent) if accent else None,
+                accent_ko=_ACCENT_KO.get((accent or "").lower()) if accent else None,
                 preview_url=p["preview_url"],
                 category=p["category"],
             )
@@ -358,3 +389,109 @@ async def preview_voice(
         media_type="audio/mpeg",
         headers={"Cache-Control": "no-store"},
     )
+
+
+# ── 공유 보이스 라이브러리 (검색·페이지네이션 브라우저) ──────────────────────────
+
+
+@router.get(
+    "/api/voices/library",
+    response_model=SharedVoicesResponse,
+    summary="ElevenLabs 공유 보이스 라이브러리 검색 (수천 종)",
+)
+async def list_shared_library(
+    page: int = Query(0, ge=0, description="0-based 페이지."),
+    search: str | None = Query(None, max_length=100),
+    gender: str | None = Query(None, description="male|female"),
+    language: str | None = Query(None, max_length=10, description="언어코드 ko/en 등"),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """공유 라이브러리를 검색·필터·페이지네이션으로 둘러본다. 설명은 한국어로만
+    제공(description_ko). 장애·키 미설정 시 빈 목록으로 degrade."""
+    from app.services.pipeline.elevenlabs_client import (
+        ElevenLabsError,
+        list_shared_voices,
+    )
+
+    try:
+        result = await list_shared_voices(
+            page=page,
+            page_size=30,
+            search=search or None,
+            gender=gender or None,
+            language=language or None,
+        )
+    except ElevenLabsError:
+        return SharedVoicesResponse(voices=[], page=page, has_more=False)
+
+    raw = result.get("voices", [])
+    descs = [
+        d
+        for v in raw
+        if (d := (v.get("description") or v.get("use_case") or "").strip())
+    ]
+    desc_ko_map = await _translate_descriptions(descs)
+    fav_ids = await _favorite_voice_ids(db, user.id)
+
+    voices: list[SharedVoice] = []
+    for v in raw:
+        vid = v.get("voice_id")
+        owner = v.get("public_owner_id")
+        if not vid or not owner:
+            continue
+        g = v.get("gender")
+        acc = v.get("accent")
+        d = (v.get("description") or v.get("use_case") or "").strip()
+        voices.append(
+            SharedVoice(
+                voice_id=vid,
+                public_owner_id=owner,
+                name=v.get("name") or "Voice",
+                preview_url=v.get("preview_url"),
+                language=v.get("language"),
+                gender_ko=_GENDER_KO.get((g or "").lower()) if g else None,
+                accent_ko=_ACCENT_KO.get((acc or "").lower()) if acc else None,
+                description_ko=_ko_only(desc_ko_map.get(d)) if d else None,
+                is_favorite=vid in fav_ids,
+            )
+        )
+    return SharedVoicesResponse(
+        voices=voices, page=page, has_more=bool(result.get("has_more"))
+    )
+
+
+@router.post(
+    "/api/voices/library/{public_owner_id}/{voice_id}/add",
+    response_model=AddSharedVoiceResponse,
+    summary="공유 라이브러리 보이스를 내 계정에 추가 (사용 가능하게)",
+)
+async def add_shared_library_voice(
+    public_owner_id: str = Path(..., max_length=255),
+    voice_id: str = Path(..., max_length=255),
+    name: str = Query("", max_length=100, description="추가 시 표시 이름(없으면 자동)."),
+    user: User = Depends(require_professor),
+) -> AddSharedVoiceResponse:
+    """공유 보이스를 계정에 추가해 합성/렌더에 쓸 수 있게 한다. 요금제 보이스
+    한도 초과 등은 400 으로 사유와 함께 반환."""
+    from app.services.pipeline.elevenlabs_client import (
+        ElevenLabsAuthError,
+        ElevenLabsError,
+        add_shared_voice,
+    )
+
+    new_name = (name.strip() or f"라이브러리 보이스 {voice_id[:6]}")[:100]
+    try:
+        new_id = await add_shared_voice(public_owner_id, voice_id, new_name)
+    except ElevenLabsAuthError as exc:
+        logger.warning("공유 보이스 추가 인증 실패: %s", exc)
+        raise HTTPException(
+            status_code=502, detail="ElevenLabs 인증 오류로 보이스를 추가하지 못했습니다."
+        ) from exc
+    except ElevenLabsError as exc:
+        logger.warning("공유 보이스 추가 실패: %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail="보이스를 추가하지 못했습니다. 요금제의 보이스 수 한도를 초과했을 수 있어요.",
+        ) from exc
+    return AddSharedVoiceResponse(voice_id=new_id)

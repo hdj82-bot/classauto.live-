@@ -36,6 +36,39 @@ class TtsVoicesResponse(BaseModel):
     total: int
 
 
+class SharedVoice(BaseModel):
+    """공유 보이스 라이브러리(ElevenLabs ``GET /v1/shared-voices``) 항목 1개.
+
+    ``public_owner_id`` + ``voice_id`` 쌍이 '내 계정에 추가'(POST add)의 키다.
+    설명은 한국어(description_ko)만 노출한다.
+    """
+
+    voice_id: str
+    public_owner_id: str
+    name: str = Field(default="Voice")
+    preview_url: str | None = None
+    language: str | None = Field(default=None, description="주 언어 코드 (ko/en 등).")
+    gender_ko: str | None = Field(default=None, description="성별 한국어.")
+    accent_ko: str | None = Field(default=None, description="억양/국적 한국어.")
+    description_ko: str | None = Field(
+        default=None, description="보이스 설명(용도/특성)의 한국어."
+    )
+    is_favorite: bool = Field(default=False)
+    in_account: bool = Field(
+        default=False, description="이미 내 계정에 추가돼 바로 사용 가능한지(이름 기준 추정)."
+    )
+
+
+class SharedVoicesResponse(BaseModel):
+    voices: list[SharedVoice]
+    page: int
+    has_more: bool
+
+
+class AddSharedVoiceResponse(BaseModel):
+    voice_id: str = Field(description="내 계정에 추가된 새 보이스 ID.")
+
+
 class VoicePreviewRequest(BaseModel):
     """음성 미리듣기 합성 요청 — 선택한 보이스·속도로 발화 내용을 실제 합성."""
 
