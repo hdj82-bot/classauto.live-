@@ -6,10 +6,12 @@ import { tabularStyle, hanStyle } from "@/components/professor/shell";
 /**
  * Studio v2 — 좌측 slide-panel.
  *
- * docs/prototypes/05-studio-flow.extracted.html `.slide-panel` 구조 그대로:
+ * docs/prototypes/05-studio-flow.extracted.html `.slide-panel` 구조 기반:
  * - 240px 폭, 라이트 베이지 배경, 우측 라인 분리
  * - 헤더(uppercase 작은 라벨 + 슬라이드 개수)
- * - 슬라이드 카드 목록: 56×36 썸네일 + 번호·이름 · 상태 dot
+ * - 슬라이드 카드 목록: PPT 슬라이드 이미지 썸네일 + 우측 페이지 번호(01, 02…)
+ *   발화 내용 텍스트는 표시하지 않는다(중앙 영역에서 검토). pending(AI 생성 중)
+ *   은 썸네일 우상단 spinner 로만 표시.
  * - 하단 "슬라이드 추가" dashed 버튼 (placeholder)
  *
  * 1280px 이하 viewport 에서는 drawer 로 전환 — 현재는 데스크톱 기준만 구현.
@@ -56,6 +58,11 @@ interface SlidePanelProps {
    */
   isLoading?: boolean;
 }
+
+// 슬라이드 썸네일 크기 — PPT 슬라이드 미리보기(16:9). 카드 좌측을 채우고
+// 우측에 페이지 번호가 들어갈 공간을 남긴다.
+const THUMB_W = 100;
+const THUMB_H = 56;
 
 const panelStyle: CSSProperties = {
   width: 240,
@@ -171,12 +178,14 @@ export default function SlidePanel({
       <ul style={listStyle}>
         {slides.map((s) => {
           const active = s.index === activeIndex;
+          const num = String(s.index + 1).padStart(2, "0");
           return (
             <li key={s.index}>
               <button
                 type="button"
                 onClick={() => onSelect(s.index)}
                 aria-current={active ? "true" : undefined}
+                aria-label={`슬라이드 ${num}${s.status === "pending" ? " · AI 생성 중" : ""}`}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -195,69 +204,92 @@ export default function SlidePanel({
                   fontFamily: "inherit",
                 }}
               >
-                {/* Thumb */}
+                {/* Thumb — PPT 슬라이드 이미지 (없으면 한자/빈 박스). */}
                 <span
-                  className="inline-grid place-items-center flex-shrink-0"
+                  className="flex-shrink-0"
                   aria-hidden="true"
                   style={{
-                    width: 56,
-                    height: 36,
+                    position: "relative",
+                    width: THUMB_W,
+                    height: THUMB_H,
                     borderRadius: 5,
                     background: "var(--bg)",
                     border: "1px solid var(--line)",
                     overflow: "hidden",
                   }}
                 >
-                  {s.thumbChar && (
+                  {s.imageUrl ? (
+                    // 슬라이드 PNG — next/image 대신 단순 <img> 로 S3 외부 도메인
+                    // 등록을 회피(WorkArea 의 미리보기 이미지와 동일 정책).
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={s.imageUrl}
+                      alt=""
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
+                  ) : s.thumbChar ? (
                     <span
                       style={{
                         ...hanStyle,
-                        fontSize: 14,
+                        position: "absolute",
+                        inset: 0,
+                        display: "grid",
+                        placeItems: "center",
+                        fontSize: 18,
                         fontWeight: 700,
                         color: active ? "var(--gold)" : "var(--text-faint)",
                       }}
                     >
                       {s.thumbChar}
                     </span>
+                  ) : null}
+                  {/* AI 생성 중 — 썸네일 우상단 spinner. */}
+                  {s.status === "pending" && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: 3,
+                        right: 3,
+                        display: "inline-grid",
+                        placeItems: "center",
+                        width: 17,
+                        height: 17,
+                        borderRadius: 999,
+                        background: "rgba(250, 250, 247, 0.92)",
+                      }}
+                    >
+                      <svg
+                        viewBox="0 0 16 16"
+                        width="12"
+                        height="12"
+                        className="studio-slide-spinner"
+                        aria-hidden="true"
+                      >
+                        <circle cx="8" cy="8" r="5.5" fill="none" stroke="rgba(255, 182, 39, 0.20)" strokeWidth="1.6" />
+                        <path d="M 8 2.5 A 5.5 5.5 0 0 1 13.5 8" fill="none" stroke="var(--gold-on-light, var(--gold))" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                    </span>
                   )}
                 </span>
-                {/* Body */}
-                <span className="flex-1 min-w-0">
-                  <span
-                    className="block"
-                    style={{
-                      ...tabularStyle,
-                      fontSize: 10.5,
-                      fontWeight: 700,
-                      letterSpacing: "0.06em",
-                      color: active ? "var(--gold)" : "var(--text-faint)",
-                    }}
-                  >
-                    {String(s.index + 1).padStart(2, "0")}
-                  </span>
-                  <span
-                    className="block truncate"
-                    style={{
-                      marginTop: 1,
-                      fontSize: 12.5,
-                      fontWeight: 600,
-                      color: "var(--text)",
-                    }}
-                  >
-                    {s.title}
-                  </span>
-                </span>
-                {/* Status */}
+                {/* spacer */}
+                <span style={{ flex: 1 }} aria-hidden="true" />
+                {/* 페이지 번호 — 우측 표기 */}
                 <span
                   className="flex-shrink-0"
-                  aria-hidden={s.status === "pending" ? undefined : "true"}
-                  aria-label={
-                    s.status === "pending"
-                      ? "AI 스크립트 생성 중"
-                      : undefined
-                  }
+                  style={{
+                    ...tabularStyle,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    letterSpacing: "0.04em",
+                    color: active ? "var(--gold)" : "var(--text-muted)",
+                  }}
                 >
-                  <StatusDot status={s.status} />
+                  {num}
                 </span>
               </button>
             </li>
@@ -313,33 +345,17 @@ function AnalyzingSkeletonCard() {
       <span
         className="studio-skeleton-block"
         style={{
-          width: 56,
-          height: 36,
+          width: THUMB_W,
+          height: THUMB_H,
           borderRadius: 5,
           flexShrink: 0,
         }}
       />
-      <span style={{ flex: 1, minWidth: 0, display: "block" }}>
-        <span
-          className="studio-skeleton-block"
-          style={{
-            display: "block",
-            width: "32%",
-            height: 8,
-            borderRadius: 3,
-          }}
-        />
-        <span
-          className="studio-skeleton-block"
-          style={{
-            display: "block",
-            marginTop: 6,
-            width: "82%",
-            height: 10,
-            borderRadius: 3,
-          }}
-        />
-      </span>
+      <span style={{ flex: 1 }} />
+      <span
+        className="studio-skeleton-block"
+        style={{ width: 18, height: 11, borderRadius: 3, flexShrink: 0 }}
+      />
     </div>
   );
 }
@@ -363,99 +379,17 @@ function SkeletonCard() {
       <span
         className="studio-skeleton-block"
         style={{
-          width: 56,
-          height: 36,
+          width: THUMB_W,
+          height: THUMB_H,
           borderRadius: 5,
           flexShrink: 0,
         }}
       />
-      <span style={{ flex: 1, minWidth: 0, display: "block" }}>
-        <span
-          className="studio-skeleton-block"
-          style={{
-            display: "block",
-            width: "30%",
-            height: 8,
-            borderRadius: 3,
-          }}
-        />
-        <span
-          className="studio-skeleton-block"
-          style={{
-            display: "block",
-            marginTop: 6,
-            width: "80%",
-            height: 10,
-            borderRadius: 3,
-          }}
-        />
-      </span>
+      <span style={{ flex: 1 }} />
+      <span
+        className="studio-skeleton-block"
+        style={{ width: 18, height: 11, borderRadius: 3, flexShrink: 0 }}
+      />
     </div>
-  );
-}
-
-function StatusDot({ status }: { status: StudioSlide["status"] }) {
-  if (status === "pending") {
-    // AI 스크립트 생성 중 — 회전 spinner. prefers-reduced-motion 환경에선
-    // CSS 가 animation 을 무효화하므로 정적 호 모양만 남는다.
-    return (
-      <svg
-        viewBox="0 0 16 16"
-        width="14"
-        height="14"
-        className="studio-slide-spinner"
-      >
-        <circle
-          cx="8"
-          cy="8"
-          r="5.5"
-          fill="none"
-          stroke="rgba(255, 182, 39, 0.20)"
-          strokeWidth="1.6"
-        />
-        <path
-          d="M 8 2.5 A 5.5 5.5 0 0 1 13.5 8"
-          fill="none"
-          stroke="var(--gold-on-light, var(--gold))"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-        />
-      </svg>
-    );
-  }
-  if (status === "adopted") {
-    return (
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-label="채택됨">
-        <circle cx="8" cy="8" r="6" fill="url(#nav-grad-electric)" />
-        <path
-          d="M5 8.5l2.2 2.2 3.8-4"
-          stroke="#FFFFFF"
-          strokeWidth="1.6"
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-  if (status === "warn") {
-    return (
-      <svg viewBox="0 0 16 16" width="14" height="14" aria-label="확인 필요">
-        <path
-          d="M8 2l6 11H2L8 2z"
-          fill="rgba(176, 171, 158, 0.40)"
-          stroke="#B0AB9E"
-          strokeWidth="1.4"
-          strokeLinejoin="round"
-        />
-        <rect x="7.4" y="6" width="1.2" height="4" rx="0.6" fill="#B0AB9E" />
-        <circle cx="8" cy="11.4" r="0.7" fill="#B0AB9E" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 16 16" width="14" height="14" aria-label="대기">
-      <circle cx="8" cy="8" r="5" fill="none" stroke="#C5C2B6" strokeWidth="1.4" />
-    </svg>
   );
 }
