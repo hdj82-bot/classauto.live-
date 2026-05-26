@@ -35,6 +35,35 @@ async def test_get_attendance_unauthorized(client, lecture):
     assert resp.status_code in (401, 403)
 
 
+# ── 대시보드 요약 배치 ────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_dashboard_summary(client, professor, lecture):
+    """내 전체 강의의 5개 메트릭(attendance/scores/engagement/qa/cost)을 한 번에."""
+    resp = await client.get(
+        "/api/v1/dashboard/summary",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "lectures" in data
+    assert len(data["lectures"]) == 1
+    item = data["lectures"][0]
+    assert item["lecture_id"] == str(lecture.id)
+    for key in ("attendance", "scores", "engagement", "qa", "cost"):
+        assert key in item
+
+
+@pytest.mark.asyncio
+async def test_dashboard_summary_student_forbidden(client, student):
+    """교수자 전용 — 학습자는 403."""
+    resp = await client.get(
+        "/api/v1/dashboard/summary",
+        headers=make_auth_header(student),
+    )
+    assert resp.status_code == 403
+
+
 @pytest.mark.asyncio
 async def test_get_attendance_explicit_deadline_override(client, professor, lecture):
     """live_deadline_min 쿼리 파라미터로 기준을 명시적으로 덮어쓸 수 있다."""

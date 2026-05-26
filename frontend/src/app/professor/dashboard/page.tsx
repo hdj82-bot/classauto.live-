@@ -29,6 +29,7 @@ import {
   useDashboardHubI18n,
   aggregateDashboardHub,
   type DashboardHubData,
+  type FanOutInput,
 } from "@/components/professor/dashboardHome";
 import {
   PageContainer,
@@ -62,6 +63,19 @@ function hubCacheKey(lectures: { id: string }[]): string {
     .map((l) => l.id)
     .sort()
     .join(",");
+}
+
+/** Map<string, V> 의 값 타입 V 추출 — 배치 응답을 집계기 Map 과 동일하게 타입. */
+type MapVal<M> = M extends Map<string, infer V> ? V : never;
+
+/** GET /api/v1/dashboard/summary 의 강의 1건 (각 메트릭은 per-lecture 응답과 동일). */
+interface DashboardSummaryRow {
+  lecture_id: string;
+  attendance: MapVal<FanOutInput["attendance"]>;
+  scores: MapVal<FanOutInput["scores"]>;
+  engagement: MapVal<FanOutInput["engagement"]>;
+  qa: MapVal<FanOutInput["qa"]>;
+  cost: MapVal<FanOutInput["cost"]>;
 }
 
 /**
@@ -208,28 +222,6 @@ export default function ProfessorDashboardPage() {
     (async () => {
       const ids = lectures.map((l) => l.id);
 
-      const [attendanceR, scoresR, engagementR, qaR, costR] = await Promise.all(
-        [
-          Promise.allSettled(
-            ids.map((id) => api.get(`/api/v1/dashboard/${id}/attendance`)),
-          ),
-          Promise.allSettled(
-            ids.map((id) => api.get(`/api/v1/dashboard/${id}/scores`)),
-          ),
-          Promise.allSettled(
-            ids.map((id) => api.get(`/api/v1/dashboard/${id}/engagement`)),
-          ),
-          Promise.allSettled(
-            ids.map((id) => api.get(`/api/v1/dashboard/${id}/qa?limit=50`)),
-          ),
-          Promise.allSettled(
-            ids.map((id) => api.get(`/api/v1/dashboard/${id}/cost`)),
-          ),
-        ],
-      );
-
-      if (cancelled) return;
-
       const toMap = <T,>(rs: PromiseSettledResult<{ data: T }>[]) => {
         const m = new Map<string, T | null>();
         ids.forEach((id, i) => {
@@ -238,9 +230,74 @@ export default function ProfessorDashboardPage() {
         });
         return m;
       };
-
       const allFailed = (rs: PromiseSettledResult<unknown>[]) =>
         rs.length > 0 && rs.every((r) => r.status === "rejected");
+
+      // 5개 Map 채우기: 단일 배치 엔드포인트(/summary) 우선, 실패 시 기존
+      // 강의당 5요청 fan-out 으로 폴백(미배포 404·부분 장애에도 안전).
+      let attendance: FanOutInput["attendance"] = new Map();
+      let scores: FanOutInput["scores"] = new Map();
+      let engagement: FanOutInput["engagement"] = new Map();
+      let qa: FanOutInput["qa"] = new Map();
+      let cost: FanOutInput["cost"] = new Map();
+      let failures: FanOutInput["failures"] = {
+        attendance: false,
+        scores: false,
+        engagement: false,
+        qa: false,
+        cost: false,
+      };
+
+      try {
+        // 강의당 5개(=1+6N) 요청을 한 번에. 응답의 각 강의 항목에서 5개 Map 구성.
+        const { data } = await api.get<{ lectures: DashboardSummaryRow[] }>(
+          "/api/v1/dashboard/summary",
+        );
+        if (cancelled) return;
+        const byId = new Map(
+          data.lectures.map((r) => [r.lecture_id, r] as const),
+        );
+        for (const id of ids) {
+          const row = byId.get(id);
+          attendance.set(id, row ? row.attendance : null);
+          scores.set(id, row ? row.scores : null);
+          engagement.set(id, row ? row.engagement : null);
+          qa.set(id, row ? row.qa : null);
+          cost.set(id, row ? row.cost : null);
+        }
+      } catch {
+        const [attendanceR, scoresR, engagementR, qaR, costR] =
+          await Promise.all([
+            Promise.allSettled(
+              ids.map((id) => api.get(`/api/v1/dashboard/${id}/attendance`)),
+            ),
+            Promise.allSettled(
+              ids.map((id) => api.get(`/api/v1/dashboard/${id}/scores`)),
+            ),
+            Promise.allSettled(
+              ids.map((id) => api.get(`/api/v1/dashboard/${id}/engagement`)),
+            ),
+            Promise.allSettled(
+              ids.map((id) => api.get(`/api/v1/dashboard/${id}/qa?limit=50`)),
+            ),
+            Promise.allSettled(
+              ids.map((id) => api.get(`/api/v1/dashboard/${id}/cost`)),
+            ),
+          ]);
+        if (cancelled) return;
+        attendance = toMap(attendanceR);
+        scores = toMap(scoresR);
+        engagement = toMap(engagementR);
+        qa = toMap(qaR);
+        cost = toMap(costR);
+        failures = {
+          attendance: allFailed(attendanceR),
+          scores: allFailed(scoresR),
+          engagement: allFailed(engagementR),
+          qa: allFailed(qaR),
+          cost: allFailed(costR),
+        };
+      }
 
       const aggregated = aggregateDashboardHub({
         lectures: lectures.map((l) => ({
@@ -250,18 +307,12 @@ export default function ProfessorDashboardPage() {
           created_at: l.created_at ?? null,
           video_url: l.video_url ?? null,
         })),
-        attendance: toMap(attendanceR),
-        scores: toMap(scoresR),
-        engagement: toMap(engagementR),
-        qa: toMap(qaR),
-        cost: toMap(costR),
-        failures: {
-          attendance: allFailed(attendanceR),
-          scores: allFailed(scoresR),
-          engagement: allFailed(engagementR),
-          qa: allFailed(qaR),
-          cost: allFailed(costR),
-        },
+        attendance,
+        scores,
+        engagement,
+        qa,
+        cost,
+        failures,
         monthlyVideoLimit: null,
         monthlyCostLimitUsd: null,
       });

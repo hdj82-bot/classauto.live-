@@ -17,6 +17,7 @@ export { default as ActivityFeed } from "./ActivityFeed";
 export { useDashboardHubI18n } from "./useDashboardHubI18n";
 export { useCountUp } from "./useCountUp";
 export { aggregateDashboardHub } from "./aggregate";
+export type { FanOutInput } from "./aggregate";
 export type {
   DashboardStats,
   DashboardHubData,

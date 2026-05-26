@@ -11,9 +11,38 @@ from app.api.deps import require_professor
 from app.db.session import get_db
 from app.models.user import User
 from app.services import dashboard as dashboard_svc
-from app.services.lecture import assert_professor_owns_lecture
+from app.services.lecture import assert_professor_owns_lecture, list_my_lectures
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
+
+
+@router.get("/summary", summary="대시보드 요약 (내 전체 강의 배치)")
+async def get_dashboard_summary(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """교수자 본인 전체 강의의 attendance/scores/engagement/qa/cost 를 한 번에 반환.
+
+    대시보드 홈이 강의당 5개 endpoint(= 1+6N 요청)를 호출하던 fan-out 을 단일
+    호출로 대체한다. 소유 범위는 ``list_my_lectures``(instructor_id) 로 한정되어
+    각 강의는 본인 소유가 보장되므로 개별 소유권 확인은 생략한다. 각 항목의 5개
+    필드는 per-lecture endpoint 응답과 동일한 모양 — 프론트 aggregateDashboardHub
+    가 그대로 소비한다.
+    """
+    lectures = await list_my_lectures(db, user)
+    items = []
+    for lec in lectures:
+        items.append(
+            {
+                "lecture_id": str(lec.id),
+                "attendance": await dashboard_svc.get_attendance(db, lec.id),
+                "scores": await dashboard_svc.get_scores(db, lec.id),
+                "engagement": await dashboard_svc.get_engagement(db, lec.id),
+                "qa": await dashboard_svc.get_qa_logs(db, lec.id, 1, 50),
+                "cost": await dashboard_svc.get_cost(db, lec.id),
+            }
+        )
+    return {"lectures": items}
 
 
 @router.get("/{lecture_id}/attendance", summary="출석 분석")
