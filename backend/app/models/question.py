@@ -53,6 +53,9 @@ class Question(Base):
     explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
     # 형성평가 전용: 영상 내 출제 시점(초)
     timestamp_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 소크라테스식 대화로 저작한 인터랙티브 퀴즈가 "슬라이드 N↔N+1 사이"에 삽입됨을
+    # 0-based index N 으로 기록. NOT NULL = 인터랙티브 퀴즈(일괄 자동 생성은 NULL).
+    insert_after_slide_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
