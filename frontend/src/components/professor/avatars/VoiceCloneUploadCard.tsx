@@ -245,7 +245,7 @@ export default function VoiceCloneUploadCard({
             <span style={{ display: "block", marginTop: 6, fontSize: 10.5, lineHeight: 1.5, color: "var(--text-faint)" }}>
               {t("voiceReadyHint")}
             </span>
-            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
               {onPreview && (
                 <button
                   type="button"
@@ -253,8 +253,9 @@ export default function VoiceCloneUploadCard({
                   disabled={previewing}
                   data-testid="voice-clone-preview"
                   style={{
-                    padding: "4px 12px",
-                    fontSize: 11,
+                    width: "100%",
+                    padding: "6px 10px",
+                    fontSize: 12,
                     fontWeight: 700,
                     borderRadius: 8,
                     border: "1px solid transparent",
@@ -262,6 +263,7 @@ export default function VoiceCloneUploadCard({
                     color: "#0A0A0A",
                     cursor: previewing ? "wait" : "pointer",
                     fontFamily: "inherit",
+                    whiteSpace: "nowrap",
                   }}
                 >
                   {previewing ? t("voicePreviewPlaying") : `▶ ${t("voicePreviewListen")}`}
@@ -274,8 +276,9 @@ export default function VoiceCloneUploadCard({
                   disabled={uploading}
                   data-testid="voice-clone-delete"
                   style={{
-                    padding: "4px 10px",
-                    fontSize: 11,
+                    width: "100%",
+                    padding: "5px 10px",
+                    fontSize: 11.5,
                     fontWeight: 600,
                     borderRadius: 8,
                     border: "1px solid var(--line-strong)",
@@ -283,6 +286,7 @@ export default function VoiceCloneUploadCard({
                     color: "var(--text-muted)",
                     cursor: uploading ? "not-allowed" : "pointer",
                     fontFamily: "inherit",
+                    whiteSpace: "nowrap",
                   }}
                 >
                   {t("voiceDelete")}

@@ -61,6 +61,11 @@ export default function AvatarPreviewStage({
     : (avatar?.preview_video_url ?? null);
   const hasVideo = !!effectiveVideoUrl;
 
+  // 본인 렌더 클립은 음성이 영상에 구워져 있어, 선택 음성이 렌더된 음성과 다르면
+  // 그 음성으로 "다시 만들어야" 본인 목소리로 함께 재생된다(오버레이 불가).
+  const needsRerender =
+    isCustomRender && voiceId != null && voiceId !== preview.voiceId;
+
   const [playing, setPlaying] = useState(false);
 
   // 최신 값을 effect 의존성에 넣지 않고 읽기 위한 ref.
@@ -73,6 +78,8 @@ export default function AvatarPreviewStage({
     voicesRef.current = voices;
   }, [voices]);
   const lastAvatarIdRef = useRef<string | null>(null);
+  // 동일 렌더 음성에 한 번만 동기화 — 이후 사용자가 다른 음성을 골라도 덮어쓰지 않음.
+  const lastSyncedRenderVoiceRef = useRef<string | null>(null);
 
   const sampleText = t("voiceSampleText");
 
@@ -139,6 +146,20 @@ export default function AvatarPreviewStage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatar?.id, voices.length]);
 
+  // 본인 렌더가 준비되면, 선택 음성을 '실제 렌더된 음성'으로 맞춰 라벨/버튼이
+  // 진실을 반영하게 한다. 같은 렌더 음성엔 1회만 동기화하므로, 이후 사용자가 다른
+  // 음성을 고르면(=needsRerender) 덮어쓰지 않는다.
+  useEffect(() => {
+    if (
+      isCustomRender &&
+      preview.voiceId &&
+      lastSyncedRenderVoiceRef.current !== preview.voiceId
+    ) {
+      lastSyncedRenderVoiceRef.current = preview.voiceId;
+      setVoiceId(preview.voiceId);
+    }
+  }, [isCustomRender, preview.voiceId]);
+
   // 영상/음성 재생: 아바타·렌더 영상·모드가 바뀌면 (재)시작.
   useEffect(() => {
     stop();
@@ -163,10 +184,18 @@ export default function AvatarPreviewStage({
     supported,
   ]);
 
+  const handleGenerate = useCallback(
+    (force: boolean) => {
+      preview.generate(voiceIdRef.current, force);
+    },
+    [preview],
+  );
+
   const handleSelectVoice = useCallback(
     (id: string) => {
       setVoiceId(id);
-      // 본인 렌더가 이미 있으면 음성 변경은 "다시 만들기"로만 반영(비용).
+      // 본인 렌더가 이미 있으면, 음성 변경은 재생 토글에서 "이 음성으로 만들기"로
+      // 반영된다(영상에 음성이 구워져 있어 즉시 오버레이는 불가).
       if (isCustomRender) return;
       const option = getVoiceById(voicesRef.current, id);
       if (option && avatar) startPlayback(option);
@@ -179,19 +208,18 @@ export default function AvatarPreviewStage({
       stopPlayback();
       return;
     }
+    // 본인 렌더 + 선택 음성 ≠ 렌더된 음성이면, 그 음성으로 다시 만든다
+    // (완료되면 새 클립이 본인 목소리로 자동 재생).
+    if (needsRerender) {
+      handleGenerate(true);
+      return;
+    }
     const option =
       getVoiceById(voicesRef.current, voiceIdRef.current) ??
       randomVoice(voicesRef.current);
     if (option) setVoiceId(option.id);
     startPlayback(option);
-  }, [playing, stopPlayback, startPlayback]);
-
-  const handleGenerate = useCallback(
-    (force: boolean) => {
-      preview.generate(voiceIdRef.current, force);
-    },
-    [preview],
-  );
+  }, [playing, stopPlayback, startPlayback, needsRerender, handleGenerate]);
 
   const current = getVoiceById(voices, voiceId);
   const males = voices.filter((v) => v.gender === "male");
@@ -406,20 +434,39 @@ export default function AvatarPreviewStage({
             <button
               type="button"
               onClick={handleToggle}
-              disabled={!avatar || voices.length === 0}
+              disabled={
+                !avatar ||
+                voices.length === 0 ||
+                (isCustom && preview.status === "processing")
+              }
               data-testid="avatar-voice-toggle"
               style={{
                 ...primaryControlStyle,
                 flex: 1,
-                opacity: !avatar || voices.length === 0 ? 0.45 : 1,
-                cursor: !avatar || voices.length === 0 ? "not-allowed" : "pointer",
+                whiteSpace: "nowrap",
+                opacity:
+                  !avatar ||
+                  voices.length === 0 ||
+                  (isCustom && preview.status === "processing")
+                    ? 0.45
+                    : 1,
+                cursor:
+                  !avatar ||
+                  voices.length === 0 ||
+                  (isCustom && preview.status === "processing")
+                    ? "not-allowed"
+                    : "pointer",
               }}
             >
-              {playing ? `⏸ ${t("voiceStop")}` : `▶ ${t("voicePlay")}`}
+              {playing
+                ? `⏸ ${t("voiceStop")}`
+                : needsRerender
+                  ? `▶ ${t("previewRegenerate")}`
+                  : `▶ ${t("voicePlay")}`}
             </button>
           </div>
 
-          {isCustomRender && (
+          {needsRerender && (
             <p style={{ ...previewHintStyle, textAlign: "left", marginTop: 8 }}>
               {t("voiceChangeNeedsRerender")}
             </p>

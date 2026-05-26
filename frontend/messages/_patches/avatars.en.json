@@ -41,7 +41,7 @@
     "voiceHeading": "Voice",
     "voiceNote": "Plays the sample voice once with the avatar clip. Click to replay or pick another voice.",
     "voiceNoteCustom": "Your avatar speaking with the selected voice.",
-    "voiceChangeNeedsRerender": "To hear a different voice, pick one above and tap 'Regenerate with this voice'.",
+    "voiceChangeNeedsRerender": "Voice changed. Tap '▶ Regenerate with this voice' below and the avatar will speak in it (takes a few tens of seconds).",
     "voiceNowPlaying": "Selected voice",
     "voiceGroupMale": "Male voices",
     "voiceGroupFemale": "Female voices",
