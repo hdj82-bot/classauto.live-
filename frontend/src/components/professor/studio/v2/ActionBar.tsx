@@ -14,9 +14,7 @@ export interface ActionBarProps {
   total: number;
   acceptedCount: number;
   canPrev: boolean;
-  canNext: boolean;
   onPrev: () => void;
-  onNext: () => void;
   onGenerate: () => void;
   generating?: boolean;
 }
@@ -54,9 +52,7 @@ export default function ActionBar({
   total,
   acceptedCount,
   canPrev,
-  canNext,
   onPrev,
-  onNext,
   onGenerate,
   generating = false,
 }: ActionBarProps) {
@@ -92,22 +88,6 @@ export default function ActionBar({
         <b style={{ color: "var(--text)", fontWeight: 700 }}>{acceptedCount}</b>개 채택
       </div>
       <div className="justify-self-end flex gap-2">
-        <button
-          type="button"
-          onClick={onNext}
-          disabled={!canNext}
-          style={{
-            ...ghostBtnStyle,
-            opacity: canNext ? 1 : 0.45,
-            cursor: canNext ? "pointer" : "not-allowed",
-          }}
-        >
-          다음
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 12h14" />
-            <path d="M12 5l7 7-7 7" />
-          </svg>
-        </button>
         <PrimaryButton
           type="button"
           variant="primary"
