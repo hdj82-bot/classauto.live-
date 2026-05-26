@@ -14,6 +14,7 @@ from app.core.metrics import track_external_api
 from app.core.retry import retry_external
 from app.services.pipeline.parser import encode_image_base64
 from app.services.pipeline.schemas import SlideContent, SlideScript
+from app.services.pipeline.text_cleanup import strip_pinyin_annotations
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +44,14 @@ SYSTEM_PROMPT = """\
 출력은 TTS(음성 합성)로 그대로 발화되는 평문입니다.
 마크다운 문법(**굵게**, ##헤딩, `코드`, [링크](url), - 목록, > 인용 등)을 절대 사용하지 마세요.
 중요한 단어를 강조할 때는 따옴표("")나 자연스러운 한국어 화법(예: "특히", "여기서 핵심은")으로 표현하세요.
-중국어 단어는 한자 뒤에 괄호로 병음을 병기합니다. 예: 他(tā), 喜欢(xǐhuān).
+중국어 단어·문장은 한자(중국어 글자)만 그대로 씁니다. 병음(로마자 발음 표기)이나
+괄호로 발음을 병기하지 마세요. 음성 합성기가 한자를 중국어로 정확히 발음하므로,
+괄호 안에 병음을 적으면 그 로마자까지 소리내어 읽어 발음이 깨집니다.
 
 예시:
-(O) 첫 번째 문장은 "他(tā)喜欢(xǐhuān)猫(māo)"입니다. 여기서 핵심은 동사 "喜欢"의 위치입니다.
-(X) 첫 번째 문장은 **他喜欢猫** 입니다. 여기서 ##핵심은 동사 `喜欢`의 위치입니다.
+(O) 첫 번째 문장은 "他喜欢猫"입니다. 여기서 핵심은 동사 "喜欢"의 위치입니다.
+(X) 첫 번째 문장은 "他(tā)喜欢(xǐhuān)猫(māo)"입니다.  ← 병음 병기 금지
+(X) 첫 번째 문장은 **他喜欢猫** 입니다. 여기서 ##핵심은 동사 `喜欢`의 위치입니다.  ← 마크다운 금지
 """
 
 
@@ -222,4 +226,6 @@ def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) ->
         logger.warning("슬라이드 %d: 텍스트 블록 없음", slide.slide_number)
         return "(스크립트를 생성할 수 없었습니다.)"
 
-    return _strip_markdown(text_block.text)
+    # 마크다운 제거 + (프롬프트로 1차 차단해도 모델이 가끔 넣는) 한자 뒤 병음
+    # 괄호 표기 제거 — 저장·표시·합성 모두 한자만 남도록 보장.
+    return strip_pinyin_annotations(_strip_markdown(text_block.text))

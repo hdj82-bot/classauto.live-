@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 import httpx
 
 from app.services.pipeline import elevenlabs_client, google_tts_client
+from app.services.pipeline.text_cleanup import strip_pinyin_annotations
 
 if TYPE_CHECKING:
     import uuid
@@ -92,6 +93,12 @@ async def synthesize(
     """
     if not text or not text.strip():
         raise TTSError("text 가 비어있어 합성 불가")
+
+    # 한자 뒤 병음 괄호 표기는 합성기가 로마자를 그대로 읽어 발음을 깨뜨린다.
+    # 생성 단계에서 1차 제거하지만, 이미 병음이 박힌 기존 스크립트·교수자 수동
+    # 편집본도 깨끗하게 발화되도록 합성 직전에 한 번 더 제거한다(ElevenLabs·
+    # Google 폴백·미리듣기 모두 이 경로를 거친다).
+    text = strip_pinyin_annotations(text)
 
     fallback_reason: str | None = None
     start = time.monotonic()
