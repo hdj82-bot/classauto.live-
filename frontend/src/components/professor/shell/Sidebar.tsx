@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
-import type { CSSProperties, ReactNode } from "react";
+import { api } from "@/lib/api";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
 /**
  * Professor v2 Sidebar — 220px, light surface.
@@ -25,6 +27,62 @@ interface NavItem {
   labelKey: string;
   iconId: string;
   icon: ReactNode;
+}
+
+/**
+ * "강의 영상 생성" 메뉴의 기본 목적지 = 영상 제작 마법사 진입(Step 1) 페이지.
+ * 클릭 시에는 진행 중인 강의가 있으면 그 강의의 제작 화면으로 바로 이어서 이동하고
+ * (resolveStudioContinueHref), 없으면 이 진입 페이지로 폴백한다.
+ */
+const STUDIO_HREF = "/professor/studio";
+
+/** 진행 중 강의 판별/정렬에 필요한 최소 필드 (GET /api/courses/{id}/lectures). */
+interface LectureLite {
+  id: string;
+  is_published: boolean;
+  video_url?: string | null;
+  pipeline_task_id?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+/**
+ * 가장 최근에 작업한 "제작 중" 강의의 제작 화면 경로를 해석한다.
+ *
+ * "제작 중" 기준은 LectureCard / 보관함의 `isProduction` 과 동일:
+ * 발행 안 됐고 (파이프라인이 돌았거나 아직 영상이 없는) 강의.
+ * 최신순(updated_at → created_at)으로 가장 위를 골라 마법사
+ * `/professor/studio/{id}` 로 이어서 진행한다. 없으면 진입 페이지로 폴백.
+ *
+ * 강좌별 강의 fan-out 은 대시보드·보관함과 같은 패턴이며, 한 강좌 조회가
+ * 실패해도 해당 강좌만 건너뛰고(best-effort) 나머지로 해석을 이어간다.
+ */
+async function resolveStudioContinueHref(): Promise<string> {
+  try {
+    const { data: courses } = await api.get<{ id: string }[]>("/api/courses");
+    const lists = await Promise.all(
+      courses.map((c) =>
+        api
+          .get<LectureLite[]>(`/api/courses/${c.id}/lectures`)
+          .then((r) => r.data)
+          .catch(() => [] as LectureLite[]),
+      ),
+    );
+    const ts = (l: LectureLite) =>
+      Date.parse(l.updated_at || l.created_at || "") || 0;
+    const inProgress = lists
+      .flat()
+      .filter(
+        (l) =>
+          !l.is_published && (Boolean(l.pipeline_task_id) || !l.video_url),
+      )
+      .sort((a, b) => ts(b) - ts(a));
+    return inProgress.length > 0
+      ? `${STUDIO_HREF}/${inProgress[0].id}`
+      : STUDIO_HREF;
+  } catch {
+    return STUDIO_HREF;
+  }
 }
 
 const navItems: NavItem[] = [
@@ -50,7 +108,7 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    href: "/professor/studio",
+    href: STUDIO_HREF,
     labelKey: "nav.studio",
     iconId: "ic-studio",
     icon: (
@@ -169,10 +227,29 @@ const sectionHeaderStyle: CSSProperties = {
 
 export default function ProfessorSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { t } = useI18n();
+  // "강의 영상 생성" 클릭 → 진행 중 강의 해석 중 표시(중복 클릭 방지 + 시각 피드백).
+  const [studioResolving, setStudioResolving] = useState(false);
 
   const isActive = (href: string) =>
     pathname === href || pathname?.startsWith(href + "/");
+
+  // "강의 영상 생성" 클릭: 진행 중 강의가 있으면 그 제작 화면으로 바로 이어서 이동.
+  // Cmd/Ctrl/보조 버튼 클릭은 기본 동작(진입 페이지를 새 탭에 열기)을 그대로 둔다.
+  const handleStudioNav = async (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+      return;
+    }
+    e.preventDefault();
+    if (studioResolving) return;
+    setStudioResolving(true);
+    try {
+      router.push(await resolveStudioContinueHref());
+    } finally {
+      setStudioResolving(false);
+    }
+  };
 
   return (
     <aside style={sidebarStyle} aria-label={t("nav.lectureManage")}>
@@ -180,11 +257,14 @@ export default function ProfessorSidebar() {
       <nav className="flex flex-col gap-0.5 px-3 pb-4">
         {navItems.map((item) => {
           const active = isActive(item.href);
+          const isStudio = item.href === STUDIO_HREF;
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={isStudio ? handleStudioNav : undefined}
               aria-current={active ? "page" : undefined}
+              aria-busy={isStudio && studioResolving ? true : undefined}
               className="flex items-center gap-2.5 rounded-lg motion-safe:transition"
               style={{
                 padding: "8px 12px",
@@ -193,6 +273,7 @@ export default function ProfessorSidebar() {
                 color: active ? "var(--gold)" : "var(--text-muted)",
                 background: active ? "var(--gold-soft)" : "transparent",
                 textDecoration: "none",
+                opacity: isStudio && studioResolving ? 0.6 : undefined,
               }}
               onMouseEnter={(e) => {
                 if (active) return;
