@@ -4,10 +4,12 @@ import { useRef, useState, type CSSProperties } from "react";
 import type { VoiceCloneStatus } from "./avatarsTypes";
 
 interface VoiceCloneUploadCardProps {
-  /** 검증 통과한 파일+성별을 부모로 올린다 — 실제 업로드는 페이지가 수행. */
-  onSubmit: (file: File, gender: "male" | "female") => void;
+  /** 검증 통과한 파일을 부모로 올린다 — 실제 업로드는 페이지가 수행. */
+  onSubmit: (file: File) => void;
   /** 본인 음성 삭제. */
   onDelete?: () => void;
+  /** 본인 음성(클론) 샘플 합성 — mp3 Blob 을 돌려주면 카드가 재생. 실패 시 null. */
+  onPreview?: () => Promise<Blob | null>;
   /** 부모가 보유한 본인 음성 상태. */
   status: VoiceCloneStatus;
   uploading: boolean;
@@ -25,6 +27,7 @@ const ACCEPT = "audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/ogg,audio/webm,
 export default function VoiceCloneUploadCard({
   onSubmit,
   onDelete,
+  onPreview,
   status,
   uploading,
   voiceName,
@@ -32,17 +35,45 @@ export default function VoiceCloneUploadCard({
   t,
 }: VoiceCloneUploadCardProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [gender, setGender] = useState<"male" | "female">("male");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
 
   const pick = () => inputRef.current?.click();
 
   // 제출 시 선택 파일을 비워 중복 제출을 막는다(부모가 uploading/status 로 진행 표시).
   const submit = () => {
     if (!file) return;
-    onSubmit(file, gender);
+    onSubmit(file);
     setFile(null);
+  };
+
+  // 본인 클론 음성 미리듣기 — 서버 TTS 로 샘플을 합성해 1회 재생.
+  const preview = async () => {
+    if (!onPreview || previewing) return;
+    setPreviewing(true);
+    let blob: Blob | null = null;
+    try {
+      blob = await onPreview();
+    } catch {
+      blob = null;
+    }
+    if (!blob) {
+      setPreviewing(false);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    const done = () => {
+      setPreviewing(false);
+      URL.revokeObjectURL(url);
+    };
+    audio.onended = done;
+    audio.onerror = done;
+    const p = audio.play();
+    if (p && typeof p.catch === "function") p.catch(done);
   };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -129,35 +160,6 @@ export default function VoiceCloneUploadCard({
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          {/* 성별 선택 — 음성 패널 남/여 그룹 분류용 */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
-            {(["male", "female"] as const).map((g) => {
-              const active = gender === g;
-              return (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setGender(g)}
-                  aria-pressed={active}
-                  data-testid={`voice-gender-${g}`}
-                  style={{
-                    padding: "5px 12px",
-                    fontSize: 12,
-                    fontWeight: 600,
-                    borderRadius: 999,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                    border: `1px solid ${active ? "var(--gold)" : "var(--line)"}`,
-                    background: active ? "var(--gold)" : "var(--bg-card)",
-                    color: active ? "#0A0A0A" : "var(--text-muted)",
-                  }}
-                >
-                  {g === "male" ? t("genderMale") : t("genderFemale")}
-                </button>
-              );
-            })}
-          </div>
-
           <input
             ref={inputRef}
             type="file"
@@ -243,28 +245,50 @@ export default function VoiceCloneUploadCard({
             <span style={{ display: "block", marginTop: 6, fontSize: 10.5, lineHeight: 1.5, color: "var(--text-faint)" }}>
               {t("voiceReadyHint")}
             </span>
-            {onDelete && (
-              <button
-                type="button"
-                onClick={onDelete}
-                disabled={uploading}
-                data-testid="voice-clone-delete"
-                style={{
-                  marginTop: 8,
-                  padding: "4px 10px",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  borderRadius: 8,
-                  border: "1px solid var(--line-strong)",
-                  background: "var(--bg-card)",
-                  color: "var(--text-muted)",
-                  cursor: uploading ? "not-allowed" : "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {t("voiceDelete")}
-              </button>
-            )}
+            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 8 }}>
+              {onPreview && (
+                <button
+                  type="button"
+                  onClick={preview}
+                  disabled={previewing}
+                  data-testid="voice-clone-preview"
+                  style={{
+                    padding: "4px 12px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    borderRadius: 8,
+                    border: "1px solid transparent",
+                    background: "linear-gradient(135deg, #FFB627, #E89E0E)",
+                    color: "#0A0A0A",
+                    cursor: previewing ? "wait" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {previewing ? t("voicePreviewPlaying") : `▶ ${t("voicePreviewListen")}`}
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={onDelete}
+                  disabled={uploading}
+                  data-testid="voice-clone-delete"
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: 11,
+                    fontWeight: 600,
+                    borderRadius: 8,
+                    border: "1px solid var(--line-strong)",
+                    background: "var(--bg-card)",
+                    color: "var(--text-muted)",
+                    cursor: uploading ? "not-allowed" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {t("voiceDelete")}
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <p

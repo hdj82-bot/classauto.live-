@@ -38,3 +38,18 @@ export async function listVoiceOptions(): Promise<VoiceListResult> {
     return { voices: TTS_FALLBACK_VOICES, deferred: true };
   }
 }
+
+/**
+ * POST /api/voices/preview — 주어진 보이스로 샘플 문장을 실제 합성(mp3 Blob).
+ *
+ * 클론 음성처럼 preview_url 이 없는 보이스도 실제 음색으로 들려주기 위해 서버
+ * TTS 를 쓴다(studio 'AI 발화 내용 미리듣기'와 동일 엔드포인트). 에러 시 throw.
+ */
+export async function previewVoice(voiceId: string, text: string): Promise<Blob> {
+  const { data } = await api.post<Blob>(
+    "/api/voices/preview",
+    { text, voice_id: voiceId },
+    { responseType: "blob" },
+  );
+  return data;
+}
