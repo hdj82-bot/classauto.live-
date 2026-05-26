@@ -58,6 +58,8 @@ class QuizConfirmRequest(BaseModel):
     options: list[str] | None = None
     correct_answer: str | None = None
     explanation: str | None = None
+    # 학생이 영상에서 푼 직후 정답·해설을 공개할지. false = 비공개(대면 활용).
+    reveal_answer: bool = True
 
 
 class QuizConfirmResponse(BaseModel):
@@ -82,8 +84,55 @@ class AuthoredQuizItem(BaseModel):
     correct_answer: str | None
     explanation: str | None
     timestamp_seconds: int | None
+    reveal_answer: bool
 
 
 class AuthoredQuizListResponse(BaseModel):
     lecture_id: uuid.UUID
     quizzes: list[AuthoredQuizItem]
+
+
+# ── 학생 재생용 (정답·해설 미포함) ────────────────────────────────────────────
+
+class PlaybackQuizItem(BaseModel):
+    """GET /api/lectures/{lecture_id}/quiz/playback — 영상 재생 중 트리거할 퀴즈.
+
+    부정행위 방지: 정답(correct_answer)·해설(explanation)은 절대 포함하지 않는다.
+    reveal_answer 는 '제출 후 정답을 공개하는 모드인지' 만 알려준다(정답 자체 아님).
+    """
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    question_type: str
+    difficulty: str
+    content: str
+    options: list[str] | None
+    timestamp_seconds: int | None
+    insert_after_slide_index: int | None
+    reveal_answer: bool
+
+
+class PlaybackQuizListResponse(BaseModel):
+    lecture_id: uuid.UUID
+    quizzes: list[PlaybackQuizItem]
+
+
+# ── 학생 응답 (인터스티셜) ────────────────────────────────────────────────────
+
+class InterstitialAnswerRequest(BaseModel):
+    """POST /api/lectures/{lecture_id}/quiz/answer — 영상 중 퀴즈 1문항 응답."""
+    session_id: uuid.UUID
+    question_id: uuid.UUID
+    user_answer: str = Field(..., min_length=1, max_length=4000)
+    video_timestamp_seconds: int = Field(..., ge=0, le=24 * 60 * 60)
+
+
+class InterstitialAnswerResult(BaseModel):
+    """응답 기록 결과. reveal_answer=false 면 정/오답·정답·해설을 모두 숨긴다(완전 비공개)."""
+    recorded: bool
+    reveal: bool
+    timestamp_valid: bool
+    # reveal=true 일 때만 채워진다. (객관식 correct_answer 는 정답 인덱스 "0"~"3")
+    is_correct: bool | None = None
+    correct_answer: str | None = None
+    explanation: str | None = None

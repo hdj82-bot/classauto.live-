@@ -235,6 +235,8 @@ export interface QuizInsertionPoint {
   boundaryIndex: number;
   questionType: QuizQuestionType;
   difficulty: QuizDifficulty;
+  /** 학생이 영상에서 푼 직후 정답·해설을 공개할지. false = 비공개(대면 활용). */
+  revealAnswer: boolean;
   /** 저장된 문제 id. null = 아직 미작성. */
   authoredId: string | null;
 }
@@ -250,4 +252,5 @@ export interface AuthoredQuiz {
   correct_answer: string | null;
   explanation: string | null;
   timestamp_seconds: number | null;
+  reveal_answer: boolean;
 }

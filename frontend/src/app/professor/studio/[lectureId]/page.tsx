@@ -308,6 +308,7 @@ export default function StudioWizardPage() {
           boundaryIndex: q.insert_after_slide_index as number,
           questionType: q.question_type,
           difficulty: q.difficulty,
+          revealAnswer: q.reveal_answer,
           authoredId: q.id,
         }))
         .sort((a, b) => a.boundaryIndex - b.boundaryIndex);
@@ -825,6 +826,7 @@ export default function StudioWizardPage() {
           boundaryIndex: boundary,
           questionType: "multiple_choice",
           difficulty: "medium",
+          revealAnswer: true,
           authoredId: null,
         },
       ];

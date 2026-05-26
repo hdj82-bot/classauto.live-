@@ -1371,7 +1371,14 @@
         "mascotSay2": "틀려도 괜찮아요.",
         "close": "닫기",
         "correctFeedback": "잘 이해하고 계세요!",
-        "wrongFeedback": "정답을 함께 확인해볼까요?"
+        "wrongFeedback": "정답을 함께 확인해볼까요?",
+        "recordedFeedback": "응답이 기록되었어요. 정답은 수업에서 함께 확인해요.",
+        "recordError": "응답 기록 중 문제가 발생했어요.",
+        "explanationLabel": "해설",
+        "modelAnswerLabel": "모범답안",
+        "submit": "제출",
+        "submitting": "제출 중…",
+        "shortAnswerPlaceholder": "답을 입력하세요…"
       },
       "warning": {
         "pausedKicker": "세션이 일시정지되었습니다",

@@ -148,7 +148,7 @@ export default function SocraticQuizModal({
     setConfirming(true);
     setError(null);
     try {
-      const res = await confirmQuiz(lectureId, point.boundaryIndex, draft);
+      const res = await confirmQuiz(lectureId, point.boundaryIndex, draft, point.revealAnswer);
       onConfirmed({ id: res.id, boundaryIndex: res.insert_after_slide_index });
     } catch {
       setError("문제 저장에 실패했습니다. 입력을 확인하거나 잠시 후 다시 시도해주세요.");
@@ -159,7 +159,8 @@ export default function SocraticQuizModal({
   if (!open || !point) return <div style={overlayStyle(false)} aria-hidden="true" />;
 
   const boundaryLabel = `슬라이드 ${point.boundaryIndex + 1} ↔ ${point.boundaryIndex + 2} 사이`;
-  const metaLabel = `${QUIZ_TYPE_LABEL[point.questionType]} · 난이도 ${QUIZ_DIFFICULTY_LABEL[point.difficulty]}`;
+  const revealLabel = point.revealAnswer ? "정답 영상 공개" : "정답 비공개(대면 활용)";
+  const metaLabel = `${QUIZ_TYPE_LABEL[point.questionType]} · 난이도 ${QUIZ_DIFFICULTY_LABEL[point.difficulty]} · ${revealLabel}`;
 
   return (
     <div style={overlayStyle(open)} role="dialog" aria-modal="true" aria-labelledby="socratic-h">

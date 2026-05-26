@@ -56,6 +56,9 @@ class Question(Base):
     # 소크라테스식 대화로 저작한 인터랙티브 퀴즈가 "슬라이드 N↔N+1 사이"에 삽입됨을
     # 0-based index N 으로 기록. NOT NULL = 인터랙티브 퀴즈(일괄 자동 생성은 NULL).
     insert_after_slide_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 학생이 영상에서 푼 직후 정답·해설을 공개할지(true) 또는 숨긴 채 응답만 기록할지
+    # (false = 완전 비공개 → 교수자가 정·오답 현황 보고 대면 수업에 활용).
+    reveal_answer: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

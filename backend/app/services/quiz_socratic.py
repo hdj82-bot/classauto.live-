@@ -302,6 +302,7 @@ def confirm_quiz(
     options: list[str] | None,
     correct_answer: str | None,
     explanation: str | None,
+    reveal_answer: bool = True,
 ) -> Question:
     """확정된 문제를 형성평가 + 슬라이드 anchor 로 저장. 검증 실패 시 ValueError."""
     content = (content or "").strip()
@@ -348,6 +349,7 @@ def confirm_quiz(
         explanation=explanation,
         timestamp_seconds=timestamp,
         insert_after_slide_index=insert_after_slide_index,
+        reveal_answer=reveal_answer,
     )
     db.add(q)
     db.commit()
@@ -367,6 +369,29 @@ def list_authored(db: Session, lecture_id: uuid.UUID) -> list[Question]:
                 Question.insert_after_slide_index.isnot(None),
             )
             .order_by(Question.insert_after_slide_index)
+        )
+        .scalars()
+        .all()
+    )
+    return list(rows)
+
+
+def list_playback(db: Session, lecture_id: uuid.UUID) -> list[Question]:
+    """학생 재생용 — 타임스탬프가 있는 활성 인터랙티브 퀴즈를 시점 순으로 반환.
+
+    정답·해설은 응답 단계에서만(그리고 reveal_answer=true 일 때만) 노출하므로,
+    호출부가 PlaybackQuizItem 으로 변환할 때 정답 필드를 제외해야 한다.
+    """
+    rows = (
+        db.execute(
+            select(Question)
+            .where(
+                Question.lecture_id == lecture_id,
+                Question.insert_after_slide_index.isnot(None),
+                Question.is_active.is_(True),
+                Question.timestamp_seconds.isnot(None),
+            )
+            .order_by(Question.timestamp_seconds)
         )
         .scalars()
         .all()
