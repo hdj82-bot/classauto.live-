@@ -20,7 +20,7 @@ import {
   uploadProfilePhoto,
   uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
-import { listVoiceOptions } from "@/components/professor/avatars/voicesApi";
+import { listVoiceOptions, previewVoice } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
   CustomAvatarStatus,
@@ -235,10 +235,10 @@ export default function AvatarsPage() {
   );
 
   const handleVoiceUpload = useCallback(
-    async (file: File, gender: "male" | "female") => {
+    async (file: File) => {
       setVoiceUploading(true);
       try {
-        const v = await uploadVoiceSample(file, gender);
+        const v = await uploadVoiceSample(file);
         setVoiceClone(v);
         if (v.status === "ready") {
           toast(t("voiceUploadStatusReady"), "success");
@@ -256,6 +256,17 @@ export default function AvatarsPage() {
     },
     [toast, t, reloadVoices],
   );
+
+  // 본인 클론 음성 미리듣기 — 서버 TTS 로 샘플 문장을 합성해 Blob 으로 돌려준다.
+  const handleVoicePreview = useCallback(async (): Promise<Blob | null> => {
+    if (!voiceClone.voice_id) return null;
+    try {
+      return await previewVoice(voiceClone.voice_id, t("voiceSampleText"));
+    } catch {
+      toast(t("voicePreviewError"), "error");
+      return null;
+    }
+  }, [voiceClone.voice_id, t, toast]);
 
   const handleVoiceDelete = useCallback(async () => {
     setVoiceUploading(true);
@@ -317,28 +328,39 @@ export default function AvatarsPage() {
           </p>
         )}
 
-        <ProfilePhotoUploadCard
-          onSubmit={handleUpload}
-          status={customStatus}
-          uploading={customUploading}
-          customAvatar={customAvatar}
-          customSelected={!!customAvatar && customAvatar.id === selectedId}
-          onSelectCustom={
-            customAvatar ? () => setSelectedId(customAvatar.id) : undefined
-          }
-          t={t}
-        />
+        {/* 본인 아바타(사진) + 본인 음성(mp3 클론) 만들기 — 나란히 배치 */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
+            gap: 18,
+            alignItems: "start",
+          }}
+        >
+          <ProfilePhotoUploadCard
+            onSubmit={handleUpload}
+            status={customStatus}
+            uploading={customUploading}
+            customAvatar={customAvatar}
+            customSelected={!!customAvatar && customAvatar.id === selectedId}
+            onSelectCustom={
+              customAvatar ? () => setSelectedId(customAvatar.id) : undefined
+            }
+            t={t}
+          />
 
-        {/* 본인 음성(mp3 업로드 → ElevenLabs 클론) 만들기 */}
-        <VoiceCloneUploadCard
-          onSubmit={handleVoiceUpload}
-          onDelete={handleVoiceDelete}
-          status={voiceClone.status}
-          uploading={voiceUploading}
-          voiceName={voiceClone.name}
-          message={voiceClone.message}
-          t={t}
-        />
+          <VoiceCloneUploadCard
+            onSubmit={handleVoiceUpload}
+            onDelete={handleVoiceDelete}
+            onPreview={handleVoicePreview}
+            status={voiceClone.status}
+            uploading={voiceUploading}
+            voiceName={voiceClone.name}
+            message={voiceClone.message}
+            t={t}
+          />
+        </div>
 
         {/* 클릭한 아바타를 크게 재생 + 음성 함께 듣기 */}
         <AvatarPreviewStage
