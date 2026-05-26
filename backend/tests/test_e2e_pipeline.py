@@ -280,6 +280,7 @@ def test_e2e_render_slide_pipeline():
     mock_lecture.voice_gender = "male"
     mock_lecture.voice_id = None
     mock_lecture.voice_speed = 1.0
+    mock_lecture.avatar_scale = 1.0
 
     mock_tts_result = TTSResult(audio_bytes=b"tts-audio", provider="elevenlabs", duration_seconds=1.2)
 
@@ -318,6 +319,7 @@ def test_e2e_render_slide_pipeline():
         avatar_id="avatar-test",
         gender="male",
         callback_id=str(render_id),
+        avatar_scale=1.0,
     )
 
     # 결과 검증
