@@ -768,7 +768,6 @@ export default function StudioWizardPage() {
         onEditSave={handleEditSave}
         onRegenerate={handleRegenerate}
         onRequestVoicePreview={handleRequestVoicePreview}
-        previewSampleUrl={selectedVoice?.preview_url ?? null}
         voicePreviewKey={voicePreviewKey}
         voiceName={
           selectedVoice

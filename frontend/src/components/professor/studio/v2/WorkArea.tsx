@@ -63,12 +63,6 @@ export interface WorkAreaProps {
    */
   onRequestVoicePreview?: () => Promise<Blob | null>;
   /**
-   * 선택한 보이스의 샘플 오디오 URL(preview_url). 제공되면 미리듣기는 이 샘플을
-   * 즉시 재생한다(ElevenLabs 합성을 거치지 않아 빠르고 안정적). 합성 경로는
-   * 운영에서 5~6분 타임아웃 후 실패하는 문제가 있어, 샘플을 우선한다.
-   */
-  previewSampleUrl?: string | null;
-  /**
    * 미리듣기 캐시 키 — 보이스·속도·슬라이드가 바뀌면 값이 달라져 재합성을
    * 트리거한다. 같은 키면 직전 합성 결과를 그대로 재생(비용 절약).
    */
@@ -223,7 +217,6 @@ export default function WorkArea({
   onEditSave,
   onRegenerate,
   onRequestVoicePreview,
-  previewSampleUrl,
   voicePreviewKey,
   voiceName,
   regenerating = false,
@@ -277,12 +270,10 @@ export default function WorkArea({
       stopVoicePreview();
       return;
     }
-    // 보이스 샘플(preview_url)을 즉시 재생 — 합성(ElevenLabs) 경로는 운영에서
-    // 5~6분 타임아웃 후 실패하므로, 샘플이 있으면 그걸 우선 재생한다(빠르고 안정).
-    if (previewSampleUrl) {
-      playPreviewUrl(previewSampleUrl);
-      return;
-    }
+    // 현재 발화 내용을 선택한 보이스·속도로 실제 합성해 재생한다. 보이스 고정
+    // 샘플(preview_url)은 우측 음성 패널의 '성우 미리듣기'가 따로 담당하므로,
+    // 여기서는 절대 샘플로 우회하지 않는다 — 그러면 발화 내용 대신 성우 샘플이
+    // 들려 미리듣기 의미가 사라진다 (#버튼이 발화 내용을 읽어야 함).
     if (!onRequestVoicePreview) return;
     const key = voicePreviewKey ?? "";
     const cached = previewCacheRef.current;
@@ -571,10 +562,7 @@ export default function WorkArea({
                   하두진 교수 톤 학습 모델
                 </span>
                 <VoicePreviewButton
-                  enabled={
-                    !!previewSampleUrl ||
-                    (!!onRequestVoicePreview && aiText.trim().length > 0)
-                  }
+                  enabled={!!onRequestVoicePreview && aiText.trim().length > 0}
                   voiceName={voiceName}
                   playing={voicePreviewPlaying}
                   loading={voicePreviewLoading}
