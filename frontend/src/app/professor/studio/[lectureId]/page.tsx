@@ -27,6 +27,7 @@ import { useCustomAvatarPreview } from "@/components/professor/avatars/useCustom
 import type {
   LangCode,
   Lecture,
+  QuizDraft,
   QuizInsertionPoint,
   RenderStatus,
   ScriptResponse,
@@ -156,6 +157,20 @@ export default function StudioWizardPage() {
   // 저작된 문제는 GET /api/lectures/{id}/quiz 로 불러와 점으로 복원한다.
   const [quizPoints, setQuizPoints] = useState<QuizInsertionPoint[]>([]);
   const [socraticOpenIndex, setSocraticOpenIndex] = useState<number | null>(null);
+  // 좌측 슬라이드 패널에 "문제N"을 슬라이드 사이에 삽입 표시 (작성된 퀴즈만).
+  // 번호는 우측 카드("문제 N", 배열 순서)와 동일하게 맞춘다.
+  const quizMarkers = useMemo(
+    () =>
+      quizPoints
+        .map((p, i) => ({
+          boundaryIndex: p.boundaryIndex,
+          label: `문제 ${i + 1}`,
+          authored: p.authoredId !== null,
+        }))
+        .filter((m) => m.authored)
+        .map(({ boundaryIndex, label }) => ({ boundaryIndex, label })),
+    [quizPoints],
+  );
 
   // ── 1) 강의 + 비디오 ID 로드 ─────────────────────────────────────────────────
   useEffect(() => {
@@ -310,6 +325,14 @@ export default function StudioWizardPage() {
           difficulty: q.difficulty,
           revealAnswer: q.reveal_answer,
           authoredId: q.id,
+          savedDraft: {
+            question_type: q.question_type,
+            difficulty: q.difficulty,
+            content: q.content,
+            options: q.options,
+            correct_answer: q.correct_answer,
+            explanation: q.explanation,
+          },
         }))
         .sort((a, b) => a.boundaryIndex - b.boundaryIndex);
       // 백엔드에 저작된 게 있으면 그것으로 복원. (없으면 빈 상태 — 교수자가 추가)
@@ -859,11 +882,16 @@ export default function StudioWizardPage() {
   );
 
   const handleQuizConfirmed = useCallback(
-    (result: { id: string; boundaryIndex: number }) => {
+    (result: { id: string; boundaryIndex: number; draft: QuizDraft }) => {
       setQuizPoints((prev) =>
         prev.map((p, i) =>
           i === socraticOpenIndex
-            ? { ...p, boundaryIndex: result.boundaryIndex, authoredId: result.id }
+            ? {
+                ...p,
+                boundaryIndex: result.boundaryIndex,
+                authoredId: result.id,
+                savedDraft: result.draft,
+              }
             : p,
         ),
       );
@@ -927,6 +955,7 @@ export default function StudioWizardPage() {
         slides={slides}
         activeIndex={activeIndex}
         onSelect={setActiveIndex}
+        quizMarkers={quizMarkers}
         loading={slidesShellLoading}
       />
 
