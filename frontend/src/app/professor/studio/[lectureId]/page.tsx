@@ -23,6 +23,7 @@ import {
 import { listAvatars } from "@/components/professor/avatars/avatarsApi";
 import type { Avatar } from "@/components/professor/avatars/avatarsTypes";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
+import { useCustomAvatarPreview } from "@/components/professor/avatars/useCustomAvatarPreview";
 import type {
   LangCode,
   Lecture,
@@ -466,6 +467,25 @@ export default function StudioWizardPage() {
     return byGender ?? avatars.find((a) => !a.is_custom) ?? avatars[0] ?? null;
   }, [avatars, lecture?.avatar_id, voiceGender]);
   const avatarLabel = lecture?.avatar_name ?? resolvedAvatar?.name ?? "아바타";
+
+  // 본인(사진) 아바타는 idle 클립이 없다. 아바타 페이지에서 만든 "움직이는
+  // 미리보기"(GET /api/avatars/me/preview)의 렌더 클립을 끌어와 스튜디오
+  // 미리보기에서도 말하는 모습을 보여준다. 생성은 비용(HeyGen 1회)이 들어 아바타
+  // 페이지의 명시 액션 전용 — 여기서는 캐시 조회만(processing 이면 폴링)하고,
+  // 미생성 시엔 아바타 페이지로 유도하는 안내만 노출한다.
+  const isCustomAvatar = !!resolvedAvatar?.is_custom;
+  const customPreview = useCustomAvatarPreview(isCustomAvatar);
+  // 미리보기 PiP 영상: 본인 아바타면 렌더 클립, 아니면 아바타의 idle 클립.
+  const avatarVideoUrl = isCustomAvatar
+    ? customPreview.videoUrl
+    : resolvedAvatar?.preview_video_url ?? null;
+  // 본인 아바타인데 움직이는 미리보기가 아직 없을 때의 안내(없으면 null).
+  const avatarHint =
+    isCustomAvatar && customPreview.status !== "ready"
+      ? customPreview.status === "processing"
+        ? "내 아바타 움직이는 미리보기 생성 중…"
+        : "아바타 페이지에서 ‘움직이는 미리보기’를 만들면 여기서도 말하는 모습이 보여요"
+      : null;
 
   // 미리듣기 캐시 키 — 보이스·속도·활성 슬라이드·본문이 바뀌면 재합성.
   const activeAiText = activeSegment?.text ?? "";
@@ -947,11 +967,12 @@ export default function StudioWizardPage() {
         onTranslateSubtitle={handleTranslateSubtitle}
         translatingSubtitle={translatingSubtitle}
         savingSubtitle={savingSubtitle}
-        avatarVideoUrl={resolvedAvatar?.preview_video_url ?? null}
+        avatarVideoUrl={avatarVideoUrl}
         avatarImageUrl={resolvedAvatar?.preview_image_url ?? null}
         avatarLabel={avatarLabel}
         avatarScale={avatarScale}
         reducedMotion={reducedMotion}
+        avatarHint={avatarHint}
       />
 
       <SettingsPanel
