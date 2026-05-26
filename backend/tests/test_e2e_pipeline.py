@@ -273,13 +273,14 @@ def test_e2e_render_slide_pipeline():
     mock_render.audio_url = None
     mock_render.heygen_job_id = None
 
-    # render task 가 lecture 에서 voice_gender / voice_id / voice_speed 를 lookup 한다.
-    # mock 으로 명시하지 않으면 MagicMock 객체가 그대로 흘러 synthesize/create_video
-    # 인자에 들어가 assert 가 깨지므로 구체값으로 고정한다.
+    # render task 가 lecture 에서 voice_gender / voice_id / voice_speed / avatar_scale 를
+    # lookup 한다. mock 으로 명시하지 않으면 MagicMock 객체가 그대로 흘러 synthesize/
+    # create_video 인자에 들어가 assert 가 깨지므로 구체값으로 고정한다.
     mock_lecture = MagicMock()
     mock_lecture.voice_gender = "male"
     mock_lecture.voice_id = None
     mock_lecture.voice_speed = 1.0
+    mock_lecture.avatar_scale = 1.0
 
     mock_tts_result = TTSResult(audio_bytes=b"tts-audio", provider="elevenlabs", duration_seconds=1.2)
 
@@ -312,12 +313,13 @@ def test_e2e_render_slide_pipeline():
     # S3 오디오 업로드 검증
     mock_s3_audio.assert_called_once_with(b"tts-audio", str(render_id))
 
-    # HeyGen 비디오 생성 검증 — 0016 이후 gender 인자 함께 전달
+    # HeyGen 비디오 생성 검증 — 0016 이후 gender, #239 이후 avatar_scale 함께 전달
     mock_heygen.assert_called_once_with(
         audio_url="https://s3/audio/test.mp3",
         avatar_id="avatar-test",
         gender="male",
         callback_id=str(render_id),
+        avatar_scale=1.0,
     )
 
     # 결과 검증
