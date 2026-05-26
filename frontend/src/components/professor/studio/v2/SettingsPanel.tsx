@@ -148,16 +148,18 @@ const segStyle: CSSProperties = {
 };
 
 const segOptStyle = (on: boolean): CSSProperties => ({
-  padding: "3px 9px",
+  padding: "3px 10px",
   borderRadius: 5,
   fontSize: 11.5,
-  fontWeight: 600,
-  color: on ? "var(--text)" : "var(--text-muted)",
+  // 선택 상태를 확실히: 굵게 + 골드 텍스트 + 골드 배경 + 골드 링(레이아웃 시프트 없이 inset).
+  fontWeight: on ? 700 : 500,
+  color: on ? "var(--gold-on-light, #B88308)" : "var(--text-muted)",
   cursor: "pointer",
-  background: on ? "var(--bg-card)" : "transparent",
-  boxShadow: on ? "0 1px 2px rgba(10,10,10,0.06)" : "none",
+  background: on ? "var(--gold-soft)" : "transparent",
+  boxShadow: on ? "inset 0 0 0 1px var(--gold-on-light, #B88308)" : "none",
   border: "none",
   fontFamily: "inherit",
+  transition: "all 140ms var(--ease-out)",
 });
 
 const switchStyle = (on: boolean): CSSProperties => ({
@@ -623,31 +625,36 @@ export default function SettingsPanel({
                     onOpen={() => onOpenSocratic?.(i)}
                   />
                 ))}
-                {quizPoints.length < 3 && (
+                {quizPoints.length < 3 ? (
                   <button
                     type="button"
                     onClick={onAddQuizPoint}
                     style={{
-                      alignSelf: "flex-start",
+                      width: "100%",
                       display: "inline-flex",
                       alignItems: "center",
+                      justifyContent: "center",
                       gap: 6,
-                      padding: "7px 12px",
-                      borderRadius: 8,
-                      border: "1px dashed var(--line-strong)",
-                      background: "var(--bg-card)",
+                      padding: "9px 12px",
+                      borderRadius: 9,
+                      border: "1px dashed var(--gold-on-light, #B88308)",
+                      background: "var(--gold-soft)",
                       fontSize: 12.5,
-                      fontWeight: 600,
+                      fontWeight: 700,
                       cursor: "pointer",
-                      color: "var(--text)",
+                      color: "var(--gold-on-light, #B88308)",
                       fontFamily: "inherit",
                     }}
                   >
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M12 5v14M5 12h14" />
                     </svg>
-                    삽입 지점 추가
+                    다음 문제 추가 (다른 슬라이드 구간)
                   </button>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                    강의당 최대 3문제까지 넣을 수 있습니다.
+                  </p>
                 )}
               </>
             )}
@@ -692,8 +699,8 @@ function QuizPointCard({
       }}
     >
       <div className="flex items-center justify-between">
-        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)" }}>
-          퀴즈 {index + 1}
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text)" }}>
+          문제 {index + 1}
         </span>
         <div className="flex items-center" style={{ gap: 6 }}>
           {authored && (

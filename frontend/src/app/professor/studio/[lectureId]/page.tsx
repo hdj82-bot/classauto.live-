@@ -156,6 +156,20 @@ export default function StudioWizardPage() {
   // 저작된 문제는 GET /api/lectures/{id}/quiz 로 불러와 점으로 복원한다.
   const [quizPoints, setQuizPoints] = useState<QuizInsertionPoint[]>([]);
   const [socraticOpenIndex, setSocraticOpenIndex] = useState<number | null>(null);
+  // 좌측 슬라이드 패널에 "문제N"을 슬라이드 사이에 삽입 표시 (작성된 퀴즈만).
+  // 번호는 우측 카드("문제 N", 배열 순서)와 동일하게 맞춘다.
+  const quizMarkers = useMemo(
+    () =>
+      quizPoints
+        .map((p, i) => ({
+          boundaryIndex: p.boundaryIndex,
+          label: `문제 ${i + 1}`,
+          authored: p.authoredId !== null,
+        }))
+        .filter((m) => m.authored)
+        .map(({ boundaryIndex, label }) => ({ boundaryIndex, label })),
+    [quizPoints],
+  );
 
   // ── 1) 강의 + 비디오 ID 로드 ─────────────────────────────────────────────────
   useEffect(() => {
@@ -927,6 +941,7 @@ export default function StudioWizardPage() {
         slides={slides}
         activeIndex={activeIndex}
         onSelect={setActiveIndex}
+        quizMarkers={quizMarkers}
         loading={slidesShellLoading}
       />
 
