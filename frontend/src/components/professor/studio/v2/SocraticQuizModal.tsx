@@ -38,8 +38,8 @@ export interface SocraticQuizModalProps {
   /** 대상 삽입 지점 (경계·유형·난이도). null 이면 렌더만 하고 동작 없음. */
   point: QuizInsertionPoint | null;
   onClose: () => void;
-  /** 저장 성공 시 — 부모가 해당 지점의 authoredId 갱신 + 모달 닫기 담당. */
-  onConfirmed: (result: { id: string; boundaryIndex: number }) => void;
+  /** 저장 성공 시 — 부모가 해당 지점의 authoredId·savedDraft 갱신 + 모달 닫기 담당. */
+  onConfirmed: (result: { id: string; boundaryIndex: number; draft: QuizDraft }) => void;
 }
 
 const overlayStyle = (open: boolean): CSSProperties => ({
@@ -87,7 +87,11 @@ export default function SocraticQuizModal({
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const runTurn = useCallback(
-    async (visible: SocraticMessage[], pt: QuizInsertionPoint) => {
+    async (
+      visible: SocraticMessage[],
+      pt: QuizInsertionPoint,
+      currentDraft: QuizDraft | null = null,
+    ) => {
       setLoading(true);
       setError(null);
       try {
@@ -96,6 +100,7 @@ export default function SocraticQuizModal({
           questionType: pt.questionType,
           difficulty: pt.difficulty,
           messages: visible,
+          currentDraft,
         });
         setMessages([...visible, { role: "assistant", content: stripMarkdown(res.reply) }]);
         if (res.draft) setDraft(res.draft);
@@ -122,13 +127,25 @@ export default function SocraticQuizModal({
     startedRef.current = true;
     const pt = point;
     const handle = requestAnimationFrame(() => {
-      setMessages([]);
-      setDraft(null);
       setDone(false);
       setError(null);
       setInput("");
       setConfirming(false);
-      void runTurn([], pt);
+      if (pt.authoredId && pt.savedDraft) {
+        // 저장된 문제 다시 보기/수정 — 자동 대화 없이 미리보기로 보여준다.
+        setDraft(pt.savedDraft);
+        setMessages([
+          {
+            role: "assistant",
+            content:
+              "이전에 저장한 문제예요. 오른쪽 미리보기를 확인하시고, 바꾸고 싶은 점을 알려주시면 다듬어 드릴게요. 그대로 두시려면 ‘이 문제로 확정’을 누르세요.",
+          },
+        ]);
+      } else {
+        setMessages([]);
+        setDraft(null);
+        void runTurn([], pt, null);
+      }
     });
     return () => cancelAnimationFrame(handle);
   }, [open, point, runTurn]);
@@ -149,7 +166,8 @@ export default function SocraticQuizModal({
     const visible: SocraticMessage[] = [...messages, { role: "user", content: trimmed }];
     setMessages(visible);
     setInput("");
-    void runTurn(visible, point);
+    // 현재 미리보기 문제를 컨텍스트로 함께 전달(수정 모드에서 모델이 기준 삼도록).
+    void runTurn(visible, point, draft);
   };
 
   const handleConfirm = async () => {
@@ -158,7 +176,7 @@ export default function SocraticQuizModal({
     setError(null);
     try {
       const res = await confirmQuiz(lectureId, point.boundaryIndex, draft, point.revealAnswer);
-      onConfirmed({ id: res.id, boundaryIndex: res.insert_after_slide_index });
+      onConfirmed({ id: res.id, boundaryIndex: res.insert_after_slide_index, draft });
     } catch {
       setError("문제 저장에 실패했습니다. 입력을 확인하거나 잠시 후 다시 시도해주세요.");
       setConfirming(false);

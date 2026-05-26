@@ -37,6 +37,8 @@ export async function socraticTurn(
     questionType: QuizQuestionType;
     difficulty: QuizDifficulty;
     messages: SocraticMessage[];
+    /** 수정 중인 현재 문제(있으면) — 저장된 문제를 다시 열어 다듬을 때 컨텍스트로 전달. */
+    currentDraft?: QuizDraft | null;
   },
 ): Promise<SocraticTurnResult> {
   const { data } = await api.post<SocraticTurnWire>(
@@ -46,6 +48,7 @@ export async function socraticTurn(
       question_type: params.questionType,
       difficulty: params.difficulty,
       messages: params.messages,
+      current_draft: params.currentDraft ?? null,
     },
   );
   return { reply: data.reply, draft: data.draft ?? null, done: !!data.done };

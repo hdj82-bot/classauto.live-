@@ -27,6 +27,7 @@ import { useCustomAvatarPreview } from "@/components/professor/avatars/useCustom
 import type {
   LangCode,
   Lecture,
+  QuizDraft,
   QuizInsertionPoint,
   RenderStatus,
   ScriptResponse,
@@ -324,6 +325,14 @@ export default function StudioWizardPage() {
           difficulty: q.difficulty,
           revealAnswer: q.reveal_answer,
           authoredId: q.id,
+          savedDraft: {
+            question_type: q.question_type,
+            difficulty: q.difficulty,
+            content: q.content,
+            options: q.options,
+            correct_answer: q.correct_answer,
+            explanation: q.explanation,
+          },
         }))
         .sort((a, b) => a.boundaryIndex - b.boundaryIndex);
       // 백엔드에 저작된 게 있으면 그것으로 복원. (없으면 빈 상태 — 교수자가 추가)
@@ -873,11 +882,16 @@ export default function StudioWizardPage() {
   );
 
   const handleQuizConfirmed = useCallback(
-    (result: { id: string; boundaryIndex: number }) => {
+    (result: { id: string; boundaryIndex: number; draft: QuizDraft }) => {
       setQuizPoints((prev) =>
         prev.map((p, i) =>
           i === socraticOpenIndex
-            ? { ...p, boundaryIndex: result.boundaryIndex, authoredId: result.id }
+            ? {
+                ...p,
+                boundaryIndex: result.boundaryIndex,
+                authoredId: result.id,
+                savedDraft: result.draft,
+              }
             : p,
         ),
       );

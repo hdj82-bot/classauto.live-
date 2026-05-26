@@ -239,6 +239,8 @@ export interface QuizInsertionPoint {
   revealAnswer: boolean;
   /** 저장된 문제 id. null = 아직 미작성. */
   authoredId: string | null;
+  /** 저장된 문제 내용(다시 보기·수정용). authoredId 가 있을 때만 채워짐. */
+  savedDraft?: QuizDraft | null;
 }
 
 /** GET /api/lectures/{id}/quiz 의 항목 (교수자 — 정답·해설 포함). */

@@ -130,6 +130,7 @@ async def quiz_socratic_turn(
     """
     await _enforce_socratic_rate_limit(lecture_id, current_user.id)
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    current_draft = body.current_draft.model_dump() if body.current_draft else None
 
     loop = asyncio.get_event_loop()
 
@@ -142,6 +143,7 @@ async def quiz_socratic_turn(
                 question_type=body.question_type,
                 difficulty=body.difficulty,
                 messages=messages,
+                current_draft=current_draft,
             )
 
     try:
