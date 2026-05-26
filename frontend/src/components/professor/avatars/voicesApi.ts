@@ -53,3 +53,17 @@ export async function previewVoice(voiceId: string, text: string): Promise<Blob>
   );
   return data;
 }
+
+/**
+ * 보이스 즐겨찾기 추가/해제 (교수자별).
+ * PUT/DELETE /api/voices/{voice_id}/favorite. 둘 다 204. 합성 폴백 보이스
+ * (id 가 "tts-" 로 시작)는 백엔드에 없으므로 호출하지 않는다.
+ */
+export async function setVoiceFavorite(
+  voiceId: string,
+  favorite: boolean,
+): Promise<void> {
+  const path = `/api/voices/${encodeURIComponent(voiceId)}/favorite`;
+  if (favorite) await api.put(path);
+  else await api.delete(path);
+}

@@ -151,6 +151,8 @@ export interface TtsVoice {
   description_ko?: string | null;
   gender_ko?: string | null;
   accent_ko?: string | null;
+  /** 현재 교수자가 즐겨찾기한 보이스인지 (GET /api/voices). */
+  is_favorite?: boolean;
 }
 
 // ── 비용 ─────────────────────────────────────────────────────────────────────

@@ -180,6 +180,61 @@ async def test_list_voices_curated_first(client, professor):
     assert aria["preview_url"] == "https://el.example/aria.mp3"
 
 
+# ── 즐겨찾기 (PUT/DELETE /api/voices/{id}/favorite + is_favorite) ───────────────
+
+
+@pytest.mark.asyncio
+async def test_voice_favorite_toggle_and_ordering(client, professor):
+    """즐겨찾기 추가 → is_favorite=true + 목록 맨 앞, 해제 → false 로 복귀."""
+    fake = [
+        {
+            "voice_id": "v_a",
+            "name": "Alpha",
+            "category": "premade",
+            "labels": {"gender": "male", "accent": "american"},
+        },
+        {
+            "voice_id": "v_b",
+            "name": "Bravo",
+            "category": "premade",
+            "labels": {"gender": "female", "accent": "british"},
+        },
+    ]
+    hdr = make_auth_header(professor)
+
+    with patch(
+        "app.services.pipeline.elevenlabs_client.list_voices",
+        new=AsyncMock(return_value=fake),
+    ):
+        # 즐겨찾기 전 — 둘 다 false.
+        before = (await client.get("/api/voices", headers=hdr)).json()["voices"]
+        assert all(v["is_favorite"] is False for v in before)
+
+        # v_b 즐겨찾기 추가 (멱등 — 두 번 호출해도 204).
+        assert (await client.put("/api/voices/v_b/favorite", headers=hdr)).status_code == 204
+        assert (await client.put("/api/voices/v_b/favorite", headers=hdr)).status_code == 204
+
+        after = (await client.get("/api/voices", headers=hdr)).json()["voices"]
+        assert after[0]["voice_id"] == "v_b"  # 즐겨찾기가 맨 앞
+        assert after[0]["is_favorite"] is True
+        assert next(v for v in after if v["voice_id"] == "v_a")["is_favorite"] is False
+
+        # 해제 → 다시 false.
+        assert (
+            await client.delete("/api/voices/v_b/favorite", headers=hdr)
+        ).status_code == 204
+        restored = (await client.get("/api/voices", headers=hdr)).json()["voices"]
+        assert all(v["is_favorite"] is False for v in restored)
+
+
+@pytest.mark.asyncio
+async def test_voice_favorite_requires_professor(client, student):
+    resp = await client.put(
+        "/api/voices/v_a/favorite", headers=make_auth_header(student)
+    )
+    assert resp.status_code in (401, 403)
+
+
 # ── POST /api/voices/preview ──────────────────────────────────────────────────
 
 
