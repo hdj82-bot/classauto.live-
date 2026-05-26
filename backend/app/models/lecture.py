@@ -78,11 +78,10 @@ class Lecture(Base):
     # 교수자가 고른 ElevenLabs 보이스 ID. NULL = voice_gender 기준 기본 보이스
     # (elevenlabs_client.pick_voice_id). render.py 가 합성 시 이 보이스를 사용.
     voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # 영상 발화 속도 배율. 기본 1.3×. 유효범위 0.7~2.0.
-    # 합성 시 ElevenLabs voice_settings.speed(0.7~1.2)로 클램프하고, 1.2× 초과분은
-    # tts.synthesize 가 ffmpeg(atempo)로 추가 가속해 최대 2.0×까지 맞춘다.
+    # 영상 발화 속도 배율. 1.0 = 기본. ElevenLabs voice_settings.speed 유효범위
+    # 0.7~1.2 로 합성 시 클램프. render.py 가 synthesize(speed=) 로 전달.
     voice_speed: Mapped[float] = mapped_column(
-        Float, nullable=False, default=1.3, server_default="1.3"
+        Float, nullable=False, default=1.0, server_default="1.0"
     )
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 교수자가 만든 컬렉션(Folder)으로 강의를 묶기 위한 옵션 외래키.
