@@ -478,7 +478,7 @@ export default function GenerationModal({
                 백그라운드 실행
               </div>
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                다른 작업하시면서 기다리실 수 있어요. 완료 시 이메일·카톡으로 알려드립니다.
+                이 창을 닫아도 서버에서 계속 생성됩니다. 완성된 영상은 강의 페이지에서 확인하실 수 있어요.
               </div>
               <button
                 type="button"
@@ -530,7 +530,7 @@ export default function GenerationModal({
           }}
         >
           <div style={{ fontSize: 11.5, color: "var(--text-subtle)" }}>
-            안전하게 처리됩니다. 문제 발생 시 자동 알림.
+            진행 상황은 자동으로 저장됩니다.
           </div>
           {done && onViewVideo ? (
             <PrimaryButton
