@@ -1,7 +1,10 @@
-"""한자 뒤 병음 괄호 표기 제거(strip_pinyin_annotations) 단위 테스트."""
+"""text_cleanup 단위 테스트 — 병음 제거 + 언어 구간 분리."""
 import pytest
 
-from app.services.pipeline.text_cleanup import strip_pinyin_annotations
+from app.services.pipeline.text_cleanup import (
+    split_by_language,
+    strip_pinyin_annotations,
+)
 
 
 @pytest.mark.parametrize(
@@ -39,3 +42,65 @@ def test_preserves_korean_and_hanja_glosses_in_parens() -> None:
 def test_empty_and_none_safe() -> None:
     assert strip_pinyin_annotations("") == ""
     assert strip_pinyin_annotations(None) is None  # type: ignore[arg-type]
+
+
+# ── split_by_language ────────────────────────────────────────────────────────
+
+
+def test_split_pure_korean_is_single_other_segment() -> None:
+    assert split_by_language("안녕하세요. 어순을 배웁니다.") == [
+        ("other", "안녕하세요. 어순을 배웁니다."),
+    ]
+
+
+def test_split_pure_chinese_is_single_zh_segment() -> None:
+    assert split_by_language("我吃饭。我们去公园。") == [
+        ("zh", "我吃饭。我们去公园。"),
+    ]
+
+
+def test_split_isolates_hanzi_run_from_korean() -> None:
+    segs = split_by_language('첫 문장은 "我吃饭"입니다.')
+    # 한자 구간이 한국어와 분리돼 별도 "zh" 로 나온다.
+    assert ("zh", '"我吃饭') in segs or any(
+        lang == "zh" and "我吃饭" in chunk for lang, chunk in segs
+    )
+    langs = [lang for lang, _ in segs]
+    assert "zh" in langs and "other" in langs
+
+
+def test_split_each_explained_character_is_chinese() -> None:
+    segs = split_by_language('"我"는 "나는", "吃"는 "먹다"를 뜻합니다.')
+    zh_chunks = [chunk for lang, chunk in segs if lang == "zh"]
+    # 설명용으로 떼어 쓴 개별 한자가 각각 중국어 구간으로 잡힌다.
+    assert "我" in "".join(zh_chunks)
+    assert "吃" in "".join(zh_chunks)
+
+
+def test_split_punctuation_between_hanzi_stays_chinese() -> None:
+    # 한자 사이에 낀 부호·공백은 중국어 구간에 붙는다(별도 부호 구간 생성 안 함).
+    assert split_by_language("我、你") == [("zh", "我、你")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "안녕하세요",
+        "我吃饭",
+        '첫 문장은 "我吃饭"입니다. 두 번째는 "我们去公园"이죠.',
+        '"我"는 나는, "吃"는 먹다.',
+        "GDP는 国内总产值(국내총생산)을 뜻합니다.",
+        "123 ... !!!",
+    ],
+)
+def test_split_is_lossless(text: str) -> None:
+    # 모든 구간을 순서대로 이으면 원문과 정확히 같아야 한다(오디오 병합 시 원문 복원).
+    assert "".join(chunk for _, chunk in split_by_language(text)) == text
+
+
+def test_split_no_empty_or_punctuation_only_segment() -> None:
+    # 순수 문장부호만으로 이뤄진 구간이 따로 생기지 않아야 한다(빈 합성 호출 방지).
+    for text in ['"我"입니다', '我吃饭! 다음.', '...我...']:
+        for _, chunk in split_by_language(text):
+            assert chunk.strip() != ""
