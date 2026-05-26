@@ -90,6 +90,24 @@ export interface WorkAreaProps {
   translatingSubtitle?: boolean;
   /** 자막 저장 진행 표시. */
   savingSubtitle?: boolean;
+  // ── AI 아바타 미리보기 오버레이 ───────────────────────────────────────────────
+  /**
+   * 선택된 아바타의 움직이는 idle 클립(muted). 주어지면 미리보기 우측 하단에
+   * 말하는 모습이 자동재생(loop)으로 겹쳐 보인다(PiP). 없으면 ``avatarImageUrl``
+   * 정지 이미지로 폴백.
+   */
+  avatarVideoUrl?: string | null;
+  /** 아바타 정지 미리보기(poster/폴백). */
+  avatarImageUrl?: string | null;
+  /** 아바타 표시명 — 오버레이 aria-label·이니셜 폴백용. */
+  avatarLabel?: string;
+  /**
+   * 영상에서 아바타 크기 배율(1.0 = 기본). 오버레이 PiP 의 크기를 0.5~1.5 범위로
+   * 키우거나 줄인다. 실제 렌더 영상에는 HeyGen character.scale 로 반영된다.
+   */
+  avatarScale?: number;
+  /** prefers-reduced-motion — true 면 오버레이는 자동재생 대신 정지 이미지. */
+  reducedMotion?: boolean;
 }
 
 const workStyle: CSSProperties = {
@@ -228,6 +246,11 @@ export default function WorkArea({
   onTranslateSubtitle,
   translatingSubtitle = false,
   savingSubtitle = false,
+  avatarVideoUrl = null,
+  avatarImageUrl = null,
+  avatarLabel,
+  avatarScale = 1.0,
+  reducedMotion = false,
 }: WorkAreaProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(aiText);
@@ -499,6 +522,16 @@ export default function WorkArea({
                   <DefaultSlideMock title={slideTitle} number={slideNumber} />
                 )}
               </div>
+            )}
+            {/* 선택된 아바타가 슬라이드 위에서 말하는 모습 (PiP, 우측 하단). */}
+            {!isLoading && (avatarVideoUrl || avatarImageUrl) && (
+              <AvatarOverlay
+                videoUrl={avatarVideoUrl}
+                imageUrl={avatarImageUrl}
+                label={avatarLabel ?? "아바타"}
+                scale={avatarScale}
+                reducedMotion={reducedMotion}
+              />
             )}
             {!isLoading && activeSlidePending && (
               <PendingPreviewOverlay slideNumber={slideNumber} />
@@ -963,6 +996,96 @@ function PendingPreviewOverlay({ slideNumber }: { slideNumber: number }) {
           슬라이드 {slideNumber} · AI 생성 중…
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 선택된 아바타가 슬라이드 위에서 말하는 모습을 보여주는 PiP 오버레이.
+ * preview body(position:relative) 의 우측 하단에 고정되고, ``scale`` 에 따라
+ * 높이(컨테이너 대비 %)가 커지거나 줄어든다. 움직이는 클립(avatarVideoUrl)이
+ * 있으면 muted·loop 자동재생으로 "말하는 모습"을 표현하고, 없거나 reducedMotion
+ * 이면 정지 이미지로, 둘 다 없으면 이니셜로 폴백한다.
+ *
+ * scale 은 SettingsPanel 의 '아바타 크기' 슬라이더와 1:1 매핑(0.5~1.5)이며,
+ * 같은 값이 강의에 저장돼 렌더 시 HeyGen character.scale 로 전달된다.
+ */
+const AVATAR_OVERLAY_BASE_PCT = 50; // scale 1.0 일 때 preview 높이의 50%
+
+function AvatarOverlay({
+  videoUrl,
+  imageUrl,
+  label,
+  scale,
+  reducedMotion,
+}: {
+  videoUrl: string | null;
+  imageUrl: string | null;
+  label: string;
+  scale: number;
+  reducedMotion: boolean;
+}) {
+  const clamped = Math.min(1.5, Math.max(0.5, scale || 1));
+  const heightPct = AVATAR_OVERLAY_BASE_PCT * clamped;
+  const showVideo = !reducedMotion && !!videoUrl;
+  const mediaStyle: CSSProperties = {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  };
+  return (
+    <div
+      data-testid="workarea-avatar-overlay"
+      role="img"
+      aria-label={`강의 아바타 미리보기: ${label}`}
+      style={{
+        position: "absolute",
+        bottom: 14,
+        right: 14,
+        height: `${heightPct}%`,
+        aspectRatio: "3 / 4",
+        borderRadius: 10,
+        overflow: "hidden",
+        background: "var(--bg-subtle, #EFEFEA)",
+        border: "1.5px solid rgba(255,255,255,0.75)",
+        boxShadow: "0 6px 20px rgba(10,10,10,0.22)",
+        zIndex: 1,
+        transition: "height 160ms var(--ease-out)",
+      }}
+    >
+      {showVideo ? (
+        <video
+          key={videoUrl ?? undefined}
+          src={videoUrl ?? undefined}
+          poster={imageUrl ?? undefined}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          aria-hidden="true"
+          style={mediaStyle}
+        />
+      ) : imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl} alt="" aria-hidden="true" style={mediaStyle} />
+      ) : (
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            fontSize: "clamp(20px, 5vw, 40px)",
+            fontWeight: 700,
+            color: "var(--text-faint)",
+          }}
+        >
+          {label.slice(0, 1)}
+        </span>
+      )}
     </div>
   );
 }

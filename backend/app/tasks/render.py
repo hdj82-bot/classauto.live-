@@ -82,6 +82,10 @@ def render_slide(
         voice_speed = (
             getattr(lecture, "voice_speed", None) if lecture else None
         ) or 1.3
+        # 영상 아바타 크기 배율. NULL/누락(구버전 row)/0 은 기본(1.0)로 폴백.
+        avatar_scale = (
+            getattr(lecture, "avatar_scale", None) if lecture else None
+        ) or 1.0
 
         # ── Critical 7: 호출자 소유권 검증 ──
         if caller_user_id is not None:
@@ -164,6 +168,7 @@ def render_slide(
                 avatar_id=render.avatar_id,
                 gender=voice_gender,
                 callback_id=str(render.id),
+                avatar_scale=avatar_scale,
             )
         )
 

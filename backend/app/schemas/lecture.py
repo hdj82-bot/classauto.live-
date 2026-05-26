@@ -97,6 +97,15 @@ class LectureUpdate(BaseModel):
         max_length=100,
         description="강의별 아바타 표시 이름 (라벨 전용, 영상 생성과 무관).",
     )
+    avatar_scale: float | None = Field(
+        default=None,
+        ge=0.3,
+        le=2.0,
+        description=(
+            "영상에서 아바타 크기 배율(1.0 = 기본). 렌더 시 HeyGen character.scale 로 "
+            "전달(0.3~2.0 클램프). 다음 렌더부터 적용."
+        ),
+    )
     voice_lang: VoiceLang | None = Field(
         default=None,
         description="영상 음성(TTS) 언어. ko/zh/en/ja/de/fr/ru.",
@@ -139,6 +148,7 @@ class LectureResponse(BaseModel):
     voice_gender: VoiceGender
     avatar_id: str | None = None
     avatar_name: str | None = None
+    avatar_scale: float = 1.0
     voice_lang: str = "ko"
     subtitle_lang: str | None = None
     voice_id: str | None = None
