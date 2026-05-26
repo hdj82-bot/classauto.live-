@@ -251,7 +251,7 @@ export default function SettingsPanel({
   voiceLang,
   subtitleLang,
   voiceId,
-  voiceSpeed = 1.0,
+  voiceSpeed = 1.3,
   voices = [],
   voicesLoading = false,
   onChangeSubtitleLang,
@@ -552,8 +552,9 @@ function formatSpeed(v: number): string {
  * 범위 0.7~1.2 (ElevenLabs voice_settings.speed 실효 범위), step 0.05.
  */
 const SPEED_MIN = 0.7;
-const SPEED_MAX = 1.2;
+const SPEED_MAX = 2.0;
 const SPEED_STEP = 0.05;
+const SPEED_DEFAULT = 1.3;
 
 function SpeedSlider({
   value,
@@ -562,7 +563,7 @@ function SpeedSlider({
   value: number;
   onChange: (v: number) => void;
 }) {
-  const clamped = Math.min(SPEED_MAX, Math.max(SPEED_MIN, value || 1.0));
+  const clamped = Math.min(SPEED_MAX, Math.max(SPEED_MIN, value || SPEED_DEFAULT));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 5, paddingTop: 2 }}>
       <div
@@ -608,8 +609,8 @@ function SpeedSlider({
         }}
       >
         <span>0.7× 느림</span>
-        <span>1.0×</span>
-        <span>빠름 1.2×</span>
+        <span>1.0× 원배속</span>
+        <span>빠름 2.0×</span>
       </div>
     </div>
   );

@@ -17,6 +17,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
+import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -129,6 +132,12 @@ async def synthesize(
             ) from g_exc
     elapsed = time.monotonic() - start
 
+    # ── 발화 속도 후처리 (ffmpeg atempo) ──────────────────────────────────
+    # provider 가 네이티브로 적용하지 못한 속도(특히 ElevenLabs 는 0.7~1.2 로
+    # 클램프)는 ffmpeg 로 추가 가속/감속해 교수자가 고른 배율(최대 2.0)에 맞춘다.
+    # Google TTS 는 speaking_rate 로 4.0 까지 네이티브 지원하므로 보통 잔여 없음.
+    audio_bytes = await _postprocess_speed(audio_bytes, speed, provider)
+
     result = TTSResult(
         audio_bytes=audio_bytes,
         provider=provider,
@@ -173,6 +182,112 @@ async def synthesize(
         provider, len(text), elapsed, bool(fallback_reason),
     )
     return result
+
+
+# ── 발화 속도 후처리 ────────────────────────────────────────────────────────────
+# ElevenLabs voice_settings.speed 가 네이티브로 적용 가능한 범위(0.7~1.2). 그 밖의
+# 배율은 합성 음원을 ffmpeg(atempo)로 시간축 가속/감속해 맞춘다.
+_ELEVENLABS_NATIVE_SPEED = (0.7, 1.2)
+_GOOGLE_NATIVE_SPEED = (0.25, 4.0)
+_FFMPEG_TIMEOUT_SEC = 60
+
+
+def _provider_native_speed(target: float, provider: str) -> float:
+    """provider 가 합성 단계에서 실제 적용한 속도 배율(클램프 반영)."""
+    if provider == "elevenlabs":
+        lo, hi = _ELEVENLABS_NATIVE_SPEED
+    elif provider == "google_tts":
+        lo, hi = _GOOGLE_NATIVE_SPEED
+    else:
+        return target
+    return min(hi, max(lo, target))
+
+
+def _atempo_chain(factor: float) -> str:
+    """ffmpeg atempo 필터 문자열. 단일 atempo 는 0.5~2.0 만 지원하므로 범위 밖은
+    곱으로 분해해 체이닝한다(현 사용 범위 0.71~1.67 은 단일로 충분)."""
+    parts: list[float] = []
+    f = factor
+    while f > 2.0:
+        parts.append(2.0)
+        f /= 2.0
+    while f < 0.5:
+        parts.append(0.5)
+        f /= 0.5
+    parts.append(round(f, 4))
+    return ",".join(f"atempo={p}" for p in parts)
+
+
+def _apply_atempo(audio_bytes: bytes, factor: float) -> bytes:
+    """mp3 bytes 를 ffmpeg atempo 로 factor 배 시간축 변환해 반환.
+
+    ffmpeg 미설치·실패·타임아웃 시 원본 bytes 를 그대로 반환한다(속도는 provider
+    네이티브에 머무름 — 크래시보다 graceful degrade). 동기 함수이므로 호출부에서
+    ``asyncio.to_thread`` 로 오프로드한다.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        logger.warning(
+            "ffmpeg 미설치 — 발화 속도 후처리(%.3f×) 생략, provider 네이티브 속도 유지",
+            factor,
+        )
+        return audio_bytes
+    in_path = out_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as fin:
+            fin.write(audio_bytes)
+            in_path = fin.name
+        out_path = in_path + ".out.mp3"
+        cmd = [
+            ffmpeg, "-y", "-loglevel", "error",
+            "-i", in_path,
+            "-filter:a", _atempo_chain(factor),
+            "-f", "mp3", out_path,
+        ]
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=_FFMPEG_TIMEOUT_SEC, check=False,
+        )
+        if proc.returncode != 0:
+            logger.warning(
+                "ffmpeg atempo 실패(rc=%s) — 원본 오디오 유지: %s",
+                proc.returncode, proc.stderr[-500:],
+            )
+            return audio_bytes
+        return Path(out_path).read_bytes()
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("ffmpeg atempo 예외 — 원본 오디오 유지: %s", exc)
+        return audio_bytes
+    finally:
+        for p in (in_path, out_path):
+            if p:
+                try:
+                    Path(p).unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+
+async def _postprocess_speed(
+    audio_bytes: bytes, speed: float | None, provider: str
+) -> bytes:
+    """합성된 mp3 를 목표 배율에 맞춰 ffmpeg 로 후처리(필요할 때만)."""
+    if speed is None:
+        return audio_bytes
+    try:
+        target = float(speed)
+    except (TypeError, ValueError):
+        return audio_bytes
+    native = _provider_native_speed(target, provider)
+    if native <= 0:
+        return audio_bytes
+    residual = target / native
+    # provider 가 이미 목표 속도를 적용했으면(잔여≈1) 후처리 생략.
+    if 0.995 <= residual <= 1.005:
+        return audio_bytes
+    logger.info(
+        "발화 속도 후처리: target=%.3f×, provider_native=%.3f×, ffmpeg_atempo=%.3f×",
+        target, native, residual,
+    )
+    return await asyncio.to_thread(_apply_atempo, audio_bytes, residual)
 
 
 async def _run_google_tts(text: str, *, speed: float | None = None) -> bytes:

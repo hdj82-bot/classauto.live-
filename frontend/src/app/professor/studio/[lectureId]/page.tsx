@@ -111,7 +111,8 @@ export default function StudioWizardPage() {
   const [voiceLang, setVoiceLang] = useState<LangCode>("ko");
   const [subtitleLang, setSubtitleLang] = useState<LangCode | null>(null);
   const [voiceId, setVoiceId] = useState<string | null>(null);
-  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
+  // 기본 발화 속도 1.3× (느린 1.0× 대비 학습 시청 효율을 높인 신규 기본값).
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.3);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(true);
   const [translatingSubtitle, setTranslatingSubtitle] = useState(false);
@@ -151,7 +152,7 @@ export default function StudioWizardPage() {
               setVoiceLang(found.voice_lang ?? "ko");
               setSubtitleLang(found.subtitle_lang ?? null);
               setVoiceId(found.voice_id ?? null);
-              setVoiceSpeed(found.voice_speed ?? 1.0);
+              setVoiceSpeed(found.voice_speed ?? 1.3);
             }
             break;
           }
