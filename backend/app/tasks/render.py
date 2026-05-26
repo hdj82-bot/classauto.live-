@@ -162,9 +162,19 @@ def render_slide(
             render.status = RenderStatus.rendering
             db.commit()
 
+        # HeyGen 이 audio_url 을 직접 다운로드하므로 익명 접근이 가능해야 한다.
+        # 운영 버킷(classauto-live-media)은 thumbnails/* 외 prefix 에 public-read 를
+        # 주지 않아, upload_audio_bytes 가 돌려준 영구 URL(audio/*)은 익명 GET 시
+        # 403 → HeyGen 이 제출은 받아들이지만(=video_id 발급) 다운로드 단계에서
+        # 실패해 video 가 Error 로 끝난다. presigned(서명·시간제한) URL 로 바꿔
+        # 전달한다. DB(render.audio_url)에는 영구 URL 을 그대로 둔다(idempotency·
+        # file_exists 는 S3 key 로 판단하므로 영향 없음). 만료는 렌더 타임아웃
+        # (RENDER_TIMEOUT_HOURS=24h)을 덮도록 24h.
+        heygen_audio_url = s3_svc.presign_stored_s3_url(audio_url, expiration=86400)
+
         heygen_job_id = loop.run_until_complete(
             create_video(
-                audio_url=audio_url,
+                audio_url=heygen_audio_url,
                 avatar_id=render.avatar_id,
                 gender=voice_gender,
                 callback_id=str(render.id),
