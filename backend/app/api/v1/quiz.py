@@ -11,21 +11,28 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_professor
+from app.api.deps import require_professor, require_student
 from app.core.redis import get_redis
-from app.db.session import SyncSessionLocal
+from app.db.session import SyncSessionLocal, get_db
 from app.models.user import User
 from app.schemas.quiz import (
     AuthoredQuizItem,
     AuthoredQuizListResponse,
+    InterstitialAnswerRequest,
+    InterstitialAnswerResult,
+    PlaybackQuizItem,
+    PlaybackQuizListResponse,
     QuizConfirmRequest,
     QuizConfirmResponse,
     QuizDraft,
     SocraticTurnRequest,
     SocraticTurnResponse,
 )
+from app.schemas.response import SingleResponse
 from app.services import quiz_socratic as quiz_svc
+from app.services import response as response_svc
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +192,7 @@ async def quiz_confirm(
                     options=body.options,
                     correct_answer=body.correct_answer,
                     explanation=body.explanation,
+                    reveal_answer=body.reveal_answer,
                 )
                 return {
                     "id": q.id,
@@ -259,3 +267,78 @@ async def quiz_delete(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="해당 인터랙티브 퀴즈를 찾을 수 없습니다.",
         )
+
+
+# ── 학생: 재생용 퀴즈 목록 (정답·해설 미포함) ─────────────────────────────────
+
+@router.get(
+    "/lectures/{lecture_id}/quiz/playback",
+    response_model=PlaybackQuizListResponse,
+    summary="영상 재생 중 트리거할 인터랙티브 퀴즈 목록 (학생 전용)",
+)
+async def quiz_playback(
+    lecture_id: uuid.UUID,
+    current_user: User = Depends(require_student),
+):
+    """타임스탬프 순으로 정렬된 퀴즈. 정답·해설은 절대 포함하지 않는다(부정행위 방지)."""
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        with SyncSessionLocal() as db:
+            rows = quiz_svc.list_playback(db, lecture_id)
+            return [PlaybackQuizItem.model_validate(r).model_dump() for r in rows]
+
+    items = await loop.run_in_executor(None, _run)
+    return PlaybackQuizListResponse(lecture_id=lecture_id, quizzes=items)
+
+
+# ── 학생: 인터스티셜 응답 제출 ────────────────────────────────────────────────
+
+@router.post(
+    "/lectures/{lecture_id}/quiz/answer",
+    response_model=InterstitialAnswerResult,
+    summary="영상 중 퀴즈 1문항 응답 (학생 전용)",
+)
+async def quiz_answer(
+    lecture_id: uuid.UUID,
+    body: InterstitialAnswerRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_student),
+):
+    """응답을 기록·채점(response 서비스 재사용)하고, 해당 퀴즈의 reveal_answer 에 따라
+    정답·해설을 공개하거나(true) 완전히 숨긴다(false = 대면 활용)."""
+    try:
+        saved = await response_svc.submit_responses(
+            db=db,
+            session_id=body.session_id,
+            user_id=current_user.id,
+            responses=[
+                SingleResponse(
+                    question_id=body.question_id,
+                    user_answer=body.user_answer,
+                    video_timestamp_seconds=body.video_timestamp_seconds,
+                )
+            ],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+    if not saved:
+        # question_id 가 존재하지 않아 건너뛴 경우.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="해당 문제를 찾을 수 없습니다.",
+        )
+
+    resp = saved[0]
+    question = resp.question
+    reveal = bool(getattr(question, "reveal_answer", False))
+
+    return InterstitialAnswerResult(
+        recorded=True,
+        reveal=reveal,
+        timestamp_valid=resp.timestamp_valid,
+        is_correct=(resp.is_correct if reveal else None),
+        correct_answer=(question.correct_answer if reveal else None),
+        explanation=(question.explanation if reveal else None),
+    )

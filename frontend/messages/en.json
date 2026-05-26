@@ -1371,7 +1371,14 @@
         "mascotSay2": "It's okay to get it wrong.",
         "close": "Close",
         "correctFeedback": "Nice — you've got it!",
-        "wrongFeedback": "Let's review the correct answer."
+        "wrongFeedback": "Let's review the correct answer.",
+        "recordedFeedback": "Your answer was recorded. We'll go over it together in class.",
+        "recordError": "Something went wrong recording your answer.",
+        "explanationLabel": "Explanation",
+        "modelAnswerLabel": "Model answer",
+        "submit": "Submit",
+        "submitting": "Submitting…",
+        "shortAnswerPlaceholder": "Type your answer…"
       },
       "warning": {
         "pausedKicker": "Session paused",

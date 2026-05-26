@@ -783,6 +783,21 @@ function QuizPointCard({
         </div>
       </div>
 
+      {/* 정답 공개 여부 */}
+      <div className="flex items-center justify-between" style={{ fontSize: 12 }}>
+        <span style={{ fontWeight: 500 }}>영상에서 정답 공개</span>
+        <Switch
+          on={point.revealAnswer}
+          onClick={() => onChange({ revealAnswer: !point.revealAnswer })}
+          label="영상에서 정답 공개"
+        />
+      </div>
+      <p style={{ margin: 0, fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+        {point.revealAnswer
+          ? "학생이 푼 직후 정답·해설을 영상에서 보여줍니다."
+          : "정답을 숨기고 정·오답 현황만 모아, 대면 수업에서 함께 다룹니다."}
+      </p>
+
       <button
         type="button"
         onClick={onOpen}

@@ -61,6 +61,7 @@ export async function confirmQuiz(
   lectureId: string,
   insertAfterSlideIndex: number,
   draft: QuizDraft,
+  revealAnswer: boolean,
 ): Promise<ConfirmQuizResult> {
   const { data } = await api.post<ConfirmQuizResult>(
     `/api/lectures/${lectureId}/quiz/confirm`,
@@ -72,6 +73,7 @@ export async function confirmQuiz(
       options: draft.options,
       correct_answer: draft.correct_answer,
       explanation: draft.explanation,
+      reveal_answer: revealAnswer,
     },
   );
   return data;

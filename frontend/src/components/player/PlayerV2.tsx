@@ -11,7 +11,15 @@ import { parseCourseTitle } from "@/components/student/v2/CourseTitle";
 import OnboardingFlowV2 from "@/components/student/v2/OnboardingFlowV2";
 import PlayerSurfaceDark from "./PlayerSurfaceDark";
 import AttentionWarningV2 from "./AttentionWarningV2";
-import InterstitialQuiz, { type QuizQuestion } from "./InterstitialQuiz";
+import InterstitialQuiz, {
+  type QuizAnswerOutcome,
+  type QuizQuestion,
+} from "./InterstitialQuiz";
+import {
+  getPlaybackQuizzes,
+  submitInterstitialAnswer,
+  type PlaybackQuiz,
+} from "./quizPlaybackApi";
 import styles from "./Player.module.css";
 
 /**
@@ -60,19 +68,22 @@ interface ReactionCount {
   aha: number;
 }
 
-const DEFAULT_QUIZ: QuizQuestion = {
-  // 06 prototype 시연 퀴즈 (把자문). 실 서비스에서는 백엔드가 영상 시점별로
-  // 자동 출제 — 본 fallback 은 "퀴즈 트리거" 데모 버튼이 사용한다.
-  id: "demo",
-  prompt: "把자문에서 把 뒤에 오는 명사는 어떤 의미를 가질까요?",
-  options: [
-    { letter: "A", text: "동작의 주체" },
-    { letter: "B", text: "동작의 대상" },
-    { letter: "C", text: "동작의 장소" },
-    { letter: "D", text: "동작의 시간" },
-  ],
-  correctLetter: "B",
-};
+/** PlaybackQuiz → InterstitialQuiz 가 쓰는 QuizQuestion 으로 변환 (보기에 A/B/C/D 부여). */
+function toQuizQuestion(pb: PlaybackQuiz): QuizQuestion {
+  return {
+    id: pb.id,
+    prompt: pb.content,
+    questionType: pb.question_type,
+    options: (pb.options ?? []).map((text, i) => ({
+      letter: String.fromCharCode(65 + i),
+      text,
+    })),
+  };
+}
+
+const letterToIndex = (letter: string): string => String(letter.charCodeAt(0) - 65);
+const indexToLetter = (idx: string): string =>
+  String.fromCharCode(65 + Math.max(0, parseInt(idx, 10) || 0));
 
 export interface PlayerV2Props {
   slug: string;
@@ -107,9 +118,19 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     aha: 3,
   });
 
-  // 인터스티셜 퀴즈
-  const [quizOpen, setQuizOpen] = useState(false);
-  const [quizQuestion] = useState<QuizQuestion>(DEFAULT_QUIZ);
+  // 인터스티셜 퀴즈 — 백엔드에서 받은 타임스탬프 퀴즈를 재생 중 자동 출제.
+  const [playbackQuizzes, setPlaybackQuizzes] = useState<PlaybackQuiz[]>([]);
+  const [activeQuiz, setActiveQuiz] = useState<PlaybackQuiz | null>(null);
+  const quizzesRef = useRef<PlaybackQuiz[]>([]);
+  const shownQuizRef = useRef<Set<string>>(new Set());
+  const quizOpenRef = useRef(false);
+  // timeupdate 클로저가 최신 값을 읽도록 ref 동기화.
+  useEffect(() => {
+    quizzesRef.current = playbackQuizzes;
+  }, [playbackQuizzes]);
+  useEffect(() => {
+    quizOpenRef.current = activeQuiz !== null;
+  }, [activeQuiz]);
 
   // 첫 진입 온보딩 (sessionStorage 기준)
   const [showOnboarding, setShowOnboarding] = useState(true);
@@ -155,6 +176,19 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     })();
   }, [lecture, user, durationSec]);
 
+  // ─── 인터스티셜 퀴즈 목록 fetch (타임스탬프 트리거용, 정답·해설 미포함) ───
+  useEffect(() => {
+    if (!lecture?.id) return;
+    let cancelled = false;
+    (async () => {
+      const quizzes = await getPlaybackQuizzes(lecture.id);
+      if (!cancelled) setPlaybackQuizzes(quizzes);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lecture?.id]);
+
   // 환영 메시지를 i18n locale 로드 후 한 번 세팅 (placeholder → 실제 텍스트).
   // react-hooks/set-state-in-effect: rAF 로 비동기화.
   useEffect(() => {
@@ -195,12 +229,87 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
 
   const attention = useAttention({ sessionId: sessionId || "" });
 
+  // ─── 인터스티셜 퀴즈: 트리거 / 일시정지·재개 / 응답 제출 ───
+  const pauseForQuiz = () => {
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      setIsPlaying(false);
+    }
+  };
+  const resumeAfterQuiz = () => {
+    const v = videoRef.current;
+    if (v && !v.ended) {
+      v.play().catch(() => {});
+      setIsPlaying(true);
+    }
+  };
+
+  /** 아직 출제되지 않은 다음 퀴즈를 연다. 열었으면 true. */
+  const openQuiz = (quiz: PlaybackQuiz) => {
+    shownQuizRef.current.add(quiz.id);
+    quizOpenRef.current = true;
+    pauseForQuiz();
+    setActiveQuiz(quiz);
+  };
+  const triggerNextQuiz = (): boolean => {
+    if (quizOpenRef.current) return false;
+    const next = quizzesRef.current.find((q) => !shownQuizRef.current.has(q.id));
+    if (!next) return false;
+    openQuiz(next);
+    return true;
+  };
+
+  const handleQuizClose = () => {
+    setActiveQuiz(null);
+    quizOpenRef.current = false;
+    resumeAfterQuiz();
+  };
+
+  const handleQuizSubmit = async (answer: string): Promise<QuizAnswerOutcome | null> => {
+    const quiz = activeQuiz;
+    if (!quiz || !sessionId) return null;
+    const isMultiple = quiz.question_type === "multiple_choice";
+    const userAnswer = isMultiple ? letterToIndex(answer) : answer;
+    try {
+      const res = await submitInterstitialAnswer(lecture!.id, {
+        sessionId,
+        questionId: quiz.id,
+        userAnswer,
+        videoTimestampSeconds: progressSec,
+      });
+      return {
+        recorded: res.recorded,
+        reveal: res.reveal,
+        correct: res.is_correct,
+        correctLetter:
+          res.reveal && isMultiple && res.correct_answer != null
+            ? indexToLetter(res.correct_answer)
+            : null,
+        explanation: res.reveal ? res.explanation : null,
+        modelAnswer: res.reveal && !isMultiple ? res.correct_answer : null,
+      };
+    } catch {
+      return null;
+    }
+  };
+
   // ─── 영상 핸들러 ───
   const handleTimeUpdate = () => {
     if (!videoRef.current) return;
     const sec = Math.floor(videoRef.current.currentTime);
     setProgressSec(sec);
     attention.setProgress(sec);
+    // 타임스탬프 도달 시 자동 출제 (퀴즈가 열려있지 않고, 아직 안 푼 것만).
+    if (!quizOpenRef.current) {
+      const due = quizzesRef.current.find(
+        (q) =>
+          q.timestamp_seconds != null &&
+          sec >= q.timestamp_seconds &&
+          !shownQuizRef.current.has(q.id),
+      );
+      if (due) openQuiz(due);
+    }
   };
   const handleLoadedMetadata = () => {
     if (videoRef.current) setDurationSec(videoRef.current.duration || 0);
@@ -548,14 +657,6 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                 <div className={styles.controlsRight}>
                   <button
                     type="button"
-                    className={styles.quizTrigger}
-                    onClick={() => setQuizOpen(true)}
-                    aria-label="DEMO 퀴즈 트리거"
-                  >
-                    DEMO · 퀴즈
-                  </button>
-                  <button
-                    type="button"
                     className={styles.assessTrigger}
                     onClick={() =>
                       router.push(
@@ -757,11 +858,12 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
         </div>
       </div>
 
-      {/* Interstitial quiz */}
+      {/* Interstitial quiz — 타임스탬프 자동 출제. 정답 공개는 서버(reveal_answer)가 결정. */}
       <InterstitialQuiz
-        open={quizOpen}
-        question={quizQuestion}
-        onClose={() => setQuizOpen(false)}
+        open={activeQuiz !== null}
+        question={activeQuiz ? toQuizQuestion(activeQuiz) : null}
+        onClose={handleQuizClose}
+        onSubmit={handleQuizSubmit}
       />
 
       {/* Attention warning — useAttention 의 warningLevel 이 1/2/3 일 때만 표시 */}
@@ -771,7 +873,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
           onResume={attention.resume}
           onTakeQuiz={() => {
             attention.resume();
-            setQuizOpen(true);
+            triggerNextQuiz();
           }}
           onRestart={() => {
             const v = videoRef.current;
