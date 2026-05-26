@@ -113,9 +113,10 @@ class Settings(BaseSettings):
     ELEVENLABS_VOICE_ID_MALE: str = ""
     ELEVENLABS_VOICE_ID_FEMALE: str = ""
     ELEVENLABS_MODEL_ID: str = "eleven_multilingual_v2"
-    # 중국어(한자)가 섞인 스크립트 전용 모델. eleven_v3 는 한 번의 합성으로 문장 내
-    # 한·중 코드스위칭을 처리해, 구간 분리·이어붙임 없이 끊김/오발음을 없앤다.
-    # 빈 문자열로 두면 v3 경로를 끄고 multilingual_v2 구간 분리로 폴백한다(escape hatch).
+    # 사이트 전체 음성 합성의 1차 모델. eleven_v3 는 한 번의 합성으로 문장 내 한·중
+    # 코드스위칭까지 처리해, 구간 분리·이어붙임 없이 끊김/오발음을 없앤다. (변수명은
+    # 도입 경위상 _ZH 지만 현재는 전체 텍스트에 적용.) 빈 문자열로 두면 v3 를 끄고
+    # 위 ELEVENLABS_MODEL_ID(multilingual_v2) 경로로 폴백한다(escape hatch).
     ELEVENLABS_MODEL_ID_ZH: str = "eleven_v3"
     # 교수자 음성 선택 UI 에 노출할 큐레이션 보이스 ID(쉼표 구분). 비우면
     # voices.py 의 DEFAULT_CURATED_VOICE_IDS(한국어 강의용 기본 20종) 사용.

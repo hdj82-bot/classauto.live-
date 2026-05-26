@@ -29,7 +29,6 @@ import httpx
 from app.core.config import settings
 from app.services.pipeline import elevenlabs_client, google_tts_client
 from app.services.pipeline.text_cleanup import (
-    contains_chinese,
     split_by_language,
     strip_pinyin_annotations,
 )
@@ -202,11 +201,11 @@ async def synthesize(
     return result
 
 
-# ── ElevenLabs 1차 합성 (중국어=v3 코드스위칭 / 그 외=multilingual_v2) ──────────
-# eleven_v3 는 한 번의 합성으로 문장 안 한·중 언어 전환(code-switching)을 처리한다.
-# 그래서 중국어가 섞인 스크립트는 구간을 쪼개 따로 합성·이어붙일 필요 없이 v3 로
-# 통째 합성하면 멈춤/끊김도, 짧은 조각 발음 손상도 없다. v3 미지원 항목(speed,
-# use_speaker_boost)은 voice_settings 에 넣지 않고, 속도는 합성 후 atempo 로 적용한다.
+# ── ElevenLabs 1차 합성 (전체 v3 / 실패 시 multilingual_v2 폴백) ──────────────
+# 사이트의 모든 음성을 eleven_v3 로 합성한다(사용자 정책). v3 는 한 번의 합성으로
+# 문장 안 한·중 언어 전환(code-switching)까지 처리하므로 구간 분리·이어붙임이
+# 불필요하고 한국어·중국어 모두 자연스럽다. v3 미지원 항목(speed, use_speaker_boost)은
+# voice_settings 에 넣지 않고, 속도는 합성 후 atempo 로 적용한다.
 _V3_MAX_CHARS = 5000  # eleven_v3 단일 요청 글자 한도
 
 
@@ -225,29 +224,29 @@ async def _elevenlabs_primary(
 ) -> tuple[bytes, str]:
     """ElevenLabs 1차 합성. 반환 ``(audio_bytes, speed_provider)``.
 
-    - 중국어(한자) 포함 + v3 설정됨 + 5000자 이하 → **eleven_v3 단일 호출**
-      (문장 내 한·중 코드스위칭 → 분리·이어붙임 불필요). speed 는 안 보내고 atempo
-      로 처리하므로 ``speed_provider="elevenlabs_v3"``. v3 호출 실패 시 아래 v2
-      구간 분리 경로로 폴백한다(중국어 정확·멈춤 있음 — 회귀 방지).
-    - 그 외(순수 한국어 등) → multilingual_v2 (필요 시 구간 분리).
-      ``speed_provider="elevenlabs"``.
+    - 기본: **모든 텍스트를 eleven_v3 단일 호출**로 합성(사이트 전체 v3 정책).
+      v3 는 한·중 코드스위칭까지 한 번에 처리한다. speed 는 안 보내고 atempo 로
+      처리하므로 ``speed_provider="elevenlabs_v3"``.
+    - v3 호출 실패 시 multilingual_v2 경로로 폴백한다(중국어 섞인 텍스트는 구간
+      분리로 발음 보존 — 회귀 방지). ``speed_provider="elevenlabs"``.
+    - ``ELEVENLABS_MODEL_ID_ZH`` 가 비었거나 5000자 초과면 v2 경로를 쓴다.
     """
-    model_zh = (settings.ELEVENLABS_MODEL_ID_ZH or "").strip()
-    if model_zh and contains_chinese(text) and len(text) <= _V3_MAX_CHARS:
+    model_v3 = (settings.ELEVENLABS_MODEL_ID_ZH or "").strip()
+    if model_v3 and len(text) <= _V3_MAX_CHARS:
         try:
             audio = await elevenlabs_client.synthesize(
                 text,
                 voice_id=voice_id,
                 gender=gender,
-                model_id=model_zh,
+                model_id=model_v3,
                 voice_settings=_v3_voice_settings(),
             )
             logger.info(
-                "ElevenLabs %s 코드스위칭 합성(중국어 포함): chars=%d", model_zh, len(text),
+                "ElevenLabs %s 합성: chars=%d", model_v3, len(text),
             )
             return audio, "elevenlabs_v3"
         except Exception as exc:  # noqa: BLE001
-            logger.warning("v3 합성 실패 → v2 구간 분리 폴백: %s", exc)
+            logger.warning("v3 합성 실패 → multilingual_v2 폴백: %s", exc)
     audio = await _elevenlabs_synthesize_segmented(
         text, voice_id=voice_id, gender=gender, speed=speed,
     )
