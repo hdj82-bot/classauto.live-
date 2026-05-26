@@ -380,3 +380,158 @@ async def test_get_preview_completes_and_caches(client, professor, db):
     await db.refresh(professor)
     assert professor.photo_avatar_preview_url == "https://b.s3/cached.mp4"
     assert professor.photo_avatar_preview_video_id is None
+
+
+# ── 본인 음성 클로닝 (POST/GET/DELETE /api/avatars/me/voice) ───────────────────
+
+# ID3 매직으로 시작하는 더미 mp3.
+_MP3 = b"ID3\x04\x00" + b"\x00" * 64
+
+
+@contextmanager
+def _patch_voice_clone(voice_id="el_clone_1", clone_error=None):
+    """clone_voice / delete_voice 와 S3 를 모킹. clone_error 면 ElevenLabsError raise."""
+    s3_client = patch(
+        "app.services.pipeline.s3.get_s3_client", return_value=MagicMock()
+    )
+    s3_presign = patch(
+        "app.services.pipeline.s3.presign_stored_s3_url",
+        side_effect=lambda u, *a, **k: u,
+    )
+    if clone_error is not None:
+        clone = patch(
+            "app.services.pipeline.elevenlabs_client.clone_voice",
+            new=AsyncMock(side_effect=clone_error),
+        )
+    else:
+        clone = patch(
+            "app.services.pipeline.elevenlabs_client.clone_voice",
+            new=AsyncMock(return_value={"voice_id": voice_id}),
+        )
+    delete = patch(
+        "app.services.pipeline.elevenlabs_client.delete_voice",
+        new=AsyncMock(return_value=None),
+    )
+    with s3_client, s3_presign, clone, delete as delete_mock:
+        yield delete_mock
+
+
+@pytest.mark.asyncio
+async def test_create_my_voice_ready(client, professor, db):
+    with _patch_voice_clone(voice_id="el_clone_1"):
+        resp = await client.post(
+            "/api/avatars/me/voice",
+            headers=make_auth_header(professor),
+            files={"file": ("me.mp3", _MP3, "audio/mpeg")},
+            data={"gender": "male"},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ready"
+    assert data["voice_id"] == "el_clone_1"
+    assert "본인" in (data["name"] or "")
+
+    await db.refresh(professor)
+    assert professor.cloned_voice_id == "el_clone_1"
+    assert professor.cloned_voice_sample_url is not None
+
+
+@pytest.mark.asyncio
+async def test_create_my_voice_replaces_and_deletes_old(client, professor, db):
+    professor.cloned_voice_id = "old_voice"
+    await db.flush()
+
+    with _patch_voice_clone(voice_id="new_voice") as delete_mock:
+        resp = await client.post(
+            "/api/avatars/me/voice",
+            headers=make_auth_header(professor),
+            files={"file": ("me.mp3", _MP3, "audio/mpeg")},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["voice_id"] == "new_voice"
+    # 이전 voice 는 best-effort 삭제.
+    delete_mock.assert_awaited_once_with("old_voice")
+    await db.refresh(professor)
+    assert professor.cloned_voice_id == "new_voice"
+
+
+@pytest.mark.asyncio
+async def test_create_my_voice_rejects_non_audio(client, professor):
+    resp = await client.post(
+        "/api/avatars/me/voice",
+        headers=make_auth_header(professor),
+        files={"file": ("x.txt", b"this is plainly not audio at all", "text/plain")},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_my_voice_elevenlabs_fail_keeps_none(client, professor, db):
+    from app.services.pipeline.elevenlabs_client import ElevenLabsError
+
+    with _patch_voice_clone(clone_error=ElevenLabsError("ivc down")):
+        resp = await client.post(
+            "/api/avatars/me/voice",
+            headers=make_auth_header(professor),
+            files={"file": ("me.mp3", _MP3, "audio/mpeg")},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "failed"
+    await db.refresh(professor)
+    assert professor.cloned_voice_id is None
+
+
+@pytest.mark.asyncio
+async def test_create_my_voice_requires_professor(client, student):
+    resp = await client.post(
+        "/api/avatars/me/voice",
+        headers=make_auth_header(student),
+        files={"file": ("me.mp3", _MP3, "audio/mpeg")},
+    )
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_get_my_voice_none_then_ready(client, professor, db):
+    resp = await client.get(
+        "/api/avatars/me/voice", headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "none"
+
+    professor.cloned_voice_id = "el_clone_1"
+    professor.cloned_voice_name = "하두진 (본인 목소리)"
+    professor.cloned_voice_sample_url = "https://cdn.example/s.mp3"
+    await db.flush()
+    with patch(
+        "app.services.pipeline.s3.presign_stored_s3_url",
+        side_effect=lambda u, *a, **k: u,
+    ):
+        resp = await client.get(
+            "/api/avatars/me/voice", headers=make_auth_header(professor)
+        )
+    data = resp.json()
+    assert data["status"] == "ready"
+    assert data["voice_id"] == "el_clone_1"
+
+
+@pytest.mark.asyncio
+async def test_delete_my_voice_clears_fields(client, professor, db):
+    professor.cloned_voice_id = "el_clone_1"
+    professor.cloned_voice_name = "본인"
+    professor.cloned_voice_sample_url = "https://cdn.example/s.mp3"
+    await db.flush()
+
+    with patch(
+        "app.services.pipeline.elevenlabs_client.delete_voice",
+        new=AsyncMock(return_value=None),
+    ) as delete_mock:
+        resp = await client.request(
+            "DELETE", "/api/avatars/me/voice", headers=make_auth_header(professor)
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "none"
+    delete_mock.assert_awaited_once_with("el_clone_1")
+    await db.refresh(professor)
+    assert professor.cloned_voice_id is None
+    assert professor.cloned_voice_sample_url is None

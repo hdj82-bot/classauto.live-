@@ -98,3 +98,28 @@ class ProfilePhotoResponse(BaseModel):
     )
     profile_image_url: str = Field(..., description="업로드된 사진의 S3 https URL.")
     message: str = Field(..., description="사용자 표시용 상태 메시지.")
+
+
+class VoiceCloneResponse(BaseModel):
+    """``POST /api/avatars/me/voice`` / ``GET /api/avatars/me/voice`` 응답.
+
+    교수자가 업로드한 음성 샘플(mp3 등)로 ElevenLabs Instant Voice Cloning(IVC)
+    을 수행한 결과. ``voice_id`` 가 채워지면 ``GET /api/voices`` 계정 보이스로
+    자동 노출돼 음성 패널·미리보기·강의 렌더에 본인 목소리로 쓸 수 있다.
+    """
+
+    status: Literal["none", "ready", "failed"] = Field(
+        ...,
+        description=(
+            "'none' = 아직 본인 음성 미생성, 'ready' = 복제 완료(voice_id 제공), "
+            "'failed' = 복제 실패."
+        ),
+    )
+    voice_id: str | None = Field(
+        default=None, description="ElevenLabs cloned voice_id (ready 일 때)."
+    )
+    name: str | None = Field(default=None, description="본인 음성 표시 이름.")
+    sample_url: str | None = Field(
+        default=None, description="업로드한 원본 샘플의 재생 URL(presigned)."
+    )
+    message: str | None = Field(default=None, description="사용자 표시용 메시지.")

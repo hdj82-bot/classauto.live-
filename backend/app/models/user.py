@@ -40,6 +40,15 @@ class User(Base):
     photo_avatar_preview_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     photo_avatar_preview_video_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     photo_avatar_preview_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 교수자가 본인 음성 샘플(mp3 등)로 만든 ElevenLabs Cloned Voice (IVC).
+    # cloned_voice_id: ElevenLabs voice_id. 채워지면 GET /api/voices 계정 보이스로
+    #   자동 노출돼 음성 패널·미리보기·강의 렌더에 본인 목소리로 쓸 수 있다. NULL =
+    #   아직 본인 음성 미생성. 1인 1개(재업로드 시 교체).
+    # cloned_voice_name: 표시 이름(예: "<이름> (본인 목소리)").
+    # cloned_voice_sample_url: 업로드한 원본 음성 샘플의 S3 https URL(참조·재생성용).
+    cloned_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cloned_voice_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    cloned_voice_sample_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # 학습자 전용
     student_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

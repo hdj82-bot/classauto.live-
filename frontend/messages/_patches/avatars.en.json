@@ -80,6 +80,24 @@
     "uploadTooLarge": "The photo must be 25MB or smaller.",
     "uploadPreviewAlt": "Preview of the uploaded profile photo",
 
+    "voiceUploadTitle": "Create a voice from your own voice",
+    "voiceUploadDescription": "Upload an audio file (mp3) of your own voice to clone it. The cloned voice appears as \"My voice\" in the voice list on the right, so your avatar can speak in your own voice.",
+    "voiceUploadSelect": "Choose an audio file",
+    "voiceUploadChange": "Choose a different file",
+    "voiceUploadButton": "Create my voice",
+    "voiceUploading": "Creating...",
+    "voiceUploadStatusReady": "Your voice is ready. Select it in the voice list on the right to build a preview.",
+    "voiceUploadStatusFailed": "Voice creation failed. Please try a different file.",
+    "voiceUploadError": "Audio upload failed.",
+    "voiceUploadInvalidType": "Only audio files (mp3, m4a, wav, ...) can be uploaded.",
+    "voiceUploadTooLarge": "The audio file must be 25MB or smaller.",
+    "voiceUploadHint": "Works best with a clean ~1-minute sample of just your voice, with no noise or background music.",
+    "voiceMyBadge": "My voice",
+    "voiceReadyHint": "Select it in the voice list to build a preview.",
+    "voiceDelete": "Delete",
+    "voiceDeleteError": "Could not delete your voice.",
+    "voiceCloneHint": "Upload an audio file to create your own voice and it will appear here.",
+
     "backToStudio": "Back to the editor"
   }
 }

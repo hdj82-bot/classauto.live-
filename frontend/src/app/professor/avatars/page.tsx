@@ -10,16 +10,21 @@ import { useReducedMotion } from "@/components/professor/avatars/useReducedMotio
 import AvatarCard from "@/components/professor/avatars/AvatarCard";
 import AvatarPreviewStage from "@/components/professor/avatars/AvatarPreviewStage";
 import ProfilePhotoUploadCard from "@/components/professor/avatars/ProfilePhotoUploadCard";
+import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import {
   applyAvatarToLecture,
+  deleteMyVoice,
+  getMyVoice,
   listAvatars,
   renameAvatarForLecture,
   uploadProfilePhoto,
+  uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
 import { listVoiceOptions } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
   CustomAvatarStatus,
+  VoiceClone,
 } from "@/components/professor/avatars/avatarsTypes";
 import type { VoiceOption } from "@/components/professor/avatars/voicePresets";
 
@@ -60,6 +65,20 @@ export default function AvatarsPage() {
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(true);
 
+  // 본인 음성(클론) 상태.
+  const [voiceClone, setVoiceClone] = useState<VoiceClone>({ status: "none" });
+  const [voiceUploading, setVoiceUploading] = useState(false);
+
+  // 음성 카탈로그를 다시 불러온다 — 본인 음성 생성/삭제 후 목록 갱신용.
+  const reloadVoices = useCallback(async () => {
+    try {
+      const { voices: list } = await listVoiceOptions();
+      setVoices(list);
+    } catch {
+      /* 실패 시 기존 목록 유지 */
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -96,6 +115,22 @@ export default function AvatarsPage() {
         if (!cancelled) setVoices(list);
       } finally {
         if (!cancelled) setVoicesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 본인 음성(클론) 상태 조회.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const v = await getMyVoice();
+        if (!cancelled) setVoiceClone(v);
+      } catch {
+        /* 미배포/실패 시 none 유지 */
       }
     })();
     return () => {
@@ -199,6 +234,42 @@ export default function AvatarsPage() {
     [deferred, toast, t],
   );
 
+  const handleVoiceUpload = useCallback(
+    async (file: File, gender: "male" | "female") => {
+      setVoiceUploading(true);
+      try {
+        const v = await uploadVoiceSample(file, gender);
+        setVoiceClone(v);
+        if (v.status === "ready") {
+          toast(t("voiceUploadStatusReady"), "success");
+          // 새 본인 음성이 /api/voices 계정 보이스로 노출되도록 목록 갱신.
+          await reloadVoices();
+        } else if (v.status === "failed") {
+          toast(v.message || t("voiceUploadStatusFailed"), "error");
+        }
+      } catch {
+        setVoiceClone({ status: "failed" });
+        toast(t("voiceUploadError"), "error");
+      } finally {
+        setVoiceUploading(false);
+      }
+    },
+    [toast, t, reloadVoices],
+  );
+
+  const handleVoiceDelete = useCallback(async () => {
+    setVoiceUploading(true);
+    try {
+      await deleteMyVoice();
+      setVoiceClone({ status: "none" });
+      await reloadVoices();
+    } catch {
+      toast(t("voiceDeleteError"), "error");
+    } finally {
+      setVoiceUploading(false);
+    }
+  }, [toast, t, reloadVoices]);
+
   if (loading) return <LoadingSpinner fullScreen label={t("loading")} />;
 
   return (
@@ -255,6 +326,17 @@ export default function AvatarsPage() {
           onSelectCustom={
             customAvatar ? () => setSelectedId(customAvatar.id) : undefined
           }
+          t={t}
+        />
+
+        {/* 본인 음성(mp3 업로드 → ElevenLabs 클론) 만들기 */}
+        <VoiceCloneUploadCard
+          onSubmit={handleVoiceUpload}
+          onDelete={handleVoiceDelete}
+          status={voiceClone.status}
+          uploading={voiceUploading}
+          voiceName={voiceClone.name}
+          message={voiceClone.message}
           t={t}
         />
 

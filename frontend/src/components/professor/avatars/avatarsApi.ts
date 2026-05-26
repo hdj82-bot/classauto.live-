@@ -5,6 +5,7 @@ import type {
   AvatarListResult,
   CustomAvatarStatus,
   ProfilePhotoResponse,
+  VoiceClone,
 } from "./avatarsTypes";
 
 /**
@@ -236,6 +237,57 @@ export async function startAvatarPreview(
         message: "백엔드 연결 후 사용할 수 있습니다.",
       };
     }
+    throw err;
+  }
+}
+
+// ── 본인 음성 클로닝 (GET/POST/DELETE /api/avatars/me/voice) ───────────────────
+
+/** GET /api/avatars/me/voice — 본인 음성 상태. deferred 면 none. */
+export async function getMyVoice(): Promise<VoiceClone> {
+  try {
+    const { data } = await api.get<VoiceClone>("/api/avatars/me/voice");
+    return data;
+  } catch (err) {
+    if (isDeferredError(err)) return { status: "none" };
+    throw err;
+  }
+}
+
+/**
+ * POST /api/avatars/me/voice (multipart) — 음성 샘플(mp3 등)로 본인 음성 생성/교체.
+ * gender("male"|"female") 는 음성 패널 남/여 그룹 분류에 쓰인다(선택).
+ */
+export async function uploadVoiceSample(
+  file: File,
+  gender?: "male" | "female" | null,
+): Promise<VoiceClone> {
+  const form = new FormData();
+  form.append("file", file);
+  if (gender) form.append("gender", gender);
+  try {
+    const { data } = await api.post<VoiceClone>("/api/avatars/me/voice", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return data;
+  } catch (err) {
+    if (isDeferredError(err)) {
+      return {
+        status: "failed",
+        message: "백엔드 연결 후 사용할 수 있습니다.",
+      };
+    }
+    throw err;
+  }
+}
+
+/** DELETE /api/avatars/me/voice — 본인 음성 삭제. */
+export async function deleteMyVoice(): Promise<VoiceClone> {
+  try {
+    const { data } = await api.delete<VoiceClone>("/api/avatars/me/voice");
+    return data;
+  } catch (err) {
+    if (isDeferredError(err)) return { status: "none" };
     throw err;
   }
 }
