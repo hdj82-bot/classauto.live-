@@ -121,12 +121,11 @@ class LectureUpdate(BaseModel):
     )
     voice_speed: float | None = Field(
         default=None,
-        ge=0.5,
-        le=2.0,
+        ge=0.7,
+        le=1.2,
         description=(
-            "영상 발화 속도 배율(기본 1.3, 유효범위 0.7~2.0). 합성 시 ElevenLabs "
-            "0.7~1.2 로 클램프하고, 1.2 초과분은 ffmpeg(atempo)로 추가 가속. "
-            "다음 렌더부터 적용."
+            "영상 발화 속도 배율(1.0 = 기본, 유효범위 0.7~1.2). 합성 시 ElevenLabs "
+            "voice_settings.speed 로 전달. 다음 렌더부터 적용."
         ),
     )
 
@@ -152,7 +151,7 @@ class LectureResponse(BaseModel):
     voice_lang: str = "ko"
     subtitle_lang: str | None = None
     voice_id: str | None = None
-    voice_speed: float = 1.3
+    voice_speed: float = 1.0
     created_at: datetime
     updated_at: datetime
 
