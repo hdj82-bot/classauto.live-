@@ -33,6 +33,11 @@
 | G4 | **검증 설문(ARCS/TAM/인지부하) 없음** | 신규 `survey_responses` |
 | G5 | **연구 동의·실험군 배정·익명 PID 없음** | 신규 `research_participants` + `lecture_research_config` |
 | G6 | **사전/사후 성취 구분 없음** | `assessment_results.occasion` 추가 |
+| G7 | **시계열 코호트 지표 없음** (성취율 추이 라인) | 신규 `cohort_daily_metrics` |
+| G8 | **AI 대면 수업 브리핑 저장소 없음** | 신규 `class_briefings` |
+| G9 | **학습 목표/기준 없음** (달성률 before→after) | 신규 `learning_goals` |
+
+> G7~G9는 [11-analytics-dashboard.md](./11-analytics-dashboard.md)(학습 분석 대시보드)를 동작시키기 위해 도출됨.
 
 ---
 
@@ -177,6 +182,54 @@
 
 ---
 
+### 3.9 `cohort_daily_metrics` (신규) — G7
+
+강의×일자별 코호트 지표 스냅샷. 성취율 추이 라인([11](./11-analytics-dashboard.md) §C). 야간 배치 적재.
+
+| 컬럼 | 타입 | 비고 |
+|---|---|---|
+| id | UUID PK | |
+| lecture_id | UUID FK→lectures | index |
+| metric_date | Date | |
+| completion_rate / attendance_rate / avg_accuracy | Float | 완료·출석·평균 정답률 |
+| question_count / active_learners | Integer | |
+| avg_focus_score | Float\|null | 집중도(산식 §11) |
+| created_at | DateTime(tz) | |
+
+- 유니크: `(lecture_id, metric_date)`
+
+### 3.10 `class_briefings` (신규) — G8
+
+AI 대면 수업 브리핑 결과 저장([11](./11-analytics-dashboard.md) §H, §5).
+
+| 컬럼 | 타입 | 비고 |
+|---|---|---|
+| id | UUID PK | |
+| lecture_id | UUID FK→lectures | index |
+| course_id | UUID FK→courses\|null | |
+| week_no | Integer\|null | 주차 |
+| generated_at | DateTime(tz) | |
+| payload | JSONB | summary[]/recommendations[]/student_feedback[] 구조화 |
+| model | String(40) | 생성 모델·버전 |
+| source_window | JSONB | 집계 대상 기간·필터(재현성) |
+
+### 3.11 `learning_goals` (신규) — G9
+
+강의/주차별 학습 목표·기준 → 달성률 before→after([11](./11-analytics-dashboard.md) §H-3).
+
+| 컬럼 | 타입 | 비고 |
+|---|---|---|
+| id | UUID PK | |
+| lecture_id | UUID FK→lectures | index |
+| week_no | Integer\|null | |
+| goal_type | Enum | completion, accuracy, attendance, custom |
+| target_value | Float | 목표치 |
+| baseline_value | Float\|null | 기준(before) |
+| description | Text\|null | |
+| created_at | DateTime(tz) | |
+
+---
+
 ## 4. RQ → 테이블 커버리지
 
 | RQ | 근거 테이블 |
@@ -214,4 +267,5 @@
 
 | 날짜 | 변경 |
 |---|---|
+| 2026-05-27 | G7~G9 추가 — cohort_daily_metrics·class_briefings·learning_goals (11번 학습 분석 대시보드 동작용) |
 | 2026-05-27 | 문서 신설 — 기존 스키마 재사용 분석 + 6개 갭(watch_events/slide_engagement, qa_logs 확장+qa_clusters, instructor_actions, survey_responses, research_participants+lecture_research_config, occasion/started_at) 명세, RQ 커버리지, 익명화·마이그레이션 순서 |

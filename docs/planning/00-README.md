@@ -20,6 +20,7 @@
 | 08 | [08-cost-optimization.md](./08-cost-optimization.md) | 비용 최적화 (립싱크 아바타 단가 인하, 슬라이드쇼 본문, 아바타 Q&A 비용 통제) | 🟡 설계 v0.3 |
 | 09 | [09-beta-program.md](./09-beta-program.md) | 베타 프로그램·연구 설계 (2026 9월 학기, 데이터 루프, 논문) | 🟡 설계 v0.1 |
 | 10 | [10-research-data-model.md](./10-research-data-model.md) | 연구·계측 데이터 모델 (베타 로깅 스키마, 테이블 명세) | 🟡 설계 v0.1 |
+| 11 | [11-analytics-dashboard.md](./11-analytics-dashboard.md) | 학습 분석 대시보드 & AI 대면 수업 브리핑 (`/analytics`) | 🟡 설계 v0.1 |
 
 ---
 
