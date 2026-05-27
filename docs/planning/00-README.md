@@ -17,6 +17,7 @@
 | 05 | [05-instructor-pages.md](./05-instructor-pages.md) | 교수자 화면 (대시보드, studio 마법사, Q&A 인박스) | ✓ 확정 |
 | 06 | [06-student-pages.md](./06-student-pages.md) | 학생 화면 (진입, 시청, 집중경고, 퀴즈) | ✓ 확정 |
 | 07 | [07-additional-pages.md](./07-additional-pages.md) | 보조 페이지 (use-cases, trust, security 등) | ✓ 확정 |
+| 08 | [08-cost-optimization.md](./08-cost-optimization.md) | 비용 최적화 (HeyGen 단가 인하, 아바타 Q&A 비용 통제) | 🟡 설계 초안 |
 
 ---
 
