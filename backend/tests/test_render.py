@@ -58,6 +58,136 @@ async def test_create_render_student_forbidden(client, student, lecture):
     assert resp.status_code == 403
 
 
+# ── 중복 렌더 차단 가드 (비용 누수 방지) ──────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_create_render_skips_already_rendered_slides(client, professor, lecture, db):
+    """이미 ready/진행 중인 슬라이드는 재렌더하지 않고 건너뛴다 (크레딧 이중 청구 방지)."""
+    db.add(VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        avatar_id="a",
+        tts_provider="elevenlabs",
+        slide_number=1,
+        status=RenderStatus.ready,
+    ))
+    await db.flush()
+
+    with patch("app.services.pipeline.subscription.check_limit", new_callable=AsyncMock), \
+         patch("app.tasks.render.render_slide") as mock_task:
+        mock_task.delay = MagicMock()
+        resp = await client.post(
+            "/api/v1/render",
+            params={"lecture_id": str(lecture.id)},
+            json=[
+                {"script": "1", "slide_number": 1},  # 이미 ready → 건너뜀
+                {"script": "2", "slide_number": 2},  # 신규 → 렌더
+            ],
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["render_ids"]) == 1
+    assert data["skipped_slides"] == [1]
+    assert mock_task.delay.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_create_render_all_existing_returns_empty(client, professor, lecture, db):
+    """모든 슬라이드가 이미 진행 중이면 새 렌더 0건 + delay 미호출."""
+    db.add(VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        avatar_id="a",
+        tts_provider="elevenlabs",
+        slide_number=1,
+        status=RenderStatus.rendering,
+    ))
+    await db.flush()
+
+    with patch("app.services.pipeline.subscription.check_limit", new_callable=AsyncMock), \
+         patch("app.tasks.render.render_slide") as mock_task:
+        mock_task.delay = MagicMock()
+        resp = await client.post(
+            "/api/v1/render",
+            params={"lecture_id": str(lecture.id)},
+            json=[{"script": "1", "slide_number": 1}],
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["render_ids"] == []
+    assert data["skipped_slides"] == [1]
+    mock_task.delay.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_render_force_cancels_inflight_and_recreates(client, professor, lecture, db):
+    """force=true 면 진행 중 슬라이드의 HeyGen 잡을 취소하고 새로 렌더한다."""
+    old = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        avatar_id="a",
+        tts_provider="elevenlabs",
+        slide_number=1,
+        status=RenderStatus.rendering,
+        heygen_job_id="job-old-1",
+    )
+    db.add(old)
+    await db.flush()
+
+    with patch("app.services.pipeline.subscription.check_limit", new_callable=AsyncMock), \
+         patch("app.services.pipeline.heygen.cancel_video", new_callable=AsyncMock) as mock_cancel, \
+         patch("app.tasks.render.render_slide") as mock_task:
+        mock_cancel.return_value = True
+        mock_task.delay = MagicMock()
+        resp = await client.post(
+            "/api/v1/render",
+            params={"lecture_id": str(lecture.id), "force": "true"},
+            json=[{"script": "수정된 스크립트", "slide_number": 1}],
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["render_ids"]) == 1            # 새 렌더 생성
+    assert data["skipped_slides"] == []
+    mock_cancel.assert_awaited_once_with("job-old-1")
+    assert old.status == RenderStatus.cancelled    # 기존 진행 중 잡은 취소 마킹
+
+
+@pytest.mark.asyncio
+async def test_create_render_retries_failed_slide(client, professor, lecture, db):
+    """failed/cancelled 슬라이드는 force 없이도 정상 재렌더 (가드 대상 아님)."""
+    db.add(VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        avatar_id="a",
+        tts_provider="elevenlabs",
+        slide_number=1,
+        status=RenderStatus.failed,
+    ))
+    await db.flush()
+
+    with patch("app.services.pipeline.subscription.check_limit", new_callable=AsyncMock), \
+         patch("app.tasks.render.render_slide") as mock_task:
+        mock_task.delay = MagicMock()
+        resp = await client.post(
+            "/api/v1/render",
+            params={"lecture_id": str(lecture.id)},
+            json=[{"script": "재시도", "slide_number": 1}],
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["render_ids"]) == 1
+    assert data["skipped_slides"] == []
+    assert mock_task.delay.call_count == 1
+
+
 # ── 렌더 상태 조회 ───────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
