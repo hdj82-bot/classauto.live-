@@ -22,6 +22,64 @@ _MAX_RETRIES = 90
 _RETRY_DELAY = 10
 
 
+def _look_not_ready(exc: Exception) -> bool:
+    """train 실패가 '업로드 사진(look)이 아직 처리 중' 때문인지(= 기다리면 해소).
+
+    그룹 생성 직후 사진은 'pending' 이라 곧바로 train 하면 HeyGen 이
+    400 invalid_parameter "No valid image for training found in group" 를 낸다.
+    이 경우만 재시도로 흡수하고, 다른 오류는 실패로 처리한다.
+    """
+    s = str(exc).lower()
+    return (
+        "no valid image" in s
+        or "not completed" in s
+        or "not ready" in s
+        or "pending" in s
+    )
+
+
+@celery.task(bind=True, max_retries=_MAX_RETRIES, default_retry_delay=_RETRY_DELAY)
+def prepare_photo_avatar_training(self, user_id: str) -> dict:
+    """업로드 사진이 ready 될 때까지 기다렸다가 학습(train)을 시작한다.
+
+    그룹 생성 직후 사진(look)은 'pending' 이므로 즉시 train 하면 실패한다
+    (HeyGen "No valid image for training"). 그 경우 self.retry 로 잠시 기다렸다
+    다시 train 하고, 성공하면 poll_photo_avatar_training 으로 학습 상태 폴링을 잇는다.
+    """
+    from app.services.pipeline.heygen import HeyGenError, train_photo_avatar_group
+
+    db = SyncSessionLocal()
+    loop = asyncio.new_event_loop()
+    try:
+        user = db.query(User).filter(User.id == uuid.UUID(user_id)).one()
+        group_id = user.photo_avatar_group_id
+        if not group_id:
+            return {"user_id": user_id, "status": "none"}
+
+        try:
+            loop.run_until_complete(train_photo_avatar_group(group_id))
+        except HeyGenError as exc:
+            if _look_not_ready(exc):
+                logger.info(
+                    "Photo Avatar 사진 준비 대기 후 train 재시도: user=%s (%s)",
+                    user_id, exc,
+                )
+                raise self.retry(exc=exc)
+            logger.warning("Photo Avatar 학습 시작 실패: user=%s, error=%s", user_id, exc)
+            user.photo_avatar_group_status = "failed"
+            db.commit()
+            return {"user_id": user_id, "status": "failed"}
+
+        logger.info("Photo Avatar 학습 시작됨: user=%s, group=%s", user_id, group_id)
+    finally:
+        loop.close()
+        db.close()
+
+    # 학습 시작 성공 → 학습 완료까지 상태 폴링을 잇는다.
+    poll_photo_avatar_training.delay(user_id)
+    return {"user_id": user_id, "status": "training"}
+
+
 @celery.task(bind=True, max_retries=_MAX_RETRIES, default_retry_delay=_RETRY_DELAY)
 def poll_photo_avatar_training(self, user_id: str) -> dict:
     """그룹 학습 상태를 폴링해 ``user.photo_avatar_group_status`` 를 갱신."""

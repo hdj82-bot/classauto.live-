@@ -5,6 +5,7 @@
 ``/api/avatars`` 계약을 사용한다).
 """
 import asyncio
+import logging
 import uuid
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
@@ -34,6 +35,7 @@ from app.schemas.avatar import (
 from app.services.pipeline import s3 as s3_svc
 
 router = APIRouter(tags=["avatars"])
+logger = logging.getLogger(__name__)
 
 # 프로필 사진 한도 — 휴대폰 고화질 원본(보통 5~12MB)을 잘리지 않게 받도록 20MB.
 # profile-photo·photo-avatar 두 업로드 엔드포인트가 공통으로 쓴다. 에러 문구는
@@ -644,18 +646,18 @@ async def create_photo_avatar(
             detail="JPEG 또는 PNG 이미지만 업로드할 수 있습니다.",
         )
 
-    from app.services.pipeline.heygen import (
-        HeyGenError,
-        create_photo_avatar_group,
-        train_photo_avatar_group,
-    )
+    from app.services.pipeline.heygen import HeyGenError, create_photo_avatar_group
 
+    # 그룹 생성만 동기로 한다. 학습(train)은 업로드 사진(look)이 'ready' 된 뒤에야
+    # 가능하다 — 생성 직후 사진은 'pending' 이라 곧바로 train 하면 HeyGen 이
+    # 400 "No valid image for training" 을 낸다. 사진 ready 대기→train→학습 폴링은
+    # prepare_photo_avatar_training 태스크가 비동기로 잇는다.
     try:
         group_id = await create_photo_avatar_group(
             f"{user.name} avatar", content, content_type=ctype
         )
-        await train_photo_avatar_group(group_id)
     except HeyGenError as e:
+        logger.warning("Photo Avatar 그룹 생성 실패: user=%s, error=%s", user.id, e)
         return PhotoAvatarStatusResponse(
             status="failed", message=f"본인 아바타 생성에 실패했습니다: {e}"
         )
@@ -664,9 +666,9 @@ async def create_photo_avatar(
     user.photo_avatar_group_status = "training"
     await db.commit()
 
-    from app.tasks.photo_avatar import poll_photo_avatar_training
+    from app.tasks.photo_avatar import prepare_photo_avatar_training
 
-    poll_photo_avatar_training.delay(str(user.id))
+    prepare_photo_avatar_training.delay(str(user.id))
 
     return PhotoAvatarStatusResponse(
         group_id=group_id,
