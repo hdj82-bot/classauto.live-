@@ -1,21 +1,22 @@
 "use client";
 
-import { useRef, useState, type CSSProperties } from "react";
+import { useCallback, useRef, useState, type CSSProperties } from "react";
 import type { VoiceCloneStatus, VoiceScriptResult } from "./avatarsTypes";
+import type { ScriptLanguage } from "./avatarsApi";
 import { useVoiceRecorder } from "./useVoiceRecorder";
 
 interface VoiceCloneUploadCardProps {
-  /** 검증 통과한 파일(업로드 또는 녹음)을 부모로 올린다 — 실제 업로드는 페이지가 수행. */
+  /** 검증 통과한 샘플(불러온 파일 또는 녹음)을 부모로 올린다 — 실제 업로드는 페이지가 수행. */
   onSubmit: (file: File) => void;
   /** 본인 음성 삭제. */
   onDelete?: () => void;
   /** 본인 음성(클론) 샘플 합성 — mp3 Blob 을 돌려주면 카드가 재생. 실패 시 null. */
   onPreview?: () => Promise<Blob | null>;
   /**
-   * 녹음용 읽기 대본 요청 — 강의 주제에 맞춘 ~500자 학술 대본을 돌려준다.
-   * 제공되지 않으면 "녹음 대본 받기" 버튼을 숨긴다.
+   * 녹음용 읽기 대본 요청 — 강의 주제·선택 언어에 맞춘 학술 대본을 돌려준다.
+   * 제공되지 않으면 "녹음 대본 도우미" 블록을 숨긴다.
    */
-  onRequestScript?: () => Promise<VoiceScriptResult | null>;
+  onRequestScript?: (language: ScriptLanguage) => Promise<VoiceScriptResult | null>;
   /** 부모가 보유한 본인 음성 상태. */
   status: VoiceCloneStatus;
   uploading: boolean;
@@ -29,6 +30,15 @@ interface VoiceCloneUploadCardProps {
 // ElevenLabs IVC 는 1분 내외 샘플이면 충분. 고비트레이트/긴 샘플 여유로 25MB.
 const MAX_BYTES = 25 * 1024 * 1024;
 const ACCEPT = "audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/ogg,audio/webm,.mp3,.m4a,.wav,.ogg,.webm";
+
+const SCRIPT_LANGS: ScriptLanguage[] = ["ko", "en", "zh", "ja"];
+
+/** 현재 샘플(불러온 파일 또는 녹음). 둘 다 같은 클론 업로드 경로로 제출된다. */
+interface Sample {
+  file: File;
+  name: string;
+  source: "file" | "record";
+}
 
 function formatElapsed(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
@@ -50,32 +60,39 @@ export default function VoiceCloneUploadCard({
 }: VoiceCloneUploadCardProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [sample, setSample] = useState<Sample | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
-  // 브라우저 직접 녹음.
-  const recorder = useVoiceRecorder();
+  // 브라우저 직접 녹음 — 완료되면 그 결과를 "현재 샘플"로 받는다.
+  const recordedLabel = t("recordPlaybackLabel");
+  const handleRecorded = useCallback(
+    (f: File) => setSample({ file: f, name: recordedLabel, source: "record" }),
+    [recordedLabel],
+  );
+  const recorder = useVoiceRecorder({ onRecorded: handleRecorded });
 
   // 녹음용 읽기 대본.
   const [script, setScript] = useState<VoiceScriptResult | null>(null);
   const [scriptLoading, setScriptLoading] = useState(false);
   const [scriptError, setScriptError] = useState(false);
+  const [scriptLang, setScriptLang] = useState<ScriptLanguage>("ko");
 
   const pick = () => inputRef.current?.click();
 
-  // 제출 시 선택 파일을 비워 중복 제출을 막는다(부모가 uploading/status 로 진행 표시).
+  // "내 목소리 만들기" — 불러온 파일이든 녹음이든 동일 클론 업로드 경로로 제출.
   const submit = () => {
-    if (!file) return;
-    onSubmit(file);
-    setFile(null);
+    if (!sample) return;
+    onSubmit(sample.file);
+    setSample(null);
+    recorder.reset();
   };
 
-  // 녹음 결과를 기존 클론 업로드 경로로 제출.
-  const submitRecording = () => {
-    if (!recorder.file) return;
-    onSubmit(recorder.file);
-    recorder.reset();
+  // 녹음 시작/다시 녹음 — 이전 파일 샘플은 비우고 녹음 결과로 대체한다(마지막 동작 우선).
+  const startRecording = () => {
+    setValidationError(null);
+    if (sample?.source === "file") setSample(null);
+    void recorder.start();
   };
 
   // 본인 클론 음성 미리듣기 — 서버 TTS 로 샘플을 합성해 1회 재생.
@@ -110,7 +127,7 @@ export default function VoiceCloneUploadCard({
     setScriptLoading(true);
     setScriptError(false);
     try {
-      const result = await onRequestScript();
+      const result = await onRequestScript(scriptLang);
       if (result) setScript(result);
       else setScriptError(true);
     } catch {
@@ -129,16 +146,15 @@ export default function VoiceCloneUploadCard({
       /\.(mp3|m4a|wav|ogg|webm|mp4)$/i.test(f.name);
     if (!isAudio) {
       setValidationError(t("voiceUploadInvalidType"));
-      setFile(null);
       return;
     }
     if (f.size > MAX_BYTES) {
       setValidationError(t("voiceUploadTooLarge"));
-      setFile(null);
       return;
     }
     setValidationError(null);
-    setFile(f);
+    recorder.reset(); // 파일을 고르면 진행 중/완료된 녹음은 비운다.
+    setSample({ file: f, name: f.name, source: "file" });
   };
 
   const statusLine =
@@ -147,6 +163,26 @@ export default function VoiceCloneUploadCard({
       : status === "failed"
         ? { text: message || t("voiceUploadStatusFailed"), tone: "error" as const }
         : null;
+
+  // 녹음 실패 사유별 안내 문구.
+  const recordMessage =
+    recorder.state === "denied"
+      ? t("recordDenied")
+      : recorder.state === "error"
+        ? recorder.errorReason === "insecure"
+          ? t("recordInsecure")
+          : recorder.errorReason === "no-device"
+            ? t("recordNoDevice")
+            : recorder.errorReason === "device-busy"
+              ? t("recordDeviceBusy")
+              : recorder.errorReason === "empty"
+                ? t("recordEmpty")
+                : t("recordError")
+        : null;
+
+  const recording = recorder.state === "recording";
+  const requesting = recorder.state === "requesting";
+  const submitDisabled = !sample || uploading || recording || requesting;
 
   return (
     <div
@@ -212,18 +248,60 @@ export default function VoiceCloneUploadCard({
             style={{ display: "none" }}
             data-testid="voice-clone-input"
           />
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            <button type="button" onClick={pick} style={secondaryBtn}>
-              {file ? t("voiceUploadChange") : t("voiceUploadSelect")}
+
+          {/* 액션 행: 음성 파일 불러오기 — 마이크로 직접 녹음하기 — 내 목소리 만들기 */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <button type="button" onClick={pick} style={secondaryBtn} data-testid="voice-clone-pick">
+              {sample?.source === "file" ? t("voiceUploadChange") : t("voiceUploadSelect")}
             </button>
+
+            {/* 마이크로 직접 녹음하기 (불러오기 우측) */}
+            {recording ? (
+              <button
+                type="button"
+                onClick={recorder.stop}
+                data-testid="record-stop"
+                style={{ ...recordBtn, display: "inline-flex", alignItems: "center", gap: 7 }}
+              >
+                <span style={stopSquare} aria-hidden="true" />
+                {t("recordStop")} · <span style={{ fontVariantNumeric: "tabular-nums" }}>{formatElapsed(recorder.elapsedMs)}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startRecording}
+                disabled={requesting || !recorder.supported}
+                data-testid="record-start"
+                style={{
+                  ...secondaryBtn,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
+                  opacity: !recorder.supported ? 0.5 : 1,
+                  cursor: requesting
+                    ? "wait"
+                    : !recorder.supported
+                      ? "not-allowed"
+                      : "pointer",
+                }}
+              >
+                <span style={recDotStatic} aria-hidden="true" />
+                {requesting
+                  ? t("recordRequesting")
+                  : recorder.state === "recorded"
+                    ? t("recordRedo")
+                    : t("recordTitle")}
+              </button>
+            )}
+
             <button
               type="button"
               onClick={submit}
-              disabled={!file || uploading}
+              disabled={submitDisabled}
               style={{
                 ...primaryBtn,
-                opacity: !file || uploading ? 0.45 : 1,
-                cursor: !file || uploading ? "not-allowed" : "pointer",
+                opacity: submitDisabled ? 0.45 : 1,
+                cursor: submitDisabled ? "not-allowed" : "pointer",
               }}
               data-testid="voice-clone-submit"
             >
@@ -231,9 +309,38 @@ export default function VoiceCloneUploadCard({
             </button>
           </div>
 
-          {file && (
+          {/* 현재 샘플: 파일명 또는 녹음 재생 */}
+          {sample?.source === "file" && (
             <p style={{ margin: "8px 0 0", fontSize: 11.5, color: "var(--text-faint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {file.name}
+              {sample.name}
+            </p>
+          )}
+          {sample?.source === "record" && recorder.audioUrl && (
+            <audio
+              src={recorder.audioUrl}
+              controls
+              data-testid="record-playback"
+              style={{ width: "100%", maxWidth: 360, height: 36, marginTop: 10 }}
+            />
+          )}
+
+          {/* 녹음 상태/오류 안내 */}
+          {recordMessage && (
+            <p
+              role="alert"
+              data-testid="record-message"
+              style={{ margin: "10px 0 0", fontSize: 12, lineHeight: 1.5, color: "var(--warning)" }}
+            >
+              {recordMessage}
+            </p>
+          )}
+          {!recorder.supported && !recordMessage && (
+            <p
+              role="status"
+              data-testid="record-unsupported"
+              style={{ margin: "10px 0 0", fontSize: 11.5, lineHeight: 1.5, color: "var(--text-faint)" }}
+            >
+              {recorder.secureContext ? t("recordUnsupported") : t("recordInsecure")}
             </p>
           )}
 
@@ -260,7 +367,7 @@ export default function VoiceCloneUploadCard({
           )}
 
           <p style={{ margin: "10px 0 0", fontSize: 11, lineHeight: 1.5, color: "var(--text-faint)" }}>
-            {t("voiceUploadHint")}
+            {recorder.supported ? t("recordHint") : t("voiceUploadHint")}
           </p>
         </div>
 
@@ -354,162 +461,80 @@ export default function VoiceCloneUploadCard({
         )}
       </div>
 
-      {/* ── 또는 브라우저에서 직접 녹음 ───────────────────────────────── */}
-      <div style={dividerRow}>
-        <span style={dividerLine} aria-hidden="true" />
-        <span style={dividerLabel}>{t("recordOr")}</span>
-        <span style={dividerLine} aria-hidden="true" />
-      </div>
+      {/* ── 녹음 대본 도우미 (+ 대본 언어 선택) ───────────────────────────── */}
+      {onRequestScript && (
+        <div data-testid="voice-script-helper" style={{ display: "grid", gap: 8, marginTop: 16 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={loadScript}
+              disabled={scriptLoading}
+              data-testid="script-get"
+              style={{
+                ...secondaryBtn,
+                cursor: scriptLoading ? "wait" : "pointer",
+              }}
+            >
+              {scriptLoading
+                ? t("scriptLoading")
+                : script
+                  ? t("scriptRegenerate")
+                  : t("scriptGet")}
+            </button>
 
-      <div data-testid="voice-record" style={{ display: "grid", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <h4 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
-            {t("recordTitle")}
-          </h4>
-          {recorder.state === "recording" && (
-            <span style={recordingBadge} role="status" aria-live="polite">
-              <span style={recDot} aria-hidden="true" />
-              {t("recordingBadge")} · {formatElapsed(recorder.elapsedMs)}
-            </span>
+            <label
+              style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "var(--text-muted)" }}
+            >
+              {t("scriptLangLabel")}
+              <select
+                value={scriptLang}
+                onChange={(e) => setScriptLang(e.target.value as ScriptLanguage)}
+                data-testid="script-lang"
+                aria-label={t("scriptLangLabel")}
+                style={selectStyle}
+              >
+                {SCRIPT_LANGS.map((lang) => (
+                  <option key={lang} value={lang}>
+                    {t(
+                      lang === "ko"
+                        ? "scriptLangKo"
+                        : lang === "en"
+                          ? "scriptLangEn"
+                          : lang === "zh"
+                            ? "scriptLangZh"
+                            : "scriptLangJa",
+                    )}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {scriptError && (
+            <p role="alert" style={warnNote} data-testid="script-error">
+              {t("scriptError")}
+            </p>
           )}
-        </div>
 
-        {!recorder.supported ? (
-          <p role="status" style={mutedNote} data-testid="record-unsupported">
-            {t("recordUnsupported")}
-          </p>
-        ) : (
-          <>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              {recorder.state === "recording" ? (
-                <button
-                  type="button"
-                  onClick={recorder.stop}
-                  data-testid="record-stop"
-                  style={{ ...primaryBtn, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7 }}
-                >
-                  <span style={stopSquare} aria-hidden="true" />
-                  {t("recordStop")}
-                </button>
-              ) : recorder.state === "recorded" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={submitRecording}
-                    disabled={uploading}
-                    data-testid="record-use"
-                    style={{
-                      ...primaryBtn,
-                      opacity: uploading ? 0.45 : 1,
-                      cursor: uploading ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    {uploading ? t("voiceUploading") : t("recordUse")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={recorder.start}
-                    disabled={uploading}
-                    data-testid="record-redo"
-                    style={secondaryBtn}
-                  >
-                    {t("recordRedo")}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={recorder.start}
-                  disabled={recorder.state === "requesting"}
-                  data-testid="record-start"
-                  style={{
-                    ...secondaryBtn,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 7,
-                    cursor: recorder.state === "requesting" ? "wait" : "pointer",
-                  }}
-                >
-                  <span style={recDotStatic} aria-hidden="true" />
-                  {recorder.state === "requesting"
-                    ? t("recordRequesting")
-                    : t("recordStart")}
-                </button>
+          {script && (
+            <div data-testid="script-box" style={scriptBox}>
+              <p style={{ margin: "0 0 6px", fontSize: 11.5, fontWeight: 700, color: "var(--gold-on-light)" }}>
+                {t("scriptTitle")}
+              </p>
+              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: "var(--text)", whiteSpace: "pre-wrap" }}>
+                {script.text}
+              </p>
+              {script.mock && (
+                <p style={{ margin: "8px 0 0", fontSize: 10.5, lineHeight: 1.5, color: "var(--text-faint)" }}>
+                  {t("scriptMockNote")}
+                </p>
               )}
             </div>
+          )}
 
-            {recorder.state === "recorded" && recorder.audioUrl && (
-              <audio
-                src={recorder.audioUrl}
-                controls
-                data-testid="record-playback"
-                style={{ width: "100%", maxWidth: 360, height: 36 }}
-              />
-            )}
-
-            {recorder.state === "denied" && (
-              <p role="alert" style={warnNote} data-testid="record-denied">
-                {t("recordDenied")}
-              </p>
-            )}
-            {recorder.state === "error" && (
-              <p role="alert" style={warnNote} data-testid="record-error">
-                {t("recordError")}
-              </p>
-            )}
-
-            <p style={mutedNote}>{t("recordHint")}</p>
-          </>
-        )}
-
-        {/* 녹음 대본 받기 */}
-        {onRequestScript && (
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-              <button
-                type="button"
-                onClick={loadScript}
-                disabled={scriptLoading}
-                data-testid="script-get"
-                style={{
-                  ...secondaryBtn,
-                  cursor: scriptLoading ? "wait" : "pointer",
-                }}
-              >
-                {scriptLoading
-                  ? t("scriptLoading")
-                  : script
-                    ? t("scriptRegenerate")
-                    : t("scriptGet")}
-              </button>
-            </div>
-
-            {scriptError && (
-              <p role="alert" style={warnNote} data-testid="script-error">
-                {t("scriptError")}
-              </p>
-            )}
-
-            {script && (
-              <div data-testid="script-box" style={scriptBox}>
-                <p style={{ margin: "0 0 6px", fontSize: 11.5, fontWeight: 700, color: "var(--gold-on-light)" }}>
-                  {t("scriptTitle")}
-                </p>
-                <p style={{ margin: 0, fontSize: 13, lineHeight: 1.7, color: "var(--text)", whiteSpace: "pre-wrap" }}>
-                  {script.text}
-                </p>
-                {script.mock && (
-                  <p style={{ margin: "8px 0 0", fontSize: 10.5, lineHeight: 1.5, color: "var(--text-faint)" }}>
-                    {t("scriptMockNote")}
-                  </p>
-                )}
-              </div>
-            )}
-
-            {script && <p style={mutedNote}>{t("scriptHint")}</p>}
-          </div>
-        )}
-      </div>
+          {script && <p style={mutedNote}>{t("scriptHint")}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -537,49 +562,17 @@ const primaryBtn: CSSProperties = {
   fontFamily: "inherit",
 };
 
-const dividerRow: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 12,
-  margin: "18px 0 14px",
-};
-
-const dividerLine: CSSProperties = {
-  flex: 1,
-  height: 1,
-  background: "var(--line)",
-};
-
-const dividerLabel: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  letterSpacing: "0.04em",
-  color: "var(--text-faint)",
-  whiteSpace: "nowrap",
-};
-
-const recordingBadge: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-  padding: "3px 10px",
-  borderRadius: 999,
-  fontSize: 11.5,
+// 녹음 정지 버튼 — 진행 중임을 알리는 연한 경고 톤.
+const recordBtn: CSSProperties = {
+  padding: "8px 14px",
+  fontSize: 13,
   fontWeight: 700,
-  color: "var(--warning)",
+  borderRadius: 10,
+  border: "1px solid rgba(239,68,68,0.35)",
   background: "rgba(239,68,68,0.08)",
-  border: "1px solid rgba(239,68,68,0.25)",
-  fontVariantNumeric: "tabular-nums",
-};
-
-const recDot: CSSProperties = {
-  width: 8,
-  height: 8,
-  borderRadius: "50%",
-  background: "#EF4444",
-  // 전역 keyframe 재사용(globals.css `pulse-warning`). reduced-motion 시엔
-  // 전역 규칙이 애니메이션을 멈춰 정적 빨간 점으로 보인다(의미 유지).
-  animation: "pulse-warning 1.4s ease-in-out infinite",
+  color: "var(--warning)",
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 
 const recDotStatic: CSSProperties = {
@@ -593,7 +586,19 @@ const stopSquare: CSSProperties = {
   width: 9,
   height: 9,
   borderRadius: 2,
-  background: "#0A0A0A",
+  background: "currentColor",
+};
+
+const selectStyle: CSSProperties = {
+  padding: "6px 8px",
+  fontSize: 12.5,
+  fontWeight: 600,
+  borderRadius: 8,
+  border: "1px solid var(--line-strong)",
+  background: "var(--bg-card)",
+  color: "var(--text)",
+  fontFamily: "inherit",
+  cursor: "pointer",
 };
 
 const scriptBox: CSSProperties = {

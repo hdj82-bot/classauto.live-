@@ -21,6 +21,7 @@ import {
   requestVoiceScript,
   uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
+import type { ScriptLanguage } from "@/components/professor/avatars/avatarsApi";
 import { listVoiceOptions, previewVoice } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
@@ -212,15 +213,17 @@ export default function AvatarsPage() {
     [lectureId, toast, t],
   );
 
-  // 녹음 대본 요청 — 현재 강의 제목을 주제로 학술 대본을 받아 카드에 표시.
-  const handleRequestScript =
-    useCallback(async (): Promise<VoiceScriptResult | null> => {
+  // 녹음 대본 요청 — 현재 강의 제목을 주제로, 선택 언어에 맞춘 학술 대본을 받는다.
+  const handleRequestScript = useCallback(
+    async (language: ScriptLanguage): Promise<VoiceScriptResult | null> => {
       try {
-        return await requestVoiceScript(lectureTitle);
+        return await requestVoiceScript(lectureTitle, language);
       } catch {
         return null;
       }
-    }, [lectureTitle]);
+    },
+    [lectureTitle],
+  );
 
   const handleVoiceUpload = useCallback(
     async (file: File) => {

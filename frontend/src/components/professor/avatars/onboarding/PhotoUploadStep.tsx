@@ -6,11 +6,16 @@ import { CameraIcon, CheckIcon, PersonIcon } from "./PhotoAvatarIcons";
 interface PhotoUploadStepProps {
   /** 검증 통과한 파일을 업로드. 성공 시 흐름이 학습 단계로 전진한다. */
   onSubmit: (file: File) => Promise<void>;
+  /**
+   * 클라이언트 사진 용량 상한(bytes). 기본 8MB. 호출자가 백엔드 한도에 맞춰
+   * 올릴 수 있다(가이드·검증 문구는 t 로 함께 맞춘다 — DEFAULT_MAX_BYTES 참고).
+   */
+  maxBytes?: number;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-// 계약 가이드: 8MB 이하, JPEG/PNG 만 (docs §4 사진 가이드라인).
-const MAX_BYTES = 8 * 1024 * 1024;
+// 계약 가이드 기본값: 8MB 이하, JPEG/PNG 만 (docs §4 사진 가이드라인).
+const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
 const ACCEPT = "image/jpeg,image/png";
 
 /**
@@ -20,7 +25,11 @@ const ACCEPT = "image/jpeg,image/png";
  * 우측 패널 없이 온보딩 단일 카드로 동작한다. 업로드 성공 시 부모가 그룹 학습
  * 단계로 넘긴다.
  */
-export default function PhotoUploadStep({ onSubmit, t }: PhotoUploadStepProps) {
+export default function PhotoUploadStep({
+  onSubmit,
+  maxBytes = DEFAULT_MAX_BYTES,
+  t,
+}: PhotoUploadStepProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -52,7 +61,7 @@ export default function PhotoUploadStep({ onSubmit, t }: PhotoUploadStepProps) {
       swapPreview(null);
       return;
     }
-    if (f.size > MAX_BYTES) {
+    if (f.size > maxBytes) {
       setValidationError(t("upload.errorTooLarge"));
       setFile(null);
       swapPreview(null);

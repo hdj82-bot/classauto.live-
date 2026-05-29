@@ -299,29 +299,83 @@ export async function deleteMyVoice(): Promise<VoiceClone> {
 // 학술 예시 대본으로 폴백해 녹음 화면을 완성한다(mock=true 안내). ElevenLabs IVC
 // 는 1분 내외 깨끗한 샘플이면 충분하므로, 대본은 또렷이 읽기 좋은 분량으로 둔다.
 
+/** 녹음 대본 언어 (UI 선택창과 동일). */
+export type ScriptLanguage = "ko" | "en" | "zh" | "ja";
+
 // deferred 폴백 대본을 호출마다 번갈아 주기 위한 순환 인덱스("다른 대본").
 let scriptVariant = 0;
 
-/** 학과·강의 주제를 엮은 ~500자 학술 mock 대본 (대본 API 미배포 폴백). */
-function mockVoiceScript(topic: string | null): string {
-  const subject = topic && topic.trim() ? topic.trim() : "오늘 강의 주제";
-  const variants = [
-    `안녕하세요, 여러분. 이번 시간에는 ${subject}에 대해 함께 살펴보겠습니다. ` +
-      `먼저 핵심 개념을 정의하고, 그것이 왜 중요한지 배경부터 차근차근 짚어 보려고 합니다. ` +
-      `학문이라는 것은 결국 좋은 질문에서 출발합니다. 우리가 당연하게 여겨 온 사실도 ` +
-      `다시 따져 보면 새로운 의미를 드러내곤 합니다. 강의를 들으며 떠오르는 의문은 메모해 ` +
-      `두었다가 토론 시간에 자유롭게 나누어 주시기 바랍니다. 그럼 본격적으로 시작하겠습니다.`,
-    `반갑습니다. 지난 시간에 이어 ${subject}의 세부 내용을 다루겠습니다. ` +
-      `이론적 틀을 먼저 정리한 뒤, 구체적인 사례를 통해 그 틀이 실제로 어떻게 작동하는지 ` +
-      `확인하겠습니다. 개념과 사례를 오가며 이해하면 기억에 훨씬 오래 남습니다. ` +
-      `중요한 용어는 천천히, 또박또박 발음하겠으니 함께 따라 읽어 보셔도 좋습니다. ` +
-      `학습은 속도가 아니라 방향이 중요합니다. 차분히 호흡을 가다듬고 시작해 봅시다.`,
-    `여러분, 좋은 아침입니다. 오늘은 ${subject}를 중심으로 생각의 폭을 넓혀 보겠습니다. ` +
-      `복잡해 보이는 주제일수록 큰 그림을 먼저 그리고 세부로 들어가는 편이 좋습니다. ` +
-      `제가 설명하는 동안, 머릿속으로 자신의 경험과 연결해 보시기를 권합니다. ` +
-      `배움은 새로운 정보를 이미 아는 것과 잇는 과정이기 때문입니다. ` +
-      `질문이 생기면 언제든 환영합니다. 그럼 첫 번째 주제부터 함께 펼쳐 보겠습니다.`,
-  ];
+// 언어별 mock 대본 — 강의 주제(subject)를 끼운 ~수백자 학술 산문. 대본 생성
+// 엔드포인트(#278)가 미배포이거나 언어 지원 전이어도 화면을 완성한다.
+const MOCK_DEFAULT_SUBJECT: Record<ScriptLanguage, string> = {
+  ko: "오늘 강의 주제",
+  en: "today's lecture topic",
+  zh: "今天的课程主题",
+  ja: "本日の講義テーマ",
+};
+
+function mockScriptVariants(lang: ScriptLanguage, subject: string): string[] {
+  switch (lang) {
+    case "en":
+      return [
+        `Hello, everyone. Today we will look closely at ${subject}. ` +
+          `Let's first define the key ideas and trace why they matter, step by step. ` +
+          `Scholarship begins with good questions, and even facts we take for granted ` +
+          `often reveal new meaning when we examine them again. Jot down any questions ` +
+          `that come to mind and share them freely during our discussion. Let's begin.`,
+        `Welcome back. Continuing from last time, we'll work through the details of ${subject}. ` +
+          `I'll lay out the theoretical frame first, then use concrete examples to show how it ` +
+          `works in practice. Moving between concept and example helps the ideas stay with you. ` +
+          `I'll pronounce the important terms slowly, so feel free to read along with me.`,
+      ];
+    case "zh":
+      return [
+        `同学们好。这节课我们一起来探讨${subject}。` +
+          `我们先界定核心概念，再一步步说明它为什么重要。学问往往从一个好问题开始，` +
+          `那些我们习以为常的事实，重新审视时常常会显出新的意义。` +
+          `听课时如果有疑问，请随手记下，留到讨论环节自由交流。那么我们正式开始。`,
+        `各位好。接续上一讲，我们来细看${subject}的具体内容。` +
+          `先梳理理论框架，再通过实例说明它在实践中如何运作。` +
+          `在概念与实例之间往返理解，记忆会更加牢固。重要术语我会放慢、清晰地念出来，` +
+          `大家可以跟着一起读。学习重在方向，让我们沉下心来开始。`,
+      ];
+    case "ja":
+      return [
+        `皆さん、こんにちは。今回は${subject}について一緒に見ていきます。` +
+          `まず重要な概念を定義し、なぜそれが大切なのかを順を追って確かめましょう。` +
+          `学問は良い問いから始まります。当たり前と思っていた事実も、改めて問い直すと` +
+          `新しい意味が見えてきます。疑問が浮かんだら書き留め、討論の時間に自由に共有してください。`,
+        `こんにちは。前回に続いて、${subject}の詳しい内容を扱います。` +
+          `まず理論の枠組みを整理し、具体例を通してそれが実際にどう働くのかを確認します。` +
+          `概念と具体例を行き来すると、記憶に長く残ります。重要な用語はゆっくり、` +
+          `はっきり発音しますので、一緒に読んでみてください。`,
+      ];
+    case "ko":
+    default:
+      return [
+        `안녕하세요, 여러분. 이번 시간에는 ${subject}에 대해 함께 살펴보겠습니다. ` +
+          `먼저 핵심 개념을 정의하고, 그것이 왜 중요한지 배경부터 차근차근 짚어 보려고 합니다. ` +
+          `학문이라는 것은 결국 좋은 질문에서 출발합니다. 우리가 당연하게 여겨 온 사실도 ` +
+          `다시 따져 보면 새로운 의미를 드러내곤 합니다. 강의를 들으며 떠오르는 의문은 메모해 ` +
+          `두었다가 토론 시간에 자유롭게 나누어 주시기 바랍니다. 그럼 본격적으로 시작하겠습니다.`,
+        `반갑습니다. 지난 시간에 이어 ${subject}의 세부 내용을 다루겠습니다. ` +
+          `이론적 틀을 먼저 정리한 뒤, 구체적인 사례를 통해 그 틀이 실제로 어떻게 작동하는지 ` +
+          `확인하겠습니다. 개념과 사례를 오가며 이해하면 기억에 훨씬 오래 남습니다. ` +
+          `중요한 용어는 천천히, 또박또박 발음하겠으니 함께 따라 읽어 보셔도 좋습니다. ` +
+          `학습은 속도가 아니라 방향이 중요합니다. 차분히 호흡을 가다듬고 시작해 봅시다.`,
+        `여러분, 좋은 아침입니다. 오늘은 ${subject}를 중심으로 생각의 폭을 넓혀 보겠습니다. ` +
+          `복잡해 보이는 주제일수록 큰 그림을 먼저 그리고 세부로 들어가는 편이 좋습니다. ` +
+          `제가 설명하는 동안, 머릿속으로 자신의 경험과 연결해 보시기를 권합니다. ` +
+          `배움은 새로운 정보를 이미 아는 것과 잇는 과정이기 때문입니다. ` +
+          `질문이 생기면 언제든 환영합니다. 그럼 첫 번째 주제부터 함께 펼쳐 보겠습니다.`,
+      ];
+  }
+}
+
+/** 강의 주제·언어를 엮은 학술 mock 대본 (대본 API 미배포/언어 미지원 폴백). */
+function mockVoiceScript(topic: string | null, lang: ScriptLanguage): string {
+  const subject = topic && topic.trim() ? topic.trim() : MOCK_DEFAULT_SUBJECT[lang];
+  const variants = mockScriptVariants(lang, subject);
   const text = variants[scriptVariant % variants.length];
   scriptVariant += 1;
   return text;
@@ -329,19 +383,25 @@ function mockVoiceScript(topic: string | null): string {
 
 /**
  * POST /api/avatars/me/voice/script — 녹음용 읽기 대본 생성.
- * topic 은 현재 강의 제목(없으면 null). 미배포면 mock 대본으로 폴백한다.
+ * topic 은 현재 강의 제목(없으면 null), language 는 대본 언어(ko/en/zh/ja).
+ * 미배포(404)면 언어에 맞춘 mock 대본으로 폴백한다. (언어 지원이 백엔드에
+ * 아직 없으면 서버는 language 를 무시하고 기본 언어 대본을 줄 수 있다 — 그 경우
+ * 연결 표시(mock=false)만 반영된다.)
  */
 export async function requestVoiceScript(
   topic: string | null,
+  language: ScriptLanguage = "ko",
 ): Promise<VoiceScriptResult> {
   try {
     const { data } = await api.post<{ script: string }>(
       "/api/avatars/me/voice/script",
-      { topic: topic ?? null },
+      { topic: topic ?? null, language },
     );
     return { text: data.script, mock: false };
   } catch (err) {
-    if (isDeferredError(err)) return { text: mockVoiceScript(topic), mock: true };
+    if (isDeferredError(err)) {
+      return { text: mockVoiceScript(topic, language), mock: true };
+    }
     throw err;
   }
 }

@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { usePhotoAvatarFlow } from "./onboarding/usePhotoAvatarFlow";
 import { usePhotoAvatarI18n } from "./onboarding/usePhotoAvatarI18n";
+import { useAvatarsI18n } from "./useAvatarsI18n";
 import PhotoUploadStep from "./onboarding/PhotoUploadStep";
 import TrainingStep from "./onboarding/TrainingStep";
 import LookGenerateStep from "./onboarding/LookGenerateStep";
@@ -36,14 +37,31 @@ interface PhotoAvatarStudioCardProps {
 // 의 앞 4개와 동일하지만, 여기선 "select"가 마지막(확정)이다.
 const EMBED_STEPS: OnboardingStep[] = ["upload", "training", "generate", "select"];
 
+// 사진 클라이언트 상한 20MB (백엔드 한도와 정합). 가이드·검증 문구는 avatars
+// 네임스페이스 키로 override 한다(아래 tUpload).
+const PHOTO_MAX_BYTES = 20 * 1024 * 1024;
+
 export default function PhotoAvatarStudioCard({
   reducedMotion,
   onConfirmed,
 }: PhotoAvatarStudioCardProps) {
   const { t } = usePhotoAvatarI18n();
+  const { t: tAvatars } = useAvatarsI18n();
   const { toast } = useToast();
   const flow = usePhotoAvatarFlow();
   const [confirmed, setConfirmed] = useState(false);
+
+  // PhotoUploadStep 의 사진 용량 가이드/검증 문구를 20MB 로 맞추기 위한 thin
+  // t-래퍼. photoAvatarOnboarding 네임스페이스(소유 밖)를 수정하지 않고, avatars
+  // 네임스페이스의 studioPhoto* 키로 그 두 문구만 갈아끼운다.
+  const tUpload = useCallback(
+    (key: string, params?: Record<string, string | number>): string => {
+      if (key === "upload.guideFormat") return tAvatars("studioPhotoFormat");
+      if (key === "upload.errorTooLarge") return tAvatars("studioPhotoTooLarge");
+      return t(key, params);
+    },
+    [t, tAvatars],
+  );
 
   const selectedLook = useMemo(
     () => flow.looks.find((l) => l.look_id === flow.selectedLookId) ?? null,
@@ -205,7 +223,11 @@ export default function PhotoAvatarStudioCard({
       ) : (
         <div style={{ marginTop: 16 }}>
           {flow.step === "upload" && (
-            <PhotoUploadStep onSubmit={flow.uploadPhoto} t={t} />
+            <PhotoUploadStep
+              onSubmit={flow.uploadPhoto}
+              maxBytes={PHOTO_MAX_BYTES}
+              t={tUpload}
+            />
           )}
           {flow.step === "training" && (
             <TrainingStep
