@@ -177,13 +177,6 @@ class LookItem(BaseModel):
     )
 
 
-class LooksResponse(BaseModel):
-    """``GET /api/avatars/me/looks`` 응답."""
-
-    looks: list[LookItem]
-    total: int
-
-
 class LookSelectResponse(BaseModel):
     """``POST /api/avatars/me/looks/{look_id}/select`` 응답."""
 

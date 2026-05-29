@@ -167,9 +167,11 @@ async def test_list_and_select_look(client, professor, db):
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["total"] == 1
-    assert body["looks"][0]["look_id"] == "look-1"
-    assert body["looks"][0]["is_default"] is False
+    # 맨 배열(프론트 listLooks 가 직접 map). 래핑 객체 아님.
+    assert isinstance(body, list)
+    assert len(body) == 1
+    assert body[0]["look_id"] == "look-1"
+    assert body[0]["is_default"] is False
 
     sel = await client.post(
         "/api/avatars/me/looks/look-1/select", headers=make_auth_header(professor)

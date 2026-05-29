@@ -23,7 +23,6 @@ from app.schemas.avatar import (
     LookGenerateRequest,
     LookGenerateResponse,
     LookItem,
-    LooksResponse,
     LookSelectResponse,
     PhotoAvatarStatusResponse,
     ProfilePhotoResponse,
@@ -704,14 +703,18 @@ async def generate_looks(
 
 @router.get(
     "/api/avatars/me/looks",
-    response_model=LooksResponse,
+    response_model=list[LookItem],
     summary="생성된 룩 목록",
 )
 async def list_looks(
     user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """본인 Photo Avatar 룩 목록을 최신순으로 반환한다."""
+    """본인 Photo Avatar 룩 목록을 최신순으로 반환한다(맨 배열).
+
+    프론트 온보딩 래퍼(photoAvatarApi.listLooks)가 배열을 직접 map 하므로
+    래핑 없이 ``list[LookItem]`` 으로 응답한다.
+    """
     rows = (
         await db.execute(
             select(PhotoAvatarLook)
@@ -719,7 +722,7 @@ async def list_looks(
             .order_by(PhotoAvatarLook.created_at.desc())
         )
     ).scalars().all()
-    items = [
+    return [
         LookItem(
             look_id=r.heygen_look_id,
             # preview 는 HeyGen 이 준 URL(단기 유효). 만료가 문제되면 S3 캐시는 후속.
@@ -730,7 +733,6 @@ async def list_looks(
         )
         for r in rows
     ]
-    return LooksResponse(looks=items, total=len(items))
 
 
 @router.post(
