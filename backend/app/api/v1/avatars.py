@@ -35,8 +35,10 @@ from app.services.pipeline import s3 as s3_svc
 
 router = APIRouter(tags=["avatars"])
 
-# 프로필 사진 한도 — 본인 아바타 소스 1장이라 크게 잡을 필요 없음.
-_MAX_PROFILE_PHOTO = 8 * 1024 * 1024  # 8MB
+# 프로필 사진 한도 — 휴대폰 고화질 원본(보통 5~12MB)을 잘리지 않게 받도록 20MB.
+# profile-photo·photo-avatar 두 업로드 엔드포인트가 공통으로 쓴다. 에러 문구는
+# 이 상수에서 자동 계산하므로(``// (1024*1024)``) 값만 바꾸면 메시지도 따라간다.
+_MAX_PROFILE_PHOTO = 20 * 1024 * 1024  # 20MB
 _JPEG_MAGIC = b"\xff\xd8\xff"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -579,10 +581,10 @@ async def generate_voice_recording_script(
 ):
     """교수자가 ElevenLabs IVC 샘플을 녹음할 때 읽을 대본을 Claude 로 생성한다.
 
-    ``topic`` (강의 제목 등) 이 주어지면 그 주제와 연관된 한국어 학술 산문을,
-    비어 있으면 일반 학술문을 만든다. 낭독하기 좋은 한 편의 산문(목록·표 없음)
-    으로 약 500자, 호출마다 변형된다. 모델·동시성은 기존 정책(Haiku 기본·단발
-    호출·retry_external 백오프)을 따른다.
+    ``topic`` (강의 제목 등) 이 주어지면 그 주제와 연관된 학술 산문을, 비어 있으면
+    일반 학술문을 만든다. ``language`` (ko·en·zh·ja, 기본 ko) 로 대본 언어를 고른다.
+    낭독하기 좋은 한 편의 산문(목록·표 없음)으로 약 500자, 호출마다 변형된다.
+    모델은 전용 경량 모델(``VOICE_SCRIPT_MODEL``)·단발 호출·retry_external 백오프.
     """
     payload = payload or VoiceScriptRequest()
 
@@ -597,7 +599,9 @@ async def generate_voice_recording_script(
 
     # anthropic SDK 는 동기·블로킹 — 이벤트 루프를 막지 않도록 스레드로 오프로드.
     try:
-        script = await asyncio.to_thread(generate_voice_script, payload.topic)
+        script = await asyncio.to_thread(
+            generate_voice_script, payload.topic, payload.language
+        )
     except VoiceScriptError as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)

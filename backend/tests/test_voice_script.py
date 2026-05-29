@@ -7,7 +7,7 @@ Anthropic(Claude) 호출은 모두 mock. 실제 네트워크·크레딧 소모 �
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import anthropic
 import pytest
@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.services.voice_script import (
     VoiceScriptError,
     _SYSTEM_BLOCKS,
+    _SYSTEM_BLOCKS_BY_LANG,
     generate_voice_script,
 )
 from tests.conftest import make_auth_header
@@ -94,16 +95,19 @@ def test_general_prose_when_no_topic():
 
 
 def test_call_uses_policy_model_and_variation():
-    """모델은 정책값(SCRIPT_MODEL=Haiku), 변형 위해 temperature=1.0, system 캐시 블록."""
+    """모델은 전용 경량값(VOICE_SCRIPT_MODEL), 타이트한 max_tokens, temperature=1.0,
+    system 캐시 블록. thinking 미사용(kwargs 에 thinking 없음)."""
     client = _mock_client(_mock_response("학술 산문."))
     with patch(_PATCH_TARGET, return_value=client):
         generate_voice_script("주제")
 
     kwargs = client.messages.create.call_args.kwargs
-    assert kwargs["model"] == settings.SCRIPT_MODEL
+    assert kwargs["model"] == settings.VOICE_SCRIPT_MODEL
     assert kwargs["temperature"] == 1.0
-    assert kwargs["max_tokens"] == settings.SCRIPT_MAX_TOKENS
-    assert kwargs["system"] == _SYSTEM_BLOCKS
+    assert kwargs["max_tokens"] == settings.VOICE_SCRIPT_MAX_TOKENS
+    assert kwargs["max_tokens"] <= 1024  # 대본 길이에 맞춘 타이트한 캡
+    assert "thinking" not in kwargs  # extended thinking 미사용
+    assert kwargs["system"] == _SYSTEM_BLOCKS  # 기본(ko) 캐시 블록
     assert isinstance(kwargs["system"], list)
     assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
 
@@ -207,3 +211,139 @@ async def test_endpoint_502_on_generation_failure(client, professor, monkeypatch
             headers=make_auth_header(professor),
         )
     assert resp.status_code == 502
+
+
+# ── 다국어 ────────────────────────────────────────────────────────────────────
+
+
+def test_default_language_is_ko():
+    """language 미지정이면 한국어 system 블록으로 호출한다."""
+    client = _mock_client(_mock_response("산문"))
+    with patch(_PATCH_TARGET, return_value=client):
+        generate_voice_script("주제")
+    assert (
+        client.messages.create.call_args.kwargs["system"]
+        == _SYSTEM_BLOCKS_BY_LANG["ko"]
+    )
+
+
+@pytest.mark.parametrize(
+    "lang, marker",
+    [
+        ("en", "Lecture topic"),
+        ("zh", "讲课主题"),
+        ("ja", "講義テーマ"),
+    ],
+)
+def test_language_selects_system_and_user_prompt(lang, marker):
+    """language 별로 그 언어의 system 블록 + user 프롬프트(topic 포함)로 호출한다."""
+    client = _mock_client(_mock_response("prose"))
+    with patch(_PATCH_TARGET, return_value=client):
+        out = generate_voice_script("Topic X", lang)
+
+    assert out == "prose"
+    kwargs = client.messages.create.call_args.kwargs
+    assert kwargs["system"] == _SYSTEM_BLOCKS_BY_LANG[lang]
+    content = kwargs["messages"][0]["content"]
+    assert marker in content  # 해당 언어 템플릿 신호
+    assert "Topic X" in content  # topic 주입
+
+
+def test_unsupported_language_falls_back_to_ko():
+    """스키마 밖의 언어 값이 직접 들어와도 ko 로 안전 폴백."""
+    client = _mock_client(_mock_response("산문"))
+    with patch(_PATCH_TARGET, return_value=client):
+        generate_voice_script("주제", "fr")
+    assert (
+        client.messages.create.call_args.kwargs["system"]
+        == _SYSTEM_BLOCKS_BY_LANG["ko"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_endpoint_passes_language(client, professor, monkeypatch):
+    """엔드포인트가 language 를 서비스로 전달한다(ja → ja system 블록 사용)."""
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "test-key")
+    anth = _mock_client(_mock_response("録音用原稿です。"))
+    with patch(_PATCH_TARGET, return_value=anth):
+        resp = await client.post(
+            "/api/avatars/me/voice/script",
+            json={"topic": "中国語教授法", "language": "ja"},
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["script"] == "録音用原稿です。"
+    assert (
+        anth.messages.create.call_args.kwargs["system"]
+        == _SYSTEM_BLOCKS_BY_LANG["ja"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_endpoint_rejects_invalid_language(client, professor, monkeypatch):
+    """스키마 Literal 밖 언어는 422 로 거부(서비스 호출 전)."""
+    monkeypatch.setattr(settings, "ANTHROPIC_API_KEY", "test-key")
+    resp = await client.post(
+        "/api/avatars/me/voice/script",
+        json={"language": "fr"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 422
+
+
+# ── 사진 업로드 한도(20MB) 경계 ───────────────────────────────────────────────
+
+import app.api.v1.avatars as avmod  # noqa: E402
+
+_MAX = avmod._MAX_PROFILE_PHOTO
+
+
+def test_profile_photo_limit_is_20mb():
+    assert avmod._MAX_PROFILE_PHOTO == 20 * 1024 * 1024
+
+
+@pytest.mark.asyncio
+async def test_profile_photo_accepts_at_20mb(client, professor):
+    """정확히 20MB 인 JPEG 는 통과(>8MB 가 허용되게 상향됐는지 확인)."""
+    payload = b"\xff\xd8\xff" + b"\x00" * (_MAX - 3)  # 정확히 20MB, JPEG 매직
+    assert len(payload) == _MAX
+    with patch(
+        "app.services.pipeline.s3.get_s3_client", return_value=MagicMock()
+    ), patch(
+        "app.services.pipeline.s3.generate_presigned_url",
+        return_value="https://signed.example/p.jpg",
+    ), patch(
+        "app.services.pipeline.heygen.upload_talking_photo",
+        new=AsyncMock(return_value="tp_new"),
+    ):
+        resp = await client.post(
+            "/api/avatars/profile-photo",
+            files={"file": ("me.jpg", payload, "image/jpeg")},
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_profile_photo_rejects_over_20mb(client, professor):
+    """20MB 초과는 413 (size 검사가 외부 호출보다 먼저라 mock 불필요)."""
+    payload = b"\xff\xd8\xff" + b"\x00" * (_MAX - 3 + 1)  # 20MB + 1
+    resp = await client.post(
+        "/api/avatars/profile-photo",
+        files={"file": ("me.jpg", payload, "image/jpeg")},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_photo_avatar_rejects_over_20mb(client, professor):
+    """photo-avatar 엔드포인트도 같은 20MB 한도를 공유한다."""
+    payload = b"\xff\xd8\xff" + b"\x00" * (_MAX - 3 + 1)  # 20MB + 1
+    with patch.object(settings, "HEYGEN_MOCK", True):
+        resp = await client.post(
+            "/api/avatars/me/photo-avatar",
+            files={"file": ("a.jpg", payload, "image/jpeg")},
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 413
