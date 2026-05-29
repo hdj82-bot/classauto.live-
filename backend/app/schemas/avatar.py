@@ -135,6 +135,10 @@ class VoiceScriptRequest(BaseModel):
             "대본을 연관시킬 강의 주제(강의 제목 등). 비어 있으면 일반 학술문으로 생성."
         ),
     )
+    language: Literal["ko", "en", "zh", "ja"] = Field(
+        default="ko",
+        description="대본 언어 — ko(한국어)·en(영어)·zh(중국어)·ja(일본어). 기본 ko.",
+    )
 
 
 class VoiceScriptResponse(BaseModel):

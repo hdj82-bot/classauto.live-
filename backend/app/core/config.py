@@ -76,6 +76,12 @@ class Settings(BaseSettings):
     # 슬라이드별 스크립트 생성 시 동시 호출 상한. Anthropic 분당 요청 수
     # rate limit 보호용. 너무 높이면 429 가 늘어 retry 백오프로 오히려 느려진다.
     SCRIPT_CONCURRENCY: int = 5
+    # 본인 음성 녹음용 대본 생성 전용 — 짧은 단발 호출이라 "가장 빠르고 싼"
+    # 최신 Haiku 를 고정한다(앞당겨진 응답 시간이 UX 핵심). thinking 미사용.
+    VOICE_SCRIPT_MODEL: str = "claude-haiku-4-5-20251001"
+    # 대본은 ~500자 한 단락 — 한국어/일본어 500자는 출력 토큰 ~600~700 수준이라
+    # mid-sentence 잘림을 피하면서도 기본(2048)보다 타이트하게 768 로 캡한다.
+    VOICE_SCRIPT_MAX_TOKENS: int = 768
     CLAUDE_INPUT_COST_PER_M: float = 3.00
     CLAUDE_OUTPUT_COST_PER_M: float = 15.00
 
