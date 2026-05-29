@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 import httpx
@@ -117,6 +118,14 @@ async def create_video(
         character.scale 로 전달하며 [0.3, 2.0] 으로 클램프한다(avatar/talking_photo
         공통).
     """
+    if settings.HEYGEN_MOCK:
+        mock_id = f"mock_{uuid.uuid4().hex}"
+        logger.warning(
+            "[HEYGEN_MOCK] create_video 실제 API 호출 생략 — mock video_id=%s, callback_id=%s",
+            mock_id, callback_id,
+        )
+        return mock_id
+
     if talking_photo_id:
         character: dict[str, Any] = {
             "type": "talking_photo",
@@ -140,7 +149,10 @@ async def create_video(
                 "voice": {"type": "audio", "audio_url": audio_url},
             }
         ],
-        "dimension": {"width": 1920, "height": 1080},
+        "dimension": {
+            "width": settings.HEYGEN_DIMENSION_WIDTH,
+            "height": settings.HEYGEN_DIMENSION_HEIGHT,
+        },
         "callback_id": callback_id or "",
         "callback_url": settings.HEYGEN_CALLBACK_URL,
     }
@@ -167,6 +179,15 @@ async def create_video(
 
 async def get_video_status(video_id: str) -> dict:
     """HeyGen 비디오 상태 조회 (폴링용)."""
+    if settings.HEYGEN_MOCK:
+        # mock 잡은 즉시 완료로 응답. HEYGEN_MOCK_VIDEO_URL 이 비어 있으면
+        # 폴링/웹훅이 완료 처리를 건너뛴다(실 비용·실 다운로드 없음). duration 0 → 비용 0.
+        return {
+            "status": "completed",
+            "video_url": settings.HEYGEN_MOCK_VIDEO_URL or None,
+            "duration": 0.0,
+            "error": None,
+        }
     url = f"{settings.HEYGEN_BASE_URL}/v1/video_status.get"
     params = {"video_id": video_id}
 
@@ -263,6 +284,9 @@ async def cancel_video(video_id: str) -> bool:
     호출자(예: lecture DELETE)는 진행을 멈추지 않으므로 예외 대신 bool 반환.
     HeyGen v1 API 의 video.delete 엔드포인트가 PROCESSING 상태 잡도 처리한다.
     """
+    if settings.HEYGEN_MOCK:
+        logger.warning("[HEYGEN_MOCK] cancel_video 실제 호출 생략: %s", video_id)
+        return True
     url = f"{settings.HEYGEN_BASE_URL}/v1/video.delete"
     payload = {"video_ids": [video_id]}
 
@@ -280,6 +304,9 @@ async def cancel_video(video_id: str) -> bool:
 
 async def delete_video(video_id: str) -> bool:
     """HeyGen 비디오 삭제."""
+    if settings.HEYGEN_MOCK:
+        logger.warning("[HEYGEN_MOCK] delete_video 실제 호출 생략: %s", video_id)
+        return True
     url = f"{settings.HEYGEN_BASE_URL}/v1/video.delete"
     payload = {"video_ids": [video_id]}
 
