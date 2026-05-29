@@ -114,6 +114,10 @@ class Settings(BaseSettings):
     # 예산 서킷 브레이커 — create_video 직전 누적 HeyGen 비용 검사. 0 이면 해당 한도 비활성.
     HEYGEN_DAILY_BUDGET_USD: float = 3.0
     HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
+    # Photo Avatar(Design with AI) 룩 생성 상한 — 룩 1개당 이미지 생성 비용이 발생하므로
+    # 한 번에 생성할 수 개수와 교수자당 누적 개수를 제한해 비용 폭주를 막는다.
+    PHOTO_AVATAR_LOOK_BATCH_MAX: int = 4
+    PHOTO_AVATAR_LOOK_TOTAL_MAX: int = 20
 
     # ── TTS: ElevenLabs (primary) ───────────────────────────────
     ELEVENLABS_API_KEY: str = ""

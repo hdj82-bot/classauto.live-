@@ -19,6 +19,7 @@ celery = Celery(
         "app.tasks.backup",
         "app.tasks.render",
         "app.tasks.pipeline",
+        "app.tasks.photo_avatar",
     ],
 )
 
