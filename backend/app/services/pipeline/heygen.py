@@ -339,3 +339,145 @@ async def get_remaining_quota() -> dict:
         "remaining_quota": data.get("remaining_quota", 0),
         "details": data,
     }
+
+
+# ── Photo Avatar (Design with AI 룩) ─────────────────────────────────────────
+# HeyGen v2 Photo Avatar 흐름: 이미지 asset 업로드 → avatar group 생성 → train →
+# look 생성(Design with AI, 프롬프트) → 상태 폴링 → 완료된 look id 를
+# /v2/video/generate 의 avatar character(avatar_id)로 사용.
+#
+# ⚠️ v2 photo_avatar 의 정확한 요청/응답 필드는 운영 키로 1회 검증 필요
+# (docs.heygen.com 이 v3 마이그레이션 안내로 전환되어 스키마 자동확인 불가).
+# 응답은 .get() 으로 방어적으로 파싱하며, HEYGEN_MOCK 경로가 개발·테스트의
+# 기준 동작을 제공한다(외부 호출 없이 전 파이프라인 통과).
+
+_MOCK_LOOK_COUNT_DEFAULT = 4
+
+
+def _heygen_phase(raw: object) -> str | None:
+    """HeyGen 의 다양한 상태 문자열을 ready/failed 로 정규화. 진행 중이면 None."""
+    s = str(raw or "").lower()
+    if s in ("ready", "completed", "success", "done", "trained", "active", "ok"):
+        return "ready"
+    if s in ("failed", "error", "fail"):
+        return "failed"
+    return None
+
+
+async def _upload_photo_asset(image_bytes: bytes, content_type: str) -> str:
+    """원본 사진을 HeyGen asset 으로 업로드하고 image_key 를 반환.
+
+    upload.heygen.com 은 raw 바이트를 본문에 싣는다(talking_photo 와 동일 패턴).
+    """
+    if settings.HEYGEN_MOCK:
+        return f"mockimg_{uuid.uuid4().hex}"
+    url = "https://upload.heygen.com/v1/asset"
+    headers = {"X-Api-Key": settings.HEYGEN_API_KEY, "Content-Type": content_type}
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(url, headers=headers, content=image_bytes)
+    except httpx.HTTPError as exc:
+        raise HeyGenError(f"HeyGen 이미지 업로드 통신 오류: {exc}") from exc
+    if resp.status_code != 200:
+        raise HeyGenError(f"HeyGen 이미지 업로드 오류 [{resp.status_code}]: {resp.text[:300]}")
+    data = resp.json().get("data", {})
+    image_key = data.get("image_key") or data.get("key") or data.get("id")
+    if not image_key:
+        raise HeyGenError(f"HeyGen 이미지 업로드 응답에 image_key 없음: {resp.text[:300]}")
+    return image_key
+
+
+async def create_photo_avatar_group(
+    name: str, image_bytes: bytes, content_type: str = "image/jpeg"
+) -> str:
+    """업로드 사진으로 Photo Avatar 그룹을 생성하고 group_id 를 반환."""
+    if settings.HEYGEN_MOCK:
+        gid = f"mockgrp_{uuid.uuid4().hex}"
+        logger.warning("[HEYGEN_MOCK] create_photo_avatar_group 생략 — group_id=%s", gid)
+        return gid
+    image_key = await _upload_photo_asset(image_bytes, content_type)
+    url = f"{settings.HEYGEN_BASE_URL}/v2/photo_avatar/avatar_group/create"
+    payload = {"name": name, "image_key": image_key}
+    resp = await _request_with_retry("POST", url, json=payload)
+    if resp.status_code != 200:
+        raise HeyGenError(f"Photo Avatar 그룹 생성 오류 [{resp.status_code}]: {resp.text[:300]}")
+    data = resp.json().get("data", {})
+    group_id = data.get("group_id") or data.get("id")
+    if not group_id:
+        raise HeyGenError(f"Photo Avatar 그룹 응답에 group_id 없음: {resp.text[:300]}")
+    logger.info("Photo Avatar 그룹 생성: group_id=%s", group_id)
+    return group_id
+
+
+async def train_photo_avatar_group(group_id: str) -> None:
+    """Photo Avatar 그룹 학습 시작(비동기). 완료는 상태 폴링으로 확인."""
+    if settings.HEYGEN_MOCK:
+        logger.warning("[HEYGEN_MOCK] train_photo_avatar_group 생략 — group_id=%s", group_id)
+        return
+    url = f"{settings.HEYGEN_BASE_URL}/v2/photo_avatar/train"
+    resp = await _request_with_retry("POST", url, json={"group_id": group_id})
+    if resp.status_code != 200:
+        raise HeyGenError(f"Photo Avatar 학습 시작 오류 [{resp.status_code}]: {resp.text[:300]}")
+    logger.info("Photo Avatar 학습 시작: group_id=%s", group_id)
+
+
+async def get_photo_avatar_group_status(group_id: str) -> dict:
+    """그룹 학습 상태 조회. 반환 ``{"status": "ready"|"training"|"failed"}``."""
+    if settings.HEYGEN_MOCK:
+        return {"status": "ready"}
+    url = f"{settings.HEYGEN_BASE_URL}/v2/photo_avatar/train/status/{group_id}"
+    resp = await _request_with_retry("GET", url, timeout=15.0)
+    if resp.status_code != 200:
+        raise HeyGenError(f"Photo Avatar 학습 상태 오류 [{resp.status_code}]: {resp.text[:300]}")
+    data = resp.json().get("data", {})
+    return {"status": _heygen_phase(data.get("status")) or "training"}
+
+
+async def generate_photo_avatar_looks(group_id: str, prompt: str, count: int) -> str:
+    """Design with AI 룩 생성 시작(비동기). generation_id 반환."""
+    if settings.HEYGEN_MOCK:
+        gen = f"mockgen_{uuid.uuid4().hex}"
+        logger.warning(
+            "[HEYGEN_MOCK] generate_photo_avatar_looks 생략 — gen=%s, count=%d", gen, count
+        )
+        return gen
+    url = f"{settings.HEYGEN_BASE_URL}/v2/photo_avatar/look/generate"
+    payload = {"group_id": group_id, "prompt": prompt, "num_images": count}
+    resp = await _request_with_retry("POST", url, json=payload)
+    if resp.status_code != 200:
+        raise HeyGenError(f"Photo Avatar 룩 생성 오류 [{resp.status_code}]: {resp.text[:300]}")
+    data = resp.json().get("data", {})
+    generation_id = data.get("generation_id") or data.get("id")
+    if not generation_id:
+        raise HeyGenError(f"Photo Avatar 룩 생성 응답에 generation_id 없음: {resp.text[:300]}")
+    logger.info("Photo Avatar 룩 생성 시작: gen=%s, count=%d", generation_id, count)
+    return generation_id
+
+
+async def get_photo_avatar_generation_status(
+    generation_id: str, count: int = _MOCK_LOOK_COUNT_DEFAULT
+) -> dict:
+    """룩 생성 상태 조회.
+
+    반환 ``{"status": "ready"|"pending"|"failed", "looks": [{"look_id","image_url"}, ...]}``.
+    ``count`` 는 mock 에서 만들 룩 개수(실호출에선 무시).
+    """
+    if settings.HEYGEN_MOCK:
+        looks = [
+            {"look_id": f"mocklook_{uuid.uuid4().hex}", "image_url": settings.HEYGEN_MOCK_VIDEO_URL or ""}
+            for _ in range(max(1, count))
+        ]
+        return {"status": "ready", "looks": looks}
+    url = f"{settings.HEYGEN_BASE_URL}/v2/photo_avatar/generation/{generation_id}"
+    resp = await _request_with_retry("GET", url, timeout=15.0)
+    if resp.status_code != 200:
+        raise HeyGenError(f"Photo Avatar 생성 상태 오류 [{resp.status_code}]: {resp.text[:300]}")
+    data = resp.json().get("data", {})
+    raw_looks = data.get("looks") or data.get("image_list") or data.get("photos") or []
+    looks: list[dict[str, str]] = []
+    for it in raw_looks:
+        look_id = it.get("look_id") or it.get("id") or it.get("image_key")
+        image_url = it.get("image_url") or it.get("url") or ""
+        if look_id:
+            looks.append({"look_id": look_id, "image_url": image_url})
+    return {"status": _heygen_phase(data.get("status")) or "pending", "looks": looks}

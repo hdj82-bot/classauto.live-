@@ -358,13 +358,19 @@ async def approve_video(
     # 실제로 시작시키지 않아 TTS 0/N 에서 영구히 멈췄다 — render.py 의
     # create_render_request 와 동일한 VideoRender 생성 + render_slide.delay 패턴.)
     from app.models.lecture import Lecture  # noqa: PLC0415
+    from app.models.user import User  # noqa: PLC0415
     from app.models.video_render import VideoRender  # noqa: PLC0415
 
     segments = video.script.segments
     lecture = await db.get(Lecture, video.lecture_id)
-    # render_slide → HeyGen 은 VideoRender.avatar_id 를 쓴다(NOT NULL). 강의가 고른
-    # 아바타를 싣고, 없으면 빈 문자열(heygen 이 기본 아바타로 폴백).
+    # 아바타 결정 순서: 강의가 고른 avatar_id → 교수자 기본 Photo Avatar 룩 →
+    # 빈 문자열(heygen.create_video 가 env HEYGEN_AVATAR_ID_* 로 폴백).
+    # 본인 룩을 기본으로 정해두면 강의별 선택 없이 모든 강의가 본인 얼굴로 생성된다.
     avatar_id = (lecture.avatar_id if lecture else None) or ""
+    if not avatar_id:
+        professor = await db.get(User, professor_id)
+        if professor and professor.photo_avatar_default_look_id:
+            avatar_id = professor.photo_avatar_default_look_id
 
     video.status = VideoStatus.rendering
     video.script.approved_at = datetime.now(tz=timezone.utc)

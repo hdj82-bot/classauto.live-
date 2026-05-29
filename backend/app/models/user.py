@@ -49,6 +49,14 @@ class User(Base):
     cloned_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cloned_voice_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     cloned_voice_sample_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # HeyGen v2 Photo Avatar(Design with AI 룩) — Talking Photo 의 상위 호환 경로.
+    # photo_avatar_group_id: 사진으로 만든 avatar group id (룩 생성의 기반).
+    # photo_avatar_group_status: "training"|"ready"|"failed" (학습 폴링 결과).
+    # photo_avatar_default_look_id: 교수자가 고른 기본 룩의 avatar_id — 강의 렌더가
+    #   lecture.avatar_id 가 없을 때 이 값으로 폴백한다(본인 얼굴을 모든 강의에).
+    photo_avatar_group_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    photo_avatar_group_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    photo_avatar_default_look_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 학습자 전용
     student_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

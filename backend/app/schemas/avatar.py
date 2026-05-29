@@ -123,3 +123,69 @@ class VoiceCloneResponse(BaseModel):
         default=None, description="업로드한 원본 샘플의 재생 URL(presigned)."
     )
     message: str | None = Field(default=None, description="사용자 표시용 메시지.")
+
+
+# ── Photo Avatar (Design with AI 룩) ─────────────────────────────────────────
+
+
+class PhotoAvatarStatusResponse(BaseModel):
+    """``POST/GET /api/avatars/me/photo-avatar`` 응답 — 그룹 생성·학습 상태."""
+
+    group_id: str | None = Field(default=None, description="HeyGen avatar group id.")
+    status: Literal["none", "training", "ready", "failed"] = Field(
+        ...,
+        description=(
+            "'none' = 아직 미생성, 'training' = 그룹 학습 중, 'ready' = 룩 생성 가능, "
+            "'failed' = 생성/학습 실패."
+        ),
+    )
+    message: str | None = Field(default=None, description="사용자 표시용 메시지.")
+
+
+class LookGenerateRequest(BaseModel):
+    """``POST /api/avatars/me/looks`` 요청 — Design with AI 룩 배치 생성."""
+
+    prompt: str = Field(
+        ..., min_length=1, max_length=1000,
+        description="룩 스타일 프롬프트(배경·복장·구도 등).",
+    )
+    count: int = Field(
+        default=4, ge=1,
+        description="한 번에 생성할 룩 수. 서버가 PHOTO_AVATAR_LOOK_BATCH_MAX 로 상한 적용.",
+    )
+
+
+class LookGenerateResponse(BaseModel):
+    """룩 생성 시작 응답."""
+
+    generation_id: str | None = Field(default=None, description="HeyGen 생성 작업 id.")
+    status: Literal["generating", "failed"] = Field(..., description="생성 시작 결과.")
+    message: str | None = Field(default=None, description="사용자 표시용 메시지.")
+
+
+class LookItem(BaseModel):
+    """생성된 룩 1개."""
+
+    look_id: str = Field(..., description="HeyGen 룩 id (avatar_id 로 렌더에 사용).")
+    preview_image_url: str | None = Field(
+        default=None, description="미리보기 썸네일(presigned)."
+    )
+    prompt: str | None = Field(default=None, description="생성에 쓴 프롬프트.")
+    status: Literal["generating", "ready", "failed"] = Field(..., description="룩 상태.")
+    is_default: bool = Field(
+        default=False, description="교수자가 기본 룩으로 선택한 항목이면 true."
+    )
+
+
+class LooksResponse(BaseModel):
+    """``GET /api/avatars/me/looks`` 응답."""
+
+    looks: list[LookItem]
+    total: int
+
+
+class LookSelectResponse(BaseModel):
+    """``POST /api/avatars/me/looks/{look_id}/select`` 응답."""
+
+    default_look_id: str = Field(..., description="선택된 기본 룩 id.")
+    message: str | None = Field(default=None, description="사용자 표시용 메시지.")

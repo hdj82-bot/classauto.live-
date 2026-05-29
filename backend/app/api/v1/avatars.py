@@ -7,17 +7,25 @@
 import uuid
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_professor
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.photo_avatar import LookStatus, PhotoAvatarLook
 from app.models.user import User
 from app.schemas.avatar import (
     AvatarMeta,
     AvatarPreviewRequest,
     AvatarPreviewResponse,
     AvatarsResponse,
+    LookGenerateRequest,
+    LookGenerateResponse,
+    LookItem,
+    LooksResponse,
+    LookSelectResponse,
+    PhotoAvatarStatusResponse,
     ProfilePhotoResponse,
     VoiceCloneResponse,
 )
@@ -556,3 +564,205 @@ async def delete_my_voice(
     user.cloned_voice_sample_url = None
     await db.commit()
     return VoiceCloneResponse(status="none", message="본인 음성을 삭제했습니다.")
+
+
+# ── Photo Avatar (Design with AI 룩) ─────────────────────────────────────────
+
+
+@router.post(
+    "/api/avatars/me/photo-avatar",
+    response_model=PhotoAvatarStatusResponse,
+    summary="사진 업로드 → Photo Avatar 그룹 생성 + 학습 시작",
+)
+async def create_photo_avatar(
+    file: UploadFile = File(...),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """증명사진으로 HeyGen Photo Avatar 그룹을 만들고 학습을 시작한다.
+
+    학습은 비동기 — 진행 상태는 ``GET /api/avatars/me/photo-avatar`` 폴링으로 확인.
+    학습이 끝나면(ready) ``POST /api/avatars/me/looks`` 로 Design with AI 룩을 만든다.
+    """
+    content = await file.read()
+    if len(content) > _MAX_PROFILE_PHOTO:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"사진은 {_MAX_PROFILE_PHOTO // (1024 * 1024)}MB 이하여야 합니다.",
+        )
+    if content[:3] == _JPEG_MAGIC:
+        ctype = "image/jpeg"
+    elif content[:8] == _PNG_MAGIC:
+        ctype = "image/png"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="JPEG 또는 PNG 이미지만 업로드할 수 있습니다.",
+        )
+
+    from app.services.pipeline.heygen import (
+        HeyGenError,
+        create_photo_avatar_group,
+        train_photo_avatar_group,
+    )
+
+    try:
+        group_id = await create_photo_avatar_group(
+            f"{user.name} avatar", content, content_type=ctype
+        )
+        await train_photo_avatar_group(group_id)
+    except HeyGenError as e:
+        return PhotoAvatarStatusResponse(
+            status="failed", message=f"본인 아바타 생성에 실패했습니다: {e}"
+        )
+
+    user.photo_avatar_group_id = group_id
+    user.photo_avatar_group_status = "training"
+    await db.commit()
+
+    from app.tasks.photo_avatar import poll_photo_avatar_training
+
+    poll_photo_avatar_training.delay(str(user.id))
+
+    return PhotoAvatarStatusResponse(
+        group_id=group_id,
+        status="training",
+        message="본인 아바타를 준비 중입니다. 잠시만 기다려 주세요.",
+    )
+
+
+@router.get(
+    "/api/avatars/me/photo-avatar",
+    response_model=PhotoAvatarStatusResponse,
+    summary="Photo Avatar 그룹 학습 상태 조회",
+)
+async def get_photo_avatar(user: User = Depends(require_professor)):
+    """본인 Photo Avatar 그룹의 학습 상태를 반환한다."""
+    if not user.photo_avatar_group_id:
+        return PhotoAvatarStatusResponse(status="none")
+    raw = user.photo_avatar_group_status or "training"
+    group_status = raw if raw in ("training", "ready", "failed") else "training"
+    return PhotoAvatarStatusResponse(group_id=user.photo_avatar_group_id, status=group_status)
+
+
+@router.post(
+    "/api/avatars/me/looks",
+    response_model=LookGenerateResponse,
+    summary="Design with AI 룩 배치 생성",
+)
+async def generate_looks(
+    payload: LookGenerateRequest,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """프롬프트로 룩을 배치 생성한다(비동기).
+
+    비용 통제: 1회 생성 수는 ``PHOTO_AVATAR_LOOK_BATCH_MAX`` 로, 교수자당 누적은
+    ``PHOTO_AVATAR_LOOK_TOTAL_MAX`` 로 상한을 둔다.
+    """
+    if not user.photo_avatar_group_id or user.photo_avatar_group_status != "ready":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="본인 아바타 학습이 끝난 뒤에 룩을 생성할 수 있습니다.",
+        )
+
+    count = min(payload.count, settings.PHOTO_AVATAR_LOOK_BATCH_MAX)
+    existing = (
+        await db.execute(
+            select(func.count())
+            .select_from(PhotoAvatarLook)
+            .where(PhotoAvatarLook.user_id == user.id)
+        )
+    ).scalar() or 0
+    if existing + count > settings.PHOTO_AVATAR_LOOK_TOTAL_MAX:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"룩은 최대 {settings.PHOTO_AVATAR_LOOK_TOTAL_MAX}개까지 만들 수 있습니다.",
+        )
+
+    from app.services.pipeline.heygen import HeyGenError, generate_photo_avatar_looks
+
+    try:
+        generation_id = await generate_photo_avatar_looks(
+            user.photo_avatar_group_id, payload.prompt, count
+        )
+    except HeyGenError as e:
+        return LookGenerateResponse(
+            status="failed", message=f"룩 생성에 실패했습니다: {e}"
+        )
+
+    from app.tasks.photo_avatar import poll_photo_avatar_looks
+
+    poll_photo_avatar_looks.delay(str(user.id), generation_id, payload.prompt, count)
+
+    return LookGenerateResponse(
+        generation_id=generation_id,
+        status="generating",
+        message=f"룩 {count}개를 생성하고 있습니다.",
+    )
+
+
+@router.get(
+    "/api/avatars/me/looks",
+    response_model=LooksResponse,
+    summary="생성된 룩 목록",
+)
+async def list_looks(
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """본인 Photo Avatar 룩 목록을 최신순으로 반환한다."""
+    rows = (
+        await db.execute(
+            select(PhotoAvatarLook)
+            .where(PhotoAvatarLook.user_id == user.id)
+            .order_by(PhotoAvatarLook.created_at.desc())
+        )
+    ).scalars().all()
+    items = [
+        LookItem(
+            look_id=r.heygen_look_id,
+            # preview 는 HeyGen 이 준 URL(단기 유효). 만료가 문제되면 S3 캐시는 후속.
+            preview_image_url=r.preview_image_url,
+            prompt=r.prompt,
+            status=r.status if r.status in ("generating", "ready", "failed") else "ready",
+            is_default=(r.heygen_look_id == user.photo_avatar_default_look_id),
+        )
+        for r in rows
+    ]
+    return LooksResponse(looks=items, total=len(items))
+
+
+@router.post(
+    "/api/avatars/me/looks/{look_id}/select",
+    response_model=LookSelectResponse,
+    summary="기본 아바타 룩 선택",
+)
+async def select_look(
+    look_id: str,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """지정한 룩을 기본 룩으로 설정한다(강의 렌더의 본인 얼굴 기본값)."""
+    row = (
+        await db.execute(
+            select(PhotoAvatarLook).where(
+                PhotoAvatarLook.user_id == user.id,
+                PhotoAvatarLook.heygen_look_id == look_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 룩을 찾을 수 없습니다."
+        )
+    if row.status != LookStatus.ready.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="아직 준비되지 않은 룩입니다.",
+        )
+    user.photo_avatar_default_look_id = look_id
+    await db.commit()
+    return LookSelectResponse(
+        default_look_id=look_id, message="기본 아바타 룩으로 설정했습니다."
+    )
