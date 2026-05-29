@@ -321,7 +321,7 @@ export default function SettingsPanel({
                 <circle cx="12" cy="7" r="4" />
               </svg>
             </H4Icon>
-            <h4 style={summaryTitleStyle}>아바타</h4>
+            <h4 style={summaryTitleStyle}>Q&amp;A 아바타</h4>
             <span style={summaryValStyle}>{avatarName}</span>
           </summary>
           <div style={aBodyStyle}>
