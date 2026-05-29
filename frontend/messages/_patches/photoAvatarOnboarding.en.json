@@ -1,0 +1,94 @@
+{
+  "photoAvatarOnboarding": {
+    "eyebrow": "Self avatar onboarding",
+    "title": "Create your own face & voice avatar",
+    "subtitle": "Turn one portrait photo and a voice sample into a lecture avatar of yourself. The flow goes: upload a photo → prepare → generate & pick a look → preview.",
+    "loading": "Loading onboarding status...",
+    "exitToGallery": "To avatar gallery",
+    "deferredBanner": "The self-avatar API isn't deployed yet, so this is a preview with sample data. Your photo, looks, and voice will be saved and generated for real once the backend is connected.",
+
+    "step": {
+      "upload": { "label": "Upload photo" },
+      "training": { "label": "Prepare avatar" },
+      "generate": { "label": "Generate looks" },
+      "select": { "label": "Pick a look" },
+      "preview": { "label": "Preview & confirm" }
+    },
+
+    "upload": {
+      "title": "Upload a portrait photo",
+      "description": "One clear, front-facing photo is enough. Following the guidelines below produces a more natural avatar.",
+      "guideBackground": "White or solid-color background",
+      "guideAttire": "Neat attire, such as a suit",
+      "guideFront": "Sharp, front-facing upper body",
+      "guideFormat": "8MB or smaller · JPEG or PNG",
+      "select": "Choose a photo",
+      "change": "Choose a different photo",
+      "submit": "Start with this photo",
+      "submitting": "Uploading...",
+      "previewAlt": "Preview of the uploaded portrait photo",
+      "privacyNote": "Your photo is stored securely in private storage and is used only to train your avatar.",
+      "errorType": "Only JPEG or PNG images can be uploaded.",
+      "errorTooLarge": "The photo must be 8MB or smaller.",
+      "errorUpload": "Photo upload failed. Please try again shortly."
+    },
+
+    "training": {
+      "title": "Preparing your avatar",
+      "description": "We're training an avatar group from your photo. You'll move to the next step automatically when it's ready. You can leave this screen — progress continues.",
+      "badge": "Training",
+      "reupload": "Re-upload a different photo",
+      "failedTitle": "Avatar preparation failed",
+      "failedDescription": "Training from the photo failed. Please try again with a sharp, front-facing photo on a white/solid background.",
+      "retry": "Re-upload"
+    },
+
+    "looks": {
+      "title": "Generate Design with AI looks",
+      "description": "Describe the background, attire, and framing to generate several styled looks that keep your face. You can make up to 4 at a time.",
+      "promptLabel": "Describe the style you want",
+      "promptPlaceholder": "e.g. light gray background, navy suit, front-facing upper body",
+      "preset1": "Light gray background, navy suit",
+      "preset2": "Warm beige background, knit cardigan",
+      "preset3": "Dark background, black suit and tie",
+      "preset4": "Office-like background, shirt",
+      "countLabel": "How many",
+      "generate": "Generate looks",
+      "generateMore": "Generate more",
+      "generating": "Generating looks...",
+      "costNote": "Generating looks is a one-time onboarding step. You can make up to {remaining} more in this step.",
+      "capReached": "You've reached the total limit ({max}). Please pick from the looks you've made.",
+      "next": "Next: pick a look",
+      "error": "Could not start look generation. Please try again shortly.",
+      "tileAlt": "Generated look preview",
+      "tileGenerating": "Generating",
+      "tileFailed": "Failed"
+    },
+
+    "select": {
+      "title": "Pick your default look",
+      "description": "Choose one look you like as the default. This look becomes the default appearance for your lecture videos.",
+      "empty": "No finished looks yet. Please generate looks in the previous step first.",
+      "generateMore": "Generate more",
+      "next": "Next: preview",
+      "error": "Could not select the default look. Please try again shortly."
+    },
+
+    "preview": {
+      "title": "Preview with your voice",
+      "description": "Generate a short preview of the selected look speaking in your own voice. Confirm if you're happy with it.",
+      "selectedAlt": "Selected default look",
+      "noLook": "No look selected. Please pick a look in the previous step.",
+      "generating": "Generating the moving preview...",
+      "generate": "Generate moving preview",
+      "regenerate": "Regenerate with this voice",
+      "generateNote": "Runs one HeyGen render with the selected look and your voice (takes a few dozen seconds).",
+      "needVoice": "Create your voice on the right first, then you can preview with it.",
+      "voiceHeading": "Your voice",
+      "mockNote": "Before the backend is connected we show a sample clip. Once connected it renders with your look and voice.",
+      "back": "Back: pick a look",
+      "confirm": "Confirm my avatar",
+      "confirmed": "Your avatar is confirmed. You can now create lectures with your own face and voice."
+    }
+  }
+}

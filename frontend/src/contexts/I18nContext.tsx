@@ -77,6 +77,12 @@ import shellCleanupEn from "../../messages/_patches/shellCleanup.en.json";
 // 업로드 카피 전부 포함.
 import avatarsKo from "../../messages/_patches/avatars.ko.json";
 import avatarsEn from "../../messages/_patches/avatars.en.json";
+// ── 2026-05-29: 교수자 본인 아바타 온보딩 (/professor/avatars/onboarding) ──
+// namespace `photoAvatarOnboarding` — 본체 / 다른 patch 와 충돌 없음. 사진
+// 업로드 → 그룹 학습 → Design with AI 룩 생성·선택 → 본인 목소리 미리보기
+// 5단계 카피. (docs/planning/12-self-avatar-onboarding.md)
+import photoAvatarOnboardingKo from "../../messages/_patches/photoAvatarOnboarding.ko.json";
+import photoAvatarOnboardingEn from "../../messages/_patches/photoAvatarOnboarding.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -125,6 +131,7 @@ const koPatches: Messages[] = [
   libraryKo as Messages,
   shellCleanupKo as Messages,
   avatarsKo as Messages,
+  photoAvatarOnboardingKo as Messages,
 ];
 const enPatches: Messages[] = [
   professorEn as Messages,
@@ -142,6 +149,7 @@ const enPatches: Messages[] = [
   libraryEn as Messages,
   shellCleanupEn as Messages,
   avatarsEn as Messages,
+  photoAvatarOnboardingEn as Messages,
 ];
 
 const koMerged = koPatches.reduce(
