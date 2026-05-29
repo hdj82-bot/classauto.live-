@@ -2,7 +2,7 @@
   "avatars": {
     "eyebrow": "Avatar gallery",
     "title": "Choose a Q&A avatar",
-    "subtitle": "Compare how HeyGen avatars speak and move with sample clips, then pick the one for your lecture. You can also create your own avatar from a photo.",
+    "subtitle": "Compare how avatars speak and move with sample clips, then pick the one for your lecture. You can also create your own avatar from a photo.",
 
     "loading": "Loading avatars...",
     "loadError": "Could not load avatars. Please try again shortly.",
@@ -33,7 +33,7 @@
     "customAvatarHint": "Upload a photo to create your own avatar and it will appear here.",
 
     "previewGenerate": "Generate moving preview",
-    "previewGenerateNote": "Runs one HeyGen render with the selected voice (takes a few dozen seconds).",
+    "previewGenerateNote": "Runs one avatar render with the selected voice (takes a few dozen seconds).",
     "previewGenerating": "Generating the moving preview...",
     "previewRegenerate": "Regenerate with this voice",
     "previewVoiceLabel": "Preview voice",

@@ -2,7 +2,7 @@
   "avatars": {
     "eyebrow": "아바타 갤러리",
     "title": "Q&A 아바타 선택",
-    "subtitle": "HeyGen 아바타가 어떻게 말하고 움직이는지 샘플 영상으로 비교하고, 강의에 쓸 아바타를 선택하세요. 본인 사진으로 나만의 아바타를 만들 수도 있습니다.",
+    "subtitle": "아바타가 어떻게 말하고 움직이는지 샘플 영상으로 비교하고, 강의에 쓸 아바타를 선택하세요. 본인 사진으로 나만의 아바타를 만들 수도 있습니다.",
 
     "loading": "아바타 목록을 불러오는 중...",
     "loadError": "아바타 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
@@ -33,7 +33,7 @@
     "customAvatarHint": "사진을 업로드해 본인 아바타를 만들면 여기에 표시됩니다.",
 
     "previewGenerate": "움직이는 미리보기 만들기",
-    "previewGenerateNote": "선택한 음성으로 HeyGen 렌더를 1회 실행합니다 (수십 초 소요).",
+    "previewGenerateNote": "선택한 음성으로 아바타 렌더를 1회 실행합니다 (수십 초 소요).",
     "previewGenerating": "움직이는 미리보기를 만드는 중입니다...",
     "previewRegenerate": "이 음성으로 다시 만들기",
     "previewVoiceLabel": "이 미리보기 음성",

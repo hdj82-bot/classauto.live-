@@ -82,8 +82,9 @@ professor will READ ALOUD to clone their own voice (voice cloning).
 
 Rules:
 1. Write in English as a single natural passage of academic prose
-   (about 90-110 words, roughly a one-minute read).
-2. It must read aloud smoothly: complete sentences of varied length, in 2-3 short
+   (about 200-240 words, a one-to-two minute read aloud — long enough to match a
+   ~500-character Korean script, NOT a short paragraph).
+2. It must read aloud smoothly: complete sentences of varied length, in 3-4
    paragraphs. Avoid choppy fragments or one endless sentence.
 3. Use a calm, intelligent written register that is still easy to speak.
 4. Reading quality matters more than factual accuracy: do not invent specific
@@ -166,12 +167,12 @@ _LANG = {
         "topic": (
             'Lecture topic: "{topic}"\n\n'
             "Write English academic prose related to the topic above. This time, "
-            "write it as {angle}. Output only the script body, about 90-110 words "
-            "(a one-minute read)."
+            "write it as {angle}. Output only the script body, about 200-240 words "
+            "(a one-to-two minute read aloud)."
         ),
         "general": (
             'Write English academic prose on the theme of "{theme}". Output only '
-            "the script body, about 90-110 words (a one-minute read)."
+            "the script body, about 200-240 words (a one-to-two minute read aloud)."
         ),
         "angles": [
             "an introduction to the topic's scholarly significance and background",
