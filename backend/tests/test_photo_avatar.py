@@ -86,8 +86,10 @@ def test_poll_photo_avatar_looks_creates_rows():
 
 @pytest.mark.asyncio
 async def test_create_photo_avatar_endpoint(client, professor):
+    # 엔드포인트는 그룹 생성만 동기로 하고, 학습은 prepare 태스크에 위임한다
+    # (즉시 train 시 사진 pending → "No valid image" 실패하므로).
     with patch.object(settings, "HEYGEN_MOCK", True), patch(
-        "app.tasks.photo_avatar.poll_photo_avatar_training.delay"
+        "app.tasks.photo_avatar.prepare_photo_avatar_training.delay"
     ) as delay:
         resp = await client.post(
             "/api/avatars/me/photo-avatar",
@@ -100,6 +102,65 @@ async def test_create_photo_avatar_endpoint(client, professor):
     assert body["status"] == "training"
     assert body["group_id"].startswith("mockgrp_")
     delay.assert_called_once()
+
+
+def test_look_not_ready_detection():
+    from app.tasks.photo_avatar import _look_not_ready
+
+    assert _look_not_ready(
+        Exception("학습 시작 오류 [400]: ...No valid image for training found in group abc...")
+    ) is True
+    assert _look_not_ready(Exception("그룹 생성 오류 [404]: not found")) is False
+
+
+def test_prepare_photo_avatar_trains_then_polls():
+    """train 성공 시 학습 폴링(poll) 을 enqueue 하고 status=training 반환."""
+    from app.tasks import photo_avatar as t
+
+    user = MagicMock()
+    user.id = uuid.uuid4()
+    user.photo_avatar_group_id = "grp-1"
+    db = MagicMock()
+    db.query.return_value.filter.return_value.one.return_value = user
+
+    with patch.object(settings, "HEYGEN_MOCK", True), patch.object(
+        t, "SyncSessionLocal", return_value=db
+    ), patch("app.tasks.photo_avatar.poll_photo_avatar_training.delay") as poll_delay:
+        out = t.prepare_photo_avatar_training.apply(args=[str(user.id)]).get(
+            propagate=True
+        )
+
+    assert out["status"] == "training"
+    poll_delay.assert_called_once()
+
+
+def test_prepare_photo_avatar_real_failure_sets_failed():
+    """train 이 '사진 미준비'가 아닌 진짜 오류면 status=failed, poll 미enqueue."""
+    from app.tasks import photo_avatar as t
+    from app.services.pipeline.heygen import HeyGenError
+
+    user = MagicMock()
+    user.id = uuid.uuid4()
+    user.photo_avatar_group_id = "grp-1"
+    db = MagicMock()
+    db.query.return_value.filter.return_value.one.return_value = user
+
+    with patch.object(settings, "HEYGEN_MOCK", False), patch.object(
+        t, "SyncSessionLocal", return_value=db
+    ), patch(
+        "app.services.pipeline.heygen.train_photo_avatar_group",
+        new_callable=AsyncMock,
+        side_effect=HeyGenError("Photo Avatar 학습 시작 오류 [404]: group not found"),
+    ), patch(
+        "app.tasks.photo_avatar.poll_photo_avatar_training.delay"
+    ) as poll_delay:
+        out = t.prepare_photo_avatar_training.apply(args=[str(user.id)]).get(
+            propagate=True
+        )
+
+    assert out["status"] == "failed"
+    assert user.photo_avatar_group_status == "failed"
+    poll_delay.assert_not_called()
 
 
 @pytest.mark.asyncio
