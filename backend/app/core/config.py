@@ -101,9 +101,19 @@ class Settings(BaseSettings):
     HEYGEN_AVATAR_ID_FEMALE: str = ""
     HEYGEN_WEBHOOK_SECRET: str = ""
     HEYGEN_CALLBACK_URL: str = "http://localhost:8000/api/v1/webhooks/heygen"
-    # 영상 1초당 USD 단가 — Creator 플랜 추정치(약 $0.50/min). 운영 시 실측값으로 교체.
+    # 영상 1초당 USD 단가 — API 종량제 실측 기준 약 $1/min = $0.0167/sec.
     # 0 으로 두면 비용 기록은 duration 만 남기고 cost_usd=0 (회계 비활성).
-    HEYGEN_COST_USD_PER_SECOND: float = 0.0083
+    HEYGEN_COST_USD_PER_SECOND: float = 0.0167
+    # 렌더 해상도. 720p 가 테스트·베타 기본. 베타 후 1920×1080 으로 상향 가능.
+    HEYGEN_DIMENSION_WIDTH: int = 1280
+    HEYGEN_DIMENSION_HEIGHT: int = 720
+    # mock 모드: 켜면 실제 HeyGen API 를 호출하지 않아 크레딧이 ₩0 (로컬/테스트용).
+    HEYGEN_MOCK: bool = False
+    # mock 완료 처리 시 사용할 placeholder 영상 URL (비우면 mock 렌더는 완료되지 않음).
+    HEYGEN_MOCK_VIDEO_URL: str = ""
+    # 예산 서킷 브레이커 — create_video 직전 누적 HeyGen 비용 검사. 0 이면 해당 한도 비활성.
+    HEYGEN_DAILY_BUDGET_USD: float = 3.0
+    HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
 
     # ── TTS: ElevenLabs (primary) ───────────────────────────────
     ELEVENLABS_API_KEY: str = ""

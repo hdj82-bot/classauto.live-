@@ -62,6 +62,8 @@ def render_slide(
     from app.models.lecture import Lecture, VoiceGender
     from app.services.pipeline.tts import synthesize
     from app.services.pipeline.heygen import create_video
+    from app.services.pipeline.budget import assert_heygen_budget, BudgetExceededError
+    from app.services.cost_tracker import estimate_tts_cost_usd
 
     db = SyncSessionLocal()
     loop = asyncio.new_event_loop()
@@ -107,6 +109,11 @@ def render_slide(
             )
             return {"render_id": render_id, "heygen_job_id": render.heygen_job_id, "skipped": True}
 
+        # ── 예산 서킷 브레이커 ──
+        # 누적 HeyGen 비용이 일/월 한도를 넘으면 TTS·HeyGen 호출 전에 즉시 차단해
+        # 비용 낭비를 막는다. mock 모드는 budget 모듈이 자체적으로 통과시킨다.
+        assert_heygen_budget(db)
+
         # 단계 진입 시점에만 상태 갱신 — 이미 진행 단계 이후면 덮어쓰지 않음
         if render.status in (RenderStatus.pending,):
             render.status = RenderStatus.tts_processing
@@ -131,12 +138,13 @@ def render_slide(
             # H: TTS API 성공 직후 별도 트랜잭션으로 비용을 즉시 commit.
             # 이후 S3 업로드(또는 HeyGen 단계)가 실패해 메인 트랜잭션이 rollback 돼도
             # 이미 발생한 provider 비용은 회계에 반드시 남아야 한다.
+            tts_cost = estimate_tts_cost_usd(tts_result.provider, len(script_text))
             cost_log.record_once_committed(
                 SyncSessionLocal,
                 render.id,
                 service=tts_result.provider,
                 operation="tts_synthesize",
-                cost_usd=0.0,
+                cost_usd=tts_cost,
                 duration_seconds=tts_result.duration_seconds,
             )
 
@@ -197,6 +205,23 @@ def render_slide(
 
         logger.info("렌더 파이프라인 시작 완료: render_id=%s, heygen_job_id=%s", render_id, heygen_job_id)
         return {"render_id": render_id, "heygen_job_id": heygen_job_id}
+
+    except BudgetExceededError as exc:
+        # 예산 초과는 재시도해도 해소되지 않으므로 retry 없이 즉시 실패 처리.
+        db.rollback()
+        lecture_id = None
+        try:
+            render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
+            render.status = RenderStatus.failed
+            render.error_message = f"예산 한도 초과로 렌더 차단: {exc}"
+            lecture_id = render.lecture_id
+            db.commit()
+        except Exception:
+            db.rollback()
+        if lecture_id:
+            _archive_videos_for_lecture(lecture_id)
+        logger.error("렌더 예산 차단: render_id=%s, error=%s", render_id, exc)
+        return {"render_id": render_id, "status": "BUDGET_EXCEEDED"}
 
     except Exception as exc:
         db.rollback()
