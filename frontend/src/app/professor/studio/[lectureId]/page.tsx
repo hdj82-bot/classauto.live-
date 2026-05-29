@@ -20,10 +20,7 @@ import {
   deleteQuiz,
   listAuthoredQuizzes,
 } from "@/components/professor/studio/quizApi";
-import { listAvatars } from "@/components/professor/avatars/avatarsApi";
-import type { Avatar } from "@/components/professor/avatars/avatarsTypes";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
-import { useCustomAvatarPreview } from "@/components/professor/avatars/useCustomAvatarPreview";
 import type {
   LangCode,
   Lecture,
@@ -131,9 +128,6 @@ export default function StudioWizardPage() {
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(true);
-  // 아바타 목록 (GET /api/avatars) — WorkArea 미리보기 PiP 에 쓸 preview 영상·
-  // 이미지를 강의의 avatar_id 로 해석하기 위해 가져온다. 미배포 시 fixture 폴백.
-  const [avatars, setAvatars] = useState<Avatar[]>([]);
   const [translatingSubtitle, setTranslatingSubtitle] = useState(false);
   const [savingSubtitle, setSavingSubtitle] = useState(false);
   // 속도 슬라이더 드래그 중 PATCH 폭주 방지용 디바운스 타이머.
@@ -230,24 +224,6 @@ export default function StudioWizardPage() {
         /* 빈 목록 유지 — 기본 보이스로 생성 */
       } finally {
         if (!cancelled) setVoicesLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // 아바타 목록 — 미리보기 PiP 의 움직이는 클립(preview_video_url)을 강의의
-  // avatar_id 로 찾기 위해 1회 로드. 실패/미배포 시 fixture 가 폴백돼 시각만
-  // 확인되며, 빈 목록이어도 미리보기 오버레이만 비고 나머지는 정상 동작.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { avatars: list } = await listAvatars();
-        if (!cancelled) setAvatars(list);
-      } catch {
-        /* 빈 목록 유지 — 미리보기 오버레이만 표시 안 됨 */
       }
     })();
     return () => {
@@ -477,41 +453,6 @@ export default function StudioWizardPage() {
     () => voices.find((v) => v.voice_id === voiceId) ?? null,
     [voices, voiceId],
   );
-
-  // 미리보기 PiP 에 띄울 아바타 — 강의의 avatar_id 로 목록에서 찾고, 없거나
-  // (아직 미선택) 일치하지 않으면 voice_gender 기준 기본 아바타로 폴백한다
-  // (렌더의 pick_avatar_id 와 같은 취지 — 기본값도 미리 보여줌).
-  const resolvedAvatar = useMemo<Avatar | null>(() => {
-    if (avatars.length === 0) return null;
-    const byId = lecture?.avatar_id
-      ? avatars.find((a) => a.id === lecture.avatar_id)
-      : null;
-    if (byId) return byId;
-    const byGender = avatars.find(
-      (a) => !a.is_custom && (a.gender ?? "").toLowerCase() === voiceGender,
-    );
-    return byGender ?? avatars.find((a) => !a.is_custom) ?? avatars[0] ?? null;
-  }, [avatars, lecture?.avatar_id, voiceGender]);
-  const avatarLabel = lecture?.avatar_name ?? resolvedAvatar?.name ?? "아바타";
-
-  // 본인(사진) 아바타는 idle 클립이 없다. 아바타 페이지에서 만든 "움직이는
-  // 미리보기"(GET /api/avatars/me/preview)의 렌더 클립을 끌어와 스튜디오
-  // 미리보기에서도 말하는 모습을 보여준다. 생성은 비용(HeyGen 1회)이 들어 아바타
-  // 페이지의 명시 액션 전용 — 여기서는 캐시 조회만(processing 이면 폴링)하고,
-  // 미생성 시엔 아바타 페이지로 유도하는 안내만 노출한다.
-  const isCustomAvatar = !!resolvedAvatar?.is_custom;
-  const customPreview = useCustomAvatarPreview(isCustomAvatar);
-  // 미리보기 PiP 영상: 본인 아바타면 렌더 클립, 아니면 아바타의 idle 클립.
-  const avatarVideoUrl = isCustomAvatar
-    ? customPreview.videoUrl
-    : resolvedAvatar?.preview_video_url ?? null;
-  // 본인 아바타인데 움직이는 미리보기가 아직 없을 때의 안내(없으면 null).
-  const avatarHint =
-    isCustomAvatar && customPreview.status !== "ready"
-      ? customPreview.status === "processing"
-        ? "내 아바타 움직이는 미리보기 생성 중…"
-        : "아바타 페이지에서 ‘움직이는 미리보기’를 만들면 여기서도 말하는 모습이 보여요"
-      : null;
 
   // 미리듣기 캐시 키 — 보이스·속도·활성 슬라이드·본문이 바뀌면 재합성.
   const activeAiText = activeSegment?.text ?? "";
@@ -1024,12 +965,7 @@ export default function StudioWizardPage() {
         onTranslateSubtitle={handleTranslateSubtitle}
         translatingSubtitle={translatingSubtitle}
         savingSubtitle={savingSubtitle}
-        avatarVideoUrl={avatarVideoUrl}
-        avatarImageUrl={resolvedAvatar?.preview_image_url ?? null}
-        avatarLabel={avatarLabel}
-        avatarScale={avatarScale}
         reducedMotion={reducedMotion}
-        avatarHint={avatarHint}
       />
 
       <SettingsPanel
