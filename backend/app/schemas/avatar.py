@@ -125,6 +125,24 @@ class VoiceCloneResponse(BaseModel):
     message: str | None = Field(default=None, description="사용자 표시용 메시지.")
 
 
+class VoiceScriptRequest(BaseModel):
+    """``POST /api/avatars/me/voice/script`` 요청 — 녹음용 대본 생성."""
+
+    topic: str | None = Field(
+        default=None,
+        max_length=200,
+        description=(
+            "대본을 연관시킬 강의 주제(강의 제목 등). 비어 있으면 일반 학술문으로 생성."
+        ),
+    )
+
+
+class VoiceScriptResponse(BaseModel):
+    """녹음용 대본 응답 — 교수자가 IVC 샘플 녹음 시 읽을 한국어 학술 산문(~500자)."""
+
+    script: str = Field(..., description="낭독용 평문 대본(마크다운 없음).")
+
+
 # ── Photo Avatar (Design with AI 룩) ─────────────────────────────────────────
 
 
