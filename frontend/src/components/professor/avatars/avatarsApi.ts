@@ -6,6 +6,7 @@ import type {
   CustomAvatarStatus,
   ProfilePhotoResponse,
   VoiceClone,
+  VoiceScriptResult,
 } from "./avatarsTypes";
 
 /**
@@ -289,6 +290,83 @@ export async function deleteMyVoice(): Promise<VoiceClone> {
   } catch (err) {
     if (isDeferredError(err)) return { status: "none" };
     throw err;
+  }
+}
+
+// ── 녹음용 읽기 대본 (POST /api/avatars/me/voice/script) ───────────────────────
+//
+// 다른 창이 추가 중인 엔드포인트. 미배포(404/405)면 강의 주제에 연관된 ~500자
+// 학술 예시 대본으로 폴백해 녹음 화면을 완성한다(mock=true 안내). ElevenLabs IVC
+// 는 1분 내외 깨끗한 샘플이면 충분하므로, 대본은 또렷이 읽기 좋은 분량으로 둔다.
+
+// deferred 폴백 대본을 호출마다 번갈아 주기 위한 순환 인덱스("다른 대본").
+let scriptVariant = 0;
+
+/** 학과·강의 주제를 엮은 ~500자 학술 mock 대본 (대본 API 미배포 폴백). */
+function mockVoiceScript(topic: string | null): string {
+  const subject = topic && topic.trim() ? topic.trim() : "오늘 강의 주제";
+  const variants = [
+    `안녕하세요, 여러분. 이번 시간에는 ${subject}에 대해 함께 살펴보겠습니다. ` +
+      `먼저 핵심 개념을 정의하고, 그것이 왜 중요한지 배경부터 차근차근 짚어 보려고 합니다. ` +
+      `학문이라는 것은 결국 좋은 질문에서 출발합니다. 우리가 당연하게 여겨 온 사실도 ` +
+      `다시 따져 보면 새로운 의미를 드러내곤 합니다. 강의를 들으며 떠오르는 의문은 메모해 ` +
+      `두었다가 토론 시간에 자유롭게 나누어 주시기 바랍니다. 그럼 본격적으로 시작하겠습니다.`,
+    `반갑습니다. 지난 시간에 이어 ${subject}의 세부 내용을 다루겠습니다. ` +
+      `이론적 틀을 먼저 정리한 뒤, 구체적인 사례를 통해 그 틀이 실제로 어떻게 작동하는지 ` +
+      `확인하겠습니다. 개념과 사례를 오가며 이해하면 기억에 훨씬 오래 남습니다. ` +
+      `중요한 용어는 천천히, 또박또박 발음하겠으니 함께 따라 읽어 보셔도 좋습니다. ` +
+      `학습은 속도가 아니라 방향이 중요합니다. 차분히 호흡을 가다듬고 시작해 봅시다.`,
+    `여러분, 좋은 아침입니다. 오늘은 ${subject}를 중심으로 생각의 폭을 넓혀 보겠습니다. ` +
+      `복잡해 보이는 주제일수록 큰 그림을 먼저 그리고 세부로 들어가는 편이 좋습니다. ` +
+      `제가 설명하는 동안, 머릿속으로 자신의 경험과 연결해 보시기를 권합니다. ` +
+      `배움은 새로운 정보를 이미 아는 것과 잇는 과정이기 때문입니다. ` +
+      `질문이 생기면 언제든 환영합니다. 그럼 첫 번째 주제부터 함께 펼쳐 보겠습니다.`,
+  ];
+  const text = variants[scriptVariant % variants.length];
+  scriptVariant += 1;
+  return text;
+}
+
+/**
+ * POST /api/avatars/me/voice/script — 녹음용 읽기 대본 생성.
+ * topic 은 현재 강의 제목(없으면 null). 미배포면 mock 대본으로 폴백한다.
+ */
+export async function requestVoiceScript(
+  topic: string | null,
+): Promise<VoiceScriptResult> {
+  try {
+    const { data } = await api.post<{ script: string }>(
+      "/api/avatars/me/voice/script",
+      { topic: topic ?? null },
+    );
+    return { text: data.script, mock: false };
+  } catch (err) {
+    if (isDeferredError(err)) return { text: mockVoiceScript(topic), mock: true };
+    throw err;
+  }
+}
+
+// ── 강의 제목 조회 (대본 주제용) ──────────────────────────────────────────────
+interface LectureLite {
+  id: string;
+  title?: string | null;
+}
+
+/**
+ * 강의 제목을 best-effort 로 가져온다(대본 생성 topic 용). 단일 엔드포인트
+ * ``GET /api/me/lectures``(PR #261) 에서 id 로 찾는다. 미배포·실패·미발견이면
+ * null 을 돌려주며, 호출자는 topic=null 로 대본을 요청한다(엔드포인트가 일반
+ * 학술 대본을 반환).
+ */
+export async function getLectureTitle(
+  lectureId: string,
+): Promise<string | null> {
+  try {
+    const { data } = await api.get<LectureLite[]>("/api/me/lectures");
+    const found = (data ?? []).find((l) => l.id === lectureId);
+    return found?.title?.trim() || null;
+  } catch {
+    return null;
   }
 }
 
