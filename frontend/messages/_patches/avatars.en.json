@@ -1,7 +1,7 @@
 {
   "avatars": {
     "eyebrow": "Avatar gallery",
-    "title": "Choose a lecture avatar",
+    "title": "Choose a Q&A avatar",
     "subtitle": "Compare how HeyGen avatars speak and move with sample clips, then pick the one for your lecture. You can also create your own avatar from a photo.",
 
     "loading": "Loading avatars...",
@@ -82,7 +82,7 @@
 
     "voiceUploadTitle": "Create a voice from your own voice",
     "voiceUploadDescription": "Upload an audio file (mp3) of your own voice to clone it. The cloned voice appears as \"My voice\" in the voice list on the right, so your avatar can speak in your own voice.",
-    "voiceUploadSelect": "Choose an audio file",
+    "voiceUploadSelect": "Load an audio file",
     "voiceUploadChange": "Choose a different file",
     "voiceUploadButton": "Create my voice",
     "voiceUploading": "Creating...",
@@ -101,26 +101,37 @@
     "voiceDeleteError": "Could not delete your voice.",
     "voiceCloneHint": "Upload an audio file to create your own voice and it will appear here.",
 
-    "recordOr": "Or record directly in your browser",
     "recordTitle": "Record with your mic",
     "recordStart": "Start recording",
     "recordRequesting": "Requesting mic access...",
     "recordStop": "Stop recording",
     "recordRedo": "Re-record",
-    "recordUse": "Use this recording",
+    "recordPlaybackLabel": "Recorded audio",
     "recordingBadge": "Recording",
-    "recordHint": "Read clearly for about a minute in a quiet place. Stop to play it back right away.",
-    "recordDenied": "Microphone access was denied. Allow it in your browser's site permissions and try again.",
-    "recordUnsupported": "This browser doesn't support in-browser recording. Please upload an audio file instead.",
+    "recordHint": "Read clearly for about a minute in a quiet place. Stop to play it back, then 'Create my voice' to register it.",
+    "recordDenied": "Microphone access was denied. Allow the microphone in your browser's site permissions and try again.",
+    "recordInsecure": "Recording requires a secure connection (HTTPS). Open the site over localhost or https and try again.",
+    "recordNoDevice": "No microphone was found. Check that a mic is connected and try again.",
+    "recordDeviceBusy": "The microphone is unavailable. Check whether another app is using it and try again.",
+    "recordEmpty": "Nothing was recorded. Check your mic input and record a little longer.",
+    "recordUnsupported": "This browser doesn't support in-browser recording. Please load an audio file instead.",
     "recordError": "Something went wrong while recording. Please try again.",
 
-    "scriptGet": "Get a recording script",
+    "scriptGet": "Recording script helper",
     "scriptRegenerate": "Get another script",
     "scriptLoading": "Writing a script...",
     "scriptError": "Could not load the script. Please try again shortly.",
     "scriptTitle": "Reading script",
     "scriptHint": "Reading the script above while recording produces a closer-sounding voice.",
-    "scriptMockNote": "This is a sample script — once the script API is connected, it will be generated for your lecture topic.",
+    "scriptMockNote": "This is a sample script — once the script API is connected, it will be generated for your lecture topic and language.",
+    "scriptLangLabel": "Script language",
+    "scriptLangKo": "Korean",
+    "scriptLangEn": "English",
+    "scriptLangZh": "Chinese",
+    "scriptLangJa": "Japanese",
+
+    "studioPhotoFormat": "20MB or smaller · JPEG or PNG",
+    "studioPhotoTooLarge": "The photo must be 20MB or smaller.",
 
     "backToStudio": "Back to the editor"
   }

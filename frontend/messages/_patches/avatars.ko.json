@@ -1,7 +1,7 @@
 {
   "avatars": {
     "eyebrow": "아바타 갤러리",
-    "title": "강의 아바타 고르기",
+    "title": "Q&A 아바타 선택",
     "subtitle": "HeyGen 아바타가 어떻게 말하고 움직이는지 샘플 영상으로 비교하고, 강의에 쓸 아바타를 선택하세요. 본인 사진으로 나만의 아바타를 만들 수도 있습니다.",
 
     "loading": "아바타 목록을 불러오는 중...",
@@ -82,7 +82,7 @@
 
     "voiceUploadTitle": "내 목소리로 음성 만들기",
     "voiceUploadDescription": "본인 목소리가 담긴 음성 파일(mp3)을 업로드하면 본인 목소리를 복제합니다. 만들어진 음성은 오른쪽 음성 목록에 '내 목소리'로 나타나, 아바타가 본인 목소리로 말하게 할 수 있습니다.",
-    "voiceUploadSelect": "음성 파일 선택",
+    "voiceUploadSelect": "음성 파일 불러오기",
     "voiceUploadChange": "다른 파일 선택",
     "voiceUploadButton": "내 목소리 만들기",
     "voiceUploading": "만드는 중...",
@@ -101,26 +101,37 @@
     "voiceDeleteError": "본인 음성을 삭제하지 못했습니다.",
     "voiceCloneHint": "음성 파일을 업로드해 본인 목소리를 만들면 여기에 표시됩니다.",
 
-    "recordOr": "또는 브라우저에서 직접 녹음",
-    "recordTitle": "마이크로 녹음하기",
+    "recordTitle": "마이크로 직접 녹음하기",
     "recordStart": "녹음 시작",
     "recordRequesting": "마이크 권한 요청 중...",
     "recordStop": "녹음 정지",
     "recordRedo": "다시 녹음",
-    "recordUse": "이 녹음으로 만들기",
+    "recordPlaybackLabel": "녹음한 음성",
     "recordingBadge": "녹음 중",
-    "recordHint": "조용한 곳에서 1분 내외로 또렷하게 읽어 주세요. 정지하면 바로 들어 볼 수 있습니다.",
-    "recordDenied": "마이크 권한이 거부되었습니다. 브라우저 주소창의 권한 설정에서 허용한 뒤 다시 시도해 주세요.",
-    "recordUnsupported": "이 브라우저는 직접 녹음을 지원하지 않습니다. 대신 음성 파일을 업로드해 주세요.",
+    "recordHint": "조용한 곳에서 1분 내외로 또렷하게 읽어 주세요. 정지하면 바로 들어 볼 수 있고, '내 목소리 만들기'로 등록합니다.",
+    "recordDenied": "마이크 권한이 거부되었습니다. 브라우저 주소창의 권한 설정에서 마이크를 허용한 뒤 다시 시도해 주세요.",
+    "recordInsecure": "보안 연결(HTTPS)에서만 녹음할 수 있습니다. localhost 또는 https 주소로 접속한 뒤 다시 시도해 주세요.",
+    "recordNoDevice": "마이크를 찾을 수 없습니다. 마이크가 연결되어 있는지 확인한 뒤 다시 시도해 주세요.",
+    "recordDeviceBusy": "마이크를 사용할 수 없습니다. 다른 앱이 마이크를 쓰고 있는지 확인한 뒤 다시 시도해 주세요.",
+    "recordEmpty": "녹음된 소리가 없습니다. 마이크 입력을 확인하고 조금 더 길게 녹음해 주세요.",
+    "recordUnsupported": "이 브라우저는 직접 녹음을 지원하지 않습니다. 대신 음성 파일을 불러와 주세요.",
     "recordError": "녹음 중 문제가 발생했습니다. 다시 시도해 주세요.",
 
-    "scriptGet": "녹음 대본 받기",
+    "scriptGet": "녹음 대본 도우미",
     "scriptRegenerate": "다른 대본 받기",
     "scriptLoading": "대본을 만드는 중...",
     "scriptError": "대본을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
     "scriptTitle": "읽기 대본",
     "scriptHint": "위 대본을 읽으며 녹음하면 더 잘 닮은 음성이 만들어집니다.",
-    "scriptMockNote": "예시 대본입니다 — 대본 생성 API 연결 후에는 강의 주제에 맞춰 생성됩니다.",
+    "scriptMockNote": "예시 대본입니다 — 대본 생성 API 연결 후에는 강의 주제·언어에 맞춰 생성됩니다.",
+    "scriptLangLabel": "대본 언어",
+    "scriptLangKo": "한국어",
+    "scriptLangEn": "영어",
+    "scriptLangZh": "중국어",
+    "scriptLangJa": "일본어",
+
+    "studioPhotoFormat": "20MB 이하 · JPEG 또는 PNG",
+    "studioPhotoTooLarge": "사진 용량은 20MB 이하여야 합니다.",
 
     "backToStudio": "편집기로 돌아가기"
   }

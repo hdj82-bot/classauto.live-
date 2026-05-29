@@ -252,6 +252,35 @@ describe("AvatarsPage", () => {
     );
   });
 
+  it("renames the page to 'Q&A 아바타 선택' and the voice load button", async () => {
+    mockDeferredBackend();
+    renderPage(<AvatarsPage />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId("avatars-page")).toBeTruthy(),
+    );
+    // 1) 페이지 제목.
+    expect(screen.getByText("Q&A 아바타 선택")).toBeTruthy();
+    // 3) 중앙 버튼 "음성 파일 불러오기".
+    const pick = screen.getByTestId("voice-clone-pick");
+    expect(pick.textContent).toContain("음성 파일 불러오기");
+    // 4) 우측으로 옮긴 "마이크로 직접 녹음하기" 라벨.
+    expect(screen.getByTestId("record-start").textContent).toContain(
+      "마이크로 직접 녹음하기",
+    );
+  });
+
+  it("offers a recording-script language selector (ko/en/zh/ja)", async () => {
+    mockDeferredBackend();
+    renderPage(<AvatarsPage />);
+
+    const langSelect = (await screen.findByTestId(
+      "script-lang",
+    )) as HTMLSelectElement;
+    const values = Array.from(langSelect.options).map((o) => o.value);
+    expect(values).toEqual(["ko", "en", "zh", "ja"]);
+  });
+
   it("applies the selected avatar to the lecture and returns to studio", async () => {
     mockDeferredBackend();
     apiPatch.mockResolvedValue({ data: {} });
