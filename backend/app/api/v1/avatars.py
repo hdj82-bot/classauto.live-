@@ -4,6 +4,7 @@
 (render.py 의 ``/api/v1/render/avatars`` 와 별개 — 프론트 아바타 갤러리는 본
 ``/api/avatars`` 계약을 사용한다).
 """
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
@@ -27,6 +28,8 @@ from app.schemas.avatar import (
     PhotoAvatarStatusResponse,
     ProfilePhotoResponse,
     VoiceCloneResponse,
+    VoiceScriptRequest,
+    VoiceScriptResponse,
 )
 from app.services.pipeline import s3 as s3_svc
 
@@ -563,6 +566,44 @@ async def delete_my_voice(
     user.cloned_voice_sample_url = None
     await db.commit()
     return VoiceCloneResponse(status="none", message="본인 음성을 삭제했습니다.")
+
+
+@router.post(
+    "/api/avatars/me/voice/script",
+    response_model=VoiceScriptResponse,
+    summary="본인 음성 녹음용 대본 생성 (한국어 학술 산문 ~500자)",
+)
+async def generate_voice_recording_script(
+    payload: VoiceScriptRequest | None = Body(default=None),
+    user: User = Depends(require_professor),
+):
+    """교수자가 ElevenLabs IVC 샘플을 녹음할 때 읽을 대본을 Claude 로 생성한다.
+
+    ``topic`` (강의 제목 등) 이 주어지면 그 주제와 연관된 한국어 학술 산문을,
+    비어 있으면 일반 학술문을 만든다. 낭독하기 좋은 한 편의 산문(목록·표 없음)
+    으로 약 500자, 호출마다 변형된다. 모델·동시성은 기존 정책(Haiku 기본·단발
+    호출·retry_external 백오프)을 따른다.
+    """
+    payload = payload or VoiceScriptRequest()
+
+    # 키가 없으면 Claude 호출 자체가 불가 — 명확한 503 으로 응답한다.
+    if not settings.ANTHROPIC_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="대본 생성 기능이 일시적으로 비활성화되어 있습니다(ANTHROPIC_API_KEY 미설정).",
+        )
+
+    from app.services.voice_script import VoiceScriptError, generate_voice_script
+
+    # anthropic SDK 는 동기·블로킹 — 이벤트 루프를 막지 않도록 스레드로 오프로드.
+    try:
+        script = await asyncio.to_thread(generate_voice_script, payload.topic)
+    except VoiceScriptError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e)
+        ) from e
+
+    return VoiceScriptResponse(script=script)
 
 
 # ── Photo Avatar (Design with AI 룩) ─────────────────────────────────────────
