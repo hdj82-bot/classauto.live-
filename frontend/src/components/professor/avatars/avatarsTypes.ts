@@ -59,3 +59,14 @@ export interface VoiceClone {
   sample_url?: string | null;
   message?: string | null;
 }
+
+/**
+ * POST /api/avatars/me/voice/script 결과 — 본인 목소리 녹음용 읽기 대본.
+ *
+ * ``mock`` 이 true 면 대본 생성 엔드포인트가 아직 미배포라 클라이언트 예시
+ * 대본을 보여주는 중(화면 안내용). 연결되면 강의 주제에 맞춘 학술 대본이 온다.
+ */
+export interface VoiceScriptResult {
+  text: string;
+  mock: boolean;
+}

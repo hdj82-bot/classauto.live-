@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PageContainer, PageHeader, PrimaryButton } from "@/components/professor/shell";
 import { useToast } from "@/components/ui/Toast";
@@ -9,35 +9,40 @@ import { useAvatarsI18n } from "@/components/professor/avatars/useAvatarsI18n";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
 import AvatarCard from "@/components/professor/avatars/AvatarCard";
 import AvatarPreviewStage from "@/components/professor/avatars/AvatarPreviewStage";
-import ProfilePhotoUploadCard from "@/components/professor/avatars/ProfilePhotoUploadCard";
+import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import {
   applyAvatarToLecture,
   deleteMyVoice,
+  getLectureTitle,
   getMyVoice,
   listAvatars,
   renameAvatarForLecture,
-  uploadProfilePhoto,
+  requestVoiceScript,
   uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
 import { listVoiceOptions, previewVoice } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
-  CustomAvatarStatus,
   VoiceClone,
+  VoiceScriptResult,
 } from "@/components/professor/avatars/avatarsTypes";
 import type { VoiceOption } from "@/components/professor/avatars/voicePresets";
 
 /**
- * /professor/avatars — 아바타 갤러리.
+ * /professor/avatars — 강의 아바타 고르기 (HeyGen 스타일 대수술).
  *
- * docs/planning/05-instructor-pages.md (아바타 선택) + design-system v2
- * (라이트 베이지 + 골드). HeyGen 남/여 샘플을 영상으로 비교하고, 강의에
- * 적용하고, 본인 사진으로 커스텀 아바타를 만들 수 있다.
+ * docs/planning/05-instructor-pages.md (아바타 선택) + 12-self-avatar-onboarding.md
+ * + design-system v2 (라이트 베이지 + 골드). 세 갈래:
+ *  ① 내 사진으로 아바타 만들기 — Photo Avatar + Design with AI 룩 온보딩을
+ *     카드 안에 인라인 임베드(PhotoAvatarStudioCard, 별도 라우트로 안 보냄).
+ *  ② 내 목소리로 음성 만들기 — 파일 업로드 + 브라우저 직접 녹음(MediaRecorder)
+ *     + 강의 주제 연관 읽기 대본(VoiceCloneUploadCard).
+ *  ③ 기본 HeyGen 남/여 샘플을 영상으로 비교하고 강의에 적용.
  *
- * 백엔드 계약(창1)은 미배포 — avatarsApi 가 fixture/시뮬레이션으로 폴백한다.
+ * 백엔드 계약이 미배포면 avatarsApi/photoAvatarApi 가 fixture/mock 으로 폴백한다.
  * ``?lecture={id}`` 진입 시 선택/이름 변경이 해당 강의에 저장되고 studio 로
- * 복귀한다.
+ * 복귀하며, 그 강의 제목이 녹음 대본의 주제로 쓰인다.
  */
 export default function AvatarsPage() {
   const router = useRouter();
@@ -56,11 +61,8 @@ export default function AvatarsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
 
-  const [customUploading, setCustomUploading] = useState(false);
-  const [customStatus, setCustomStatus] = useState<CustomAvatarStatus | null>(
-    null,
-  );
-  const readyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 녹음 대본 주제로 쓸 현재 강의 제목(없으면 null → 일반 학술 대본).
+  const [lectureTitle, setLectureTitle] = useState<string | null>(null);
 
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(true);
@@ -74,6 +76,17 @@ export default function AvatarsPage() {
     try {
       const { voices: list } = await listVoiceOptions();
       setVoices(list);
+    } catch {
+      /* 실패 시 기존 목록 유지 */
+    }
+  }, []);
+
+  // 아바타 목록을 다시 불러온다(스피너 없이) — 본인 룩 확정 후 갤러리 갱신용.
+  const refreshAvatars = useCallback(async () => {
+    try {
+      const { avatars: list, deferred: isDeferred } = await listAvatars();
+      setAvatars(list);
+      setDeferred(isDeferred);
     } catch {
       /* 실패 시 기존 목록 유지 */
     }
@@ -99,12 +112,21 @@ export default function AvatarsPage() {
     };
   }, []);
 
-  useEffect(
-    () => () => {
-      if (readyTimer.current) clearTimeout(readyTimer.current);
-    },
-    [],
-  );
+  // 강의 제목 조회 — 녹음 대본 주제용. 실패/미배포면 null 유지.
+  useEffect(() => {
+    if (!lectureId) {
+      setLectureTitle(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const title = await getLectureTitle(lectureId);
+      if (!cancelled) setLectureTitle(title);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lectureId]);
 
   // 음성 카탈로그 (studio 와 동일한 /api/voices). 실패 시 합성 폴백.
   useEffect(() => {
@@ -138,24 +160,23 @@ export default function AvatarsPage() {
     };
   }, []);
 
-  // 본인 아바타는 업로드 카드 우측에 별도 노출하므로 그리드 섹션에서는 제외한다.
+  // 본인 룩(is_custom)은 "내 아바타" 섹션 맨 앞에 노출한다. 기본 룩을 지정하면
+  // 백엔드 GET /api/avatars 가 is_custom 으로 돌려주므로 확정 후 갱신되어 보인다.
   const sections = useMemo(() => {
+    const custom = avatars.filter((a) => a.is_custom);
     const male = avatars.filter((a) => !a.is_custom && a.gender === "male");
     const female = avatars.filter((a) => !a.is_custom && a.gender === "female");
     const other = avatars.filter(
       (a) => !a.is_custom && a.gender !== "male" && a.gender !== "female",
     );
     return [
+      { key: "custom", label: t("sectionCustom"), items: custom },
       { key: "male", label: t("sectionMale"), items: male },
       { key: "female", label: t("sectionFemale"), items: female },
       { key: "other", label: t("sectionOther"), items: other },
     ].filter((s) => s.items.length > 0);
   }, [avatars, t]);
 
-  const customAvatar = useMemo(
-    () => avatars.find((a) => a.is_custom) ?? null,
-    [avatars],
-  );
   const selectedAvatar = useMemo(
     () => avatars.find((a) => a.id === selectedId) ?? null,
     [avatars, selectedId],
@@ -191,48 +212,15 @@ export default function AvatarsPage() {
     [lectureId, toast, t],
   );
 
-  const handleUpload = useCallback(
-    async (file: File) => {
-      setCustomUploading(true);
+  // 녹음 대본 요청 — 현재 강의 제목을 주제로 학술 대본을 받아 카드에 표시.
+  const handleRequestScript =
+    useCallback(async (): Promise<VoiceScriptResult | null> => {
       try {
-        const resp = await uploadProfilePhoto(file);
-        setCustomStatus(resp.status);
-        const customAvatar: Avatar = {
-          id: resp.id,
-          name: resp.name ?? t("customBadge"),
-          preview_image_url: resp.preview_image_url ?? null,
-          preview_video_url: null,
-          gender: null,
-          is_custom: true,
-          status: resp.status,
-        };
-        // 기존 커스텀 항목을 교체하고 맨 앞에 prepend.
-        setAvatars((prev) => [
-          customAvatar,
-          ...prev.filter((a) => !a.is_custom),
-        ]);
-        setSelectedId(resp.id);
-
-        // 백엔드 미배포 시 processing → ready 전환을 시뮬레이션 (UI 확인용).
-        if (deferred && resp.status === "processing") {
-          readyTimer.current = setTimeout(() => {
-            setCustomStatus("ready");
-            setAvatars((prev) =>
-              prev.map((a) =>
-                a.id === resp.id ? { ...a, status: "ready" } : a,
-              ),
-            );
-          }, 2500);
-        }
+        return await requestVoiceScript(lectureTitle);
       } catch {
-        setCustomStatus("failed");
-        toast(t("uploadError"), "error");
-      } finally {
-        setCustomUploading(false);
+        return null;
       }
-    },
-    [deferred, toast, t],
-  );
+    }, [lectureTitle]);
 
   const handleVoiceUpload = useCallback(
     async (file: File) => {
@@ -328,39 +316,24 @@ export default function AvatarsPage() {
           </p>
         )}
 
-        {/* 본인 아바타(사진) + 본인 음성(mp3 클론) 만들기 — 같은 높이로 나란히 배치 */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(min(100%, 360px), 1fr))",
-            gap: 18,
-            alignItems: "stretch",
-          }}
-        >
-          <ProfilePhotoUploadCard
-            onSubmit={handleUpload}
-            status={customStatus}
-            uploading={customUploading}
-            customAvatar={customAvatar}
-            customSelected={!!customAvatar && customAvatar.id === selectedId}
-            onSelectCustom={
-              customAvatar ? () => setSelectedId(customAvatar.id) : undefined
-            }
-            t={t}
-          />
+        {/* ① 내 사진으로 아바타 만들기 — Design with AI 룩 온보딩을 카드 안에 인라인 임베드 */}
+        <PhotoAvatarStudioCard
+          reducedMotion={reducedMotion}
+          onConfirmed={refreshAvatars}
+        />
 
-          <VoiceCloneUploadCard
-            onSubmit={handleVoiceUpload}
-            onDelete={handleVoiceDelete}
-            onPreview={handleVoicePreview}
-            status={voiceClone.status}
-            uploading={voiceUploading}
-            voiceName={voiceClone.name}
-            message={voiceClone.message}
-            t={t}
-          />
-        </div>
+        {/* ② 내 목소리로 음성 만들기 — 파일 업로드 + 브라우저 직접 녹음 + 읽기 대본 */}
+        <VoiceCloneUploadCard
+          onSubmit={handleVoiceUpload}
+          onDelete={handleVoiceDelete}
+          onPreview={handleVoicePreview}
+          onRequestScript={handleRequestScript}
+          status={voiceClone.status}
+          uploading={voiceUploading}
+          voiceName={voiceClone.name}
+          message={voiceClone.message}
+          t={t}
+        />
 
         {/* 클릭한 아바타를 크게 재생 + 음성 함께 듣기 */}
         <AvatarPreviewStage

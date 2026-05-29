@@ -7,6 +7,17 @@
     "exitToGallery": "To avatar gallery",
     "deferredBanner": "The self-avatar API isn't deployed yet, so this is a preview with sample data. Your photo, looks, and voice will be saved and generated for real once the backend is connected.",
 
+    "embed": {
+      "title": "Create an avatar from your photo",
+      "description": "Upload one portrait photo and Design with AI generates several looks that keep your face. Set the one you like as the default look and it becomes the base appearance for your lecture videos.",
+      "setDefault": "Set this as the default look",
+      "confirmed": "Default look set. You can now create lectures with your own face.",
+      "confirmedTitle": "Default look set",
+      "confirmedBody": "The selected look is saved as the base appearance for your lecture videos. Create your own voice in the voice card below to use them together.",
+      "rechoose": "Pick another look",
+      "restart": "Start over"
+    },
+
     "step": {
       "upload": { "label": "Upload photo" },
       "training": { "label": "Prepare avatar" },

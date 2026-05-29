@@ -101,6 +101,27 @@
     "voiceDeleteError": "Could not delete your voice.",
     "voiceCloneHint": "Upload an audio file to create your own voice and it will appear here.",
 
+    "recordOr": "Or record directly in your browser",
+    "recordTitle": "Record with your mic",
+    "recordStart": "Start recording",
+    "recordRequesting": "Requesting mic access...",
+    "recordStop": "Stop recording",
+    "recordRedo": "Re-record",
+    "recordUse": "Use this recording",
+    "recordingBadge": "Recording",
+    "recordHint": "Read clearly for about a minute in a quiet place. Stop to play it back right away.",
+    "recordDenied": "Microphone access was denied. Allow it in your browser's site permissions and try again.",
+    "recordUnsupported": "This browser doesn't support in-browser recording. Please upload an audio file instead.",
+    "recordError": "Something went wrong while recording. Please try again.",
+
+    "scriptGet": "Get a recording script",
+    "scriptRegenerate": "Get another script",
+    "scriptLoading": "Writing a script...",
+    "scriptError": "Could not load the script. Please try again shortly.",
+    "scriptTitle": "Reading script",
+    "scriptHint": "Reading the script above while recording produces a closer-sounding voice.",
+    "scriptMockNote": "This is a sample script — once the script API is connected, it will be generated for your lecture topic.",
+
     "backToStudio": "Back to the editor"
   }
 }

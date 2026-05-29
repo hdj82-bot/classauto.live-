@@ -101,6 +101,27 @@
     "voiceDeleteError": "본인 음성을 삭제하지 못했습니다.",
     "voiceCloneHint": "음성 파일을 업로드해 본인 목소리를 만들면 여기에 표시됩니다.",
 
+    "recordOr": "또는 브라우저에서 직접 녹음",
+    "recordTitle": "마이크로 녹음하기",
+    "recordStart": "녹음 시작",
+    "recordRequesting": "마이크 권한 요청 중...",
+    "recordStop": "녹음 정지",
+    "recordRedo": "다시 녹음",
+    "recordUse": "이 녹음으로 만들기",
+    "recordingBadge": "녹음 중",
+    "recordHint": "조용한 곳에서 1분 내외로 또렷하게 읽어 주세요. 정지하면 바로 들어 볼 수 있습니다.",
+    "recordDenied": "마이크 권한이 거부되었습니다. 브라우저 주소창의 권한 설정에서 허용한 뒤 다시 시도해 주세요.",
+    "recordUnsupported": "이 브라우저는 직접 녹음을 지원하지 않습니다. 대신 음성 파일을 업로드해 주세요.",
+    "recordError": "녹음 중 문제가 발생했습니다. 다시 시도해 주세요.",
+
+    "scriptGet": "녹음 대본 받기",
+    "scriptRegenerate": "다른 대본 받기",
+    "scriptLoading": "대본을 만드는 중...",
+    "scriptError": "대본을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    "scriptTitle": "읽기 대본",
+    "scriptHint": "위 대본을 읽으며 녹음하면 더 잘 닮은 음성이 만들어집니다.",
+    "scriptMockNote": "예시 대본입니다 — 대본 생성 API 연결 후에는 강의 주제에 맞춰 생성됩니다.",
+
     "backToStudio": "편집기로 돌아가기"
   }
 }

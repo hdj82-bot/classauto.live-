@@ -208,9 +208,9 @@ describe("AvatarsPage", () => {
 
     renderPage(<AvatarsPage />);
 
-    // 본인 아바타는 업로드 카드 우측에 노출 → 클릭해 무대에서 선택.
-    const customBtn = await screen.findByTestId("upload-custom-avatar");
-    fireEvent.click(customBtn);
+    // 본인 룩(is_custom)은 갤러리 '내 아바타' 섹션 카드로 노출 → 클릭해 무대에서 선택.
+    const customCard = await screen.findByTestId("avatar-card-tp_self");
+    fireEvent.click(within(customCard).getByRole("button"));
 
     // 사진 기반이라 '움직이는 미리보기 만들기' 버튼이 떠야 한다.
     const genBtn = await screen.findByTestId("avatar-preview-generate");
@@ -222,6 +222,33 @@ describe("AvatarsPage", () => {
         expect.objectContaining({ force: false }),
         undefined,
       ),
+    );
+  });
+
+  it("embeds the Design-with-AI looks onboarding inline (photo upload step in card)", async () => {
+    mockDeferredBackend();
+    renderPage(<AvatarsPage />);
+
+    // 별도 /onboarding 라우트로 보내지 않고, 카드 안에서 사진 업로드 단계부터 시작.
+    await waitFor(() =>
+      expect(screen.getByTestId("photo-avatar-studio")).toBeTruthy(),
+    );
+    expect(screen.getByTestId("studio-stepper")).toBeTruthy();
+    expect(screen.getByTestId("step-upload")).toBeTruthy();
+    // 라우팅이 일어나지 않아야 한다(인라인 임베드).
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("fetches a recording script (mock fallback) and shows it in the voice card", async () => {
+    mockDeferredBackend(); // 모든 POST 미정의 → requestVoiceScript 가 mock 대본으로 폴백
+    renderPage(<AvatarsPage />);
+
+    const scriptBtn = await screen.findByTestId("script-get");
+    fireEvent.click(scriptBtn);
+
+    // ~500자 학술 대본 박스가 표시된다(미배포 → 예시 대본).
+    await waitFor(() =>
+      expect(screen.getByTestId("script-box")).toBeTruthy(),
     );
   });
 
