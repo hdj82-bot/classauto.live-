@@ -7,6 +7,8 @@ import { PersonIcon } from "./PhotoAvatarIcons";
 interface TrainingStepProps {
   status: PhotoAvatarGroupStatus;
   reducedMotion: boolean;
+  /** 학습이 예상보다 오래 걸리는 중인지 — 안내 문구를 추가로 노출한다. */
+  stalled?: boolean;
   /** 다시 사진 업로드(이전 단계로). */
   onReupload: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
@@ -22,10 +24,12 @@ interface TrainingStepProps {
 export default function TrainingStep({
   status,
   reducedMotion,
+  stalled = false,
   onReupload,
   t,
 }: TrainingStepProps) {
   const failed = status === "failed";
+  const showStalled = stalled && !failed;
 
   return (
     <div data-testid="step-training" style={cardStyle}>
@@ -104,6 +108,17 @@ export default function TrainingStep({
           </div>
         )}
 
+        {showStalled && (
+          <p
+            role="status"
+            aria-live="polite"
+            data-testid="training-stalled"
+            style={stalledNote}
+          >
+            {t("training.stalledNote")}
+          </p>
+        )}
+
         {!failed && (
           <button
             type="button"
@@ -111,7 +126,7 @@ export default function TrainingStep({
             style={ghostLink}
             data-testid="training-reupload"
           >
-            {t("training.reupload")}
+            {showStalled ? t("training.retry") : t("training.reupload")}
           </button>
         )}
       </div>
@@ -169,6 +184,15 @@ const primaryBtn: CSSProperties = {
   color: "#0A0A0A",
   cursor: "pointer",
   fontFamily: "inherit",
+};
+
+const stalledNote: CSSProperties = {
+  margin: 0,
+  maxWidth: 420,
+  textAlign: "center",
+  fontSize: 12.5,
+  lineHeight: 1.6,
+  color: "var(--text-muted)",
 };
 
 const ghostLink: CSSProperties = {

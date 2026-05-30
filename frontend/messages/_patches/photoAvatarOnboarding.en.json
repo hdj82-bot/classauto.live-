@@ -48,6 +48,7 @@
       "title": "Preparing your avatar",
       "description": "We're training an avatar group from your photo. You'll move to the next step automatically when it's ready. You can leave this screen — progress continues.",
       "badge": "Training",
+      "stalledNote": "This is taking longer than usual (normally 1–2 minutes). You can close this screen — progress continues and you'll move on automatically when it's ready. If it stays stuck, try again below.",
       "reupload": "Re-upload a different photo",
       "failedTitle": "Avatar preparation failed",
       "failedDescription": "Training from the photo failed. Please try again with a sharp, front-facing photo on a white/solid background.",
