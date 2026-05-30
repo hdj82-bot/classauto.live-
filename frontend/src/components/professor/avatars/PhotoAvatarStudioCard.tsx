@@ -233,6 +233,7 @@ export default function PhotoAvatarStudioCard({
             <TrainingStep
               status={flow.group.status}
               reducedMotion={reducedMotion}
+              stalled={flow.trainingStalled}
               onReupload={() => flow.goTo("upload")}
               t={t}
             />

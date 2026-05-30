@@ -14,9 +14,12 @@ const securityHeaders = [
     value: "strict-origin-when-cross-origin",
   },
   {
-    // 카메라/마이크/위치/USB 등 민감 권한 차단 — 본 앱은 사용 안 함
+    // 민감 권한 정책. 마이크는 본인 음성 녹음(내 목소리로 음성 만들기)에 쓰므로
+    // 자기 출처(self)에만 허용한다. microphone=() 로 두면 사용자가 브라우저
+    // 권한을 허용해도 getUserMedia 가 정책 단계에서 막혀 녹음이 불가능하다.
+    // 나머지(카메라/위치/결제/USB)는 미사용이라 전면 차단 유지.
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+    value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
   },
   {
     // 클릭재킹 방지 (CSP frame-ancestors 미지원 브라우저 대비)

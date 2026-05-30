@@ -30,6 +30,10 @@ import type {
 
 const GROUP_POLL_MS = 4000;
 const LOOKS_POLL_MS = 3000;
+// 학습이 이 횟수(≈3분)를 넘겨도 training 이면 "지연" 으로 보고 사용자에게 안내한다.
+// HeyGen 학습은 보통 1~2분이면 끝나므로, 그 이상이면 백엔드/HeyGen 지연을 의심한다.
+// 폴링은 계속하되(여전히 끝날 수 있으므로) 무한 스피너 대신 안내·재시도를 노출한다.
+const GROUP_STALL_AFTER = 45;
 
 /** 서버 상태로부터 진입 단계를 도출한다. */
 function deriveStep(group: PhotoAvatarGroup, looks: Look[]): OnboardingStep {
@@ -46,6 +50,8 @@ export interface PhotoAvatarFlow {
   selectedLookId: string | null;
   initializing: boolean;
   deferred: boolean;
+  /** 학습이 예상(≈3분)보다 오래 걸리는지 — 무한 대기 대신 안내·재시도 노출용. */
+  trainingStalled: boolean;
   /** 룩 생성/조회가 진행 중인지(폴링 중). */
   looksPending: boolean;
   goTo: (step: OnboardingStep) => void;
@@ -64,6 +70,7 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
   const [selectedLookId, setSelectedLookId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [deferred, setDeferred] = useState(false);
+  const [trainingStalled, setTrainingStalled] = useState(false);
 
   // training 단계에서 ready 로 전이될 때 자동 전진은 사용자가 그 화면에 있을
   // 때만 — 뒤로 돌아가 다른 단계를 보고 있으면 강제 이동하지 않는다.
@@ -97,16 +104,24 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
 
   const startGroupPolling = useCallback(() => {
     clearGroupTimer();
+    // 새 학습이 시작될 때마다 지연 카운터/플래그를 초기화한다.
+    let attempts = 0;
+    setTrainingStalled(false);
     groupTimer.current = setInterval(async () => {
+      attempts += 1;
       const g = await getPhotoAvatar();
       setGroup(g);
       setDeferred(isDeferredMode());
       if (g.status === "ready") {
         clearGroupTimer();
+        setTrainingStalled(false);
         // 학습 화면에 머물러 있었다면 룩 생성 단계로 자동 전진.
         if (stepRef.current === "training") setStep("generate");
       } else if (g.status === "failed" || g.status === "none") {
         clearGroupTimer();
+      } else if (attempts >= GROUP_STALL_AFTER) {
+        // 여전히 training — 폴링은 계속하되 안내를 띄운다(무한 스피너 방지).
+        setTrainingStalled(true);
       }
     }, GROUP_POLL_MS);
   }, [clearGroupTimer]);
@@ -186,6 +201,7 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     selectedLookId,
     initializing,
     deferred,
+    trainingStalled,
     looksPending,
     goTo,
     uploadPhoto,
