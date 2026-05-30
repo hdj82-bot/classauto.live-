@@ -1,11 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import {
-  LOOK_BATCH_MAX,
-  LOOK_TOTAL_MAX,
-  type Look,
-} from "./photoAvatarTypes";
+import { LOOK_TOTAL_MAX, type Look } from "./photoAvatarTypes";
 import { SparkleIcon } from "./PhotoAvatarIcons";
 import LookTile from "./LookTile";
 import LookPresetGallery from "./LookPresetGallery";
@@ -13,8 +9,8 @@ import type { LookPreset } from "./lookPresets";
 
 interface LookGenerateStepProps {
   looks: Look[];
-  /** 룩 배치 생성(prompt, count). 진행 타일이 즉시 추가된다. */
-  onGenerate: (prompt: string, count: number) => Promise<void>;
+  /** 룩 1개 생성. 스타일 카드를 누르면 그 스타일 프롬프트로 호출된다. */
+  onGenerate: (prompt: string) => Promise<void>;
   /** 생성이 진행 중인지(generating 타일 존재). */
   looksPending: boolean;
   reducedMotion: boolean;
@@ -26,11 +22,12 @@ interface LookGenerateStepProps {
 }
 
 /**
- * ③ 프롬프트 입력 + Design with AI 룩 배치 생성.
+ * ③ 스타일 샘플 갤러리에서 골라 룩을 만든다.
  *
- * 한 번에 최대 4개(LOOK_BATCH_MAX, 계약 count≤4) 생성하고, 누적 상한
- * (LOOK_TOTAL_MAX) 으로 과생성을 막는다(docs §8 비용 가드레일). "추가 생성"은
- * 항상 명시 버튼으로만 — 자동 재생성 없음.
+ * 자유 프롬프트 입력·개수 선택 UI 는 제거했다 — 사용자는 갤러리에서 스타일을
+ * 고르기만 하면 되고, **카드를 누르면 그 스타일로 룩 1개를 바로 생성**한다.
+ * 누적 상한(LOOK_TOTAL_MAX)으로 과생성을 막는다(docs §8 비용 가드레일). 완성된
+ * 룩이 생기면 "다음: 룩 선택" 으로 자연스럽게 ④ 선택 단계로 이어진다.
  */
 export default function LookGenerateStep({
   looks,
@@ -41,42 +38,26 @@ export default function LookGenerateStep({
   onRestart,
   t,
 }: LookGenerateStepProps) {
-  const [prompt, setPrompt] = useState("");
-  const [count, setCount] = useState<number>(LOOK_BATCH_MAX);
   const [submitting, setSubmitting] = useState(false);
-  // 갤러리에서 고른 프리셋 강조용. 직접 입력하면 해제(더 이상 일치하지 않음).
+  // 갤러리에서 고른 프리셋 강조용.
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
   const total = looks.length;
   const remaining = Math.max(0, LOOK_TOTAL_MAX - total);
   const capReached = remaining <= 0;
-  const effectiveMax = Math.min(LOOK_BATCH_MAX, remaining || LOOK_BATCH_MAX);
   const readyCount = looks.filter((l) => l.status === "ready").length;
-  const trimmed = prompt.trim();
   const busy = submitting || looksPending;
 
-  const canGenerate = !!trimmed && !busy && !capReached;
-
-  // 프롬프트 텍스트를 직접 받아 생성한다(프리셋 클릭은 setState 비동기를 기다리지
-  // 않고 곧바로 그 프롬프트로 생성하기 위함).
-  const runGenerate = async (promptText: string) => {
-    const text = promptText.trim();
-    if (!text || busy || capReached) return;
-    const n = Math.min(count, effectiveMax);
+  // 스타일 카드 클릭 → 그 스타일 프롬프트로 룩 1개를 바로 생성(개수 고정 = 1).
+  const pickPreset = async (preset: LookPreset) => {
+    if (busy || capReached) return;
+    setSelectedPresetId(preset.id);
     setSubmitting(true);
     try {
-      await onGenerate(text, n);
+      await onGenerate(preset.prompt);
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const submit = () => runGenerate(prompt);
-
-  const pickPreset = (preset: LookPreset) => {
-    setSelectedPresetId(preset.id);
-    setPrompt(preset.prompt);
-    void runGenerate(preset.prompt);
   };
 
   return (
@@ -105,91 +86,13 @@ export default function LookGenerateStep({
       </div>
       <p style={descStyle}>{t("looks.description")}</p>
 
-      {/* 스타일 샘플 갤러리 (주) — 카드 클릭 시 프롬프트 채움 + 즉시 생성 */}
+      {/* 스타일 샘플 갤러리 — 카드 클릭 시 그 스타일로 룩 1개를 즉시 생성 */}
       <LookPresetGallery
         selectedId={selectedPresetId}
         onPick={pickPreset}
         disabled={busy || capReached}
         t={t}
       />
-
-      {/* 자유 입력(보조) */}
-      <label htmlFor="look-prompt" style={{ ...labelStyle, marginTop: 18 }}>
-        {t("looks.promptLabel")}
-      </label>
-      <textarea
-        id="look-prompt"
-        data-testid="look-prompt"
-        value={prompt}
-        onChange={(e) => {
-          setPrompt(e.target.value);
-          setSelectedPresetId(null);
-        }}
-        placeholder={t("looks.promptPlaceholder")}
-        rows={3}
-        style={textareaStyle}
-      />
-
-      {/* 개수 + 생성 버튼 */}
-      <div
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          gap: 14,
-          marginTop: 16,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
-            {t("looks.countLabel")}
-          </span>
-          <div style={{ display: "inline-flex", gap: 4 }} role="group" aria-label={t("looks.countLabel")}>
-            {Array.from({ length: LOOK_BATCH_MAX }, (_, i) => i + 1).map((n) => {
-              const disabled = n > effectiveMax;
-              const active = count === n;
-              return (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setCount(n)}
-                  disabled={disabled}
-                  aria-pressed={active}
-                  data-testid={`look-count-${n}`}
-                  style={{
-                    ...countBtn,
-                    background: active ? "var(--gold)" : "var(--bg-card)",
-                    color: active ? "#0A0A0A" : "var(--text)",
-                    borderColor: active ? "var(--gold)" : "var(--line-strong)",
-                    opacity: disabled ? 0.35 : 1,
-                    cursor: disabled ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {n}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={submit}
-          disabled={!canGenerate}
-          data-testid="look-generate"
-          style={{
-            ...primaryBtn,
-            opacity: canGenerate ? 1 : 0.45,
-            cursor: canGenerate ? "pointer" : "not-allowed",
-          }}
-        >
-          {submitting || looksPending
-            ? t("looks.generating")
-            : total > 0
-              ? t("looks.generateMore")
-              : t("looks.generate")}
-        </button>
-      </div>
 
       {/* 비용 투명성 안내 (차별점 #2 / docs §8·§10) */}
       <p style={costNote}>
@@ -250,28 +153,6 @@ const descStyle: CSSProperties = {
   color: "var(--text-muted)",
 };
 
-const labelStyle: CSSProperties = {
-  display: "block",
-  fontSize: 12.5,
-  fontWeight: 600,
-  color: "var(--text)",
-  marginBottom: 6,
-};
-
-const textareaStyle: CSSProperties = {
-  width: "100%",
-  resize: "vertical",
-  borderRadius: 12,
-  border: "1px solid var(--line-strong)",
-  background: "var(--bg)",
-  padding: "10px 12px",
-  fontSize: 13.5,
-  lineHeight: 1.55,
-  color: "var(--text)",
-  fontFamily: "inherit",
-  boxSizing: "border-box",
-};
-
 const ghostLink: CSSProperties = {
   padding: "4px 8px",
   fontSize: 12,
@@ -284,16 +165,6 @@ const ghostLink: CSSProperties = {
   fontFamily: "inherit",
   textDecoration: "underline",
   flexShrink: 0,
-};
-
-const countBtn: CSSProperties = {
-  width: 34,
-  height: 34,
-  borderRadius: 9,
-  border: "1px solid",
-  fontSize: 13,
-  fontWeight: 700,
-  fontFamily: "inherit",
 };
 
 const primaryBtn: CSSProperties = {

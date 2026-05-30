@@ -12,9 +12,9 @@ import {
 import { CheckIcon } from "./PhotoAvatarIcons";
 
 interface LookPresetGalleryProps {
-  /** 현재 강조된(채워진) 프리셋 id. textarea 를 직접 고치면 부모가 null 로 해제. */
+  /** 현재 강조된(선택된) 프리셋 id. */
   selectedId: string | null;
-  /** 카드 클릭 → 프롬프트 채움 + 즉시 생성. */
+  /** 카드 클릭 → 그 스타일로 룩 1개를 즉시 생성. */
   onPick: (preset: LookPreset) => void;
   /** 생성 진행/한도 도달 등으로 새 생성을 막을 때 — 카드 비활성. */
   disabled: boolean;
@@ -25,8 +25,8 @@ interface LookPresetGalleryProps {
  * "스타일 샘플 이미지" 룩 갤러리 — **복장 × 배경 2축 필터**로 탐색한다.
  *
  * HeyGen Design with AI 로 만든 실사 룩 썸네일(public/avatar-looks/*.jpg)을
- * 보여주고, 위쪽 두 줄의 필터(복장 / 배경)로 좁힌다. 카드를 누르면 해당 스타일
- * 프롬프트가 채워지고 바로 생성된다. 선택 카드는 골드 링 + 체크로 강조한다.
+ * 보여주고, 위쪽 두 줄의 필터(복장 / 배경)로 좁힌다. 카드를 누르면 해당 스타일로
+ * 룩 1개가 바로 생성된다. 선택 카드는 골드 링 + 체크로 강조한다.
  */
 export default function LookPresetGallery({
   selectedId,

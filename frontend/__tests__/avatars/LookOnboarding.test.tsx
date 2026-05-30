@@ -41,11 +41,12 @@ describe("LookGenerateStep — 스타일 샘플 갤러리", () => {
     for (const p of LOOK_PRESETS) {
       expect(screen.getByTestId(`look-preset-${p.id}`)).toBeTruthy();
     }
-    // 자유 입력 textarea 는 보조로 유지된다.
-    expect(screen.getByTestId("look-prompt")).toBeTruthy();
+    // 단순화: 자유 입력 textarea 와 개수 선택 UI 는 제거됐다.
+    expect(screen.queryByTestId("look-prompt")).toBeNull();
+    expect(screen.queryByTestId("look-count-2")).toBeNull();
   });
 
-  it("카드 클릭 시 프롬프트가 채워지고 바로 생성되며 선택이 강조된다", async () => {
+  it("카드 클릭 시 그 스타일로 룩 1개를 바로 생성하고 선택을 강조한다", async () => {
     const onGenerate = vi.fn().mockResolvedValue(undefined);
     render(
       <LookGenerateStep
@@ -62,12 +63,8 @@ describe("LookGenerateStep — 스타일 샘플 갤러리", () => {
     fireEvent.click(screen.getByTestId(`look-preset-${first.id}`));
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
-    // 프리셋 프롬프트(데이터의 preset.prompt)로 즉시 생성.
-    expect(onGenerate).toHaveBeenCalledWith(first.prompt, expect.any(Number));
-    // textarea 에도 채워진다.
-    expect((screen.getByTestId("look-prompt") as HTMLTextAreaElement).value).toBe(
-      first.prompt,
-    );
+    // 프리셋 프롬프트(데이터의 preset.prompt)로 즉시 생성 — 개수 인자 없이 1개.
+    expect(onGenerate).toHaveBeenCalledWith(first.prompt);
     // 선택 강조(aria-pressed).
     expect(
       screen.getByTestId(`look-preset-${first.id}`).getAttribute("aria-pressed"),
@@ -149,6 +146,7 @@ vi.mock("@/components/professor/avatars/onboarding/photoAvatarApi", () => ({
 }));
 
 import { usePhotoAvatarFlow } from "@/components/professor/avatars/onboarding/usePhotoAvatarFlow";
+import { generateLooks } from "@/components/professor/avatars/onboarding/photoAvatarApi";
 
 describe("usePhotoAvatarFlow — 업로드 복귀 시 stale 룩 초기화", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -157,10 +155,11 @@ describe("usePhotoAvatarFlow — 업로드 복귀 시 stale 룩 초기화", () =
     const { result, unmount } = renderHook(() => usePhotoAvatarFlow());
     await waitFor(() => expect(result.current.initializing).toBe(false));
 
-    // 룩 생성 → looks 채움 + 선택.
+    // 룩 생성 → looks 채움 + 선택. 개수는 항상 1로 고정된다.
     await act(async () => {
-      await result.current.generate("프롬프트", 2);
+      await result.current.generate("프롬프트");
     });
+    expect(generateLooks).toHaveBeenCalledWith("프롬프트", 1);
     await act(async () => {
       await result.current.select("k1");
     });
