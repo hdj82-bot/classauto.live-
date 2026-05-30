@@ -465,6 +465,62 @@ async def test_synthesize_mixed_falls_back_to_google_when_elevenlabs_down():
     assert result.fallback_reason and "ElevenLabsServerError" in result.fallback_reason
 
 
+# ── 클론(IVC) 음성: v3 우회 + multilingual_v2 + 클론 튜닝 세팅 ──────────────
+
+
+@pytest.mark.asyncio
+async def test_synthesize_cloned_uses_v2_and_clone_settings():
+    """cloned=True 면 v3 를 건너뛰고 multilingual_v2 + 클론 튜닝 세팅으로 합성한다.
+
+    v3 는 similarity_boost 등 클론 튜닝 키를 무시하므로 클론에는 v2 를 쓴다.
+    """
+    captured: dict = {}
+
+    def fake_el(text, **kwargs):
+        captured["model_id"] = kwargs.get("model_id")
+        captured["voice_settings"] = kwargs.get("voice_settings")
+        captured["calls"] = captured.get("calls", 0) + 1
+        return b"clone-audio"
+
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=fake_el,
+    ):
+        result = await synthesize(
+            "안녕하세요. 본인 목소리 미리보기.", voice_id="cloned-voice-1", cloned=True,
+        )
+
+    assert result.provider == "elevenlabs"
+    assert result.audio_bytes == b"clone-audio"
+    assert captured["model_id"] == "eleven_multilingual_v2"   # v3 아님
+    assert captured["calls"] == 1                             # v3 선시도 없음
+    vs = captured["voice_settings"]
+    assert vs["similarity_boost"] == 0.85   # 클론 재현 강화
+    assert vs["stability"] == 0.45
+    assert vs["use_speaker_boost"] is True
+
+
+@pytest.mark.asyncio
+async def test_synthesize_cloned_does_not_attempt_v3_on_mixed_text():
+    """클론은 중국어 혼합 텍스트라도 v3 를 시도하지 않고 v2 구간 합성으로 간다."""
+    seen_models: list = []
+
+    def fake_el(text, **kwargs):
+        seen_models.append(kwargs.get("model_id"))
+        return b"seg"
+
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=fake_el,
+    ), patch.object(tts, "_concat_mp3", side_effect=lambda parts: b"".join(parts)):
+        result = await synthesize(
+            '여기서 "我"는 나는 입니다.', voice_id="cloned-voice-1", cloned=True,
+        )
+
+    assert result.provider == "elevenlabs"
+    assert seen_models  # 최소 1구간
+    assert all(m == "eleven_multilingual_v2" for m in seen_models)
+    assert "eleven_v3" not in seen_models
+
+
 def test_concat_mp3_single_and_empty():
     """_concat_mp3: 1개면 그대로, 빈 입력이면 b''."""
     assert tts._concat_mp3([b"only"]) == b"only"

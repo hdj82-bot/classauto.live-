@@ -314,8 +314,11 @@ async def create_avatar_preview(
     from app.services.pipeline import tts
     from app.services.pipeline.heygen import HeyGenError, create_video
 
+    # 미리보기 대상이 교수자 본인 목소리(IVC 클론)면 v3 가 아니라 multilingual_v2
+    # +클론 튜닝 세팅으로 합성한다(클론 fidelity 안정화).
+    is_cloned = bool(voice_id and user.cloned_voice_id and voice_id == user.cloned_voice_id)
     try:
-        result = await tts.synthesize(_PREVIEW_TEXT, voice_id=voice_id)
+        result = await tts.synthesize(_PREVIEW_TEXT, voice_id=voice_id, cloned=is_cloned)
         stored_audio_url = s3_svc.upload_audio_bytes(
             result.audio_bytes, f"avatar-preview-{user.id}"
         )
