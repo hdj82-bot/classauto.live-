@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { CameraIcon, CheckIcon, PersonIcon } from "./PhotoAvatarIcons";
+import { useReducedMotion } from "../useReducedMotion";
 
 interface PhotoUploadStepProps {
   /** 검증 통과한 파일을 업로드. 성공 시 흐름이 학습 단계로 전진한다. */
@@ -30,6 +31,7 @@ export default function PhotoUploadStep({
   maxBytes = DEFAULT_MAX_BYTES,
   t,
 }: PhotoUploadStepProps) {
+  const reducedMotion = useReducedMotion();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -164,12 +166,24 @@ export default function PhotoUploadStep({
                 onClick={submit}
                 disabled={!file || submitting}
                 data-testid="upload-submit"
+                aria-busy={submitting}
                 style={{
                   ...primaryBtn,
-                  opacity: !file || submitting ? 0.45 : 1,
+                  // 제출 중에는 흐리게만 처리하고(완전 회색 비활성 X) 스피너로
+                  // 리사이즈·업로드가 진행 중임을 체감시킨다.
+                  opacity: !file ? 0.45 : submitting ? 0.8 : 1,
                   cursor: !file || submitting ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 7,
                 }}
               >
+                {submitting && (
+                  <span
+                    aria-hidden="true"
+                    style={reducedMotion ? submitSpinnerStatic : submitSpinner}
+                  />
+                )}
                 {submitting ? t("upload.submitting") : t("upload.submit")}
               </button>
             </div>
@@ -246,4 +260,22 @@ const primaryBtn: CSSProperties = {
   background: "linear-gradient(135deg, #FFB627, #E89E0E)",
   color: "#0A0A0A",
   fontFamily: "inherit",
+};
+
+// 제출 버튼 라벨 앞 스피너 — 골드 버튼 위라 어두운(#0A0A0A) 링.
+// keyframe 은 globals.css 전역 `studio-spin` 재사용(TrainingStep 과 동일).
+const submitSpinner: CSSProperties = {
+  width: 13,
+  height: 13,
+  flexShrink: 0,
+  borderRadius: "50%",
+  border: "2px solid rgba(10, 10, 10, 0.25)",
+  borderTopColor: "#0A0A0A",
+  animation: "studio-spin 0.8s linear infinite",
+};
+
+// prefers-reduced-motion: 회전 없이 정적 링만 노출.
+const submitSpinnerStatic: CSSProperties = {
+  ...submitSpinner,
+  animation: "none",
 };
