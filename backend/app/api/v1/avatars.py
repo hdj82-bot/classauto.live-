@@ -28,6 +28,8 @@ from app.schemas.avatar import (
     LookSelectResponse,
     PhotoAvatarStatusResponse,
     ProfilePhotoResponse,
+    RecentAvatarRequest,
+    RecentAvatarResponse,
     VoiceCloneResponse,
     VoiceScriptRequest,
     VoiceScriptResponse,
@@ -826,3 +828,60 @@ async def select_look(
     return LookSelectResponse(
         default_look_id=look_id, message="기본 아바타 룩으로 설정했습니다."
     )
+
+
+# ── 최근 선택한 아바타 (라이브러리 즉시 선택·적용) ────────────────────────────
+#
+# "기본 룩"(photo_avatar_default_look_id, 모든 강의의 폴백)과 별개로, 교수자가
+# 가장 최근에 고른 아바타/룩을 기억한다. 표준 HeyGen avatar_id 든 본인 룩
+# heygen_look_id(둘 다 렌더용 avatar_id)든 그대로 저장하며, 프론트가 이미 가진
+# 목록에서 해석해 "최근 선택한 아바타" 박스로 복원한다(재생성 없이 바로 적용).
+
+
+@router.get(
+    "/api/avatars/me/recent",
+    response_model=RecentAvatarResponse,
+    summary="가장 최근 선택한 아바타",
+)
+async def get_recent_avatar(user: User = Depends(require_professor)):
+    """가장 최근 선택한 아바타/룩 id 를 반환한다(없으면 null)."""
+    return RecentAvatarResponse(avatar_id=user.recent_avatar_id)
+
+
+@router.post(
+    "/api/avatars/me/recent",
+    response_model=RecentAvatarResponse,
+    summary="가장 최근 선택한 아바타 기록",
+)
+async def set_recent_avatar(
+    payload: RecentAvatarRequest,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """가장 최근 선택한 아바타/룩을 기록한다(재생성 없는 단순 선택 기록).
+
+    값이 본인 룩이면 ready 인 것만 허용한다(미완 룩은 노출·적용 대상이 아님).
+    표준 HeyGen 아바타·Talking Photo id 는 그대로 수용한다(프론트가 큐레이션된
+    목록에서만 보내므로 추가 검증 불필요).
+    """
+    avatar_id = payload.avatar_id.strip()
+    if not avatar_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="아바타 id 가 비어 있습니다."
+        )
+    look = (
+        await db.execute(
+            select(PhotoAvatarLook).where(
+                PhotoAvatarLook.user_id == user.id,
+                PhotoAvatarLook.heygen_look_id == avatar_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if look is not None and look.status != LookStatus.ready.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="아직 준비되지 않은 룩입니다.",
+        )
+    user.recent_avatar_id = avatar_id
+    await db.commit()
+    return RecentAvatarResponse(avatar_id=avatar_id)

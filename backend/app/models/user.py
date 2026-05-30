@@ -61,6 +61,11 @@ class User(Base):
     #   고르기 위함 — 크레딧 부족을 "사진을 바꾸라"고 오안내하지 않도록.
     photo_avatar_group_error: Mapped[str | None] = mapped_column(String(40), nullable=True)
     photo_avatar_default_look_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # recent_avatar_id: 아바타 선택 페이지에서 교수자가 가장 최근에 고른 아바타/룩 id.
+    #   표준 HeyGen avatar_id 또는 본인 룩 heygen_look_id(둘 다 렌더용 avatar_id 로 통용).
+    #   다음 방문 시 "최근 선택한 아바타" 박스로 복원해 재생성 없이 바로 강의에 적용한다.
+    #   기본 룩(photo_avatar_default_look_id, 모든 강의의 폴백)과는 별개의 "최근 선택" 기록.
+    recent_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 학습자 전용
     student_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
