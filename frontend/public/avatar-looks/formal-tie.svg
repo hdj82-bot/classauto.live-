@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400" viewBox="0 0 300 400" role="img" aria-hidden="true">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2B2B34"/>
+      <stop offset="1" stop-color="#16161C"/>
+    </linearGradient>
+    <linearGradient id="at" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22232C"/>
+      <stop offset="1" stop-color="#0D0E14"/>
+    </linearGradient>
+    <radialGradient id="vg" cx="0.5" cy="0.38" r="0.75">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.06"/>
+    </radialGradient>
+  </defs>
+  <rect width="300" height="400" fill="url(#bg)"/>
+  
+  <rect width="300" height="400" fill="url(#vg)"/>
+  <!-- shoulders / bust -->
+  <path d="M52 400 C52 318 96 282 150 282 C204 282 248 318 248 400 Z" fill="url(#at)"/>
+  <!-- lapel V -->
+  <path d="M150 300 L120 400 L138 400 L150 330 L162 400 L180 400 Z" fill="#2C2D38" opacity="0.55"/>
+  <rect x="143" y="250" width="14" height="86" rx="4" fill="#C9A24B"/>
+  <!-- neck -->
+  <path d="M132 252 h36 v30 c0 16 -36 16 -36 0 Z" fill="#D9B98E"/>
+  <!-- head -->
+  <circle cx="150" cy="206" r="54" fill="#E7CBA6"/>
+  <!-- hair cap -->
+  <path d="M96 206 a54 54 0 0 1 108 0 a54 26 0 0 0 -108 0 Z" fill="#33291F"/>
+</svg>

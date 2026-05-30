@@ -13,6 +13,8 @@ interface LookSelectStepProps {
   reducedMotion: boolean;
   /** ③ 으로 돌아가 추가 생성. */
   onBack: () => void;
+  /** ① 업로드로 되돌아가 다른 사진으로 다시 시작. */
+  onRestart: () => void;
   /** ⑤ 미리보기로. 선택된 룩이 있어야 활성. */
   onNext: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
@@ -30,6 +32,7 @@ export default function LookSelectStep({
   onSelect,
   reducedMotion,
   onBack,
+  onRestart,
   onNext,
   t,
 }: LookSelectStepProps) {
@@ -66,9 +69,14 @@ export default function LookSelectStep({
       )}
 
       <div style={footerStyle}>
-        <button type="button" onClick={onBack} style={secondaryBtn} data-testid="select-back">
-          {t("select.generateMore")}
-        </button>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+          <button type="button" onClick={onBack} style={secondaryBtn} data-testid="select-back">
+            {t("select.generateMore")}
+          </button>
+          <button type="button" onClick={onRestart} style={ghostLink} data-testid="select-restart">
+            {t("select.restart")}
+          </button>
+        </div>
         <button
           type="button"
           onClick={onNext}
@@ -141,6 +149,19 @@ const secondaryBtn: CSSProperties = {
   color: "var(--text)",
   cursor: "pointer",
   fontFamily: "inherit",
+};
+
+const ghostLink: CSSProperties = {
+  padding: "4px 8px",
+  fontSize: 12,
+  fontWeight: 500,
+  borderRadius: 8,
+  border: "none",
+  background: "transparent",
+  color: "var(--text-subtle)",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  textDecoration: "underline",
 };
 
 const primaryBtn: CSSProperties = {

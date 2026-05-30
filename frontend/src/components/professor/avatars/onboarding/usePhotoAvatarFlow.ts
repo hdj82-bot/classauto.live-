@@ -28,12 +28,13 @@ import type {
  * 표면화한다. 폴링은 조용히 자기 보정한다.
  */
 
-const GROUP_POLL_MS = 4000;
+const GROUP_POLL_MS = 2500;
 const LOOKS_POLL_MS = 3000;
 // 학습이 이 횟수(≈3분)를 넘겨도 training 이면 "지연" 으로 보고 사용자에게 안내한다.
 // HeyGen 학습은 보통 1~2분이면 끝나므로, 그 이상이면 백엔드/HeyGen 지연을 의심한다.
 // 폴링은 계속하되(여전히 끝날 수 있으므로) 무한 스피너 대신 안내·재시도를 노출한다.
-const GROUP_STALL_AFTER = 45;
+// 72 × 2500ms = 180000ms = 3분 (GROUP_POLL_MS 를 낮춰도 임계 시간은 동일하게 유지).
+const GROUP_STALL_AFTER = 72;
 
 /** 서버 상태로부터 진입 단계를 도출한다. */
 function deriveStep(group: PhotoAvatarGroup, looks: Look[]): OnboardingStep {
@@ -190,7 +191,20 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     setDeferred(isDeferredMode());
   }, []);
 
-  const goTo = useCallback((next: OnboardingStep) => setStep(next), []);
+  const goTo = useCallback(
+    (next: OnboardingStep) => {
+      // ① 업로드로 되돌아가면(다른 사진으로 다시 시작) 이전 룩/선택은 무효 —
+      // 새 사진은 새 그룹을 학습하므로 기존 룩이 남아 ③④ 에 섞이면 안 된다.
+      // (mock 백엔드도 재업로드 시 룩을 비운다 — photoAvatarApi.uploadPhotoAvatar.)
+      if (next === "upload") {
+        clearLooksTimer();
+        setLooks([]);
+        setSelectedLookId(null);
+      }
+      setStep(next);
+    },
+    [clearLooksTimer],
+  );
 
   const looksPending = looks.some((l) => l.status === "generating");
 

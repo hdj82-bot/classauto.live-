@@ -58,12 +58,45 @@
     "looks": {
       "title": "Generate Design with AI looks",
       "description": "Describe the background, attire, and framing to generate several styled looks that keep your face. You can make up to 4 at a time.",
-      "promptLabel": "Describe the style you want",
+      "galleryLabel": "Pick from style samples",
+      "galleryHint": "Tap a card to generate that style right away.",
+      "presets": {
+        "studio-navy": {
+          "label": "Light gray studio · navy suit",
+          "prompt": "Light gray studio background, navy suit with a white shirt, front-facing upper body"
+        },
+        "warm-cardigan": {
+          "label": "Warm beige · knit cardigan",
+          "prompt": "Warm beige background, knit cardigan, softly lit front-facing upper body"
+        },
+        "formal-tie": {
+          "label": "Dark backdrop · black suit and tie",
+          "prompt": "Dark neutral background, black suit and tie, formal front-facing upper body"
+        },
+        "lab-shirt": {
+          "label": "Lab · shirt and coat",
+          "prompt": "Bright lab background, shirt under a white coat, neat front-facing upper body"
+        },
+        "study-blazer": {
+          "label": "Study · tweed blazer",
+          "prompt": "Study background with bookshelves, tweed blazer, calm front-facing upper body"
+        },
+        "lecture-casual": {
+          "label": "Classroom · casual shirt",
+          "prompt": "Bright classroom background, casual shirt, friendly front-facing upper body"
+        },
+        "bookshelf-knit": {
+          "label": "Bookshelf · knit sweater",
+          "prompt": "Bookshelf background, knit sweater, warm front-facing upper body"
+        },
+        "classic-portrait": {
+          "label": "Gold gradient · classic suit",
+          "prompt": "Soft gold gradient background, charcoal classic suit, front-facing portrait"
+        }
+      },
+      "promptLabel": "Or describe it yourself",
       "promptPlaceholder": "e.g. light gray background, navy suit, front-facing upper body",
-      "preset1": "Light gray background, navy suit",
-      "preset2": "Warm beige background, knit cardigan",
-      "preset3": "Dark background, black suit and tie",
-      "preset4": "Office-like background, shirt",
+      "restart": "Start over with a different photo",
       "countLabel": "How many",
       "generate": "Generate looks",
       "generateMore": "Generate more",
@@ -82,6 +115,7 @@
       "description": "Choose one look you like as the default. This look becomes the default appearance for your lecture videos.",
       "empty": "No finished looks yet. Please generate looks in the previous step first.",
       "generateMore": "Generate more",
+      "restart": "Start over with a different photo",
       "next": "Next: preview",
       "error": "Could not select the default look. Please try again shortly."
     },

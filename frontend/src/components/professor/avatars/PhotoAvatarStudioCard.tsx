@@ -245,6 +245,7 @@ export default function PhotoAvatarStudioCard({
               looksPending={flow.looksPending}
               reducedMotion={reducedMotion}
               onNext={() => flow.goTo("select")}
+              onRestart={restart}
               t={t}
             />
           )}
@@ -256,6 +257,7 @@ export default function PhotoAvatarStudioCard({
               onSelect={handleSelect}
               reducedMotion={reducedMotion}
               onBack={() => flow.goTo("generate")}
+              onRestart={restart}
               onNext={handleConfirm}
               t={tSelectConfirm(t)}
             />
