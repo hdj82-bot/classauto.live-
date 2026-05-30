@@ -308,6 +308,7 @@ def test_e2e_render_slide_pipeline():
         voice_id=None,
         gender="male",
         speed=1.0,
+        cloned=False,
     )
 
     # S3 오디오 업로드 검증
