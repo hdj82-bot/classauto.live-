@@ -31,6 +31,41 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://api.elevenlabs.io/v1"
 _DEFAULT_TIMEOUT = 120.0  # 합성은 긴 문장에서 수십 초 소요 — 통상 30s 보다 길게
 
+# eleven_v3 는 voice_settings 모델이 v2 와 다르다. stability 는 Creative(0.0)/
+# Natural(0.5)/Robust(1.0) 세 단계만 의미가 있고 similarity_boost·style·
+# use_speaker_boost·speed 는 무시/거부될 수 있다(speed 는 audio tag 로 제어).
+# 잘못된 키를 실어 보내면 422 로 거부돼 조용히 v2 폴백이 일어날 수 있으므로
+# v3 요청 전 voice_settings 를 정리한다.
+# 근거: https://elevenlabs.io/docs/overview/capabilities/text-to-speech/best-practices
+_V3_STABILITY_STEPS = (0.0, 0.5, 1.0)
+
+
+def _is_v3_model(model_id: str) -> bool:
+    return (model_id or "").strip().lower() == "eleven_v3"
+
+
+def _quantize_v3_stability(value: Any) -> float:
+    """v3 stability 를 가장 가까운 Creative/Natural/Robust 단계로 스냅."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.5
+    return min(_V3_STABILITY_STEPS, key=lambda s: abs(s - v))
+
+
+def _sanitize_voice_settings(model_id: str, vs: dict[str, Any]) -> dict[str, Any]:
+    """모델이 실제로 지원하는 voice_settings 만 남긴다.
+
+    v3 는 stability(이산 3단계) 만 남기고 나머지(similarity_boost·style·
+    use_speaker_boost·speed)는 제거한다. v2 등은 그대로 통과시킨다.
+    """
+    if not _is_v3_model(model_id):
+        return vs
+    out: dict[str, Any] = {}
+    if "stability" in vs:
+        out["stability"] = _quantize_v3_stability(vs["stability"])
+    return out
+
 
 # ── 도메인 예외 ──────────────────────────────────────────────────────────────
 
@@ -113,7 +148,7 @@ async def synthesize(
     gender: str | None = None,
     speed: float | None = None,
     model_id: str | None = None,
-    output_format: str = "mp3_44100_128",
+    output_format: str | None = None,
     voice_settings: dict[str, Any] | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
 ) -> bytes:
@@ -130,17 +165,20 @@ async def synthesize(
         raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
     vid = _voice_id_or_default(voice_id, gender)
     mid = (model_id or settings.ELEVENLABS_MODEL_ID).strip()
+    fmt = (output_format or settings.ELEVENLABS_OUTPUT_FORMAT or "mp3_44100_128").strip()
     payload_settings = dict(voice_settings or _default_voice_settings())
     clamped_speed = _clamp_speed(speed)
     if clamped_speed is not None and clamped_speed != 1.0:
         payload_settings["speed"] = clamped_speed
+    # 모델별 미지원 키 제거(특히 v3) — 422 거부로 인한 조용한 폴백 방지.
+    payload_settings = _sanitize_voice_settings(mid, payload_settings)
 
     try:
         return await _synthesize_with_retry(
             text=text,
             voice_id=vid,
             model_id=mid,
-            output_format=output_format,
+            output_format=fmt,
             voice_settings=payload_settings,
             timeout=timeout,
         )
@@ -176,12 +214,19 @@ async def _synthesize_with_retry(
     payload = {"text": text, "model_id": model_id, "voice_settings": voice_settings}
     params = {"output_format": output_format}
     logger.info(
-        "ElevenLabs TTS 요청: voice_id=%s, model=%s, chars=%d",
-        voice_id, model_id, len(text),
+        "ElevenLabs TTS 요청: voice_id=%s, model=%s, format=%s, chars=%d, settings=%s",
+        voice_id, model_id, output_format, len(text), voice_settings,
     )
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(url, headers=headers, json=payload, params=params)
-    return _interpret_synth_response(resp)
+    audio = _interpret_synth_response(resp)
+    # 실제 합성에 사용된 model 을 200 응답 직후 명시 로깅한다(추측 제거 — 호출부
+    # 폴백 분기와 합쳐 "어떤 model 로 합성됐는지"가 로그만으로 확정되도록).
+    logger.info(
+        "ElevenLabs TTS 합성 성공: voice_id=%s, model=%s, format=%s, bytes=%d",
+        voice_id, model_id, output_format, len(audio),
+    )
+    return audio
 
 
 def _interpret_synth_response(resp: httpx.Response) -> bytes:
@@ -387,11 +432,14 @@ async def clone_voice(
     *,
     description: str | None = None,
     labels: dict[str, str] | None = None,
+    remove_background_noise: bool | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
 ) -> dict[str, Any]:
     """ElevenLabs Instant Voice Cloning 으로 cloned voice 생성.
 
     - audio_files: ``[(filename, bytes), ...]`` — 30초~수분 분량 샘플
+    - remove_background_noise: 샘플의 배경 잡음 제거(마이크 녹음 보정 → 클론
+      fidelity↑). None 이면 ``settings.ELEVENLABS_IVC_REMOVE_NOISE`` 를 따른다.
     - 반환: ``{"voice_id": "...", ...}`` (생성된 voice 메타데이터)
 
     ``custom_voices`` 테이블 INSERT 시 ``elevenlabs_voice_id`` 로 사용한다.
@@ -401,12 +449,18 @@ async def clone_voice(
     if not audio_files:
         raise ElevenLabsError("clone_voice: 음성 샘플이 비어있음")
 
+    denoise = (
+        settings.ELEVENLABS_IVC_REMOVE_NOISE
+        if remove_background_noise is None
+        else remove_background_noise
+    )
     try:
         return await _clone_voice_with_retry(
             name=name,
             audio_files=audio_files,
             description=description,
             labels=labels,
+            remove_background_noise=denoise,
             timeout=timeout,
         )
     except (RetryableHTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
@@ -428,6 +482,7 @@ async def _clone_voice_with_retry(
     audio_files: list[tuple[str, bytes]],
     description: str | None,
     labels: dict[str, str] | None,
+    remove_background_noise: bool = False,
     timeout: float,
 ) -> dict[str, Any]:
     url = f"{_BASE_URL}/voices/add"
@@ -440,8 +495,11 @@ async def _clone_voice_with_retry(
         data["description"] = description
     if labels:
         data["labels"] = _json.dumps(labels)
+    # multipart form 의 bool 은 소문자 문자열로 보낸다(ElevenLabs add-voice 규약).
+    data["remove_background_noise"] = "true" if remove_background_noise else "false"
     logger.info(
-        "ElevenLabs IVC 요청: name=%s, samples=%d", name, len(audio_files),
+        "ElevenLabs IVC 요청: name=%s, samples=%d, remove_noise=%s",
+        name, len(audio_files), remove_background_noise,
     )
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(url, headers=headers, data=data, files=files)

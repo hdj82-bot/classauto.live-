@@ -78,6 +78,7 @@ async def synthesize(
     voice_id: str | None = None,
     gender: str | None = None,
     speed: float | None = None,
+    cloned: bool = False,
     sessionmaker=None,
     video_render_id: uuid.UUID | None = None,
     s3_render_id: str | None = None,
@@ -90,6 +91,10 @@ async def synthesize(
               Lecture.voice_gender 를 흘려보내는 용도.
     speed:    발화 속도 배율(1.0 = 기본). ElevenLabs 는 voice_settings.speed(0.7~1.2
               로 클램프), Google 폴백은 speaking_rate 로 전달한다.
+    cloned:   교수자 본인 목소리(Instant Voice Cloning)면 True. 이 경우 eleven_v3
+              가 아니라 ``ELEVENLABS_MODEL_ID_CLONE``(multilingual_v2)+클론 튜닝
+              세팅으로 합성한다(클론 fidelity 안정화). v3 는 similarity_boost 등
+              클론 튜닝 키를 무시하므로 클론에는 부적합.
     sessionmaker, video_render_id: 둘 다 주어지면 cost_logs 에 즉시 기록.
                                    (별도 트랜잭션 — record_once_committed 위임)
     s3_render_id: 주어지면 audio 를 S3 의 표준 경로에 업로드.
@@ -112,13 +117,14 @@ async def synthesize(
         # 전환을 한 음원에서 처리한다(구간 분리·이어붙임 없음 → 멈춤/끊김 제거).
         # 순수 한국어 등은 기존 multilingual_v2. v3 실패 시 v2 구간 분리로 폴백.
         audio_bytes, speed_provider = await _elevenlabs_primary(
-            text, voice_id=voice_id, gender=gender, speed=speed,
+            text, voice_id=voice_id, gender=gender, speed=speed, cloned=cloned,
         )
         provider = "elevenlabs"
         logger.info(
-            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s, speed=%s, path=%s",
+            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s, speed=%s, "
+            "cloned=%s, path=%s",
             len(text), voice_id or "<default>", gender or "<default>", speed or 1.0,
-            speed_provider,
+            cloned, speed_provider,
         )
     except Exception as exc:
         # ElevenLabsError 뿐 아니라 httpx.ConnectError 등 변환 안 된 네트워크 예외도
@@ -210,9 +216,22 @@ _V3_MAX_CHARS = 5000  # eleven_v3 단일 요청 글자 한도
 
 
 def _v3_voice_settings() -> dict[str, Any]:
-    """eleven_v3 용 voice_settings. v3 미지원인 ``speed``·``use_speaker_boost``·
-    ``style`` 은 빼고 stability/similarity_boost 만 보낸다(속도는 atempo 로 처리)."""
-    return {"stability": 0.5, "similarity_boost": 0.75}
+    """eleven_v3 용 voice_settings. v3 는 stability(Creative0.0/Natural0.5/
+    Robust1.0) 만 의미가 있다(나머지 키는 elevenlabs_client 에서 정리됨). 속도는
+    API 미지원이라 atempo 로 처리한다. Natural(0.5)로 합성한다."""
+    return {"stability": 0.5}
+
+
+def _clone_voice_settings() -> dict[str, Any]:
+    """클론(IVC) 음성 합성용 voice_settings (multilingual_v2). similarity_boost 를
+    높여(기본 0.85) 원본 목소리 재현을 강화하고, stability 0.45 로 약간의 표현력을
+    남긴다. 모두 ``settings.ELEVENLABS_CLONE_*`` 로 운영 튜닝 가능."""
+    return {
+        "stability": settings.ELEVENLABS_CLONE_STABILITY,
+        "similarity_boost": settings.ELEVENLABS_CLONE_SIMILARITY_BOOST,
+        "style": settings.ELEVENLABS_CLONE_STYLE,
+        "use_speaker_boost": settings.ELEVENLABS_CLONE_USE_SPEAKER_BOOST,
+    }
 
 
 async def _elevenlabs_primary(
@@ -221,16 +240,38 @@ async def _elevenlabs_primary(
     voice_id: str | None,
     gender: str | None,
     speed: float | None,
+    cloned: bool = False,
 ) -> tuple[bytes, str]:
     """ElevenLabs 1차 합성. 반환 ``(audio_bytes, speed_provider)``.
 
-    - 기본: **모든 텍스트를 eleven_v3 단일 호출**로 합성(사이트 전체 v3 정책).
-      v3 는 한·중 코드스위칭까지 한 번에 처리한다. speed 는 안 보내고 atempo 로
-      처리하므로 ``speed_provider="elevenlabs_v3"``.
+    - **클론(IVC) 음성(cloned=True)**: v3 를 건너뛰고 ``ELEVENLABS_MODEL_ID_CLONE``
+      (multilingual_v2)+클론 튜닝 세팅으로 합성한다. v3 는 similarity_boost 등
+      클론 튜닝 키를 무시해 본인 목소리 재현이 약해지기 때문. multilingual_v2 는
+      네이티브 speed(0.7~1.2)도 지원하므로 ``speed_provider="elevenlabs"``.
+    - **일반 음성**: ``ELEVENLABS_MODEL_ID_ZH``(eleven_v3) 단일 호출로 합성한다
+      (사이트 전체 v3 정책 — 한·중 코드스위칭 한 번에 처리). speed 는 안 보내고
+      atempo 로 처리하므로 ``speed_provider="elevenlabs_v3"``.
     - v3 호출 실패 시 multilingual_v2 경로로 폴백한다(중국어 섞인 텍스트는 구간
       분리로 발음 보존 — 회귀 방지). ``speed_provider="elevenlabs"``.
     - ``ELEVENLABS_MODEL_ID_ZH`` 가 비었거나 5000자 초과면 v2 경로를 쓴다.
     """
+    # ── 클론(IVC) 전용 경로: 항상 v2 + 클론 튜닝 세팅 ──────────────────────────
+    if cloned:
+        clone_model = (
+            settings.ELEVENLABS_MODEL_ID_CLONE or settings.ELEVENLABS_MODEL_ID
+        ).strip()
+        clone_settings = _clone_voice_settings()
+        logger.info(
+            "클론(IVC) 합성: model=%s, similarity_boost=%.2f, stability=%.2f, chars=%d",
+            clone_model, clone_settings["similarity_boost"],
+            clone_settings["stability"], len(text),
+        )
+        audio = await _elevenlabs_synthesize_segmented(
+            text, voice_id=voice_id, gender=gender, speed=speed,
+            model_id=clone_model, voice_settings=clone_settings,
+        )
+        return audio, "elevenlabs"
+
     model_v3 = (settings.ELEVENLABS_MODEL_ID_ZH or "").strip()
     if model_v3 and len(text) <= _V3_MAX_CHARS:
         try:
@@ -242,13 +283,20 @@ async def _elevenlabs_primary(
                 voice_settings=_v3_voice_settings(),
             )
             logger.info(
-                "ElevenLabs %s 합성: chars=%d", model_v3, len(text),
+                "ElevenLabs 합성 모델 확정: model=%s, chars=%d", model_v3, len(text),
             )
             return audio, "elevenlabs_v3"
         except Exception as exc:  # noqa: BLE001
-            logger.warning("v3 합성 실패 → multilingual_v2 폴백: %s", exc)
+            logger.warning(
+                "eleven_v3 합성 실패 → %s 폴백: %s",
+                settings.ELEVENLABS_MODEL_ID, exc,
+            )
     audio = await _elevenlabs_synthesize_segmented(
         text, voice_id=voice_id, gender=gender, speed=speed,
+    )
+    logger.info(
+        "ElevenLabs 합성 모델 확정: model=%s (v3 미사용/폴백), chars=%d",
+        settings.ELEVENLABS_MODEL_ID, len(text),
     )
     return audio, "elevenlabs"
 
@@ -269,6 +317,8 @@ async def _elevenlabs_synthesize_segmented(
     voice_id: str | None,
     gender: str | None,
     speed: float | None,
+    model_id: str | None = None,
+    voice_settings: dict[str, Any] | None = None,
 ) -> bytes:
     """언어 구간별로 ElevenLabs 합성 후 오디오를 이어붙여 반환.
 
@@ -276,11 +326,21 @@ async def _elevenlabs_synthesize_segmented(
     동일). 혼합 텍스트만 구간별로 나눠 합성하고 ``_concat_mp3`` 로 병합한다.
     어느 한 구간이라도 실패하면 예외가 그대로 전파돼 호출부(synthesize)의 Google
     폴백으로 흘러간다.
+
+    model_id/voice_settings: 주어지면 모든 구간 호출에 그대로 전달한다(클론 경로가
+    multilingual_v2 + 클론 튜닝 세팅을 강제할 때 사용). None 이면 elevenlabs_client
+    기본값(ELEVENLABS_MODEL_ID + 기본 세팅)을 쓴다.
     """
+    extra: dict[str, Any] = {}
+    if model_id:
+        extra["model_id"] = model_id
+    if voice_settings is not None:
+        extra["voice_settings"] = voice_settings
+
     segments = split_by_language(text)
     if len(segments) <= 1:
         return await elevenlabs_client.synthesize(
-            text, voice_id=voice_id, gender=gender, speed=speed,
+            text, voice_id=voice_id, gender=gender, speed=speed, **extra,
         )
 
     zh_count = sum(1 for lang, _ in segments if lang == "zh")
@@ -294,7 +354,7 @@ async def _elevenlabs_synthesize_segmented(
     async def _one(chunk: str) -> bytes:
         async with sem:
             return await elevenlabs_client.synthesize(
-                chunk, voice_id=voice_id, gender=gender, speed=speed,
+                chunk, voice_id=voice_id, gender=gender, speed=speed, **extra,
             )
 
     # gather 는 입력 순서를 보존하므로 구간 순서대로 이어붙일 수 있다.

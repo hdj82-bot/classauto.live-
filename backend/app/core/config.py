@@ -138,6 +138,24 @@ class Settings(BaseSettings):
     # 도입 경위상 _ZH 지만 현재는 전체 텍스트에 적용.) 빈 문자열로 두면 v3 를 끄고
     # 위 ELEVENLABS_MODEL_ID(multilingual_v2) 경로로 폴백한다(escape hatch).
     ELEVENLABS_MODEL_ID_ZH: str = "eleven_v3"
+    # ── 클론(IVC) 음성 합성 전용 ─────────────────────────────────
+    # 교수자 본인 목소리(Instant Voice Cloning)는 eleven_v3 가 아니라
+    # multilingual_v2 로 합성한다. 이유(ElevenLabs 공식 문서 근거):
+    #  · v3 는 voice_settings 중 stability(Creative0.0/Natural0.5/Robust1.0) 만
+    #    의미가 있고 similarity_boost·style·use_speaker_boost·speed 는 사실상
+    #    무시한다 → 클론 fidelity 를 높이는 similarity_boost 튜닝이 불가능.
+    #  · multilingual_v2 는 위 세팅을 모두 지원해 클론 재현(원본 목소리 닮음)을
+    #    안정적으로 끌어올릴 수 있다.
+    # 운영에서 모델·세팅을 코드 배포 없이 교체할 수 있도록 환경변수로 노출한다.
+    ELEVENLABS_MODEL_ID_CLONE: str = "eleven_multilingual_v2"
+    ELEVENLABS_CLONE_STABILITY: float = 0.45
+    ELEVENLABS_CLONE_SIMILARITY_BOOST: float = 0.85
+    ELEVENLABS_CLONE_STYLE: float = 0.0
+    ELEVENLABS_CLONE_USE_SPEAKER_BOOST: bool = True
+    # 합성 출력 포맷(품질). mp3_44100_128(=44.1kHz/128kbps) 이상 권장.
+    ELEVENLABS_OUTPUT_FORMAT: str = "mp3_44100_128"
+    # IVC 생성 시 업로드 샘플의 배경 잡음 제거(마이크 녹음 품질 보정 → 클론 fidelity↑).
+    ELEVENLABS_IVC_REMOVE_NOISE: bool = True
     # 교수자 음성 선택 UI 에 노출할 큐레이션 보이스 ID(쉼표 구분). 비우면
     # voices.py 의 DEFAULT_CURATED_VOICE_IDS(한국어 강의용 기본 20종) 사용.
     # "차차 추가" 시 이 환경변수에 ID 를 덧붙이면 코드 배포 없이 목록 확장.

@@ -160,7 +160,86 @@ async def test_elevenlabs_synthesize_422_raises_immediately():
     assert route.call_count == 1
 
 
+# ── ElevenLabs synthesize: v3 voice_settings 정리 ────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_elevenlabs_synthesize_v3_strips_unsupported_settings():
+    """eleven_v3 요청 시 미지원 voice_settings(similarity_boost·style·
+    use_speaker_boost)를 제거하고 stability 만 이산 단계로 보낸다."""
+    import json
+
+    route = respx.post(
+        "https://api.elevenlabs.io/v1/text-to-speech/test-voice-default"
+    ).mock(return_value=httpx.Response(200, content=b"V3"))
+
+    await elevenlabs_client.synthesize(
+        "v3 text",
+        model_id="eleven_v3",
+        voice_settings={
+            "stability": 0.6,           # → Natural(0.5) 로 스냅
+            "similarity_boost": 0.9,    # 제거
+            "style": 0.3,               # 제거
+            "use_speaker_boost": True,  # 제거
+        },
+    )
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["model_id"] == "eleven_v3"
+    assert body["voice_settings"] == {"stability": 0.5}
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_elevenlabs_synthesize_v2_keeps_settings():
+    """v2 는 voice_settings 를 그대로 보낸다(정리 대상 아님)."""
+    import json
+
+    route = respx.post(
+        "https://api.elevenlabs.io/v1/text-to-speech/test-voice-default"
+    ).mock(return_value=httpx.Response(200, content=b"V2"))
+
+    await elevenlabs_client.synthesize(
+        "v2 text",
+        model_id="eleven_multilingual_v2",
+        voice_settings={"stability": 0.45, "similarity_boost": 0.85},
+    )
+
+    body = json.loads(route.calls.last.request.content)
+    assert body["voice_settings"]["similarity_boost"] == 0.85
+    assert body["voice_settings"]["stability"] == 0.45
+
+
+def test_sanitize_voice_settings_unit():
+    """순수 함수 단위 검증 — 네트워크 없이."""
+    v3 = elevenlabs_client._sanitize_voice_settings(
+        "eleven_v3",
+        {"stability": 0.9, "similarity_boost": 0.7, "style": 0.2},
+    )
+    assert v3 == {"stability": 1.0}  # 0.9 → Robust(1.0)
+    v2 = elevenlabs_client._sanitize_voice_settings(
+        "eleven_multilingual_v2", {"stability": 0.5, "similarity_boost": 0.7},
+    )
+    assert v2 == {"stability": 0.5, "similarity_boost": 0.7}
+
+
 # ── ElevenLabs IVC (clone_voice) ─────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_elevenlabs_clone_voice_sends_remove_background_noise():
+    """IVC 생성 시 remove_background_noise 가 multipart form 으로 전달된다."""
+    route = respx.post("https://api.elevenlabs.io/v1/voices/add").mock(
+        return_value=httpx.Response(200, json={"voice_id": "v1"}),
+    )
+    await elevenlabs_client.clone_voice(
+        "v", [("a.mp3", b"x")], remove_background_noise=True,
+    )
+    content = route.calls.last.request.content
+    assert b"remove_background_noise" in content
+    assert b"true" in content
 
 
 @pytest.mark.asyncio

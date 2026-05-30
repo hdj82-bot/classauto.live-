@@ -361,12 +361,19 @@ async def preview_voice(
         raise HTTPException(status_code=422, detail="미리들을 발화 내용이 비어 있습니다.")
     text = text[:VOICE_PREVIEW_MAX_CHARS]
 
+    # 미리듣기 대상이 교수자 본인 목소리(IVC 클론)면 v3 가 아니라 multilingual_v2
+    # +클론 튜닝 세팅으로 합성한다(avatars.create_avatar_preview 와 동일 규칙).
+    is_cloned = bool(
+        req.voice_id and user.cloned_voice_id and req.voice_id == user.cloned_voice_id
+    )
+
     try:
         result = await synthesize(
             text,
             voice_id=req.voice_id or None,
             gender=req.gender,
             speed=req.speed,
+            cloned=is_cloned,
         )
     except TTSError as exc:
         logger.warning("음성 미리듣기 합성 실패(TTS): %s", exc)
