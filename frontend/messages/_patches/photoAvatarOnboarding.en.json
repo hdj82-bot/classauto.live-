@@ -52,6 +52,8 @@
       "reupload": "Re-upload a different photo",
       "failedTitle": "Avatar preparation failed",
       "failedDescription": "Training from the photo failed. Please try again with a sharp, front-facing photo on a white/solid background.",
+      "failedCreditTitle": "Out of AI generation credits",
+      "failedCreditDescription": "This isn't a photo problem — the video-generation (HeyGen) API is out of credits. Please ask your administrator to top up credits; it will work once credits are added.",
       "retry": "Re-upload"
     },
 

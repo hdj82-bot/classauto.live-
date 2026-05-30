@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import type { PhotoAvatarGroupStatus } from "./photoAvatarTypes";
+import type { PhotoAvatarErrorCode, PhotoAvatarGroupStatus } from "./photoAvatarTypes";
 import { PersonIcon } from "./PhotoAvatarIcons";
 
 interface TrainingStepProps {
@@ -9,6 +9,8 @@ interface TrainingStepProps {
   reducedMotion: boolean;
   /** 학습이 예상보다 오래 걸리는 중인지 — 안내 문구를 추가로 노출한다. */
   stalled?: boolean;
+  /** status="failed" 일 때의 사유 코드 — 정확한 안내(크레딧 vs 사진)를 고른다. */
+  errorCode?: PhotoAvatarErrorCode | null;
   /** 다시 사진 업로드(이전 단계로). */
   onReupload: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
@@ -25,11 +27,18 @@ export default function TrainingStep({
   status,
   reducedMotion,
   stalled = false,
+  errorCode = null,
   onReupload,
   t,
 }: TrainingStepProps) {
   const failed = status === "failed";
   const showStalled = stalled && !failed;
+  // 크레딧 부족은 사진 문제가 아니므로 안내 문구를 분리한다.
+  const isCredit = failed && errorCode === "insufficient_credit";
+  const failTitle = isCredit ? t("training.failedCreditTitle") : t("training.failedTitle");
+  const failDesc = isCredit
+    ? t("training.failedCreditDescription")
+    : t("training.failedDescription");
 
   return (
     <div data-testid="step-training" style={cardStyle}>
@@ -69,10 +78,10 @@ export default function TrainingStep({
 
         <div style={{ textAlign: "center", maxWidth: 420 }}>
           <h2 style={headingStyle}>
-            {failed ? t("training.failedTitle") : t("training.title")}
+            {failed ? failTitle : t("training.title")}
           </h2>
           <p style={descStyle}>
-            {failed ? t("training.failedDescription") : t("training.description")}
+            {failed ? failDesc : t("training.description")}
           </p>
         </div>
 

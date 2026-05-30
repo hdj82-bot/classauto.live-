@@ -56,6 +56,10 @@ class User(Base):
     #   lecture.avatar_id 가 없을 때 이 값으로 폴백한다(본인 얼굴을 모든 강의에).
     photo_avatar_group_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     photo_avatar_group_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # photo_avatar_group_error: status="failed" 일 때의 사유 분류 코드
+    #   ("insufficient_credit"|"invalid_image"|"unknown"). 사용자에게 정확한 안내를
+    #   고르기 위함 — 크레딧 부족을 "사진을 바꾸라"고 오안내하지 않도록.
+    photo_avatar_group_error: Mapped[str | None] = mapped_column(String(40), nullable=True)
     photo_avatar_default_look_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 학습자 전용
     student_number: Mapped[str | None] = mapped_column(String(50), nullable=True)

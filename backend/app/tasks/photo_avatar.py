@@ -38,6 +38,23 @@ def _look_not_ready(exc: Exception) -> bool:
     )
 
 
+def _classify_failure(exc: Exception) -> str:
+    """학습 실패 사유를 사용자 안내용 분류 코드로 변환.
+
+    - ``insufficient_credit``: HeyGen API 크레딧 부족 — 사진이 아니라 결제 문제.
+      (예: ``{"code":"insufficient_credit","message":"... requires 'api' credits"}``)
+    - ``invalid_image``: 사진 자체 문제(얼굴 미검출·화질 등) — 다른 사진 권장.
+    - ``unknown``: 그 외.
+    호출 시점은 이미 _look_not_ready(=재시도 대상)를 걸러낸 '최종 실패' 경로다.
+    """
+    s = str(exc).lower()
+    if "insufficient_credit" in s or "insufficient credit" in s or "requires 'api' credit" in s:
+        return "insufficient_credit"
+    if "face" in s or "image" in s or "photo" in s or "resolution" in s:
+        return "invalid_image"
+    return "unknown"
+
+
 @celery.task(bind=True, max_retries=_MAX_RETRIES, default_retry_delay=_RETRY_DELAY)
 def prepare_photo_avatar_training(self, user_id: str) -> dict:
     """업로드 사진이 ready 될 때까지 기다렸다가 학습(train)을 시작한다.
@@ -65,10 +82,15 @@ def prepare_photo_avatar_training(self, user_id: str) -> dict:
                     user_id, exc,
                 )
                 raise self.retry(exc=exc)
-            logger.warning("Photo Avatar 학습 시작 실패: user=%s, error=%s", user_id, exc)
+            reason = _classify_failure(exc)
+            logger.warning(
+                "Photo Avatar 학습 시작 실패: user=%s, reason=%s, error=%s",
+                user_id, reason, exc,
+            )
             user.photo_avatar_group_status = "failed"
+            user.photo_avatar_group_error = reason
             db.commit()
-            return {"user_id": user_id, "status": "failed"}
+            return {"user_id": user_id, "status": "failed", "reason": reason}
 
         logger.info("Photo Avatar 학습 시작됨: user=%s, group=%s", user_id, group_id)
     finally:
@@ -102,6 +124,11 @@ def poll_photo_avatar_training(self, user_id: str) -> dict:
 
         status = st.get("status", "training")
         user.photo_avatar_group_status = status
+        if status == "ready":
+            user.photo_avatar_group_error = None  # 성공 — 이전 실패 사유 정리.
+        elif status == "failed":
+            # 폴링 단계 실패는 HeyGen 이 세부 사유를 주지 않으므로 unknown.
+            user.photo_avatar_group_error = "unknown"
         db.commit()
 
         if status == "training":

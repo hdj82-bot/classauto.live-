@@ -667,6 +667,7 @@ async def create_photo_avatar(
 
     user.photo_avatar_group_id = group_id
     user.photo_avatar_group_status = "training"
+    user.photo_avatar_group_error = None  # 새 시도 — 이전 실패 사유 정리.
     await db.commit()
 
     from app.tasks.photo_avatar import prepare_photo_avatar_training
@@ -691,7 +692,14 @@ async def get_photo_avatar(user: User = Depends(require_professor)):
         return PhotoAvatarStatusResponse(status="none")
     raw = user.photo_avatar_group_status or "training"
     group_status = raw if raw in ("training", "ready", "failed") else "training"
-    return PhotoAvatarStatusResponse(group_id=user.photo_avatar_group_id, status=group_status)
+    # 실패 시 사유 분류 코드를 함께 내려 프론트가 정확한 안내를 고르게 한다
+    # (크레딧 부족을 "사진을 바꾸라"고 오안내하지 않도록).
+    error_code = user.photo_avatar_group_error if group_status == "failed" else None
+    return PhotoAvatarStatusResponse(
+        group_id=user.photo_avatar_group_id,
+        status=group_status,
+        error_code=error_code,
+    )
 
 
 @router.post(

@@ -4,6 +4,7 @@ import type {
   Look,
   LookGeneration,
   LookStatus,
+  PhotoAvatarErrorCode,
   PhotoAvatarGroup,
   PhotoAvatarGroupStatus,
 } from "./photoAvatarTypes";
@@ -25,6 +26,7 @@ import type {
 interface GroupWire {
   group_id: string | null;
   status: PhotoAvatarGroupStatus | null;
+  error_code?: string | null;
 }
 
 interface LookWire {
@@ -180,11 +182,23 @@ export async function uploadPhotoAvatar(file: File): Promise<PhotoAvatarGroup> {
   }
 }
 
+/** error_code 문자열을 알려진 분류 코드로 정규화(미지의 값은 "unknown"). */
+function toErrorCode(raw: string | null | undefined): PhotoAvatarErrorCode | null {
+  if (!raw) return null;
+  return raw === "insufficient_credit" || raw === "invalid_image"
+    ? raw
+    : "unknown";
+}
+
 /** GET /api/avatars/me/photo-avatar — 그룹 학습 상태 폴링. deferred 면 mock. */
 export async function getPhotoAvatar(): Promise<PhotoAvatarGroup> {
   try {
     const { data } = await api.get<GroupWire>("/api/avatars/me/photo-avatar");
-    return { group_id: data.group_id ?? null, status: data.status ?? "none" };
+    return {
+      group_id: data.group_id ?? null,
+      status: data.status ?? "none",
+      errorCode: toErrorCode(data.error_code),
+    };
   } catch (err) {
     if (isDeferredError(err)) return mockGroupToDomain();
     throw err;
