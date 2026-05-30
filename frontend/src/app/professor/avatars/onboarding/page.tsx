@@ -159,6 +159,7 @@ export default function PhotoAvatarOnboardingPage() {
                 status={flow.group.status}
                 reducedMotion={reducedMotion}
                 stalled={flow.trainingStalled}
+                errorCode={flow.group.errorCode}
                 onReupload={() => flow.goTo("upload")}
                 t={t}
               />

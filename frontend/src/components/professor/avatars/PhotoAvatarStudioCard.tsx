@@ -234,6 +234,7 @@ export default function PhotoAvatarStudioCard({
               status={flow.group.status}
               reducedMotion={reducedMotion}
               stalled={flow.trainingStalled}
+              errorCode={flow.group.errorCode}
               onReupload={() => flow.goTo("upload")}
               t={t}
             />

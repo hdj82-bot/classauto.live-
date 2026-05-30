@@ -162,6 +162,13 @@ class PhotoAvatarStatusResponse(BaseModel):
         ),
     )
     message: str | None = Field(default=None, description="사용자 표시용 메시지.")
+    error_code: str | None = Field(
+        default=None,
+        description=(
+            "status='failed' 일 때의 사유 분류 코드 "
+            "('insufficient_credit'|'invalid_image'|'unknown'). 프론트가 정확한 안내를 고른다."
+        ),
+    )
 
 
 class LookGenerateRequest(BaseModel):

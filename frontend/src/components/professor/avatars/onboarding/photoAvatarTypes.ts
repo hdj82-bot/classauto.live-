@@ -20,9 +20,14 @@
 /** 그룹 학습 상태. 계약은 training|ready|failed, none 은 "미시작" 표현용. */
 export type PhotoAvatarGroupStatus = "none" | "training" | "ready" | "failed";
 
+/** 학습 실패 사유 분류 코드. status="failed" 일 때만 의미. */
+export type PhotoAvatarErrorCode = "insufficient_credit" | "invalid_image" | "unknown";
+
 export interface PhotoAvatarGroup {
   group_id: string | null;
   status: PhotoAvatarGroupStatus;
+  /** status="failed" 일 때의 사유 코드(정확한 안내 선택용). 없으면 null. */
+  errorCode?: PhotoAvatarErrorCode | null;
 }
 
 /** Design with AI 룩 1개. status 가 ready 일 때만 갤러리/선택 대상. */
