@@ -430,4 +430,75 @@ export async function getLectureTitle(
   }
 }
 
+// ── 저장된 본인 룩 라이브러리 (GET /api/avatars/me/looks) ─────────────────────
+//
+// 온보딩(photoAvatarApi.listLooks)과 같은 엔드포인트지만, 갤러리 페이지는 이미
+// 만든 룩을 "라이브러리"로 보여 주고 재생성 없이 바로 선택/적용하는 용도로 쓴다.
+// 온보딩 래퍼(소유 밖)를 건드리지 않도록 별도 함수로 같은 계약을 호출한다.
+
+/** 백엔드 LookItem wire (avatars.py LookItem). */
+interface LookItemWire {
+  look_id: string;
+  preview_image_url?: string | null;
+  prompt?: string | null;
+  status: "generating" | "ready" | "failed";
+  is_default?: boolean;
+}
+
+/** 저장된 본인 Design with AI 룩 1개 (라이브러리 항목). */
+export interface MyLook {
+  /** HeyGen 룩 id — 렌더용 avatar_id 로 그대로 통용된다(video.py 참고). */
+  id: string;
+  preview_image_url: string | null;
+  prompt: string | null;
+  status: "generating" | "ready" | "failed";
+  /** 교수자가 기본 룩(모든 강의 폴백)으로 지정한 항목이면 true. */
+  is_default: boolean;
+}
+
+/** GET /api/avatars/me/looks — 저장된 본인 룩 목록. deferred(미배포)면 빈 목록. */
+export async function listMyLooks(): Promise<MyLook[]> {
+  try {
+    const { data } = await api.get<LookItemWire[]>("/api/avatars/me/looks");
+    return (data ?? []).map((w) => ({
+      id: w.look_id,
+      preview_image_url: w.preview_image_url ?? null,
+      prompt: w.prompt ?? null,
+      status: w.status,
+      is_default: w.is_default ?? false,
+    }));
+  } catch (err) {
+    if (isDeferredError(err)) return [];
+    throw err;
+  }
+}
+
+// ── 최근 선택한 아바타 (GET/POST /api/avatars/me/recent) ───────────────────────
+//
+// 가장 최근에 고른 아바타/룩 id 를 서버에 영속화한다(localStorage 미사용). 다음
+// 방문 시 "최근 선택한 아바타" 박스로 복원해 재생성 없이 바로 강의에 적용한다.
+
+/** GET /api/avatars/me/recent — 최근 선택 id. deferred 면 null. */
+export async function getRecentAvatarId(): Promise<string | null> {
+  try {
+    const { data } = await api.get<{ avatar_id: string | null }>(
+      "/api/avatars/me/recent",
+    );
+    return data?.avatar_id ?? null;
+  } catch (err) {
+    if (isDeferredError(err)) return null;
+    throw err;
+  }
+}
+
+/** POST /api/avatars/me/recent — 최근 선택 기록. deferred 면 조용히 무시(no-op). */
+export async function setRecentAvatar(avatarId: string): Promise<void> {
+  try {
+    await api.post("/api/avatars/me/recent", { avatar_id: avatarId });
+  } catch (err) {
+    if (isDeferredError(err)) return;
+    throw err;
+  }
+}
+
 export const __fixtures = { FIXTURE_AVATARS };

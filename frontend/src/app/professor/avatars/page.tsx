@@ -9,6 +9,7 @@ import { useAvatarsI18n } from "@/components/professor/avatars/useAvatarsI18n";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
 import AvatarCard from "@/components/professor/avatars/AvatarCard";
 import AvatarPreviewStage from "@/components/professor/avatars/AvatarPreviewStage";
+import AvatarLibrary from "@/components/professor/avatars/AvatarLibrary";
 import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import {
@@ -16,12 +17,15 @@ import {
   deleteMyVoice,
   getLectureTitle,
   getMyVoice,
+  getRecentAvatarId,
   listAvatars,
+  listMyLooks,
   renameAvatarForLecture,
   requestVoiceScript,
+  setRecentAvatar,
   uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
-import type { ScriptLanguage } from "@/components/professor/avatars/avatarsApi";
+import type { MyLook, ScriptLanguage } from "@/components/professor/avatars/avatarsApi";
 import { listVoiceOptions, previewVoice } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
@@ -62,6 +66,11 @@ export default function AvatarsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
 
+  // 저장된 본인 룩(라이브러리) + 가장 최근 선택(서버 영속) — 재방문 시 재생성 없이
+  // 바로 고르도록 복원한다.
+  const [looks, setLooks] = useState<MyLook[]>([]);
+  const [recentId, setRecentId] = useState<string | null>(null);
+
   // 녹음 대본 주제로 쓸 현재 강의 제목(없으면 null → 일반 학술 대본).
   const [lectureTitle, setLectureTitle] = useState<string | null>(null);
 
@@ -82,7 +91,7 @@ export default function AvatarsPage() {
     }
   }, []);
 
-  // 아바타 목록을 다시 불러온다(스피너 없이) — 본인 룩 확정 후 갤러리 갱신용.
+  // 아바타·룩 목록을 다시 불러온다(스피너 없이) — 본인 룩 확정 후 갤러리/라이브러리 갱신용.
   const refreshAvatars = useCallback(async () => {
     try {
       const { avatars: list, deferred: isDeferred } = await listAvatars();
@@ -90,6 +99,11 @@ export default function AvatarsPage() {
       setDeferred(isDeferred);
     } catch {
       /* 실패 시 기존 목록 유지 */
+    }
+    try {
+      setLooks(await listMyLooks());
+    } catch {
+      /* 실패 시 기존 룩 유지 */
     }
   }, []);
 
@@ -106,6 +120,28 @@ export default function AvatarsPage() {
         if (!cancelled) setError(true);
       } finally {
         if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 저장된 본인 룩 + 가장 최근 선택 — 라이브러리/최근 박스 복원용(스피너 없이).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await listMyLooks();
+        if (!cancelled) setLooks(list);
+      } catch {
+        /* 미배포/실패 시 빈 목록 유지 */
+      }
+      try {
+        const rid = await getRecentAvatarId();
+        if (!cancelled) setRecentId(rid);
+      } catch {
+        /* 미배포/실패 시 null 유지 */
       }
     })();
     return () => {
@@ -161,41 +197,94 @@ export default function AvatarsPage() {
     };
   }, []);
 
-  // 본인 룩(is_custom)은 "내 아바타" 섹션 맨 앞에 노출한다. 기본 룩을 지정하면
-  // 백엔드 GET /api/avatars 가 is_custom 으로 돌려주므로 확정 후 갱신되어 보인다.
+  // 본인 아바타(is_custom)·룩은 위쪽 "저장된 아바타·룩 라이브러리"(AvatarLibrary)가
+  // 전담한다. 아래 섹션은 표준 HeyGen 아바타만 성별로 그룹핑한다(중복 노출 방지).
   const sections = useMemo(() => {
-    const custom = avatars.filter((a) => a.is_custom);
     const male = avatars.filter((a) => !a.is_custom && a.gender === "male");
     const female = avatars.filter((a) => !a.is_custom && a.gender === "female");
     const other = avatars.filter(
       (a) => !a.is_custom && a.gender !== "male" && a.gender !== "female",
     );
     return [
-      { key: "custom", label: t("sectionCustom"), items: custom },
       { key: "male", label: t("sectionMale"), items: male },
       { key: "female", label: t("sectionFemale"), items: female },
       { key: "other", label: t("sectionOther"), items: other },
     ].filter((s) => s.items.length > 0);
   }, [avatars, t]);
 
-  const selectedAvatar = useMemo(
-    () => avatars.find((a) => a.id === selectedId) ?? null,
-    [avatars, selectedId],
+  // 라이브러리 = 교수자가 만든 본인 아바타(talking photo) + ready 룩. 룩은 렌더용
+  // avatar_id 로 그대로 통용되므로(video.py) 동일 Avatar shape 로 정규화한다.
+  const libraryItems = useMemo<Avatar[]>(() => {
+    const customAvatars = avatars.filter((a) => a.is_custom);
+    const lookAvatars: Avatar[] = looks
+      .filter((l) => l.status === "ready")
+      .map((l) => ({
+        id: l.id,
+        name: l.prompt?.trim() || t("lookUntitled"),
+        preview_image_url: l.preview_image_url,
+        preview_video_url: null,
+        is_custom: true,
+        status: "ready" as const,
+      }));
+    // 같은 id 중복 제거(본인 아바타와 룩이 우연히 겹칠 일은 없으나 방어적으로).
+    const seen = new Set<string>();
+    return [...customAvatars, ...lookAvatars].filter((a) =>
+      seen.has(a.id) ? false : (seen.add(a.id), true),
+    );
+  }, [avatars, looks, t]);
+
+  // 선택/최근 id 를 (표준 아바타 ∪ 라이브러리)에서 해석한다.
+  const resolveAvatar = useCallback(
+    (id: string | null): Avatar | null => {
+      if (!id) return null;
+      return (
+        avatars.find((a) => a.id === id) ??
+        libraryItems.find((a) => a.id === id) ??
+        null
+      );
+    },
+    [avatars, libraryItems],
   );
 
-  const handleApply = useCallback(async () => {
-    if (!lectureId || !selectedId) return;
-    setApplying(true);
-    try {
-      await applyAvatarToLecture(lectureId, selectedId);
-      toast(t("applySuccess"), "success");
-      router.push(`/professor/studio/${lectureId}`);
-    } catch {
-      toast(t("applyError"), "error");
-    } finally {
-      setApplying(false);
-    }
-  }, [lectureId, selectedId, router, toast, t]);
+  const selectedAvatar = useMemo(
+    () => resolveAvatar(selectedId),
+    [resolveAvatar, selectedId],
+  );
+
+  const recentAvatar = useMemo(
+    () => resolveAvatar(recentId),
+    [resolveAvatar, recentId],
+  );
+
+  // 아바타/룩 선택 — 재생성 없이 즉시. 최근 선택을 서버에 영속화한다(실패는 무시).
+  const handleSelect = useCallback((id: string) => {
+    setSelectedId(id);
+    setRecentId(id);
+    void setRecentAvatar(id).catch(() => {});
+  }, []);
+
+  // 지정한 아바타/룩을 현재 강의에 적용(재생성 없음). 헤더·최근 박스가 공유한다.
+  const doApply = useCallback(
+    async (id: string | null) => {
+      if (!lectureId || !id) return;
+      setApplying(true);
+      try {
+        await applyAvatarToLecture(lectureId, id);
+        toast(t("applySuccess"), "success");
+        router.push(`/professor/studio/${lectureId}`);
+      } catch {
+        toast(t("applyError"), "error");
+      } finally {
+        setApplying(false);
+      }
+    },
+    [lectureId, router, toast, t],
+  );
+
+  const handleApply = useCallback(
+    () => doApply(selectedId),
+    [doApply, selectedId],
+  );
 
   const handleRename = useCallback(
     async (avatarId: string, name: string) => {
@@ -319,6 +408,21 @@ export default function AvatarsPage() {
           </p>
         )}
 
+        {/* 최근 선택한 아바타 + 저장된 아바타·룩 라이브러리 — 재생성 없이 즉시 선택/적용.
+            만든 아바타·룩이 없으면 컴포넌트가 스스로 아무것도 렌더하지 않는다. */}
+        <AvatarLibrary
+          recent={recentAvatar}
+          items={libraryItems}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          onApply={() => doApply(recentId)}
+          canApply={!!lectureId}
+          applying={applying}
+          renameEnabled={renameEnabled}
+          onRename={handleRename}
+          t={t}
+        />
+
         {/* ① 내 사진으로 아바타 만들기 — Design with AI 룩 온보딩을 카드 안에 인라인 임베드 */}
         <PhotoAvatarStudioCard
           reducedMotion={reducedMotion}
@@ -403,7 +507,7 @@ export default function AvatarsPage() {
                     key={a.id}
                     avatar={a}
                     selected={a.id === selectedId}
-                    onSelect={setSelectedId}
+                    onSelect={handleSelect}
                     renameEnabled={renameEnabled}
                     onRename={(name) => handleRename(a.id, name)}
                     t={t}

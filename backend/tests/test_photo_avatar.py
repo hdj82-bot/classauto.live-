@@ -240,3 +240,84 @@ async def test_list_and_select_look(client, professor, db):
     assert sel.status_code == 200
     assert sel.json()["default_look_id"] == "look-1"
     assert professor.photo_avatar_default_look_id == "look-1"
+
+
+# ── 최근 선택한 아바타 (라이브러리 즉시 선택·적용) ────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_recent_avatar_get_default_null(client, professor):
+    """아무것도 고르지 않았으면 최근 선택은 null."""
+    resp = await client.get(
+        "/api/avatars/me/recent", headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 200
+    assert resp.json()["avatar_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_recent_avatar_set_and_get_standard(client, professor, db):
+    """표준 HeyGen avatar_id 는 그대로 수용·영속화되고 다시 조회된다."""
+    resp = await client.post(
+        "/api/avatars/me/recent",
+        json={"avatar_id": "heygen-male-01"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["avatar_id"] == "heygen-male-01"
+    assert professor.recent_avatar_id == "heygen-male-01"
+
+    got = await client.get(
+        "/api/avatars/me/recent", headers=make_auth_header(professor)
+    )
+    assert got.json()["avatar_id"] == "heygen-male-01"
+
+
+@pytest.mark.asyncio
+async def test_recent_avatar_accepts_ready_look(client, professor, db):
+    """ready 인 본인 룩 id 는 최근 선택으로 수용된다."""
+    from app.models.photo_avatar import PhotoAvatarLook
+
+    db.add(
+        PhotoAvatarLook(
+            user_id=professor.id,
+            heygen_look_id="look-ready",
+            preview_image_url="https://h/r.png",
+            prompt="정장",
+            status="ready",
+        )
+    )
+    await db.flush()
+
+    resp = await client.post(
+        "/api/avatars/me/recent",
+        json={"avatar_id": "look-ready"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    assert professor.recent_avatar_id == "look-ready"
+
+
+@pytest.mark.asyncio
+async def test_recent_avatar_rejects_unready_look(client, professor, db):
+    """아직 생성 중인 본인 룩은 최근 선택 대상이 아니다(400)."""
+    from app.models.photo_avatar import PhotoAvatarLook
+
+    db.add(
+        PhotoAvatarLook(
+            user_id=professor.id,
+            heygen_look_id="look-pending",
+            preview_image_url=None,
+            prompt="정장",
+            status="generating",
+        )
+    )
+    await db.flush()
+
+    resp = await client.post(
+        "/api/avatars/me/recent",
+        json={"avatar_id": "look-pending"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 400
+    assert professor.recent_avatar_id is None

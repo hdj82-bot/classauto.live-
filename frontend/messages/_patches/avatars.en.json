@@ -57,6 +57,12 @@
     "applyError": "Could not apply the avatar to the lecture.",
     "applyHintNoLecture": "Enter from the lecture editor via 'Change avatar' to apply your selection directly to a lecture.",
 
+    "recentTitle": "Recently selected avatar",
+    "recentApplyNote": "Apply to this lecture instantly — no re-generation (zero cost).",
+    "libraryTitle": "Saved avatars & looks",
+    "libraryDescription": "Avatars and looks you've created. Pick one to select and apply instantly — no re-generation.",
+    "lookUntitled": "My look",
+
     "renameLabel": "Display name for this lecture",
     "renamePlaceholder": "Enter an avatar name",
     "renameEdit": "Rename",

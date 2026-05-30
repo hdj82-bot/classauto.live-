@@ -211,3 +211,29 @@ class LookSelectResponse(BaseModel):
 
     default_look_id: str = Field(..., description="선택된 기본 룩 id.")
     message: str | None = Field(default=None, description="사용자 표시용 메시지.")
+
+
+# ── 최근 선택한 아바타 (라이브러리에서 재생성 없이 바로 적용) ───────────────────
+
+
+class RecentAvatarRequest(BaseModel):
+    """``POST /api/avatars/me/recent`` 요청 — 가장 최근 선택한 아바타/룩 기록."""
+
+    avatar_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="가장 최근에 고른 아바타/룩 id(표준 avatar_id 또는 본인 룩 id).",
+    )
+
+
+class RecentAvatarResponse(BaseModel):
+    """``GET/POST /api/avatars/me/recent`` 응답 — 최근 선택 id.
+
+    프론트가 이미 보유한 아바타 목록·룩 목록에서 이 id 로 항목을 해석해 "최근
+    선택한 아바타" 박스를 그린다(없으면 null → 박스 미표시).
+    """
+
+    avatar_id: str | None = Field(
+        default=None, description="가장 최근 선택한 아바타/룩 id (없으면 null)."
+    )
