@@ -171,6 +171,7 @@ export default function PhotoAvatarOnboardingPage() {
                 looksPending={flow.looksPending}
                 reducedMotion={reducedMotion}
                 onNext={() => flow.goTo("select")}
+                onRestart={() => flow.goTo("upload")}
                 t={t}
               />
             )}
@@ -182,6 +183,7 @@ export default function PhotoAvatarOnboardingPage() {
                 onSelect={handleSelect}
                 reducedMotion={reducedMotion}
                 onBack={() => flow.goTo("generate")}
+                onRestart={() => flow.goTo("upload")}
                 onNext={() => flow.goTo("preview")}
                 t={t}
               />

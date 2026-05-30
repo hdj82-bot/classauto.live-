@@ -8,6 +8,8 @@ import {
 } from "./photoAvatarTypes";
 import { SparkleIcon } from "./PhotoAvatarIcons";
 import LookTile from "./LookTile";
+import LookPresetGallery from "./LookPresetGallery";
+import type { LookPreset } from "./lookPresets";
 
 interface LookGenerateStepProps {
   looks: Look[];
@@ -18,6 +20,8 @@ interface LookGenerateStepProps {
   reducedMotion: boolean;
   /** ④ 룩 선택 단계로. ready 룩이 1개 이상일 때 활성. */
   onNext: () => void;
+  /** ① 업로드로 되돌아가 다른 사진으로 다시 시작. */
+  onRestart: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -34,18 +38,14 @@ export default function LookGenerateStep({
   looksPending,
   reducedMotion,
   onNext,
+  onRestart,
   t,
 }: LookGenerateStepProps) {
   const [prompt, setPrompt] = useState("");
   const [count, setCount] = useState<number>(LOOK_BATCH_MAX);
   const [submitting, setSubmitting] = useState(false);
-
-  const presets = [
-    t("looks.preset1"),
-    t("looks.preset2"),
-    t("looks.preset3"),
-    t("looks.preset4"),
-  ];
+  // 갤러리에서 고른 프리셋 강조용. 직접 입력하면 해제(더 이상 일치하지 않음).
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
   const total = looks.length;
   const remaining = Math.max(0, LOOK_TOTAL_MAX - total);
@@ -53,57 +53,83 @@ export default function LookGenerateStep({
   const effectiveMax = Math.min(LOOK_BATCH_MAX, remaining || LOOK_BATCH_MAX);
   const readyCount = looks.filter((l) => l.status === "ready").length;
   const trimmed = prompt.trim();
+  const busy = submitting || looksPending;
 
-  const canGenerate =
-    !!trimmed && !submitting && !looksPending && !capReached;
+  const canGenerate = !!trimmed && !busy && !capReached;
 
-  const submit = async () => {
-    if (!canGenerate) return;
+  // 프롬프트 텍스트를 직접 받아 생성한다(프리셋 클릭은 setState 비동기를 기다리지
+  // 않고 곧바로 그 프롬프트로 생성하기 위함).
+  const runGenerate = async (promptText: string) => {
+    const text = promptText.trim();
+    if (!text || busy || capReached) return;
     const n = Math.min(count, effectiveMax);
     setSubmitting(true);
     try {
-      await onGenerate(trimmed, n);
+      await onGenerate(text, n);
     } finally {
       setSubmitting(false);
     }
   };
 
+  const submit = () => runGenerate(prompt);
+
+  const pickPreset = (preset: LookPreset) => {
+    const promptText = t(preset.promptKey);
+    setSelectedPresetId(preset.id);
+    setPrompt(promptText);
+    void runGenerate(promptText);
+  };
+
   return (
     <div data-testid="step-generate" style={cardStyle}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-        <SparkleIcon size={26} />
-        <h2 style={headingStyle}>{t("looks.title")}</h2>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 6,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <SparkleIcon size={26} />
+          <h2 style={headingStyle}>{t("looks.title")}</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onRestart}
+          style={ghostLink}
+          data-testid="generate-restart"
+        >
+          {t("looks.restart")}
+        </button>
       </div>
       <p style={descStyle}>{t("looks.description")}</p>
 
-      {/* 프롬프트 입력 */}
-      <label htmlFor="look-prompt" style={labelStyle}>
+      {/* 스타일 샘플 갤러리 (주) — 카드 클릭 시 프롬프트 채움 + 즉시 생성 */}
+      <LookPresetGallery
+        selectedId={selectedPresetId}
+        onPick={pickPreset}
+        disabled={busy || capReached}
+        t={t}
+      />
+
+      {/* 자유 입력(보조) */}
+      <label htmlFor="look-prompt" style={{ ...labelStyle, marginTop: 18 }}>
         {t("looks.promptLabel")}
       </label>
       <textarea
         id="look-prompt"
         data-testid="look-prompt"
         value={prompt}
-        onChange={(e) => setPrompt(e.target.value)}
+        onChange={(e) => {
+          setPrompt(e.target.value);
+          setSelectedPresetId(null);
+        }}
         placeholder={t("looks.promptPlaceholder")}
         rows={3}
         style={textareaStyle}
       />
-
-      {/* 프리셋 칩 */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-        {presets.map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => setPrompt(p)}
-            style={chipStyle}
-            data-testid="look-preset"
-          >
-            {p}
-          </button>
-        ))}
-      </div>
 
       {/* 개수 + 생성 버튼 */}
       <div
@@ -247,16 +273,18 @@ const textareaStyle: CSSProperties = {
   boxSizing: "border-box",
 };
 
-const chipStyle: CSSProperties = {
-  padding: "6px 12px",
+const ghostLink: CSSProperties = {
+  padding: "4px 8px",
   fontSize: 12,
   fontWeight: 500,
-  borderRadius: 999,
-  border: "1px solid var(--line-strong)",
-  background: "var(--bg-subtle)",
-  color: "var(--text-muted)",
+  borderRadius: 8,
+  border: "none",
+  background: "transparent",
+  color: "var(--text-subtle)",
   cursor: "pointer",
   fontFamily: "inherit",
+  textDecoration: "underline",
+  flexShrink: 0,
 };
 
 const countBtn: CSSProperties = {
