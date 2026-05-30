@@ -57,7 +57,8 @@ export interface PhotoAvatarFlow {
   looksPending: boolean;
   goTo: (step: OnboardingStep) => void;
   uploadPhoto: (file: File) => Promise<void>;
-  generate: (prompt: string, count: number) => Promise<void>;
+  /** 선택한 스타일로 룩 1개를 생성한다(개수 고정 = 1). */
+  generate: (prompt: string) => Promise<void>;
   select: (lookId: string) => Promise<void>;
 }
 
@@ -175,8 +176,10 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
   );
 
   const generate = useCallback(
-    async (prompt: string, count: number) => {
-      await generateLooks(prompt, count);
+    async (prompt: string) => {
+      // 룩은 항상 1개만 생성한다 — 사용자가 갤러리에서 스타일을 고르면 그
+      // 스타일로 1개를 만든다(계약 count 는 1 고정, 백엔드 변경 없음).
+      await generateLooks(prompt, 1);
       const list = await listLooks();
       setLooks(list);
       setDeferred(isDeferredMode());

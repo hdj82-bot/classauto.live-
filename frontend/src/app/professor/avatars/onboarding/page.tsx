@@ -57,9 +57,9 @@ export default function PhotoAvatarOnboardingPage() {
   );
 
   const handleGenerate = useCallback(
-    async (prompt: string, count: number) => {
+    async (prompt: string) => {
       try {
-        await flow.generate(prompt, count);
+        await flow.generate(prompt);
       } catch {
         toast(t("looks.error"), "error");
       }

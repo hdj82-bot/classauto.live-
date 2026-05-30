@@ -25,9 +25,9 @@ interface PhotoAvatarStudioCardProps {
  * 별도 ``/onboarding`` 라우트로 보내지 않고, #276 의 온보딩 단계 컴포넌트
  * (PhotoUploadStep/TrainingStep/LookGenerateStep/LookSelectStep)와
  * ``usePhotoAvatarFlow`` 를 이 카드 안에서 그대로 재사용한다. 흐름은
- * 사진 업로드 → 학습(폴링) → 프롬프트 룩 배치 생성(≤4) → 갤러리 선택 →
- * 기본 룩 지정. 비용 가드(배치 상한·누적 상한·1회성 안내)는 LookGenerateStep
- * 이 그대로 유지한다 (docs/planning/12 §8).
+ * 사진 업로드 → 학습(폴링) → 스타일 샘플 갤러리에서 룩 1개 생성 → 갤러리 선택 →
+ * 기본 룩 지정. 비용 가드(누적 상한·1회성 안내)는 LookGenerateStep 이 그대로
+ * 유지한다 (docs/planning/12 §8).
  *
  * 움직이는 미리보기(⑤)·본인 목소리는 이 페이지의 별도 음성 카드/미리보기
  * 무대가 담당하므로 임베드 흐름은 "기본 룩 지정"에서 끝낸다.
@@ -69,9 +69,9 @@ export default function PhotoAvatarStudioCard({
   );
 
   const handleGenerate = useCallback(
-    async (prompt: string, count: number) => {
+    async (prompt: string) => {
       try {
-        await flow.generate(prompt, count);
+        await flow.generate(prompt);
       } catch {
         toast(t("looks.error"), "error");
       }

@@ -59,7 +59,7 @@
 
     "looks": {
       "title": "Generate Design with AI looks",
-      "description": "Describe the background, attire, and framing to generate several styled looks that keep your face. You can make up to 4 at a time.",
+      "description": "Pick a style sample and we'll create a look in that style while keeping your face.",
       "galleryLabel": "Pick from style samples",
       "galleryHint": "Tap a card to generate that style right away.",
       "presets": {
@@ -96,13 +96,7 @@
           "prompt": "Soft gold gradient background, charcoal classic suit, front-facing portrait"
         }
       },
-      "promptLabel": "Or describe it yourself",
-      "promptPlaceholder": "e.g. light gray background, navy suit, front-facing upper body",
       "restart": "Start over with a different photo",
-      "countLabel": "How many",
-      "generate": "Generate looks",
-      "generateMore": "Generate more",
-      "generating": "Generating looks...",
       "costNote": "Generating looks is a one-time onboarding step. You can make up to {remaining} more in this step.",
       "capReached": "You've reached the total limit ({max}). Please pick from the looks you've made.",
       "next": "Next: pick a look",
