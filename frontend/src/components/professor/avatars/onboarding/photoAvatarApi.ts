@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import { downscaleImageFile } from "../imageResize";
 import type {
   Look,
   LookGeneration,
@@ -151,8 +152,14 @@ function mockLooksToDomain(): Look[] {
 // ── ① 사진 업로드 → 그룹 생성 + 학습 시작 ───────────────────────────────────
 /** POST /api/avatars/me/photo-avatar (multipart). deferred 면 mock 그룹 생성. */
 export async function uploadPhotoAvatar(file: File): Promise<PhotoAvatarGroup> {
+  // 온보딩 업로드도 프로필 사진 경로(avatarsApi.uploadProfilePhoto)와 동일하게
+  // 전송 전 클라이언트 다운스케일·JPEG 재인코딩한다. 풀 사이즈 원본을 그대로
+  // 올리면 HeyGen 등록이 느려지거나 실패하므로 이탈 위험이 컸다.
+  // downscaleImageFile 은 어떤 단계든 실패하면 원본 File 을 그대로 돌려주므로
+  // 업로드 자체를 막지 않는다(graceful).
+  const prepared = await downscaleImageFile(file);
   const form = new FormData();
-  form.append("file", file);
+  form.append("file", prepared);
   try {
     const { data } = await api.post<GroupWire>(
       "/api/avatars/me/photo-avatar",
