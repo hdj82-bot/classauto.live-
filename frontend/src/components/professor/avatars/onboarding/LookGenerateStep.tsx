@@ -74,10 +74,9 @@ export default function LookGenerateStep({
   const submit = () => runGenerate(prompt);
 
   const pickPreset = (preset: LookPreset) => {
-    const promptText = t(preset.promptKey);
     setSelectedPresetId(preset.id);
-    setPrompt(promptText);
-    void runGenerate(promptText);
+    setPrompt(preset.prompt);
+    void runGenerate(preset.prompt);
   };
 
   return (

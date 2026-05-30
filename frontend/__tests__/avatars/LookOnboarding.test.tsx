@@ -13,7 +13,8 @@ import { LOOK_PRESETS } from "@/components/professor/avatars/onboarding/lookPres
 import type { Look } from "@/components/professor/avatars/onboarding/photoAvatarTypes";
 
 // 컴포넌트는 i18n provider 없이 t 를 prop 으로 받는다 — 키를 그대로 돌려주는
-// 가짜 t 로 동작을 검증한다(프리셋 프롬프트 = promptKey 문자열).
+// 가짜 t 로 동작을 검증한다. 프리셋 라벨·프롬프트는 데이터(lookPresets)에 직접 담겨
+// 있어 t 와 무관하다(preset.prompt 를 그대로 생성에 쓴다).
 const t = (key: string) => key;
 
 const readyLook = (id: string): Look => ({
@@ -61,11 +62,11 @@ describe("LookGenerateStep — 스타일 샘플 갤러리", () => {
     fireEvent.click(screen.getByTestId(`look-preset-${first.id}`));
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
-    // 프리셋 프롬프트(가짜 t → promptKey)로 즉시 생성.
-    expect(onGenerate).toHaveBeenCalledWith(first.promptKey, expect.any(Number));
+    // 프리셋 프롬프트(데이터의 preset.prompt)로 즉시 생성.
+    expect(onGenerate).toHaveBeenCalledWith(first.prompt, expect.any(Number));
     // textarea 에도 채워진다.
     expect((screen.getByTestId("look-prompt") as HTMLTextAreaElement).value).toBe(
-      first.promptKey,
+      first.prompt,
     );
     // 선택 강조(aria-pressed).
     expect(

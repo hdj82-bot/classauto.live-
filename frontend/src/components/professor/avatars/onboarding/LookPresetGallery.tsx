@@ -1,7 +1,14 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import { LOOK_PRESETS, type LookPreset } from "./lookPresets";
+import { useMemo, useState, type CSSProperties } from "react";
+import {
+  BACKGROUND_OPTIONS,
+  CLOTHING_OPTIONS,
+  LOOK_PRESETS,
+  type LookBackground,
+  type LookClothing,
+  type LookPreset,
+} from "./lookPresets";
 import { CheckIcon } from "./PhotoAvatarIcons";
 
 interface LookPresetGalleryProps {
@@ -15,12 +22,11 @@ interface LookPresetGalleryProps {
 }
 
 /**
- * "스타일 샘플 이미지" 룩 갤러리 — 텍스트 칩을 대체한다(차별점: 결과 가늠).
+ * "스타일 샘플 이미지" 룩 갤러리 — **복장 × 배경 2축 필터**로 탐색한다.
  *
- * 카드(썸네일 + 라벨)를 누르면 해당 스타일 프롬프트가 채워지고 바로 생성된다.
- * 썸네일은 ``public/avatar-looks/<id>.svg`` 폴백(라이트 베이지 + 골드, design
- * -system v2)이며, 실제 사진으로 파일만 교체하면 그대로 바뀐다. 선택된 카드는
- * 골드 링 + 체크로 강조(색 + 모양 이중 표시, 색맹 친화).
+ * HeyGen Design with AI 로 만든 실사 룩 썸네일(public/avatar-looks/*.jpg)을
+ * 보여주고, 위쪽 두 줄의 필터(복장 / 배경)로 좁힌다. 카드를 누르면 해당 스타일
+ * 프롬프트가 채워지고 바로 생성된다. 선택 카드는 골드 링 + 체크로 강조한다.
  */
 export default function LookPresetGallery({
   selectedId,
@@ -28,16 +34,48 @@ export default function LookPresetGallery({
   disabled,
   t,
 }: LookPresetGalleryProps) {
+  const [clothing, setClothing] = useState<LookClothing | null>(null);
+  const [background, setBackground] = useState<LookBackground | null>(null);
+
+  const filtered = useMemo(
+    () =>
+      LOOK_PRESETS.filter(
+        (p) =>
+          (clothing === null || p.clothing === clothing) &&
+          (background === null || p.background === background),
+      ),
+    [clothing, background],
+  );
+
   return (
     <div data-testid="look-preset-gallery">
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: 8 }}>
-        <span style={galleryLabel}>{t("looks.galleryLabel")}</span>
-        <span style={galleryHint}>{t("looks.galleryHint")}</span>
+        <span style={galleryLabelStyle}>{t("looks.galleryLabel")}</span>
+        <span style={galleryHintStyle}>{t("looks.galleryHint")}</span>
       </div>
 
+      {/* 2축 필터 — 복장 / 배경 */}
+      <div style={{ display: "grid", gap: 6, marginTop: 10 }}>
+        <FilterRow
+          label="복장"
+          options={CLOTHING_OPTIONS}
+          value={clothing}
+          onChange={(v) => setClothing(v as LookClothing | null)}
+        />
+        <FilterRow
+          label="배경"
+          options={BACKGROUND_OPTIONS}
+          value={background}
+          onChange={(v) => setBackground(v as LookBackground | null)}
+        />
+      </div>
+
+      <p style={countNote} aria-live="polite" data-testid="look-preset-count">
+        {filtered.length}개 스타일
+      </p>
+
       <div style={gridStyle} role="group" aria-label={t("looks.galleryLabel")}>
-        {LOOK_PRESETS.map((preset) => {
-          const label = t(preset.labelKey);
+        {filtered.map((preset) => {
           const selected = selectedId === preset.id;
           return (
             <button
@@ -59,7 +97,7 @@ export default function LookPresetGallery({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={preset.image}
-                  alt={label}
+                  alt={preset.label}
                   loading="lazy"
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                 />
@@ -69,8 +107,8 @@ export default function LookPresetGallery({
                   </span>
                 )}
               </span>
-              <span style={labelStyle} title={label}>
-                {label}
+              <span style={labelStyle} title={preset.label}>
+                {preset.label}
               </span>
             </button>
           );
@@ -80,22 +118,107 @@ export default function LookPresetGallery({
   );
 }
 
-const galleryLabel: CSSProperties = {
+/** 한 축(복장 또는 배경)의 필터 칩 행. "전체" + 각 옵션. 같은 칩 재클릭 시 해제. */
+function FilterRow({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly { key: string; label: string }[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+      <span style={filterRowLabel}>{label}</span>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        <Chip active={value === null} onClick={() => onChange(null)}>
+          전체
+        </Chip>
+        {options.map((o) => (
+          <Chip
+            key={o.key}
+            active={value === o.key}
+            onClick={() => onChange(value === o.key ? null : o.key)}
+          >
+            {o.label}
+          </Chip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Chip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      style={{
+        ...chipStyle,
+        background: active ? "var(--gold)" : "var(--bg-card)",
+        color: active ? "#0A0A0A" : "var(--text-muted)",
+        borderColor: active ? "var(--gold)" : "var(--line-strong)",
+        fontWeight: active ? 700 : 500,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+const galleryLabelStyle: CSSProperties = {
   fontSize: 12.5,
   fontWeight: 600,
   color: "var(--text)",
 };
 
-const galleryHint: CSSProperties = {
+const galleryHintStyle: CSSProperties = {
   fontSize: 11.5,
   color: "var(--text-muted)",
+};
+
+const filterRowLabel: CSSProperties = {
+  flexShrink: 0,
+  width: 34,
+  paddingTop: 5,
+  fontSize: 11.5,
+  fontWeight: 700,
+  color: "var(--text-muted)",
+};
+
+const chipStyle: CSSProperties = {
+  padding: "4px 11px",
+  fontSize: 11.5,
+  borderRadius: 999,
+  border: "1px solid",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  transition: "background 120ms var(--ease-out), border-color 120ms var(--ease-out)",
+};
+
+const countNote: CSSProperties = {
+  margin: "10px 0 0",
+  fontSize: 11,
+  color: "var(--text-faint)",
 };
 
 const gridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fill, minmax(108px, 1fr))",
   gap: 10,
-  marginTop: 10,
+  marginTop: 6,
 };
 
 const cardStyle: CSSProperties = {
