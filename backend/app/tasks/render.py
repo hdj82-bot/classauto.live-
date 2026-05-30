@@ -60,6 +60,7 @@ def render_slide(
     """
     import asyncio
     from app.models.lecture import Lecture, VoiceGender
+    from app.models.user import User
     from app.services.pipeline.tts import synthesize
     from app.services.pipeline.heygen import create_video
     from app.services.pipeline.budget import assert_heygen_budget, BudgetExceededError
@@ -81,6 +82,17 @@ def render_slide(
         # 교수자가 고른 보이스·속도. NULL/누락이면 기본(성별 보이스 / 1.3배속).
         # voice_speed 컬럼이 없는 구버전 row 대비 getattr 로 안전 접근.
         voice_id = (lecture.voice_id or None) if lecture else None
+        # 교수자가 고른 보이스가 본인 목소리(IVC 클론)면 cloned 경로로 합성한다
+        # (v3 대신 multilingual_v2 + 클론 튜닝 — avatars/voices 미리듣기와 동일 규칙).
+        professor = (
+            db.query(User).filter(User.id == render.instructor_id).first()
+        )
+        is_cloned_voice = bool(
+            voice_id
+            and professor
+            and professor.cloned_voice_id
+            and voice_id == professor.cloned_voice_id
+        )
         voice_speed = (
             getattr(lecture, "voice_speed", None) if lecture else None
         ) or 1.3
@@ -132,6 +144,7 @@ def render_slide(
                     voice_id=voice_id,
                     gender=voice_gender,
                     speed=voice_speed,
+                    cloned=is_cloned_voice,
                 )
             )
 
