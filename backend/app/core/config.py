@@ -120,10 +120,24 @@ class Settings(BaseSettings):
     # 예산 서킷 브레이커 — create_video 직전 누적 HeyGen 비용 검사. 0 이면 해당 한도 비활성.
     HEYGEN_DAILY_BUDGET_USD: float = 3.0
     HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
-    # Photo Avatar(Design with AI) 룩 생성 상한 — 룩 1개당 이미지 생성 비용이 발생하므로
+    # Photo Avatar 룩 생성 상한 — 룩 1개당 이미지 생성 비용이 발생하므로
     # 한 번에 생성할 수 개수와 교수자당 누적 개수를 제한해 비용 폭주를 막는다.
     PHOTO_AVATAR_LOOK_BATCH_MAX: int = 4
-    PHOTO_AVATAR_LOOK_TOTAL_MAX: int = 20
+    PHOTO_AVATAR_LOOK_TOTAL_MAX: int = 20  # 교수자(계정)당 누적 — 강의당 아님
+
+    # ── Photo Avatar v0.2: gpt-image-2 룩 + Talking Photo (docs/planning/12 §0) ──
+    # 룩 생성 제공자 전환 feature flag. "gpt" = OpenAI gpt-image-2 즉석 생성 +
+    # Talking Photo 최종(train 0). "heygen" = 기존 Design with AI 풀코스(롤백용).
+    PHOTO_AVATAR_PROVIDER: str = "gpt"
+    # 룩 생성 모델·품질. tier 가 비용의 핵심 레버(high↔medium ~4배). 정체성 보존은
+    # tier 가 아니라 INPUT_FIDELITY 가 책임지므로 기본 medium 으로 충분.
+    OPENAI_IMAGE_MODEL: str = "gpt-image-2"
+    PHOTO_AVATAR_IMAGE_QUALITY: str = "medium"  # low|medium|high
+    PHOTO_AVATAR_INPUT_FIDELITY: str = "high"   # reference(교수 사진) 얼굴 보존 강도
+    PHOTO_AVATAR_LOOK_BATCH_DEFAULT: int = 3    # 한 번에 보여줄 후보 수
+    # mock 모드: 켜면 OpenAI 를 호출하지 않고 더미 이미지를 반환(테스트 비용 ₩0).
+    # HEYGEN_MOCK 와 동일 패턴.
+    OPENAI_IMAGE_MOCK: bool = False
 
     # ── TTS: ElevenLabs (primary) ───────────────────────────────
     ELEVENLABS_API_KEY: str = ""

@@ -29,7 +29,13 @@ class PhotoAvatarLook(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    heygen_look_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    # v0.2: 룩 식별은 내부 id(uuid). heygen_look_id 는 provider="heygen"(레거시) 에서만
+    # 채워지므로 nullable. gpt 경로는 image_url(S3) 로 룩을 보관하고, 렌더용 아바타는
+    # 룩 확정 시 user.photo_avatar_id(talking_photo) 로 등록한다.
+    heygen_look_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # v0.2: gpt-image-2 가 생성한 룩 이미지의 S3 저장 URL(영구). OpenAI 결과 URL 은
+    # 만료되므로 생성 직후 S3 로 옮겨 이 컬럼에 저장한다.
+    image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     preview_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
     # "generating"|"ready"|"failed" — LookStatus 값을 문자열로 저장(enum 타입 미사용).
