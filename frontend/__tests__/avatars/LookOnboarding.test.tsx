@@ -9,23 +9,26 @@ import {
 } from "@testing-library/react";
 import LookGenerateStep from "@/components/professor/avatars/onboarding/LookGenerateStep";
 import LookSelectStep from "@/components/professor/avatars/onboarding/LookSelectStep";
-import { LOOK_PRESETS } from "@/components/professor/avatars/onboarding/lookPresets";
-import type { Look } from "@/components/professor/avatars/onboarding/photoAvatarTypes";
+import {
+  LOOK_BATCH_DEFAULT,
+  LOOK_TOTAL_MAX,
+  type Look,
+} from "@/components/professor/avatars/onboarding/photoAvatarTypes";
 
 // 컴포넌트는 i18n provider 없이 t 를 prop 으로 받는다 — 키를 그대로 돌려주는
-// 가짜 t 로 동작을 검증한다. 프리셋 라벨·프롬프트는 데이터(lookPresets)에 직접 담겨
-// 있어 t 와 무관하다(preset.prompt 를 그대로 생성에 쓴다).
+// 가짜 t 로 동작을 검증한다(옵션 라벨은 lookOptions 데이터에 한국어로 있음).
 const t = (key: string) => key;
 
 const readyLook = (id: string): Look => ({
   look_id: id,
-  preview_image_url: "data:image/svg+xml;utf8,x",
+  image_url: "data:image/svg+xml;utf8,x",
+  preview_image_url: null,
   prompt: "p",
   status: "ready",
 });
 
-describe("LookGenerateStep — 스타일 샘플 갤러리", () => {
-  it("프리셋마다 샘플 카드를 렌더한다", () => {
+describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
+  it("자유 프롬프트 갤러리 대신 옵션 폼을 렌더한다", () => {
     render(
       <LookGenerateStep
         looks={[]}
@@ -37,16 +40,13 @@ describe("LookGenerateStep — 스타일 샘플 갤러리", () => {
         t={t}
       />,
     );
-    expect(screen.getByTestId("look-preset-gallery")).toBeTruthy();
-    for (const p of LOOK_PRESETS) {
-      expect(screen.getByTestId(`look-preset-${p.id}`)).toBeTruthy();
-    }
-    // 단순화: 자유 입력 textarea 와 개수 선택 UI 는 제거됐다.
+    expect(screen.getByTestId("look-option-form")).toBeTruthy();
+    // v0.1 프리셋 갤러리·자유 입력은 제거됐다.
+    expect(screen.queryByTestId("look-preset-gallery")).toBeNull();
     expect(screen.queryByTestId("look-prompt")).toBeNull();
-    expect(screen.queryByTestId("look-count-2")).toBeNull();
   });
 
-  it("카드 클릭 시 그 스타일로 룩 1개를 바로 생성하고 선택을 강조한다", async () => {
+  it("'룩 생성' 클릭 시 기본 persona 추천 조합으로 구조화 입력을 전달한다", async () => {
     const onGenerate = vi.fn().mockResolvedValue(undefined);
     render(
       <LookGenerateStep
@@ -59,20 +59,21 @@ describe("LookGenerateStep — 스타일 샘플 갤러리", () => {
         t={t}
       />,
     );
-    const first = LOOK_PRESETS[0];
-    fireEvent.click(screen.getByTestId(`look-preset-${first.id}`));
+    fireEvent.click(screen.getByTestId("look-generate-btn"));
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
-    // 프리셋 프롬프트(데이터의 preset.prompt)로 즉시 생성 — 개수 인자 없이 1개.
-    expect(onGenerate).toHaveBeenCalledWith(first.prompt);
-    // 선택 강조(aria-pressed).
-    expect(
-      screen.getByTestId(`look-preset-${first.id}`).getAttribute("aria-pressed"),
-    ).toBe("true");
+    // 기본 educator + 추천 조합(blazer/lecture/friendly), extra 없음.
+    expect(onGenerate).toHaveBeenCalledWith({
+      persona: "educator",
+      outfit: "blazer",
+      background: "lecture",
+      expression: "friendly",
+      extra: null,
+    });
   });
 
-  it("누적 한도에 도달하면 카드가 비활성화되고 생성되지 않는다", () => {
-    const looks = Array.from({ length: 12 }, (_, i) => readyLook(`l${i}`));
+  it("누적 한도에 도달하면 생성 버튼 대신 소프트 안내를 노출한다", () => {
+    const looks = Array.from({ length: LOOK_TOTAL_MAX }, (_, i) => readyLook(`l${i}`));
     const onGenerate = vi.fn();
     render(
       <LookGenerateStep
@@ -85,11 +86,8 @@ describe("LookGenerateStep — 스타일 샘플 갤러리", () => {
         t={t}
       />,
     );
-    const card = screen.getByTestId(
-      `look-preset-${LOOK_PRESETS[0].id}`,
-    ) as HTMLButtonElement;
-    expect(card.disabled).toBe(true);
-    fireEvent.click(card);
+    expect(screen.queryByTestId("look-generate-btn")).toBeNull();
+    expect(screen.getByTestId("look-cap-note")).toBeTruthy();
     expect(onGenerate).not.toHaveBeenCalled();
   });
 
@@ -132,12 +130,13 @@ describe("LookSelectStep — 복귀 동선", () => {
 });
 
 // usePhotoAvatarFlow.goTo("upload") 가 stale 룩/선택을 비우는지 검증.
+// v0.2: 그룹은 즉시 ready, 룩 생성은 구조화 입력 + 배치(LOOK_BATCH_DEFAULT).
 vi.mock("@/components/professor/avatars/onboarding/photoAvatarApi", () => ({
   getPhotoAvatar: vi.fn().mockResolvedValue({ group_id: null, status: "none" }),
   listLooks: vi
     .fn()
     .mockResolvedValue([
-      { look_id: "k1", preview_image_url: "x", prompt: "p", status: "ready" },
+      { look_id: "k1", image_url: "x", preview_image_url: null, prompt: "p", status: "ready" },
     ]),
   generateLooks: vi.fn().mockResolvedValue({ generation_id: "g" }),
   selectLook: vi.fn().mockResolvedValue({ ok: true }),
@@ -155,11 +154,18 @@ describe("usePhotoAvatarFlow — 업로드 복귀 시 stale 룩 초기화", () =
     const { result, unmount } = renderHook(() => usePhotoAvatarFlow());
     await waitFor(() => expect(result.current.initializing).toBe(false));
 
-    // 룩 생성 → looks 채움 + 선택. 개수는 항상 1로 고정된다.
+    // 룩 생성 → 구조화 입력으로 배치(LOOK_BATCH_DEFAULT 장) 생성.
+    const input = {
+      persona: "educator" as const,
+      outfit: "blazer" as const,
+      background: "lecture" as const,
+      expression: "friendly" as const,
+      extra: null,
+    };
     await act(async () => {
-      await result.current.generate("프롬프트");
+      await result.current.generate(input);
     });
-    expect(generateLooks).toHaveBeenCalledWith("프롬프트", 1);
+    expect(generateLooks).toHaveBeenCalledWith(input, LOOK_BATCH_DEFAULT);
     await act(async () => {
       await result.current.select("k1");
     });

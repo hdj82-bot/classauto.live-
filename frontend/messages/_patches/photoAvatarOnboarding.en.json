@@ -2,14 +2,14 @@
   "photoAvatarOnboarding": {
     "eyebrow": "Self avatar onboarding",
     "title": "Create your own face & voice avatar",
-    "subtitle": "Turn one portrait photo and a voice sample into a lecture avatar of yourself. The flow goes: upload a photo → prepare → generate & pick a look → preview.",
+    "subtitle": "Turn one portrait photo and a voice sample into a lecture avatar of yourself. The flow goes: upload a photo → generate & pick a look → preview.",
     "loading": "Loading onboarding status...",
     "exitToGallery": "To avatar gallery",
     "deferredBanner": "The self-avatar API isn't deployed yet, so this is a preview with sample data. Your photo, looks, and voice will be saved and generated for real once the backend is connected.",
 
     "embed": {
       "title": "Create an avatar from your photo",
-      "description": "Upload one portrait photo and Design with AI generates several looks that keep your face. Set the one you like as the default look and it becomes the base appearance for your lecture videos.",
+      "description": "Upload one portrait photo and we generate several looks that keep your face. Set the one you like as the default look and it becomes the base appearance for your lecture videos.",
       "setDefault": "Set this as the default look",
       "confirmed": "Default look set. You can now create lectures with your own face.",
       "confirmedTitle": "Default look set",
@@ -20,7 +20,6 @@
 
     "step": {
       "upload": { "label": "Upload photo" },
-      "training": { "label": "Prepare avatar" },
       "generate": { "label": "Generate looks" },
       "select": { "label": "Pick a look" },
       "preview": { "label": "Preview & confirm" }
@@ -44,61 +43,22 @@
       "errorUpload": "Photo upload failed. Please try again shortly."
     },
 
-    "training": {
-      "title": "Preparing your avatar",
-      "description": "We're training an avatar group from your photo. You'll move to the next step automatically when it's ready. You can leave this screen — progress continues.",
-      "badge": "Training",
-      "stalledNote": "This is taking longer than usual (normally 1–2 minutes). You can close this screen — progress continues and you'll move on automatically when it's ready. If it stays stuck, try again below.",
-      "reupload": "Re-upload a different photo",
-      "failedTitle": "Avatar preparation failed",
-      "failedDescription": "Training from the photo failed. Please try again with a sharp, front-facing photo on a white/solid background.",
-      "failedCreditTitle": "Out of AI generation credits",
-      "failedCreditDescription": "This isn't a photo problem — the video-generation (HeyGen) API is out of credits. Please ask your administrator to top up credits; it will work once credits are added.",
-      "retry": "Re-upload"
-    },
-
     "looks": {
-      "title": "Generate Design with AI looks",
-      "description": "Pick a style sample and we'll create a look in that style while keeping your face.",
-      "galleryLabel": "Pick from style samples",
-      "galleryHint": "Tap a card to generate that style right away.",
-      "presets": {
-        "studio-navy": {
-          "label": "Light gray studio · navy suit",
-          "prompt": "Light gray studio background, navy suit with a white shirt, front-facing upper body"
-        },
-        "warm-cardigan": {
-          "label": "Warm beige · knit cardigan",
-          "prompt": "Warm beige background, knit cardigan, softly lit front-facing upper body"
-        },
-        "formal-tie": {
-          "label": "Dark backdrop · black suit and tie",
-          "prompt": "Dark neutral background, black suit and tie, formal front-facing upper body"
-        },
-        "lab-shirt": {
-          "label": "Lab · shirt and coat",
-          "prompt": "Bright lab background, shirt under a white coat, neat front-facing upper body"
-        },
-        "study-blazer": {
-          "label": "Study · tweed blazer",
-          "prompt": "Study background with bookshelves, tweed blazer, calm front-facing upper body"
-        },
-        "lecture-casual": {
-          "label": "Classroom · casual shirt",
-          "prompt": "Bright classroom background, casual shirt, friendly front-facing upper body"
-        },
-        "bookshelf-knit": {
-          "label": "Bookshelf · knit sweater",
-          "prompt": "Bookshelf background, knit sweater, warm front-facing upper body"
-        },
-        "classic-portrait": {
-          "label": "Gold gradient · classic suit",
-          "prompt": "Soft gold gradient background, charcoal classic suit, front-facing portrait"
-        }
+      "title": "Create looks with your face",
+      "description": "Pick a persona, outfit, background, and expression, and we'll generate several looks in that style at once while keeping your face.",
+      "options": {
+        "personaLabel": "Persona",
+        "outfitLabel": "Outfit",
+        "backgroundLabel": "Background",
+        "expressionLabel": "Expression",
+        "extraLabel": "Extra",
+        "extraPlaceholder": "e.g. wearing glasses, bright mood (optional)",
+        "auto": "Auto"
       },
+      "generateCta": "Generate {count} looks",
       "restart": "Start over with a different photo",
       "costNote": "Generating looks is a one-time onboarding step. You can make up to {remaining} more in this step.",
-      "capReached": "You've reached the total limit ({max}). Please pick from the looks you've made.",
+      "capReached": "Please pick from the looks you've already made. You can generate more again shortly.",
       "next": "Next: pick a look",
       "error": "Could not start look generation. Please try again shortly.",
       "tileAlt": "Generated look preview",
