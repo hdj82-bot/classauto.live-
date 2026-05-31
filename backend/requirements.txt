@@ -29,7 +29,10 @@ httpx>=0.27.0,<1.0.0
 
 # AI / ML
 anthropic>=0.102.0,<1.0.0
-openai>=1.58.0,<2.0.0
+# images.edit 의 input_fidelity(교수 사진 정체성 보존; Photo Avatar v0.2)는 1.96.0+ 에서 지원.
+# 운영/개발 환경은 이미 2.x 설치본을 쓰므로 상한을 3.0 미만으로 넓힌다. 임베딩 경로
+# (embeddings.create)는 1.x→2.x 안정 API라 호환. (공유 의존성 — 병렬 브랜치 merge 시 주의)
+openai>=1.96.0,<3.0.0
 
 # Pipeline
 python-pptx>=1.0.2,<2.0.0

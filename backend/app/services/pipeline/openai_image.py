@@ -20,6 +20,8 @@ from __future__ import annotations
 import base64
 import logging
 
+import openai
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -42,44 +44,62 @@ class OpenAIModerationRefused(OpenAIImageError):
 # 의 PersonaT/OutfitT/BackgroundT/ExpressionT 와 1:1 로 유지(계약).
 
 PERSONA_PROMPTS: dict[str, str] = {
-    "educator": "a friendly university professor, approachable academic presence",
-    "researcher": "a focused researcher, scholarly and precise demeanor",
-    "mentor": "a warm mentor, encouraging and trustworthy presence",
-    "podcast_host": "a conversational podcast host, engaging and relaxed",
+    "educator": (
+        "a friendly university professor with an approachable, trustworthy academic "
+        "presence, looking directly at the camera as if teaching a class"
+    ),
+    "researcher": (
+        "a focused researcher with a scholarly, precise and composed demeanor, "
+        "intellectual and credible"
+    ),
+    "mentor": (
+        "a warm, encouraging mentor with a reassuring and supportive presence, "
+        "patient and attentive"
+    ),
+    "podcast_host": (
+        "a conversational podcast host with an engaging, relaxed and personable "
+        "presence, naturally expressive"
+    ),
 }
 OUTFIT_PROMPTS: dict[str, str] = {
-    "suit": "a well-fitted business suit",
-    "blazer": "a smart blazer over a shirt",
-    "shirt": "a clean collared shirt",
-    "knit": "a tidy knit sweater",
-    "tee": "a plain quality t-shirt",
-    "hoodie": "a clean casual hoodie",
+    "suit": "a well-fitted tailored business suit with a clean shirt",
+    "blazer": "a smart blazer worn over a collared shirt",
+    "shirt": "a crisp, clean collared dress shirt",
+    "knit": "a tidy, refined knit sweater",
+    "tee": "a plain, good-quality fitted t-shirt",
+    "hoodie": "a clean, smart-casual hoodie",
 }
 BACKGROUND_PROMPTS: dict[str, str] = {
-    "lecture": "a bright lecture hall background",
-    "lab": "a tidy research lab background",
-    "study": "a study with bookshelves",
-    "studio": "a clean bright studio backdrop",
-    "lounge": "a warm lounge with plants",
-    "cafe": "a softly lit cafe background",
+    "lecture": "a bright modern lecture hall, softly blurred behind the subject",
+    "lab": "a tidy, well-lit research laboratory, softly blurred behind the subject",
+    "study": "a warm study lined with bookshelves, softly blurred behind the subject",
+    "studio": "a clean, evenly lit neutral studio backdrop",
+    "lounge": "a warm lounge with greenery, softly blurred behind the subject",
+    "cafe": "a softly lit, cozy cafe interior, gently blurred behind the subject",
 }
 EXPRESSION_PROMPTS: dict[str, str] = {
-    "neutral": "a calm neutral expression",
-    "friendly": "a friendly expression",
-    "warm": "a warm gentle smile",
-    "confident": "a confident expression",
-    "thoughtful": "a thoughtful expression",
+    "neutral": "a calm, composed neutral expression",
+    "friendly": "a friendly, open expression with a light smile",
+    "warm": "a warm, gentle and welcoming smile",
+    "confident": "a confident, self-assured expression",
+    "thoughtful": "a thoughtful, attentive expression",
 }
 
-# 사용자에게 노출하지 않는 HeyGen 최적화 레이어 — 항상 주입(docs §0.5 ①, PRD Hidden Layer).
+# 사용자에게 노출하지 않는 HeyGen 최적화 레이어 — 항상 주입(docs §0.5 ①·③, PRD Hidden Layer).
+# 정체성 보존(같은 인물)·talking-head 적합 프레이밍(정면·인물 중심 1:1~포트레이트·
+# 머리 ~30% 프레임·입/턱 비가림)을 강제한다. 정체성의 1차 보증은 images/edits +
+# input_fidelity:high 이고, 이 문장은 프레이밍·조명·화질을 보조한다.
 _HIDDEN_HEYGEN_RULES = (
-    "Keep the exact same person, identity, age, ethnicity, facial proportions, "
-    "hairstyle, and facial features from the reference image. "
-    "Direct frontal view, eye-level camera, face centered and fully visible, "
-    "mouth and jawline unobstructed, head occupies about 30% of frame, comfortable "
-    "headroom. Soft even frontal lighting, no harsh shadows. Ultra photorealistic, "
-    "DSLR portrait quality, natural skin texture. "
-    "Designed specifically for HeyGen talking-head avatar and lip-sync animation."
+    "Preserve the exact same person from the reference image — identical identity, "
+    "age, gender, ethnicity, facial proportions, hairstyle, and facial features. "
+    "Do not beautify, slim, or alter the face. "
+    "Single person only, upper-body portrait, direct frontal view at eye level, "
+    "face centered and fully visible with the mouth and jawline unobstructed, "
+    "head occupying about 30% of the frame with comfortable headroom. "
+    "Soft, even frontal lighting with no harsh shadows. "
+    "Ultra photorealistic, DSLR portrait quality, natural and detailed skin texture, "
+    "sharp focus on the face. "
+    "Optimized as a still reference for a HeyGen talking-head avatar and lip-sync animation."
 )
 
 
@@ -148,17 +168,69 @@ async def generate_instructor_looks(
         count,
     )
 
-    # ── _TODO_REAL_CALL (창2 구현) ──────────────────────────────────────────
-    # OpenAI 공식 SDK 로 images/edits 호출:
-    #   - image=업로드 사진(image_bytes), prompt=prompt
-    #   - model=settings.OPENAI_IMAGE_MODEL
-    #   - quality=settings.PHOTO_AVATAR_IMAGE_QUALITY
-    #   - input_fidelity=settings.PHOTO_AVATAR_INPUT_FIDELITY
-    #   - size=인물 중심(예: "1024x1024"), n=count
-    # 응답에서 b64_json 디코드 → list[bytes] 반환.
-    # 모더레이션/정책 거부 응답은 OpenAIModerationRefused 로, 그 외 오류는
-    # OpenAIImageError 로 래핑. 토큰/비용은 logger.info 로 계측(차별점 #2).
-    raise NotImplementedError(
-        "실제 gpt-image-2 호출은 창2(feat/pa-backend-core)에서 구현 예정. "
-        "현재는 OPENAI_IMAGE_MOCK=True 경로만 동작한다."
+    # ── 실제 gpt-image-2 호출 (images/edits) ────────────────────────────────
+    # 업로드 사진을 reference 로 전달해 인물 룩을 생성한다. content_type 에서
+    # 확장자를 유도해 SDK 의 멀티파트 업로드 파일명에 반영한다.
+    ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}.get(
+        content_type, "png"
     )
+    image_file = (f"reference.{ext}", image_bytes, content_type)
+
+    client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    try:
+        response = await client.images.edit(
+            model=settings.OPENAI_IMAGE_MODEL,
+            image=image_file,
+            prompt=prompt,
+            n=count,
+            size="1024x1024",  # 인물 중심 정사각 (HeyGen talking-head 적합)
+            quality=settings.PHOTO_AVATAR_IMAGE_QUALITY,
+            input_fidelity=settings.PHOTO_AVATAR_INPUT_FIDELITY,
+        )
+    except openai.BadRequestError as exc:
+        # gpt-image 모더레이션/정책 거부는 BadRequest 로 온다(code=moderation_blocked 등).
+        code = str(getattr(exc, "code", "") or "")
+        if (
+            "moderation" in code
+            or "content_policy" in code
+            or "safety" in code
+            or "moderation" in str(exc).lower()
+            or "content_policy" in str(exc).lower()
+        ):
+            logger.warning("gpt-image-2 모더레이션 거부: %s", exc)
+            raise OpenAIModerationRefused(
+                "gpt-image-2 가 실존 인물 얼굴 생성을 정책상 거부했습니다."
+            ) from exc
+        logger.error("gpt-image-2 요청 거부(BadRequest): %s", exc)
+        raise OpenAIImageError(f"gpt-image-2 요청 실패: {exc}") from exc
+    except openai.APIError as exc:
+        logger.error("gpt-image-2 API 오류: %s", exc)
+        raise OpenAIImageError(f"gpt-image-2 호출 실패: {exc}") from exc
+
+    # ── 비용/사용량 계측 (차별점 #2 비용 투명성) ────────────────────────────
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        logger.info(
+            "gpt-image-2 사용량: input_tokens=%s, output_tokens=%s, total_tokens=%s, count=%d",
+            getattr(usage, "input_tokens", None),
+            getattr(usage, "output_tokens", None),
+            getattr(usage, "total_tokens", None),
+            count,
+        )
+
+    # ── 응답 → bytes 목록 ───────────────────────────────────────────────────
+    data = getattr(response, "data", None) or []
+    images: list[bytes] = []
+    for item in data:
+        b64 = getattr(item, "b64_json", None)
+        if not b64:
+            raise OpenAIImageError("gpt-image-2 응답에 이미지 데이터(b64_json)가 없습니다.")
+        images.append(base64.b64decode(b64))
+
+    if not images:
+        raise OpenAIImageError("gpt-image-2 가 이미지를 반환하지 않았습니다.")
+    if len(images) < count:
+        logger.warning(
+            "gpt-image-2 요청 %d 개 중 %d 개만 반환됨", count, len(images)
+        )
+    return images
