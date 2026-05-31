@@ -642,15 +642,34 @@ async def create_photo_avatar(
             detail=f"사진은 {_MAX_PROFILE_PHOTO // (1024 * 1024)}MB 이하여야 합니다.",
         )
     if content[:3] == _JPEG_MAGIC:
-        ctype = "image/jpeg"
+        ext, ctype = "jpg", "image/jpeg"
     elif content[:8] == _PNG_MAGIC:
-        ctype = "image/png"
+        ext, ctype = "png", "image/png"
     else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="JPEG 또는 PNG 이미지만 업로드할 수 있습니다.",
         )
 
+    # v0.2 gpt 경로: train 없음. 사진을 S3 에 reference 로 저장만 하면 곧바로 룩
+    # 생성이 가능하다(정체성 보존은 generate 시 input_fidelity 가 책임). 저장한 원본은
+    # 모더레이션 거부 fallback(원본 그대로 Talking Photo)에도 재사용된다.
+    if settings.PHOTO_AVATAR_PROVIDER == "gpt":
+        s3_key = f"thumbnails/photo-avatar/{user.id}/source-{uuid.uuid4().hex[:8]}.{ext}"
+        s3_svc.upload_file(content, s3_key, content_type=ctype)
+        user.profile_image_url = (
+            f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
+        )
+        # group_id 없이 status 만 'ready' 로 둬 룩 생성 gate 를 연다(룩 생성 신호).
+        user.photo_avatar_group_status = "ready"
+        user.photo_avatar_group_error = None
+        await db.commit()
+        return PhotoAvatarStatusResponse(
+            status="ready",
+            message="사진이 업로드되었습니다. 이제 원하는 룩을 만들어 보세요.",
+        )
+
+    # ── 레거시 heygen 경로(롤백용): 그룹 생성 + train ──────────────────────────
     from app.services.pipeline.heygen import HeyGenError, create_photo_avatar_group
 
     # 그룹 생성만 동기로 한다. 학습(train)은 업로드 사진(look)이 'ready' 된 뒤에야
@@ -690,6 +709,12 @@ async def create_photo_avatar(
 )
 async def get_photo_avatar(user: User = Depends(require_professor)):
     """본인 Photo Avatar 그룹의 학습 상태를 반환한다."""
+    # gpt 경로는 group/train 이 없다 — reference 사진이 올라가 있으면 룩 생성 가능(ready).
+    if settings.PHOTO_AVATAR_PROVIDER == "gpt":
+        if user.photo_avatar_group_status == "ready" and user.profile_image_url:
+            return PhotoAvatarStatusResponse(status="ready")
+        return PhotoAvatarStatusResponse(status="none")
+
     if not user.photo_avatar_group_id:
         return PhotoAvatarStatusResponse(status="none")
     raw = user.photo_avatar_group_status or "training"
@@ -719,6 +744,78 @@ async def generate_looks(
     비용 통제: 1회 생성 수는 ``PHOTO_AVATAR_LOOK_BATCH_MAX`` 로, 교수자당 누적은
     ``PHOTO_AVATAR_LOOK_TOTAL_MAX`` 로 상한을 둔다.
     """
+    # ── v0.2 gpt 경로: placeholder 행 선생성 → generate_gpt_looks 태스크 ──────────
+    if settings.PHOTO_AVATAR_PROVIDER == "gpt":
+        if user.photo_avatar_group_status != "ready" or not user.profile_image_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="먼저 사진을 업로드해 주세요.",
+            )
+
+        # 누적 상한은 소프트 처리 — 한도 도달 시 예외가 아니라 안내 메시지로 응답한다.
+        # failed 룩은 누적에서 제외(실패가 한도를 잡아먹지 않도록).
+        existing = (
+            await db.execute(
+                select(func.count())
+                .select_from(PhotoAvatarLook)
+                .where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.status != LookStatus.failed.value,
+                )
+            )
+        ).scalar() or 0
+        remaining = settings.PHOTO_AVATAR_LOOK_TOTAL_MAX - existing
+        if remaining <= 0:
+            return LookGenerateResponse(
+                status="failed",
+                message=(
+                    f"룩은 최대 {settings.PHOTO_AVATAR_LOOK_TOTAL_MAX}개까지 만들 수 있습니다. "
+                    "기존 룩을 정리한 뒤 다시 시도해 주세요."
+                ),
+            )
+        count = min(payload.count, settings.PHOTO_AVATAR_LOOK_BATCH_MAX, remaining)
+
+        from app.services.pipeline.openai_image import build_prompt
+
+        prompt = build_prompt(
+            payload.persona or "educator",
+            payload.outfit,
+            payload.background,
+            payload.expression,
+            payload.extra,
+        )
+        rows = [
+            PhotoAvatarLook(
+                user_id=user.id,
+                image_url=None,
+                prompt=prompt,
+                status=LookStatus.generating.value,
+            )
+            for _ in range(count)
+        ]
+        db.add_all(rows)
+        await db.flush()  # id 확정 — 태스크가 id 로 행을 채운다(idempotent 키).
+        look_ids = [str(r.id) for r in rows]
+        await db.commit()
+
+        from app.tasks.photo_avatar import generate_gpt_looks
+
+        generate_gpt_looks.delay(
+            str(user.id),
+            look_ids,
+            payload.persona or "educator",
+            payload.outfit,
+            payload.background,
+            payload.expression,
+            payload.extra,
+        )
+        return LookGenerateResponse(
+            generation_id=None,
+            status="generating",
+            message=f"룩 {count}개를 생성하고 있습니다.",
+        )
+
+    # ── 레거시 heygen 경로(Design with AI) ───────────────────────────────────────
     if not user.photo_avatar_group_id or user.photo_avatar_group_status != "ready":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -782,17 +879,25 @@ async def list_looks(
             .order_by(PhotoAvatarLook.created_at.desc())
         )
     ).scalars().all()
-    return [
-        LookItem(
-            look_id=r.heygen_look_id,
-            # preview 는 HeyGen 이 준 URL(단기 유효). 만료가 문제되면 S3 캐시는 후속.
-            preview_image_url=r.preview_image_url,
-            prompt=r.prompt,
-            status=r.status if r.status in ("generating", "ready", "failed") else "ready",
-            is_default=(r.heygen_look_id == user.photo_avatar_default_look_id),
+    items: list[LookItem] = []
+    for r in rows:
+        # 룩 식별자: v0.2 gpt=내부 uuid, 레거시=heygen_look_id.
+        lid = r.heygen_look_id or str(r.id)
+        items.append(
+            LookItem(
+                look_id=lid,
+                # gpt: S3 영구 URL 을 presigned 로 서빙. 레거시: HeyGen 외부 URL 은
+                # presign_stored_s3_url 이 우리 버킷이 아니면 그대로 통과시킨다.
+                image_url=s3_svc.presign_stored_s3_url(r.image_url),
+                preview_image_url=s3_svc.presign_stored_s3_url(
+                    r.preview_image_url or r.image_url
+                ),
+                prompt=r.prompt,
+                status=r.status if r.status in ("generating", "ready", "failed") else "ready",
+                is_default=(lid == user.photo_avatar_default_look_id),
+            )
         )
-        for r in rows
-    ]
+    return items
 
 
 @router.post(
@@ -805,15 +910,33 @@ async def select_look(
     user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    """지정한 룩을 기본 룩으로 설정한다(강의 렌더의 본인 얼굴 기본값)."""
-    row = (
-        await db.execute(
-            select(PhotoAvatarLook).where(
-                PhotoAvatarLook.user_id == user.id,
-                PhotoAvatarLook.heygen_look_id == look_id,
+    """지정한 룩을 기본 룩으로 설정한다(강의 렌더의 본인 얼굴 기본값).
+
+    v0.2 gpt: 룩 이미지를 Talking Photo 로 등록해 ``user.photo_avatar_id`` 로 확정하고
+    이전 미리보기 캐시를 무효화한다(얼굴 교체). 레거시 heygen: 룩 id 를 기본값으로만 둔다.
+    """
+    # 룩 해석 — gpt 는 내부 uuid, 레거시는 heygen_look_id. 둘 다 시도한다.
+    row = None
+    try:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.id == uuid.UUID(look_id),
+                )
             )
-        )
-    ).scalar_one_or_none()
+        ).scalar_one_or_none()
+    except ValueError:
+        row = None
+    if row is None:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.heygen_look_id == look_id,
+                )
+            )
+        ).scalar_one_or_none()
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="해당 룩을 찾을 수 없습니다."
@@ -823,11 +946,38 @@ async def select_look(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="아직 준비되지 않은 룩입니다.",
         )
+
+    message = "기본 아바타 룩으로 설정했습니다."
+    if settings.PHOTO_AVATAR_PROVIDER == "gpt":
+        if not row.image_url:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="이 룩에는 이미지가 없습니다.",
+            )
+        from urllib.parse import urlparse
+
+        from app.services.pipeline.heygen import HeyGenError, upload_talking_photo
+
+        key = urlparse(row.image_url).path.lstrip("/")
+        ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
+        try:
+            img_bytes = s3_svc.download_file(key)
+            talking_photo_id = await upload_talking_photo(img_bytes, content_type=ctype)
+        except HeyGenError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"본인 아바타 등록에 실패했습니다: {e}",
+            ) from e
+        user.photo_avatar_id = talking_photo_id
+        # (E) 얼굴이 바뀌었으므로 이전 '움직이는 미리보기' 캐시는 무효(재생성 유도).
+        user.photo_avatar_preview_url = None
+        user.photo_avatar_preview_video_id = None
+        user.photo_avatar_preview_voice_id = None
+        message = "이 모습을 본인 아바타로 설정했습니다."
+
     user.photo_avatar_default_look_id = look_id
     await db.commit()
-    return LookSelectResponse(
-        default_look_id=look_id, message="기본 아바타 룩으로 설정했습니다."
-    )
+    return LookSelectResponse(default_look_id=look_id, message=message)
 
 
 # ── 최근 선택한 아바타 (라이브러리 즉시 선택·적용) ────────────────────────────
