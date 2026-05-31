@@ -171,15 +171,33 @@ class PhotoAvatarStatusResponse(BaseModel):
     )
 
 
-class LookGenerateRequest(BaseModel):
-    """``POST /api/avatars/me/looks`` 요청 — Design with AI 룩 배치 생성."""
+# v0.2 옵션 enum — 프론트(창4) 드롭다운과 백엔드(창2) 프롬프트 매핑이 공유.
+PersonaT = Literal["educator", "researcher", "mentor", "podcast_host"]
+OutfitT = Literal["suit", "blazer", "shirt", "knit", "tee", "hoodie"]
+BackgroundT = Literal["lecture", "lab", "study", "studio", "lounge", "cafe"]
+ExpressionT = Literal["neutral", "friendly", "warm", "confident", "thoughtful"]
 
-    prompt: str = Field(
-        ..., min_length=1, max_length=1000,
-        description="룩 스타일 프롬프트(배경·복장·구도 등).",
+
+class LookGenerateRequest(BaseModel):
+    """``POST /api/avatars/me/looks`` 요청 — 룩 배치 생성.
+
+    v0.2(provider="gpt"): 구조화 필드(persona 필수, 나머지 선택)로 gpt-image-2 룩 생성.
+    레거시(provider="heygen"): 자유 ``prompt`` 사용. 둘 다 하위호환으로 받는다.
+    """
+
+    persona: PersonaT | None = Field(default=None, description="교수자 페르소나(v0.2).")
+    outfit: OutfitT | None = Field(default=None, description="복장. null=자동 추론.")
+    background: BackgroundT | None = Field(default=None, description="배경. null=자동.")
+    expression: ExpressionT | None = Field(default=None, description="표정. null=자동.")
+    extra: str | None = Field(
+        default=None, max_length=500, description="추가 자유 묘사(선택)."
+    )
+    prompt: str | None = Field(
+        default=None, max_length=1000,
+        description="레거시 자유 프롬프트(provider='heygen' 호환). v0.2 에선 미사용 가능.",
     )
     count: int = Field(
-        default=4, ge=1,
+        default=3, ge=1,
         description="한 번에 생성할 룩 수. 서버가 PHOTO_AVATAR_LOOK_BATCH_MAX 로 상한 적용.",
     )
 
@@ -195,7 +213,12 @@ class LookGenerateResponse(BaseModel):
 class LookItem(BaseModel):
     """생성된 룩 1개."""
 
-    look_id: str = Field(..., description="HeyGen 룩 id (avatar_id 로 렌더에 사용).")
+    look_id: str = Field(
+        ..., description="룩 식별자. v0.2=내부 uuid 문자열, 레거시=heygen_look_id."
+    )
+    image_url: str | None = Field(
+        default=None, description="v0.2 gpt 룩 이미지의 S3 URL(presigned)."
+    )
     preview_image_url: str | None = Field(
         default=None, description="미리보기 썸네일(presigned)."
     )
