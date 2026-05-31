@@ -9,8 +9,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from urllib.parse import urlparse
 
 from app.celery_app import celery
+from app.core.config import settings
 from app.db.session import SyncSessionLocal
 from app.models.photo_avatar import LookStatus, PhotoAvatarLook
 from app.models.user import User
@@ -206,6 +208,125 @@ def poll_photo_avatar_looks(
         logger.info(
             "Photo Avatar 룩 생성 완료(비용 계측): user=%s, gen=%s, created=%d",
             user_id, generation_id, created,
+        )
+        return {"user_id": user_id, "status": "ready", "created": created}
+    finally:
+        loop.close()
+        db.close()
+
+
+# ── v0.2: gpt-image-2 룩 생성 (HeyGen group/train 없음) ────────────────────────
+
+
+def _ctype_from_key(key: str) -> str:
+    """S3 key 확장자에서 이미지 content-type 추론(png 외엔 jpeg 취급)."""
+    return "image/png" if key.lower().endswith(".png") else "image/jpeg"
+
+
+@celery.task
+def generate_gpt_looks(
+    user_id: str,
+    look_ids: list[str],
+    persona: str,
+    outfit: str | None,
+    background: str | None,
+    expression: str | None,
+    extra: str | None,
+) -> dict:
+    """업로드 사진을 reference 로 gpt-image-2 룩을 생성해 placeholder 행을 채운다.
+
+    엔드포인트가 미리 만든 ``status=generating`` 행(``look_ids``)을 id 로 찾아
+    각 행에 생성 이미지의 S3 URL 을 채우고 ``ready`` 로 전환한다(없으면 ``failed``).
+
+    멱등성: 대상 행이 모두 generating 이 아니면(이미 처리됨) 즉시 skip. 외부 오류는
+    catch 해 행을 failed 로 두고 **재시도하지 않는다** — 재시도 시 새 이미지를 또
+    생성해 비용이 중복되므로(생성은 1회성).
+
+    모더레이션 거부(``OpenAIModerationRefused``)는 docs §0.6 D 의 '원본 사진 직행'
+    fallback — 첫 행을 원본 사진 URL 로 ready 처리하고 나머지는 failed 로 둔다.
+    이후 교수가 그 룩을 select 하면 기존 경로가 원본을 Talking Photo 로 등록한다.
+    """
+    from app.services.pipeline import openai_image
+    from app.services.pipeline import s3 as s3_svc
+    from app.services.pipeline.openai_image import (
+        OpenAIImageError,
+        OpenAIModerationRefused,
+    )
+
+    db = SyncSessionLocal()
+    loop = asyncio.new_event_loop()
+    try:
+        user = db.query(User).filter(User.id == uuid.UUID(user_id)).one()
+        ids = [uuid.UUID(x) for x in look_ids]
+        rows = (
+            db.query(PhotoAvatarLook)
+            .filter(
+                PhotoAvatarLook.user_id == user.id,
+                PhotoAvatarLook.id.in_(ids),
+            )
+            .all()
+        )
+        if not rows:
+            return {"user_id": user_id, "status": "none"}
+        # 멱등: 모든 대상 행이 이미 generating 을 벗어났으면(처리 완료) 재실행 skip.
+        if all(r.status != LookStatus.generating.value for r in rows):
+            return {"user_id": user_id, "status": "skipped"}
+
+        if not user.profile_image_url:
+            for r in rows:
+                r.status = LookStatus.failed.value
+            db.commit()
+            return {"user_id": user_id, "status": "failed", "reason": "no_reference"}
+
+        key = urlparse(user.profile_image_url).path.lstrip("/")
+        ctype = _ctype_from_key(key)
+        count = len(rows)
+
+        try:
+            ref_bytes = s3_svc.download_file(key)
+            images = loop.run_until_complete(
+                openai_image.generate_instructor_looks(
+                    ref_bytes, ctype, persona, outfit, background, expression, extra, count
+                )
+            )
+        except OpenAIModerationRefused:
+            logger.warning(
+                "gpt-image-2 모더레이션 거부 → 원본 사진 직행 fallback: user=%s", user_id
+            )
+            rows[0].image_url = user.profile_image_url
+            rows[0].status = LookStatus.ready.value
+            for r in rows[1:]:
+                r.status = LookStatus.failed.value
+            db.commit()
+            logger.info(
+                "gpt 룩 생성(비용 계측): user=%s, mode=moderation_fallback, created=1",
+                user_id,
+            )
+            return {"user_id": user_id, "status": "ready", "created": 1, "fallback": True}
+        except OpenAIImageError as exc:
+            logger.warning("gpt 룩 생성 실패(재시도 안 함): user=%s, error=%s", user_id, exc)
+            for r in rows:
+                r.status = LookStatus.failed.value
+            db.commit()
+            return {"user_id": user_id, "status": "failed"}
+
+        created = 0
+        for r, img in zip(rows, images):
+            s3_key = f"thumbnails/photo-avatar/{user.id}/look-{uuid.uuid4().hex[:8]}.png"
+            s3_svc.upload_file(img, s3_key, content_type="image/png")
+            r.image_url = (
+                f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
+            )
+            r.status = LookStatus.ready.value
+            created += 1
+        # 생성된 이미지가 행보다 적으면 남는 placeholder 는 failed 처리.
+        for r in rows[len(images):]:
+            r.status = LookStatus.failed.value
+        db.commit()
+
+        logger.info(
+            "gpt 룩 생성 완료(비용 계측): user=%s, requested=%d, created=%d",
+            user_id, count, created,
         )
         return {"user_id": user_id, "status": "ready", "created": created}
     finally:
