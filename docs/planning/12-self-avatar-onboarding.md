@@ -1,6 +1,95 @@
-# 12. 교수자 본인 아바타 온보딩 — Photo Avatar 룩(Design with AI)
+# 12. 교수자 본인 아바타 온보딩 — Photo Avatar 룩
 
-> 상태: 🟡 설계 v0.1 (2026-05-29) · 근거: HeyGen Photo Avatar API + 기존 `avatars.py`/`render.py` 코드 조사
+> 상태: 🟡 설계 v0.2 (2026-05-31) · 근거: v0.1(HeyGen Photo Avatar 풀코스) 코드 점검 + 비용·속도 재분석 → **룩 생성 제공자 전환 결정**
+>
+> ⚠️ **v0.2 에서 룩 생성 경로가 바뀝니다.** §0(아래)이 최신 결정이며, §1~§12 의 HeyGen Design with AI / Avatar III(group+train) 기준 서술은 **맥락 보존용**입니다. 충돌 시 §0 이 우선합니다.
+
+---
+
+## 0. v0.2 방향 전환 — gpt-image-2 룩 + Talking Photo 최종 (2026-05-31 확정)
+
+### 0.1 무엇을 바꾸나
+
+| | v0.1 (기존 설계) | **v0.2 (확정)** |
+|---|---|---|
+| 룩 생성 | HeyGen Design with AI (`/v2/photo_avatar/look/generate`) | **OpenAI gpt-image-2** (`images/edits` + `input_fidelity:high`) |
+| 학습(train) | Photo Avatar group **train 필요** (코드상 최대 15분 폴링) | **없음** |
+| 최종 아바타 | Avatar III(trained group look = avatar_id) | **Talking Photo** (`upload_talking_photo` → `talking_photo_id`) |
+| 온보딩 단계 | 4단계(업로드→준비→룩생성→선택) | **1단계로 압축** (한 화면) |
+
+### 0.2 왜 (근거)
+
+1. **체감 지연의 주범은 train.** 코드 점검 결과(`tasks/photo_avatar.py`, `_MAX_RETRIES=90·_RETRY_DELAY=10` → 최대 15분) 사진 업로드 직후 그룹 학습이 최대 병목. 화면의 "34개 스타일"은 미리 생성이 아니라 정적 프리셋 카탈로그(`lookPresets.ts`)이며 이미 카드 클릭당 1장만 생성 → 느림은 룩 개수가 아니라 train 때문.
+2. **자연스러움은 룩 출처와 무관.** HeyGen 공식: photo avatar 룩은 "AI generated **또는 사용자 업로드**" 둘 다 수용. 엔진은 입력 이미지의 출처를 구분하지 않음 → 같은 이미지·같은 엔진이면 결과 동일. 차이는 입력 이미지 품질(아티팩트·정체성)뿐이고, gpt-image-2(2026-04 출시, 2K/4K·reasoning)는 그 변수를 대부분 해소.
+3. **비용 비등·시간 압승.** 아래 0.4.
+
+### 0.3 새 사용자 흐름 (1단계 압축)
+
+```
+[사진 업로드(S3 즉시)] + [Persona/Outfit/Background 선택]
+        └─ ✨ 룩 생성: gpt-image-2 즉석 N장 (~수십초, train 없음)
+              └─ 맘에 들면 → [이 모습으로 아바타 만들기]
+              └─ 아니면 → ↻ 다시 생성 (수동, 계정당 누적 상한)
+        └─ 확정 1장만 → upload_talking_photo → talking_photo_id
+        └─ (선택) 본인 목소리 → 움직이는 미리보기 (기존 /me/preview 재사용)
+```
+- 스테퍼의 "준비(train)" 단계 소멸이 압축의 핵심. Talking Photo 경로라 가능.
+
+### 0.4 비용·시간 비교 ($1 = ₩1,380)
+
+**온보딩(제작) — 4~5장 생성 후 1장 선택:**
+
+| | v0.1 HeyGen 풀코스 | v0.2 gpt-image-2 → Talking Photo |
+|---|---|---|
+| train | 5~15분 대기 | **없음** |
+| 룩 5장 | HeyGen look 5×$0.20 ≈ $1.00, 각 폴링 수 분 | gpt medium 5×~$0.08 ≈ **$0.40** (high면 ~$1.2) |
+| 1장 확정 | look_id = avatar (추가 0) | Talking Photo 등록 무료·초 단위 |
+| **합/시간** | ~$1.00 / **15~30분** | **~$0.40 / 1~3분** |
+
+**강의 렌더(반복) — 최종 엔진 단가:**
+
+| 엔진 | 분당 | 캡 | 채택 |
+|---|---|---|---|
+| Avatar III / **Talking Photo** | **$1 (₩1,380)** | 무제한 | ✅ |
+| Avatar IV | $4 (₩5,520) | 월 10분(200크레딧) | ❌ 본 렌더 금지(미리보기 한정) |
+
+→ **Talking Photo 는 렌더 단가가 기존 Avatar III 와 동일.** 즉 v0.2 는 "온보딩만 빨라지고 렌더 비용은 그대로"인 순수 개선.
+
+### 0.5 확정 설계 결정 (2026-05-31)
+
+1. **Generate Avatar = 선택된 룩을 `upload_talking_photo` 로 등록** (train 0). 정체성 보존은 프롬프트 문장이 아니라 **`images/edits` + `input_fidelity: high`** API 로 강제.
+2. **재생성 상한 = 교수자(계정)당 누적** (강의당 아님 — 아바타는 계정 1회성 자산). 기본 20회. 평소 "상한" 텍스트 비노출, **초과 시에만** 소프트 안내(막다른 메시지 금지): *"지금까지 만든 룩 중에서 선택해 주세요. 추가 생성은 잠시 후 다시 가능합니다."* 버튼만 비활성, 기존 룩 선택 유도. (auto-regenerate validator 는 비용·지연 폭탄이라 **삭제** — 수동 재생성만.)
+3. **비율**: *최종 강의 영상* = 16:9 (HeyGen `HEYGEN_DIMENSION 1280×720`, 이미 고정). *gpt 룩 생성 이미지* = **인물 중심(1:1~포트레이트)** — 16:9 와이드로 뽑으면 인물이 작아져 Talking Photo 입력에 불리. 추가 비율 요구는 후속.
+4. **품질 tier = medium, 한 번에 3장.** 비용 레버는 장수가 아니라 tier(high↔medium 4배차). medium 3장(~₩330)이 high 2장(~₩830)보다 싸면서 다양성 유지. 정체성은 tier 아닌 input_fidelity 가 책임. 확정 1장만 필요 시 high 재생성.
+
+### 0.6 추가 개선·리스크 (v2 구현 시 반영)
+
+**구현 전 필수:**
+- **(A) 생성 이미지 즉시 S3 저장** — OpenAI 결과 URL 은 만료. v0.1 의 미해결 TODO(`avatars.py:789` "S3 캐시는 후속")를 이번에 해소.
+- **(B) 비동기 처리** — gpt-image-2 는 reasoning 모델이라 장당 수십 초. 기존 Celery 폴링 재사용 또는 진행 표시 필수(동기 요청 시 타임아웃).
+
+**구현 중:**
+- **(C) Feature flag** `PHOTO_AVATAR_PROVIDER=gpt|heygen` 로 점진 전환·롤백 (배포 단계 안전). 기존 `heygen_look_id` 데이터 마이그레이션 호환.
+- **(D) 하드 실패 처리** — ① Talking Photo 얼굴 미검출(`_classify_failure` 패턴 재사용) ② gpt-image-2 의 실존 인물 모더레이션 거부 → **원본 사진 Talking Photo 직행 fallback**.
+- **(E) Talking Photo 교체 시 이전 자산 정리 + 미리보기 캐시 무효화** (기존 `upload_profile_photo` 패턴).
+- **(F) 토큰 사용량 계측 로깅** (비용 투명성 차별점 #2 — 추정치 0.06~0.35 를 실측 보정).
+
+**검토:**
+- **(G) PPT 코너 PIP 로 쓸 경우** 단색 배경 룩 옵션(배경 합성 용이). 전체화면 인트로만이면 불필요.
+- **(H) 음성 결합 순서** — 룩과 독립. PRD 에 "룩 확정 → (선택)음성 → 미리보기" 명시.
+
+### 0.7 전환에 따른 §1~§12 변경 매핑
+
+- **제거**: `prepare_photo_avatar_training`, `poll_photo_avatar_training`, `generate_photo_avatar_looks`(HeyGen 룩), `poll_photo_avatar_looks` 의 HeyGen 의존부, User `photo_avatar_group_id/status/error`(또는 flag 뒤로).
+- **신규**: gpt-image-2 서비스(edits+input_fidelity), Persona/Outfit/Background 매핑(영어 직접 — Translate LLM 단계 생략), 결과 S3 저장.
+- **변경**: `photo_avatar_looks.heygen_look_id` → **이미지 S3 URL** 의미로(마이그레이션 1건). 룩 확정 시 `upload_talking_photo` → `user.photo_avatar_id`.
+- **그대로 유효**: §2 재사용 자산, `create_video(talking_photo_id=…)` 렌더 경로, `create_avatar_preview` 미리보기, 음성(ElevenLabs IVC) 전부, §9 렌더 폴백·갤러리 노출.
+
+### 0.8 PoC 우선 (실작업은 후속)
+
+본 문서는 **결정 기록**이며 구현은 추후. 착수 시 **(A)·(B)·(D) + Talking Photo 모션 자연스러움**을 PoC 로 먼저 검증(사진 1장 → gpt 룩 3장 비동기 → S3 → Talking Photo → 짧은 립싱크 + 모더레이션 거부 케이스). 통과하면 PRD v2 확정 후 본구현.
+
+> 별도 PRD: `AI_Instructor_Avatar_Generator_FULL_PRD.md`(사용자 작성) — Quick/Advanced·Persona·Hidden HeyGen Optimization Layer·Quality Validator. 위 0.5 결정과 0.6 항목을 반영해 PRD v2 로 정리 예정.
 
 ---
 
@@ -168,4 +257,5 @@
 
 ## 변경 이력
 
+- 2026-05-31: **설계 v0.2 — 룩 생성 제공자 전환(§0 신설).** 코드 점검으로 train(최대 15분)이 온보딩 최대 병목임을 확인. 룩 생성을 HeyGen Design with AI → **gpt-image-2**, 최종 아바타를 Avatar III(group+train) → **Talking Photo** 로 전환(자연스러움은 룩 출처 무관, 비용 비등·시간 압승). 4단계→1단계 압축. 확정 결정 4건(Talking Photo+input_fidelity / 계정당 누적 상한·소프트 안내 / 16:9 영상·인물중심 룩 / medium tier 3장) + 개선 A~H + PoC 우선. §1~§12 는 맥락 보존(v0.1 HeyGen 풀코스 기준).
 - 2026-05-29: 설계 v0.1 최초 작성. 음성 클론(IVC)은 기존 구현 확인 → 신규 범위에서 제외. Avatar III $1/분 = 코드 단가 일치 확정. 룩 생성 1회성·배치 상한 정책.
