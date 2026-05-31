@@ -10,18 +10,20 @@ import { usePhotoAvatarI18n } from "@/components/professor/avatars/onboarding/us
 import { usePhotoAvatarFlow } from "@/components/professor/avatars/onboarding/usePhotoAvatarFlow";
 import OnboardingStepper from "@/components/professor/avatars/onboarding/OnboardingStepper";
 import PhotoUploadStep from "@/components/professor/avatars/onboarding/PhotoUploadStep";
-import TrainingStep from "@/components/professor/avatars/onboarding/TrainingStep";
 import LookGenerateStep from "@/components/professor/avatars/onboarding/LookGenerateStep";
 import LookSelectStep from "@/components/professor/avatars/onboarding/LookSelectStep";
 import PreviewConfirmStep from "@/components/professor/avatars/onboarding/PreviewConfirmStep";
-import type { OnboardingStep } from "@/components/professor/avatars/onboarding/photoAvatarTypes";
+import type {
+  LookGenerateInput,
+  OnboardingStep,
+} from "@/components/professor/avatars/onboarding/photoAvatarTypes";
 
 /**
- * /professor/avatars/onboarding — 교수자 본인 아바타 온보딩.
+ * /professor/avatars/onboarding — 교수자 본인 아바타 온보딩 (v0.2 압축).
  *
- * docs/planning/12-self-avatar-onboarding.md §4 의 5단계 흐름을 구현한다:
- * ① 사진 업로드 → ② 그룹 학습(폴링) → ③ Design with AI 룩 배치 생성 →
- * ④ 기본 룩 선택 → ⑤ 본인 목소리로 움직이는 미리보기 → 확정.
+ * docs/planning/12-self-avatar-onboarding.md §0.3 의 train 없는 흐름을 구현한다:
+ * ① 사진 업로드(provider=gpt 는 즉시 ready) → ② 구조화 옵션으로 룩 배치 생성 →
+ * ③ 기본 룩 선택 → ④ 본인 목소리로 움직이는 미리보기 → 확정.
  *
  * 디자인: 라이트 베이지 + 골드(design-system v2). 음성 클론은 기존 기능을
  * 재사용한다. 백엔드(§7 계약)가 미배포면 photoAvatarApi 가 mock 으로 폴백해
@@ -43,8 +45,6 @@ export default function PhotoAvatarOnboardingPage() {
       switch (step) {
         case "upload":
           return true;
-        case "training":
-          return flow.group.status === "training" || flow.group.status === "ready";
         case "generate":
           return flow.group.status === "ready";
         case "select":
@@ -57,9 +57,9 @@ export default function PhotoAvatarOnboardingPage() {
   );
 
   const handleGenerate = useCallback(
-    async (prompt: string) => {
+    async (input: LookGenerateInput) => {
       try {
-        await flow.generate(prompt);
+        await flow.generate(input);
       } catch {
         toast(t("looks.error"), "error");
       }
@@ -152,17 +152,6 @@ export default function PhotoAvatarOnboardingPage() {
 
             {flow.step === "upload" && (
               <PhotoUploadStep onSubmit={flow.uploadPhoto} t={t} />
-            )}
-
-            {flow.step === "training" && (
-              <TrainingStep
-                status={flow.group.status}
-                reducedMotion={reducedMotion}
-                stalled={flow.trainingStalled}
-                errorCode={flow.group.errorCode}
-                onReupload={() => flow.goTo("upload")}
-                t={t}
-              />
             )}
 
             {flow.step === "generate" && (
