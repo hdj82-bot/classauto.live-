@@ -6,11 +6,13 @@ import { usePhotoAvatarFlow } from "./onboarding/usePhotoAvatarFlow";
 import { usePhotoAvatarI18n } from "./onboarding/usePhotoAvatarI18n";
 import { useAvatarsI18n } from "./useAvatarsI18n";
 import PhotoUploadStep from "./onboarding/PhotoUploadStep";
-import TrainingStep from "./onboarding/TrainingStep";
 import LookGenerateStep from "./onboarding/LookGenerateStep";
 import LookSelectStep from "./onboarding/LookSelectStep";
 import { CameraIcon, CheckIcon } from "./onboarding/PhotoAvatarIcons";
-import type { OnboardingStep } from "./onboarding/photoAvatarTypes";
+import type {
+  LookGenerateInput,
+  OnboardingStep,
+} from "./onboarding/photoAvatarTypes";
 
 interface PhotoAvatarStudioCardProps {
   reducedMotion: boolean;
@@ -19,23 +21,22 @@ interface PhotoAvatarStudioCardProps {
 }
 
 /**
- * "내 사진으로 아바타 만들기" — 갤러리 페이지 안에 인라인으로 임베드한 HeyGen
- * Design with AI 룩 온보딩.
+ * "내 사진으로 아바타 만들기" — 갤러리 페이지 안에 인라인으로 임베드한 v0.2
+ * 사진 아바타 룩 온보딩(train 없음).
  *
- * 별도 ``/onboarding`` 라우트로 보내지 않고, #276 의 온보딩 단계 컴포넌트
- * (PhotoUploadStep/TrainingStep/LookGenerateStep/LookSelectStep)와
- * ``usePhotoAvatarFlow`` 를 이 카드 안에서 그대로 재사용한다. 흐름은
- * 사진 업로드 → 학습(폴링) → 스타일 샘플 갤러리에서 룩 1개 생성 → 갤러리 선택 →
- * 기본 룩 지정. 비용 가드(누적 상한·1회성 안내)는 LookGenerateStep 이 그대로
- * 유지한다 (docs/planning/12 §8).
+ * 별도 ``/onboarding`` 라우트로 보내지 않고, 온보딩 단계 컴포넌트
+ * (PhotoUploadStep/LookGenerateStep/LookSelectStep)와 ``usePhotoAvatarFlow`` 를
+ * 이 카드 안에서 그대로 재사용한다. 흐름은 사진 업로드(즉시 ready) → 구조화
+ * 옵션으로 룩 배치 생성 → 갤러리 선택 → 기본 룩 지정. 비용 가드(누적 상한·소프트
+ * 안내)는 LookGenerateStep/LookOptionForm 이 유지한다 (docs/planning/12 §0.5).
  *
- * 움직이는 미리보기(⑤)·본인 목소리는 이 페이지의 별도 음성 카드/미리보기
- * 무대가 담당하므로 임베드 흐름은 "기본 룩 지정"에서 끝낸다.
+ * 움직이는 미리보기·본인 목소리는 이 페이지의 별도 음성 카드/미리보기 무대가
+ * 담당하므로 임베드 흐름은 "기본 룩 지정"에서 끝낸다.
  */
 
-// 임베드 흐름의 단계(미리보기 제외 4단계). photoAvatarTypes.ONBOARDING_STEPS
-// 의 앞 4개와 동일하지만, 여기선 "select"가 마지막(확정)이다.
-const EMBED_STEPS: OnboardingStep[] = ["upload", "training", "generate", "select"];
+// 임베드 흐름의 단계(미리보기 제외 3단계). v0.2 = train 없음. 여기선 "select"가
+// 마지막(확정)이다.
+const EMBED_STEPS: OnboardingStep[] = ["upload", "generate", "select"];
 
 // 사진 클라이언트 상한 20MB (백엔드 한도와 정합). 가이드·검증 문구는 avatars
 // 네임스페이스 키로 override 한다(아래 tUpload).
@@ -69,9 +70,9 @@ export default function PhotoAvatarStudioCard({
   );
 
   const handleGenerate = useCallback(
-    async (prompt: string) => {
+    async (input: LookGenerateInput) => {
       try {
-        await flow.generate(prompt);
+        await flow.generate(input);
       } catch {
         toast(t("looks.error"), "error");
       }
@@ -122,7 +123,7 @@ export default function PhotoAvatarStudioCard({
         </p>
       )}
 
-      {/* 컴팩트 4단계 인디케이터 (확정 시 전부 완료 표시) */}
+      {/* 컴팩트 3단계 인디케이터 (확정 시 전부 완료 표시) */}
       <ol style={stepperStyle} data-testid="studio-stepper" aria-hidden={confirmed}>
         {EMBED_STEPS.map((stepKey, i) => {
           const state: "done" | "current" | "upcoming" = confirmed
@@ -192,10 +193,10 @@ export default function PhotoAvatarStudioCard({
       {confirmed ? (
         <div style={confirmPanel} data-testid="studio-confirmed">
           <div style={confirmThumb}>
-            {selectedLook?.preview_image_url ? (
+            {selectedLook?.image_url || selectedLook?.preview_image_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={selectedLook.preview_image_url}
+                src={selectedLook.image_url ?? selectedLook.preview_image_url ?? ""}
                 alt={t("embed.confirmedTitle")}
                 style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
               />
@@ -227,16 +228,6 @@ export default function PhotoAvatarStudioCard({
               onSubmit={flow.uploadPhoto}
               maxBytes={PHOTO_MAX_BYTES}
               t={tUpload}
-            />
-          )}
-          {flow.step === "training" && (
-            <TrainingStep
-              status={flow.group.status}
-              reducedMotion={reducedMotion}
-              stalled={flow.trainingStalled}
-              errorCode={flow.group.errorCode}
-              onReupload={() => flow.goTo("upload")}
-              t={t}
             />
           )}
           {flow.step === "generate" && (

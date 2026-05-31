@@ -2,6 +2,7 @@ import { api } from "@/lib/api";
 import { downscaleImageFile } from "../imageResize";
 import type {
   Look,
+  LookGenerateInput,
   LookGeneration,
   LookStatus,
   PhotoAvatarErrorCode,
@@ -31,6 +32,7 @@ interface GroupWire {
 
 interface LookWire {
   look_id: string;
+  image_url?: string | null;
   preview_image_url?: string | null;
   prompt?: string | null;
   status: LookStatus;
@@ -72,7 +74,7 @@ function isDeferredError(err: unknown): boolean {
 }
 
 // ── deferred mock store (모듈 메모리) ────────────────────────────────────────
-const TRAIN_MS = 6000; // 그룹 학습 완료까지
+// v0.2(provider=gpt): train 없음 → 업로드 즉시 그룹 ready. 룩 생성만 비동기.
 const LOOK_MS = 5000; // 룩 1배치 생성 완료까지
 const PREVIEW_MS = 6500; // 움직이는 미리보기 렌더 완료까지
 
@@ -86,6 +88,7 @@ interface MockLook {
   prompt: string | null;
   status: LookStatus;
   startedAt: number;
+  image_url: string | null;
   preview_image_url: string | null;
 }
 
@@ -128,9 +131,7 @@ function makeLookPreview(index: number): string {
 
 function mockGroupToDomain(): PhotoAvatarGroup {
   if (!mock.group) return { group_id: null, status: "none" };
-  if (mock.group.status === "training" && now() - mock.group.startedAt > TRAIN_MS) {
-    mock.group.status = "ready";
-  }
+  // v0.2: gpt provider 는 train 이 없어 그룹은 생성 즉시 ready 다.
   return { group_id: mock.group.group_id, status: mock.group.status };
 }
 
@@ -139,11 +140,14 @@ function mockLooksToDomain(): Look[] {
   return mock.looks.map((l) => {
     if (l.status === "generating" && now() - l.startedAt > LOOK_MS) {
       l.status = "ready";
-      l.preview_image_url = makeLookPreview(readyIndex);
+      // v0.2 룩은 image_url(S3) 이 1차 소스 — mock 은 SVG data URI 로 채운다.
+      l.image_url = makeLookPreview(readyIndex);
+      l.preview_image_url = l.image_url;
     }
     if (l.status === "ready") readyIndex += 1;
     return {
       look_id: l.look_id,
+      image_url: l.image_url,
       preview_image_url: l.preview_image_url,
       prompt: l.prompt,
       status: l.status,
@@ -168,15 +172,17 @@ export async function uploadPhotoAvatar(file: File): Promise<PhotoAvatarGroup> {
       form,
       { headers: { "Content-Type": "multipart/form-data" } },
     );
-    return { group_id: data.group_id ?? null, status: data.status ?? "training" };
+    // v0.2 gpt: 백엔드가 즉시 ready 로 응답. status 미제공 시 ready 로 가정.
+    return { group_id: data.group_id ?? null, status: data.status ?? "ready" };
   } catch (err) {
     if (isDeferredError(err)) {
-      mock.group = { group_id: "grp-mock", status: "training", startedAt: now() };
+      // train 없는 v0.2 — mock 도 업로드 즉시 ready(룩 생성 가능).
+      mock.group = { group_id: "grp-mock", status: "ready", startedAt: now() };
       // 새 사진으로 다시 시작하면 이전 룩/선택/미리보기는 무효.
       mock.looks = [];
       mock.selectedLookId = null;
       mock.preview = null;
-      return { group_id: mock.group.group_id, status: "training" };
+      return { group_id: mock.group.group_id, status: "ready" };
     }
     throw err;
   }
@@ -205,28 +211,38 @@ export async function getPhotoAvatar(): Promise<PhotoAvatarGroup> {
   }
 }
 
-// ── ③ Design with AI 룩 배치 생성 ────────────────────────────────────────────
-/** POST /api/avatars/me/looks ({ prompt, count≤4 }). deferred 면 mock 배치 push. */
+// ── ② gpt 룩 배치 생성 (v0.2 구조화 옵션) ────────────────────────────────────
+/**
+ * POST /api/avatars/me/looks — 구조화 필드(persona 필수 + outfit/background/
+ * expression/extra)로 룩 ``count`` 개를 배치 생성한다(계약 LookGenerateRequest).
+ * deferred 면 mock 배치를 push 한다. mock 라벨은 옵션을 사람이 읽을 수 있게 요약.
+ */
 export async function generateLooks(
-  prompt: string,
+  input: LookGenerateInput,
   count: number,
 ): Promise<LookGeneration> {
   try {
     const { data } = await api.post<LookGeneration>("/api/avatars/me/looks", {
-      prompt,
+      persona: input.persona,
+      outfit: input.outfit ?? null,
+      background: input.background ?? null,
+      expression: input.expression ?? null,
+      extra: input.extra ?? null,
       count,
     });
     return data;
   } catch (err) {
     if (isDeferredError(err)) {
       const started = now();
+      const label = mockLookLabel(input);
       for (let i = 0; i < count; i += 1) {
         lookSeq += 1;
         mock.looks.push({
           look_id: `look-mock-${lookSeq}`,
-          prompt,
+          prompt: label,
           status: "generating",
           startedAt: started,
+          image_url: null,
           preview_image_url: null,
         });
       }
@@ -236,12 +252,20 @@ export async function generateLooks(
   }
 }
 
+/** mock 룩 라벨 — 구조화 옵션을 사람이 읽을 수 있는 한 줄로(디버그·미배포 표기용). */
+function mockLookLabel(input: LookGenerateInput): string {
+  return [input.persona, input.outfit, input.background, input.expression]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /** GET /api/avatars/me/looks — 룩 목록·생성 상태. deferred 면 mock(시간 전이). */
 export async function listLooks(): Promise<Look[]> {
   try {
     const { data } = await api.get<LookWire[]>("/api/avatars/me/looks");
     return (data ?? []).map((w) => ({
       look_id: w.look_id,
+      image_url: w.image_url ?? null,
       preview_image_url: w.preview_image_url ?? null,
       prompt: w.prompt ?? null,
       status: w.status,

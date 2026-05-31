@@ -1,0 +1,83 @@
+/**
+ * v0.2 구조화 룩 옵션 카탈로그 (gpt-image-2 / Photo Avatar §0).
+ *
+ * 자유 프롬프트 프리셋(v0.1 lookPresets) 대신, 계약(schemas/avatar.py)의 4개
+ * enum 을 그대로 노출한다. 키는 백엔드 ``openai_image.build_prompt`` 의 매핑
+ * 키와 **1:1** 이어야 하므로 임의로 추가/변경하지 않는다. 라벨은 플랫폼
+ * 한국어 우선 정책상 데이터에 한국어로 둔다(소수 enum → i18n 분리 비용 회피).
+ *
+ * persona 는 필수, 나머지(outfit/background/expression)는 선택(null=백엔드 자동
+ * 추론). ``RECOMMENDED`` 는 persona 선택 시 채워줄 합리적 기본 조합이다.
+ */
+import type {
+  BackgroundKey,
+  ExpressionKey,
+  LookGenerateInput,
+  OutfitKey,
+  PersonaKey,
+} from "./photoAvatarTypes";
+
+export interface Option<K extends string> {
+  key: K;
+  label: string;
+}
+
+/** 페르소나(필수). 기본 educator. */
+export const PERSONA_OPTIONS: Option<PersonaKey>[] = [
+  { key: "educator", label: "친근한 교수자" },
+  { key: "researcher", label: "연구자" },
+  { key: "mentor", label: "멘토" },
+  { key: "podcast_host", label: "팟캐스트 진행자" },
+];
+
+/** 복장(선택). */
+export const OUTFIT_OPTIONS: Option<OutfitKey>[] = [
+  { key: "suit", label: "정장" },
+  { key: "blazer", label: "블레이저" },
+  { key: "shirt", label: "셔츠" },
+  { key: "knit", label: "니트" },
+  { key: "tee", label: "티셔츠" },
+  { key: "hoodie", label: "후드티" },
+];
+
+/** 배경(선택). */
+export const BACKGROUND_OPTIONS: Option<BackgroundKey>[] = [
+  { key: "lecture", label: "강의실" },
+  { key: "lab", label: "연구실" },
+  { key: "study", label: "서재" },
+  { key: "studio", label: "스튜디오" },
+  { key: "lounge", label: "응접실" },
+  { key: "cafe", label: "카페" },
+];
+
+/** 표정(선택). */
+export const EXPRESSION_OPTIONS: Option<ExpressionKey>[] = [
+  { key: "neutral", label: "차분" },
+  { key: "friendly", label: "친근" },
+  { key: "warm", label: "따뜻" },
+  { key: "confident", label: "자신감" },
+  { key: "thoughtful", label: "사려깊음" },
+];
+
+/** persona 선택 시 채워줄 추천 기본 조합(사용자는 이후 자유 변경 가능). */
+export const RECOMMENDED: Record<
+  PersonaKey,
+  { outfit: OutfitKey; background: BackgroundKey; expression: ExpressionKey }
+> = {
+  educator: { outfit: "blazer", background: "lecture", expression: "friendly" },
+  researcher: { outfit: "shirt", background: "lab", expression: "thoughtful" },
+  mentor: { outfit: "knit", background: "study", expression: "warm" },
+  podcast_host: { outfit: "tee", background: "studio", expression: "confident" },
+};
+
+/** persona 의 추천 조합으로 초기 입력을 만든다. */
+export function defaultInputFor(persona: PersonaKey): LookGenerateInput {
+  const r = RECOMMENDED[persona];
+  return {
+    persona,
+    outfit: r.outfit,
+    background: r.background,
+    expression: r.expression,
+    extra: null,
+  };
+}

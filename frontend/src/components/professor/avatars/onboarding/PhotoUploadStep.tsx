@@ -263,7 +263,7 @@ const primaryBtn: CSSProperties = {
 };
 
 // 제출 버튼 라벨 앞 스피너 — 골드 버튼 위라 어두운(#0A0A0A) 링.
-// keyframe 은 globals.css 전역 `studio-spin` 재사용(TrainingStep 과 동일).
+// keyframe 은 globals.css 전역 `studio-spin` 재사용.
 const submitSpinner: CSSProperties = {
   width: 13,
   height: 13,

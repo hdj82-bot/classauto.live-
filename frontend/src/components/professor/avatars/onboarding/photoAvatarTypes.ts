@@ -6,7 +6,8 @@
  * 백엔드 계약 (창 = backend, 미머지 가능):
  *  - POST /api/avatars/me/photo-avatar  (multipart file)  → { group_id, status }
  *  - GET  /api/avatars/me/photo-avatar                    → { group_id, status }
- *  - POST /api/avatars/me/looks  ({ prompt, count≤4 })    → { generation_id }
+ *  - POST /api/avatars/me/looks  ({ persona, outfit?, background?,
+ *      expression?, extra?, count≤4 })                    → { generation_id }
  *  - GET  /api/avatars/me/looks                           → LookWire[]
  *  - POST /api/avatars/me/looks/{look_id}/select          → { ok }
  *  - (재사용) GET/POST /api/avatars/me/preview            → 움직이는 미리보기
@@ -30,11 +31,14 @@ export interface PhotoAvatarGroup {
   errorCode?: PhotoAvatarErrorCode | null;
 }
 
-/** Design with AI 룩 1개. status 가 ready 일 때만 갤러리/선택 대상. */
+/** gpt 룩 1개. status 가 ready 일 때만 갤러리/선택 대상. */
 export type LookStatus = "generating" | "ready" | "failed";
 
 export interface Look {
   look_id: string;
+  /** v0.2 gpt 룩 이미지의 S3 URL(계약 LookItem.image_url). 우선 표시. */
+  image_url: string | null;
+  /** 레거시 썸네일(presigned). image_url 부재 시 폴백. */
   preview_image_url: string | null;
   prompt: string | null;
   status: LookStatus;
@@ -45,28 +49,64 @@ export interface LookGeneration {
   generation_id: string;
 }
 
-/** 온보딩 단계 (스테퍼). 5단계 = 기획 §4 흐름. */
+// ── v0.2 구조화 룩 옵션 (계약 schemas/avatar.py 의 enum 과 1:1) ─────────────────
+// 백엔드(openai_image.build_prompt)가 이 키를 영어 프롬프트로 매핑하므로 값은
+// 계약 리터럴과 정확히 일치해야 한다(번역·자유문 금지).
+
+/** 교수자 페르소나(필수). */
+export type PersonaKey = "educator" | "researcher" | "mentor" | "podcast_host";
+/** 복장(선택, null=자동 추론). */
+export type OutfitKey = "suit" | "blazer" | "shirt" | "knit" | "tee" | "hoodie";
+/** 배경(선택, null=자동). */
+export type BackgroundKey =
+  | "lecture"
+  | "lab"
+  | "study"
+  | "studio"
+  | "lounge"
+  | "cafe";
+/** 표정(선택, null=자동). */
+export type ExpressionKey =
+  | "neutral"
+  | "friendly"
+  | "warm"
+  | "confident"
+  | "thoughtful";
+
+/** 룩 배치 생성 입력 — LookGenerateRequest(persona 필수, 나머지 선택)에 대응. */
+export interface LookGenerateInput {
+  persona: PersonaKey;
+  outfit?: OutfitKey | null;
+  background?: BackgroundKey | null;
+  expression?: ExpressionKey | null;
+  /** 추가 자유 묘사(≤500). */
+  extra?: string | null;
+}
+
+/** 온보딩 단계 (스테퍼). v0.2 = train 제거 1단계 압축(docs §0.3). */
 export type OnboardingStep =
-  | "upload" // ① 사진 업로드
-  | "training" // ② 본인 아바타 준비 중 (그룹 학습 폴링)
-  | "generate" // ③ 프롬프트 + 룩 배치 생성
-  | "select" // ④ 룩 갤러리에서 기본 룩 선택
-  | "preview"; // ⑤ 본인 목소리로 움직이는 미리보기 → 확정
+  | "upload" // ① 사진 업로드 (provider=gpt 는 즉시 ready)
+  | "generate" // ② 구조화 옵션 + 룩 배치 생성
+  | "select" // ③ 룩 갤러리에서 기본 룩 선택
+  | "preview"; // ④ 본인 목소리로 움직이는 미리보기 → 확정
 
 export const ONBOARDING_STEPS: OnboardingStep[] = [
   "upload",
-  "training",
   "generate",
   "select",
   "preview",
 ];
 
-/** 룩 배치 1회 상한 (계약: count ≤ 4). docs §8 비용 가드레일. */
+/** 룩 배치 1회 상한 (계약: count ≤ PHOTO_AVATAR_LOOK_BATCH_MAX=4). */
 export const LOOK_BATCH_MAX = 4;
 
+/** 한 배치 기본 생성 수 (계약 PHOTO_AVATAR_LOOK_BATCH_DEFAULT=3). */
+export const LOOK_BATCH_DEFAULT = 3;
+
 /**
- * 교수자당 누적 룩 상한(클라이언트 가드레일). docs §8 의
- * ``PHOTO_AVATAR_LOOK_TOTAL_MAX`` 대응 — 무심코 다량 생성 방지. 백엔드가
- * 권위 있는 상한을 강제하더라도, UI 도 "추가 생성"을 여기서 막는다.
+ * 교수자당 누적 룩 상한(클라이언트 가드레일). 계약
+ * ``PHOTO_AVATAR_LOOK_TOTAL_MAX``(기본 20)에 정렬 — 무심코 다량 생성 방지.
+ * 백엔드가 권위 있는 상한을 강제하더라도, UI 도 "추가 생성"을 여기서 막고
+ * 초과 시 소프트 안내(docs §0.5②)를 노출한다.
  */
-export const LOOK_TOTAL_MAX = 12;
+export const LOOK_TOTAL_MAX = 20;
