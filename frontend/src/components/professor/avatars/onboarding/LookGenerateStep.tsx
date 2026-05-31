@@ -1,20 +1,23 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { LOOK_TOTAL_MAX, type Look } from "./photoAvatarTypes";
+import {
+  LOOK_TOTAL_MAX,
+  type Look,
+  type LookGenerateInput,
+} from "./photoAvatarTypes";
 import { SparkleIcon } from "./PhotoAvatarIcons";
 import LookTile from "./LookTile";
-import LookPresetGallery from "./LookPresetGallery";
-import type { LookPreset } from "./lookPresets";
+import LookOptionForm from "./LookOptionForm";
 
 interface LookGenerateStepProps {
   looks: Look[];
-  /** 룩 1개 생성. 스타일 카드를 누르면 그 스타일 프롬프트로 호출된다. */
-  onGenerate: (prompt: string) => Promise<void>;
+  /** 구조화 옵션으로 룩 배치를 생성한다(v0.2). */
+  onGenerate: (input: LookGenerateInput) => Promise<void>;
   /** 생성이 진행 중인지(generating 타일 존재). */
   looksPending: boolean;
   reducedMotion: boolean;
-  /** ④ 룩 선택 단계로. ready 룩이 1개 이상일 때 활성. */
+  /** ③ 룩 선택 단계로. ready 룩이 1개 이상일 때 활성. */
   onNext: () => void;
   /** ① 업로드로 되돌아가 다른 사진으로 다시 시작. */
   onRestart: () => void;
@@ -22,12 +25,10 @@ interface LookGenerateStepProps {
 }
 
 /**
- * ③ 스타일 샘플 갤러리에서 골라 룩을 만든다.
- *
- * 자유 프롬프트 입력·개수 선택 UI 는 제거했다 — 사용자는 갤러리에서 스타일을
- * 고르기만 하면 되고, **카드를 누르면 그 스타일로 룩 1개를 바로 생성**한다.
- * 누적 상한(LOOK_TOTAL_MAX)으로 과생성을 막는다(docs §8 비용 가드레일). 완성된
- * 룩이 생기면 "다음: 룩 선택" 으로 자연스럽게 ④ 선택 단계로 이어진다.
+ * ② 구조화 옵션(persona/outfit/background/expression + extra)으로 룩 배치를
+ * 생성한다(v0.2 gpt-image-2). 자유 프롬프트 갤러리(v0.1)를 옵션 폼으로 대체했다.
+ * 누적 상한(LOOK_TOTAL_MAX)으로 과생성을 막고(docs §0.5②), 완성된 룩이 생기면
+ * "다음: 룩 선택" 으로 ③ 선택 단계로 이어진다.
  */
 export default function LookGenerateStep({
   looks,
@@ -39,8 +40,6 @@ export default function LookGenerateStep({
   t,
 }: LookGenerateStepProps) {
   const [submitting, setSubmitting] = useState(false);
-  // 갤러리에서 고른 프리셋 강조용.
-  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
 
   const total = looks.length;
   const remaining = Math.max(0, LOOK_TOTAL_MAX - total);
@@ -48,13 +47,11 @@ export default function LookGenerateStep({
   const readyCount = looks.filter((l) => l.status === "ready").length;
   const busy = submitting || looksPending;
 
-  // 스타일 카드 클릭 → 그 스타일 프롬프트로 룩 1개를 바로 생성(개수 고정 = 1).
-  const pickPreset = async (preset: LookPreset) => {
+  const handleGenerate = async (input: LookGenerateInput) => {
     if (busy || capReached) return;
-    setSelectedPresetId(preset.id);
     setSubmitting(true);
     try {
-      await onGenerate(preset.prompt);
+      await onGenerate(input);
     } finally {
       setSubmitting(false);
     }
@@ -86,20 +83,18 @@ export default function LookGenerateStep({
       </div>
       <p style={descStyle}>{t("looks.description")}</p>
 
-      {/* 스타일 샘플 갤러리 — 카드 클릭 시 그 스타일로 룩 1개를 즉시 생성 */}
-      <LookPresetGallery
-        selectedId={selectedPresetId}
-        onPick={pickPreset}
-        disabled={busy || capReached}
+      {/* 구조화 옵션 폼 — 칩 선택 후 "룩 N장 생성" */}
+      <LookOptionForm
+        onGenerate={handleGenerate}
+        disabled={busy}
+        capReached={capReached}
         t={t}
       />
 
       {/* 비용 투명성 안내 (차별점 #2 / docs §8·§10) */}
-      <p style={costNote}>
-        {capReached
-          ? t("looks.capReached", { max: LOOK_TOTAL_MAX })
-          : t("looks.costNote", { remaining })}
-      </p>
+      {!capReached && (
+        <p style={costNote}>{t("looks.costNote", { remaining })}</p>
+      )}
 
       {/* 진행/완료 타일 */}
       {looks.length > 0 && (

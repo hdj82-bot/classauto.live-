@@ -43,10 +43,11 @@ export default function LookTile({
       }}
     >
       <span style={thumbStyle}>
-        {look.status === "ready" && look.preview_image_url ? (
+        {look.status === "ready" && (look.image_url || look.preview_image_url) ? (
+          // v0.2 gpt 룩은 image_url(S3) 우선, 레거시는 preview_image_url 폴백.
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={look.preview_image_url}
+            src={look.image_url ?? look.preview_image_url ?? ""}
             alt={look.prompt || t("looks.tileAlt")}
             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
           />
