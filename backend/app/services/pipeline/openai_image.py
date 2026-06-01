@@ -17,6 +17,7 @@ train(최대 15분) 병목을 제거하기 위한 전환 (docs/planning/12-self-
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 
@@ -99,33 +100,39 @@ OUTFIT_PROMPTS: dict[str, str] = {
         "smart-casual but composed"
     ),
 }
-# Background: 단순 위치(lecture hall) → 인물 뒤로 보이는 구체적 디테일 + 부드러운
-# bokeh. 너무 화려하면 인물이 묻히므로 ‘softly blurred / shallow depth of field’
-# 를 일관되게 깐다.
+# Background: 사용자 요청(2026-06-01) "배경도 선명하게 생성" — 이전엔 softly
+# blurred / shallow depth of field 로 인물 뒤가 흐릿했다. 이번엔 deep DOF·환경
+# 디테일 가시·선명한 가장자리로 전환해 강의실/연구실 등이 실제로 보이게 한다.
+# (인물 분리는 입체감·조명으로 충분히 살릴 수 있다.)
 BACKGROUND_PROMPTS: dict[str, str] = {
     "lecture": (
-        "a bright modern university lecture hall with rows of empty seats and a large "
-        "whiteboard, softly out-of-focus behind the subject (shallow depth of field)"
+        "a bright modern university lecture hall behind the subject — rows of empty "
+        "seats, a large whiteboard or chalkboard, ceiling lights, all clearly visible "
+        "and rendered in sharp focus with readable detail"
     ),
     "lab": (
-        "a tidy well-lit research laboratory with glassware, monitors, and lab "
-        "benches gently bokeh'd behind the subject"
+        "a tidy well-lit research laboratory behind the subject — glassware, monitors "
+        "with charts, lab benches and shelves, all clearly visible and rendered in "
+        "sharp focus with readable detail"
     ),
     "study": (
-        "a warm private study with floor-to-ceiling walnut bookshelves and a soft "
-        "warm lamp, softly out-of-focus behind the subject"
+        "a warm private study behind the subject — floor-to-ceiling walnut bookshelves "
+        "with visible book spines, a desk lamp and small artifacts, all clearly "
+        "visible and rendered in sharp focus with readable detail"
     ),
     "studio": (
-        "a clean evenly-lit neutral grey studio backdrop, professional headshot "
-        "context, no clutter"
+        "a clean evenly-lit neutral grey studio backdrop behind the subject, "
+        "professional headshot context, no clutter"
     ),
     "lounge": (
-        "a warm contemporary lounge with potted greenery and soft natural daylight, "
-        "softly out-of-focus behind the subject"
+        "a warm contemporary lounge behind the subject — potted greenery, a couch, "
+        "wall art, and a window with natural daylight, all clearly visible and "
+        "rendered in sharp focus with readable detail"
     ),
     "cafe": (
-        "a softly lit cozy specialty-coffee cafe interior with warm wood tones and "
-        "subtle hanging lights, gently bokeh'd behind the subject"
+        "a cozy specialty-coffee cafe interior behind the subject — warm wood tones, "
+        "hanging lights, a counter with cups and a chalkboard menu, all clearly "
+        "visible and rendered in sharp focus with readable detail"
     ),
 }
 # Expression: 단순 형용사 → 입꼬리/눈가 등 구체적 표정 근육 묘사로 강화.
@@ -193,9 +200,10 @@ _HIDDEN_HEYGEN_RULES = (
     "frame WIDTH (not more) — do NOT zoom in tight on the face. Eye level, direct "
     "frontal view, mouth and jawline unobstructed. Natural relaxed posture. "
     "Soft, even frontal lighting with no harsh shadows. "
-    "Render style: ultra photorealistic, DSLR portrait quality (50mm f/2.8 environmental "
-    "portrait look — context visible, not a tight headshot), natural detailed skin "
-    "texture with visible pores, sharp focus on the face. "
+    "Render style: ultra photorealistic, DSLR environmental portrait look at "
+    "35mm f/5.6 (deeper depth of field — both the subject and the entire background "
+    "are clearly in focus and readable). Avoid background blur and bokeh. "
+    "Natural detailed skin texture with visible pores, sharp focus on the face. "
     "This still will be animated as a HeyGen talking-head avatar, so the mouth area "
     "must be unobstructed and lighting must be even and forward."
 )
@@ -256,6 +264,27 @@ _DUMMY_PNG = base64.b64decode(
 )
 
 
+# v0.3 (2026-06-01): pose 미지정 시 N장 사이에 자동 로테이션 — 사용자 요청
+# "3장 그림 생성인데 하나는 가만 정자세, 하나는 팔짱, 하나는 말하는 역동적인 제스처".
+# 사용자가 pose 를 명시했으면 모든 N 에 동일 적용(기존 contract 보존).
+_POSE_ROTATION: list[str] = ["relaxed_at_sides", "crossed_arms", "gesturing"]
+
+
+def _is_moderation_refusal(exc: BaseException) -> bool:
+    """gpt-image 의 BadRequest 가 moderation/content_policy 거부인지."""
+    if not isinstance(exc, openai.BadRequestError):
+        return False
+    code = str(getattr(exc, "code", "") or "")
+    msg = str(exc).lower()
+    return (
+        "moderation" in code
+        or "content_policy" in code
+        or "safety" in code
+        or "moderation" in msg
+        or "content_policy" in msg
+    )
+
+
 async def generate_instructor_looks(
     image_bytes: bytes,
     content_type: str,
@@ -270,9 +299,14 @@ async def generate_instructor_looks(
 ) -> list[bytes]:
     """업로드 사진 reference 로 룩 이미지 ``count`` 개를 생성해 bytes 목록을 반환.
 
+    v0.3 (2026-06-01): ``count`` 개를 **각각 별도 호출** 로 만든다(이전엔 n=count
+    단일 호출이라 결과가 서로 닮은 사고가 있었음). ``pose`` 가 None 이면 호출별로
+    ``_POSE_ROTATION`` 을 순환 적용 — 사용자가 "각기 따로 적용" 요청한 동작.
+
     - MOCK(``OPENAI_IMAGE_MOCK=True``): 외부 호출 없이 더미 PNG ``count`` 개 반환.
-    - 모더레이션 거부: ``OpenAIModerationRefused``.
-    - 그 외 실패: ``OpenAIImageError``.
+    - 모더레이션 거부가 모든 호출에서 발생: ``OpenAIModerationRefused``.
+    - 부분 실패: 성공한 N' < count 만 반환(태스크가 남은 placeholder 를 failed 처리).
+    - 모두 실패(비-moderation): ``OpenAIImageError``.
     """
     if count < 1:
         return []
@@ -284,92 +318,94 @@ async def generate_instructor_looks(
         )
         return [_DUMMY_PNG for _ in range(count)]
 
-    prompt = build_prompt(persona, outfit, background, expression, extra, prop, pose)
+    # 호출별 pose 결정 — 명시 pose 가 있으면 모두 동일, 없으면 rotation.
+    per_call_poses: list[str | None] = (
+        [pose] * count if pose else [_POSE_ROTATION[i % len(_POSE_ROTATION)] for i in range(count)]
+    )
+    prompts = [
+        build_prompt(persona, outfit, background, expression, extra, prop, p)
+        for p in per_call_poses
+    ]
     logger.info(
-        "gpt-image-2 룩 생성 요청: model=%s, quality=%s, fidelity=%s, count=%d, prop=%s, pose=%s",
+        "gpt-image-2 룩 생성 요청(N 분할): model=%s, quality=%s, fidelity=%s, count=%d, prop=%s, poses=%s",
         settings.OPENAI_IMAGE_MODEL,
         settings.PHOTO_AVATAR_IMAGE_QUALITY,
         settings.PHOTO_AVATAR_INPUT_FIDELITY,
         count,
         prop,
-        pose,
+        per_call_poses,
     )
 
-    # ── 실제 gpt-image-2 호출 (images/edits) ────────────────────────────────
-    # 업로드 사진을 reference 로 전달해 인물 룩을 생성한다. content_type 에서
-    # 확장자를 유도해 SDK 의 멀티파트 업로드 파일명에 반영한다.
     ext = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}.get(
         content_type, "png"
     )
-    image_file = (f"reference.{ext}", image_bytes, content_type)
 
-    # high quality + 1536x1024 면 호출당 30-60초까지 걸린다. n>=3 동시 처리 시
-    # SDK 기본 60초 타임아웃을 넘어 ReadTimeout 으로 떨어질 수 있어 명시 상향.
+    # high quality + 1536x1024 면 호출당 30-60초까지 걸린다. 병렬 호출이라 각자
+    # 독립적으로 타임아웃이 적용되므로 SDK 의 기본 60초보다 여유 있는 값으로 명시.
     client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=180.0)
-    # input_fidelity 는 gpt-image-1 전용 파라미터다. gpt-image-2 처럼 지원하지 않는
-    # 모델에 보내면 OpenAI 가 400 `invalid_input_fidelity_model` 로 거부한다.
-    # PHOTO_AVATAR_INPUT_FIDELITY 가 빈 문자열이면 파라미터 자체를 생략해
-    # 모델 전환이 env 만으로 가능하도록 한다.
-    edit_kwargs: dict = {
-        "model": settings.OPENAI_IMAGE_MODEL,
-        "image": image_file,
-        "prompt": prompt,
-        "n": count,
-        # 1536x1024 (3:2 landscape — gpt-image-2 지원). 사용자 보고 "16:9 를 기대했는데
-        # 정사각으로 만들고 얼굴이 잘려 보인다" → 가로형으로 전환해 와이드 컴포지션
-        # + 인물 작게 + 배경 양옆 노출. 강의 영상(16:9)에 합성될 때도 자연스럽다.
-        # (gpt-image-2 의 정확한 16:9 사이즈는 미지원이라 3:2 가 최선 근사.)
-        "size": "1536x1024",
-        "quality": settings.PHOTO_AVATAR_IMAGE_QUALITY,
-    }
-    if settings.PHOTO_AVATAR_INPUT_FIDELITY:
-        edit_kwargs["input_fidelity"] = settings.PHOTO_AVATAR_INPUT_FIDELITY
-    try:
-        response = await client.images.edit(**edit_kwargs)
-    except openai.BadRequestError as exc:
-        # gpt-image 모더레이션/정책 거부는 BadRequest 로 온다(code=moderation_blocked 등).
-        code = str(getattr(exc, "code", "") or "")
-        if (
-            "moderation" in code
-            or "content_policy" in code
-            or "safety" in code
-            or "moderation" in str(exc).lower()
-            or "content_policy" in str(exc).lower()
-        ):
-            logger.warning("gpt-image-2 모더레이션 거부: %s", exc)
-            raise OpenAIModerationRefused(
-                "gpt-image-2 가 실존 인물 얼굴 생성을 정책상 거부했습니다."
-            ) from exc
-        logger.error("gpt-image-2 요청 거부(BadRequest): %s", exc)
-        raise OpenAIImageError(f"gpt-image-2 요청 실패: {exc}") from exc
-    except openai.APIError as exc:
-        logger.error("gpt-image-2 API 오류: %s", exc)
-        raise OpenAIImageError(f"gpt-image-2 호출 실패: {exc}") from exc
 
-    # ── 비용/사용량 계측 (차별점 #2 비용 투명성) ────────────────────────────
-    usage = getattr(response, "usage", None)
-    if usage is not None:
-        logger.info(
-            "gpt-image-2 사용량: input_tokens=%s, output_tokens=%s, total_tokens=%s, count=%d",
-            getattr(usage, "input_tokens", None),
-            getattr(usage, "output_tokens", None),
-            getattr(usage, "total_tokens", None),
-            count,
-        )
-
-    # ── 응답 → bytes 목록 ───────────────────────────────────────────────────
-    data = getattr(response, "data", None) or []
-    images: list[bytes] = []
-    for item in data:
-        b64 = getattr(item, "b64_json", None)
+    async def _one_call(idx: int, prompt: str) -> bytes:
+        kwargs: dict = {
+            "model": settings.OPENAI_IMAGE_MODEL,
+            # 매 호출마다 동일 reference 를 새 tuple 로 전달(SDK 가 내부에서 소비할 수 있어).
+            "image": (f"reference.{ext}", image_bytes, content_type),
+            "prompt": prompt,
+            "n": 1,
+            "size": "1536x1024",  # 3:2 가로 (강의 영상 16:9 톤과 정합).
+            "quality": settings.PHOTO_AVATAR_IMAGE_QUALITY,
+        }
+        if settings.PHOTO_AVATAR_INPUT_FIDELITY:
+            kwargs["input_fidelity"] = settings.PHOTO_AVATAR_INPUT_FIDELITY
+        response = await client.images.edit(**kwargs)
+        data = getattr(response, "data", None) or []
+        if not data:
+            raise OpenAIImageError(f"#{idx}: gpt-image-2 응답에 이미지가 없습니다.")
+        b64 = getattr(data[0], "b64_json", None)
         if not b64:
-            raise OpenAIImageError("gpt-image-2 응답에 이미지 데이터(b64_json)가 없습니다.")
-        images.append(base64.b64decode(b64))
+            raise OpenAIImageError(f"#{idx}: gpt-image-2 응답에 b64_json 이 없습니다.")
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            logger.info(
+                "gpt-image-2 사용량(#%d): input_tokens=%s, output_tokens=%s, total_tokens=%s, pose=%s",
+                idx,
+                getattr(usage, "input_tokens", None),
+                getattr(usage, "output_tokens", None),
+                getattr(usage, "total_tokens", None),
+                per_call_poses[idx],
+            )
+        return base64.b64decode(b64)
 
+    results = await asyncio.gather(
+        *[_one_call(i, p) for i, p in enumerate(prompts)],
+        return_exceptions=True,
+    )
+
+    images: list[bytes] = []
+    moderation_count = 0
+    error_count = 0
+    for idx, res in enumerate(results):
+        if isinstance(res, BaseException):
+            if _is_moderation_refusal(res):
+                logger.warning("gpt-image-2 #%d 모더레이션 거부: %s", idx, res)
+                moderation_count += 1
+            else:
+                logger.warning("gpt-image-2 #%d 호출 실패: %s", idx, res)
+                error_count += 1
+            continue
+        images.append(res)  # type: ignore[arg-type]
+
+    if not images and moderation_count > 0:
+        # 부분 성공이 전혀 없고 적어도 한 건이 moderation → fallback 신호.
+        raise OpenAIModerationRefused(
+            "gpt-image-2 가 실존 인물 얼굴 생성을 정책상 거부했습니다."
+        )
     if not images:
-        raise OpenAIImageError("gpt-image-2 가 이미지를 반환하지 않았습니다.")
+        raise OpenAIImageError(
+            f"gpt-image-2 호출 전부 실패(count={count}, errors={error_count})."
+        )
     if len(images) < count:
         logger.warning(
-            "gpt-image-2 요청 %d 개 중 %d 개만 반환됨", count, len(images)
+            "gpt-image-2 부분 성공: 요청=%d, 성공=%d, 실패=%d, moderation=%d",
+            count, len(images), error_count, moderation_count,
         )
     return images

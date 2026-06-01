@@ -87,12 +87,13 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
     });
   });
 
-  it("v0.3: 소품·손동작 칩 선택이 onGenerate 페이로드에 반영된다", async () => {
-    const onGenerate = vi.fn().mockResolvedValue(undefined);
+  it("v0.4: prop·pose 칩 행이 폼에 더 이상 노출되지 않는다", () => {
+    // 회귀 가드(2026-06-01): 사용자 요청으로 prop/pose 선택지를 제거하고
+    // 백엔드가 N장에 대해 자세를 자동 분산한다. 칩 라벨이 폼에 없어야 한다.
     render(
       <LookGenerateStep
         looks={[]}
-        onGenerate={onGenerate}
+        onGenerate={vi.fn()}
         looksPending={false}
         lastInput={null}
         reducedMotion={false}
@@ -101,18 +102,10 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
         t={t}
       />,
     );
-    // 소품: 스탠드 마이크. 손 동작: 마이크 잡기.
-    fireEvent.click(screen.getByText("스탠드 마이크"));
-    fireEvent.click(screen.getByText("마이크 잡기"));
-    fireEvent.click(screen.getByTestId("look-generate-btn"));
-
-    await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
-    expect(onGenerate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prop: "mic_stand",
-        pose: "holding_mic",
-      }),
-    );
+    expect(screen.queryByText("스탠드 마이크")).toBeNull();
+    expect(screen.queryByText("팔짱")).toBeNull();
+    expect(screen.queryByText("마이크 잡기")).toBeNull();
+    expect(screen.queryByText("말하는 제스처")).toBeNull();
   });
 
   it("누적 한도에 도달하면 생성 버튼 대신 소프트 안내를 노출한다", () => {

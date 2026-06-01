@@ -6,8 +6,6 @@ import {
   EXPRESSION_OPTIONS,
   OUTFIT_OPTIONS,
   PERSONA_OPTIONS,
-  POSE_OPTIONS,
-  PROP_OPTIONS,
   defaultInputFor,
   type Option,
 } from "./lookOptions";
@@ -18,8 +16,6 @@ import {
   type LookGenerateInput,
   type OutfitKey,
   type PersonaKey,
-  type PoseKey,
-  type PropKey,
 } from "./photoAvatarTypes";
 
 interface LookOptionFormProps {
@@ -58,12 +54,8 @@ export default function LookOptionForm({
   const [expression, setExpression] = useState<ExpressionKey | null>(
     defaultInputFor("educator").expression ?? null,
   );
-  // v0.3: 소품·자세는 기본 null (자동/없음) — 사용자가 명시적으로 고를 때만 강제.
-  const [prop, setProp] = useState<PropKey | null>(null);
-  const [pose, setPose] = useState<PoseKey | null>(null);
 
   // persona 변경 시 나머지를 그 추천 조합으로 재설정(빠른 시작 — 이후 자유 변경).
-  // prop/pose 는 persona 추천 기본값이 없으므로 그대로 둔다.
   const pickPersona = (key: PersonaKey) => {
     setPersona(key);
     const d = defaultInputFor(key);
@@ -72,16 +64,18 @@ export default function LookOptionForm({
     setExpression(d.expression ?? null);
   };
 
+  // v0.4 (2026-06-01): prop·pose 칩 행 제거 — 사용자 요청 "선택지 없이 자동으로
+  // 각기 따로 적용". 백엔드가 N장에 대해 자세를 자동 분산한다(정자세·팔짱·제스처
+  // 순환). prop/pose 는 모달의 미세 조정 경로(LookDetailModal)에서만 사용된다.
   const submit = () => {
     if (disabled || capReached) return;
-    // 첫 룩 생성에는 extra 를 보내지 않는다(모달에서만 사용).
     onGenerate({
       persona,
       outfit,
       background,
       expression,
-      prop,
-      pose,
+      prop: null,
+      pose: null,
       extra: null,
     });
   };
@@ -117,22 +111,6 @@ export default function LookOptionForm({
           options={EXPRESSION_OPTIONS}
           value={expression}
           onChange={(v) => setExpression(v as ExpressionKey | null)}
-          autoLabel={t("looks.options.auto")}
-        />
-      </FieldRow>
-      <FieldRow label={t("looks.options.propLabel")}>
-        <Chips
-          options={PROP_OPTIONS}
-          value={prop}
-          onChange={(v) => setProp(v as PropKey | null)}
-          autoLabel={t("looks.options.propNone")}
-        />
-      </FieldRow>
-      <FieldRow label={t("looks.options.poseLabel")}>
-        <Chips
-          options={POSE_OPTIONS}
-          value={pose}
-          onChange={(v) => setPose(v as PoseKey | null)}
           autoLabel={t("looks.options.auto")}
         />
       </FieldRow>
