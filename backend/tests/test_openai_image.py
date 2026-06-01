@@ -84,6 +84,24 @@ class TestRealCall:
         assert kwargs["n"] == 2
 
     @pytest.mark.asyncio
+    async def test_size_is_landscape_16_9_class(self):
+        """2026-06-01 v2 회귀 가드: 1024x1024(정사각) → 1536x1024(3:2 가로) 전환.
+
+        사용자 보고 "16:9 를 기대했는데 정사각으로 만들고 얼굴이 잘려 보인다" 에
+        대한 조치 — gpt-image-2 가 지원하는 사이즈 중 16:9 에 가장 가까운 1536x1024
+        로 고정.
+        """
+        edit = AsyncMock(return_value=_fake_edit_response(1))
+        with (
+            patch.object(settings, "OPENAI_IMAGE_MOCK", False),
+            _patch_async_openai(edit),
+        ):
+            await oi.generate_instructor_looks(
+                b"img", "image/png", "educator", None, None, None, None, 1
+            )
+        assert edit.await_args.kwargs["size"] == "1536x1024"
+
+    @pytest.mark.asyncio
     async def test_input_fidelity_omitted_when_empty(self):
         """gpt-image-2 처럼 input_fidelity 미지원 모델용 — 빈 문자열이면 파라미터 자체를 안 보낸다.
 

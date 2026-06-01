@@ -231,6 +231,54 @@ describe("LookSelectStep — 복귀 동선 + 16:9 모달", () => {
     expect(screen.getByTestId("look-detail-modal")).toBeTruthy();
     expect(screen.queryByTestId("look-detail-delete")).toBeNull();
   });
+
+  it("onGenerate 가 주어지면 인라인 룩 생성 폼이 노출된다 (2026-06-01 v2)", async () => {
+    // 회귀 가드: 사용자가 '룩 생성 창이 사라졌다' 고 보고한 상황을 막는다.
+    // SelectStep 안에 LookOptionForm 이 임베드되어 별도 단계 이동 없이
+    // 곧장 새 배치를 생성할 수 있어야 한다.
+    const onGenerate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LookSelectStep
+        looks={[readyLook("a")]}
+        selectedLookId={null}
+        onSelect={vi.fn()}
+        onGenerate={onGenerate}
+        onDelete={vi.fn().mockResolvedValue(undefined)}
+        lastInput={null}
+        looksPending={false}
+        reducedMotion={false}
+        onBack={vi.fn()}
+        onRestart={vi.fn()}
+        onNext={vi.fn()}
+        t={t}
+      />,
+    );
+    expect(screen.getByTestId("select-inline-generate")).toBeTruthy();
+    expect(screen.getByTestId("look-option-form")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("look-generate-btn"));
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
+    // 인라인 폼이 끝까지 educator 추천 조합을 그대로 보낸다.
+    expect(onGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ persona: "educator", outfit: "blazer" }),
+    );
+  });
+
+  it("onGenerate 가 없으면 인라인 폼 대신 '추가 생성' 백 버튼이 보인다", () => {
+    render(
+      <LookSelectStep
+        looks={[readyLook("a")]}
+        selectedLookId={null}
+        onSelect={vi.fn()}
+        reducedMotion={false}
+        onBack={vi.fn()}
+        onRestart={vi.fn()}
+        onNext={vi.fn()}
+        t={t}
+      />,
+    );
+    expect(screen.queryByTestId("select-inline-generate")).toBeNull();
+    expect(screen.getByTestId("select-back")).toBeTruthy();
+  });
 });
 
 // usePhotoAvatarFlow.goTo("upload") 가 stale 룩/선택을 비우는지 검증.

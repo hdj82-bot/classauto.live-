@@ -146,21 +146,26 @@ EXPRESSION_PROMPTS: dict[str, str] = {
 }
 
 # 사용자에게 노출하지 않는 HeyGen 최적화 레이어 — 항상 주입(docs §0.5 ①·③).
-# 2026-06-01 정교화: "정체성 보존"을 얼굴 한정으로 명시(머리카락 정돈·의상·
-# 배경은 교체 허용)해 outfit/background 가 reference 사진에 묶이지 않게 한다.
-# talking-head 프레이밍(정면·인물 중심·머리 ~30% 프레임·입/턱 비가림)은 유지.
+# 2026-06-01 v2 정교화: 사용자 보고 "얼굴이 너무 타이트하게 잡혀 머리 위가 잘리고
+# 몸이 안 보임" → 와이드 가로(landscape 16:9 계열) + 인물 작게 + 어깨/상체 충분히
+# 보이는 프레이밍으로 전환. 정체성은 얼굴 한정 보존 유지(머리 정돈·의상·배경 교체).
 _HIDDEN_HEYGEN_RULES = (
     "PRESERVE EXACTLY (face only): the same person's identical facial identity, age, "
     "gender, ethnicity, facial proportions, skin tone, eye shape and color, eyebrows, "
     "nose, lips, and overall facial features as in the reference photo. "
     "Do NOT beautify, slim, smooth, or alter the face. "
     "Hairstyle should remain the same person's natural hair but may be neatly groomed. "
-    "Framing: single person only, upper-body portrait, direct frontal view at eye level, "
-    "face centered and fully visible with the mouth and jawline unobstructed, "
-    "head occupying about 30% of the frame with comfortable headroom. "
+    "FRAMING (critical, must follow): wide landscape composition. Single person only, "
+    "centered or slightly off-center, with the new background clearly visible on both "
+    "sides of the subject. Show the full head with generous headroom above the hair "
+    "(roughly 12-18% of the frame height above the head), and the upper body including "
+    "both shoulders and the upper chest. The head should occupy roughly 20-25% of the "
+    "frame WIDTH (not more) — do NOT zoom in tight on the face. Eye level, direct "
+    "frontal view, mouth and jawline unobstructed. Natural relaxed posture. "
     "Soft, even frontal lighting with no harsh shadows. "
-    "Render style: ultra photorealistic, DSLR portrait quality (85mm f/2.8 look), "
-    "natural detailed skin texture with visible pores, sharp focus on the face. "
+    "Render style: ultra photorealistic, DSLR portrait quality (50mm f/2.8 environmental "
+    "portrait look — context visible, not a tight headshot), natural detailed skin "
+    "texture with visible pores, sharp focus on the face. "
     "This still will be animated as a HeyGen talking-head avatar, so the mouth area "
     "must be unobstructed and lighting must be even and forward."
 )
@@ -266,7 +271,11 @@ async def generate_instructor_looks(
         "image": image_file,
         "prompt": prompt,
         "n": count,
-        "size": "1024x1024",  # 인물 중심 정사각 (HeyGen talking-head 적합)
+        # 1536x1024 (3:2 landscape — gpt-image-2 지원). 사용자 보고 "16:9 를 기대했는데
+        # 정사각으로 만들고 얼굴이 잘려 보인다" → 가로형으로 전환해 와이드 컴포지션
+        # + 인물 작게 + 배경 양옆 노출. 강의 영상(16:9)에 합성될 때도 자연스럽다.
+        # (gpt-image-2 의 정확한 16:9 사이즈는 미지원이라 3:2 가 최선 근사.)
+        "size": "1536x1024",
         "quality": settings.PHOTO_AVATAR_IMAGE_QUALITY,
     }
     if settings.PHOTO_AVATAR_INPUT_FIDELITY:

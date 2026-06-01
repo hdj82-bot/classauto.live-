@@ -120,13 +120,13 @@ export default function LookDetailModal({
         </header>
 
         <div style={bodyStyle}>
-          <div style={frame169} aria-label={look.prompt || t("looks.tileAlt")}>
+          <div style={frameStyle} aria-label={look.prompt || t("looks.tileAlt")}>
             {src ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={src}
                 alt={look.prompt || t("looks.tileAlt")}
-                style={img169}
+                style={imgStyle}
               />
             ) : null}
           </div>
@@ -253,9 +253,12 @@ const bodyStyle: CSSProperties = {
   overflowY: "auto",
 };
 
-const frame169: CSSProperties = {
+// 2026-06-01 v2: 강제 16:9 프레임 → 자연 비율. 이전엔 정사각(1024x1024) 이미지를
+// 16:9 프레임에 letterbox 하면서 사용자가 "양옆 잘림 / 얼굴만 확대" 로 인식했다.
+// 이제 백엔드가 1536x1024 (3:2 가로) 로 만들고 모달도 자연 비율로 보여준다.
+// max-height: 70vh 로 화면을 넘지 않게 하고, 너비는 컨테이너에 맞춰 줄어든다.
+const frameStyle: CSSProperties = {
   width: "100%",
-  aspectRatio: "16 / 9",
   borderRadius: 12,
   background: "#0A0A0A",
   display: "grid",
@@ -263,13 +266,12 @@ const frame169: CSSProperties = {
   overflow: "hidden",
 };
 
-const img169: CSSProperties = {
-  maxWidth: "100%",
-  maxHeight: "100%",
-  width: "auto",
-  height: "100%",
-  objectFit: "contain",
+const imgStyle: CSSProperties = {
   display: "block",
+  width: "100%",
+  height: "auto",
+  maxHeight: "70vh",
+  objectFit: "contain",
 };
 
 const extraLabel: CSSProperties = {
