@@ -1,10 +1,15 @@
 "use client";
 
 import { useMemo, useState, type CSSProperties } from "react";
-import type { Look, LookGenerateInput } from "./photoAvatarTypes";
-import { PersonIcon } from "./PhotoAvatarIcons";
+import {
+  LOOK_TOTAL_MAX,
+  type Look,
+  type LookGenerateInput,
+} from "./photoAvatarTypes";
+import { PersonIcon, SparkleIcon } from "./PhotoAvatarIcons";
 import LookTile from "./LookTile";
 import LookDetailModal from "./LookDetailModal";
+import LookOptionForm from "./LookOptionForm";
 
 interface LookSelectStepProps {
   looks: Look[];
@@ -32,9 +37,13 @@ interface LookSelectStepProps {
 /**
  * ④ 룩 갤러리에서 기본 룩 1개 선택.
  *
- * ready 룩만 노출한다. 타일 클릭 시 즉시 선택되고(낙관적) 동시에 16:9 상세
- * 모달이 열려 큰 화면 확인·미세 조정 재생성·삭제가 가능하다(2026-06-01 정책).
- * "추가 생성"은 ③ 단계로 되돌아간다.
+ * ready 룩만 노출한다. 타일 클릭 시 즉시 선택되고(낙관적) 동시에 상세 모달이
+ * 열려 큰 화면 확인·미세 조정 재생성·삭제가 가능하다(2026-06-01).
+ *
+ * 2026-06-01 v2: "룩 생성 폼이 사라졌다" 보고 → 갤러리 아래에 ``LookOptionForm``
+ * 을 인라인 임베드한다. ``onGenerate`` 가 주어지면 사용자가 별도 단계로 이동하지
+ * 않고 이 화면에서 곧장 새 배치를 생성할 수 있다. cap 도달 시 form 은 안내만
+ * 표시한다(LookOptionForm 자체 동작).
  */
 export default function LookSelectStep({
   looks,
@@ -54,7 +63,16 @@ export default function LookSelectStep({
     () => looks.filter((l) => l.status === "ready"),
     [looks],
   );
+  const visibleLooks = useMemo(
+    () => looks.filter((l) => l.status !== "failed"),
+    [looks],
+  );
+  // 인라인 생성 폼의 누적 cap — failed 제외(백엔드 계산과 동일).
+  const remaining = Math.max(0, LOOK_TOTAL_MAX - visibleLooks.length);
+  const capReached = remaining <= 0;
+
   const [activeLookId, setActiveLookId] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
   const activeLook =
     activeLookId !== null
       ? readyLooks.find((l) => l.look_id === activeLookId) ?? null
@@ -69,6 +87,17 @@ export default function LookSelectStep({
   // 모달이 재생성을 위임받았을 때 — 비어 있으면 no-op.
   const handleRegenerate = async (input: LookGenerateInput) => {
     if (onGenerate) await onGenerate(input);
+  };
+
+  // 인라인 폼이 새 배치 생성을 의뢰. cap 도달이면 비활성.
+  const handleInlineGenerate = async (input: LookGenerateInput) => {
+    if (!onGenerate || capReached || generating || looksPending) return;
+    setGenerating(true);
+    try {
+      await onGenerate(input);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (
@@ -98,11 +127,27 @@ export default function LookSelectStep({
         </div>
       )}
 
+      {onGenerate && (
+        <section style={inlineGenSection} data-testid="select-inline-generate">
+          <div style={inlineGenHeading}>
+            <SparkleIcon size={20} />
+            <h3 style={inlineGenTitle}>{t("looks.title")}</h3>
+          </div>
+          <p style={inlineGenDesc}>{t("looks.description")}</p>
+          <LookOptionForm
+            onGenerate={handleInlineGenerate}
+            disabled={generating || looksPending}
+            capReached={capReached}
+            t={t}
+          />
+          {!capReached && (
+            <p style={inlineGenNote}>{t("looks.costNote", { remaining })}</p>
+          )}
+        </section>
+      )}
+
       <div style={footerStyle}>
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
-          <button type="button" onClick={onBack} style={secondaryBtn} data-testid="select-back">
-            {t("select.generateMore")}
-          </button>
           <button type="button" onClick={onRestart} style={ghostLink} data-testid="select-restart">
             {t("select.restart")}
           </button>
@@ -121,6 +166,18 @@ export default function LookSelectStep({
           {t("select.next")}
         </button>
       </div>
+
+      {/* onGenerate 가 없는 fallback 경로(임베드 카드 일부) — 별도 단계로 이동. */}
+      {!onGenerate && (
+        <button
+          type="button"
+          onClick={onBack}
+          style={{ ...secondaryBtn, marginTop: 12 }}
+          data-testid="select-back"
+        >
+          {t("select.generateMore")}
+        </button>
+      )}
 
       {activeLook && (
         <LookDetailModal
@@ -163,6 +220,42 @@ const gridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
   gap: 16,
+};
+
+const inlineGenSection: CSSProperties = {
+  marginTop: 22,
+  padding: "18px 18px 14px",
+  borderRadius: 14,
+  border: "1px solid var(--line)",
+  background: "var(--bg-subtle)",
+};
+
+const inlineGenHeading: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  marginBottom: 4,
+};
+
+const inlineGenTitle: CSSProperties = {
+  margin: 0,
+  fontSize: 15.5,
+  fontWeight: 700,
+  color: "var(--text)",
+};
+
+const inlineGenDesc: CSSProperties = {
+  margin: "0 0 12px",
+  fontSize: 12.5,
+  lineHeight: 1.55,
+  color: "var(--text-muted)",
+};
+
+const inlineGenNote: CSSProperties = {
+  margin: "10px 0 0",
+  fontSize: 11.5,
+  lineHeight: 1.5,
+  color: "var(--text-faint)",
 };
 
 const emptyBox: CSSProperties = {
