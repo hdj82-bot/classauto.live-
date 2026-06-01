@@ -133,7 +133,9 @@ class Settings(BaseSettings):
     PHOTO_AVATAR_PROVIDER: str = "gpt"
     # 룩 생성 모델·품질. tier 가 비용의 핵심 레버(high↔medium ~4배).
     OPENAI_IMAGE_MODEL: str = "gpt-image-2"
-    PHOTO_AVATAR_IMAGE_QUALITY: str = "medium"  # low|medium|high
+    # 사용자 결정(2026-06-01): 베타 품질 우선 — medium(~$0.042/장) → high(~$0.17/장).
+    # 3장 배치 1회 ≈ $0.51. 추가 비용은 라이브러리 상한(10) + 1회성 온보딩으로 흡수.
+    PHOTO_AVATAR_IMAGE_QUALITY: str = "high"  # low|medium|high
     # reference(교수 사진) 얼굴 보존 강도. **gpt-image-1 전용 파라미터** —
     # gpt-image-2 는 이 파라미터를 지원하지 않으며, 보내면 400
     # `invalid_input_fidelity_model` 로 거부된다(2026-06-01 확인).
