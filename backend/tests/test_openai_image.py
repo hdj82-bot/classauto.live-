@@ -245,6 +245,25 @@ class TestBuildPrompt:
         assert "REPLACE the clothing entirely" in p
         assert "REPLACE the background entirely" in p
 
+    def test_studio_means_broadcast_not_photo_backdrop(self):
+        """배경=studio 는 사진관 배경이 아니라 팟캐스트/방송 스튜디오 (마이크/헤드폰/
+        포음판 가시) 로 매핑돼야 한다(2026-06-01 사용자 보고 회귀 가드)."""
+        p = oi.build_prompt("podcast_host", None, "studio", None, None)
+        s = p.lower()
+        assert "podcast" in s or "broadcast" in s
+        assert "microphone" in s
+        assert "acoustic" in s or "foam" in s
+        # 이전 사진관 식 어휘는 들어가지 않아야 한다.
+        assert "neutral grey studio backdrop" not in s
+        assert "headshot context" not in s
+
+    def test_framing_requires_waist_up_and_hands_visible(self):
+        """프레이밍은 허리 위까지 + 두 손 보임을 강제해야 한다(사용자 '하단 짤림' 회귀 가드)."""
+        p = oi.build_prompt("educator", None, None, None, None)
+        s = p.lower()
+        assert "waist-up" in s or "waist or hip" in s
+        assert "hands" in s and "visible" in s
+
     def test_omits_directives_for_auto_options(self):
         """outfit/background/expression 이 None 이면 명령 블록을 생략한다 —
         모델이 persona 에 어울리게 알아서 채우게 둔다."""

@@ -465,6 +465,63 @@ async def test_select_gpt_look_registers_talking_photo(client, professor, db):
     assert professor.photo_avatar_preview_video_id is None
 
 
+# ── _ensure_talking_photo_payload (HeyGen 업로드 안전망) ───────────────────
+
+
+def test_ensure_talking_photo_payload_resizes_large_png():
+    """큰 PNG 룩 이미지가 HeyGen 거부 위험 사이즈일 때 다운스케일 + JPEG 재인코딩.
+
+    2026-06-01 회귀 가드 — 룩 이미지(1536x1024 PNG)는 4MB 를 넘을 수 있어
+    HeyGen Talking Photo 업로드 단계에서 거부됐다는 사용자 보고.
+    """
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.api.v1.avatars import (
+        _TALKING_PHOTO_MAX_SIDE,
+        _ensure_talking_photo_payload,
+    )
+
+    # 1536x1024 RGB 더미 — JPEG 보다 큰 PNG 출력을 위해 노이즈 패턴.
+    img = Image.new("RGB", (1536, 1024), color=(120, 130, 140))
+    # 약간의 패턴을 깔아 PNG 압축 효율을 떨어뜨려 사이즈를 키운다.
+    pixels = img.load()
+    for x in range(0, 1536, 2):
+        for y in range(0, 1024, 2):
+            pixels[x, y] = ((x * 7) % 255, (y * 11) % 255, ((x + y) * 13) % 255)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    src = buf.getvalue()
+
+    out_bytes, out_ctype = _ensure_talking_photo_payload(src, "image/png")
+    # PNG 입력은 항상 JPEG 로 정규화된다(크기 무관).
+    assert out_ctype == "image/jpeg"
+    # 긴 변이 가이드 이내로 축소된다.
+    out_img = Image.open(BytesIO(out_bytes))
+    assert max(out_img.size) <= _TALKING_PHOTO_MAX_SIDE
+    # 결과 사이즈는 원본 PNG 보다 작아야 한다(다운스케일 + JPEG 압축).
+    assert len(out_bytes) < len(src)
+
+
+def test_ensure_talking_photo_payload_keeps_small_jpeg_untouched():
+    """이미 작은 JPEG 는 추가 압축 손실을 피하기 위해 그대로 통과."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.api.v1.avatars import _ensure_talking_photo_payload
+
+    img = Image.new("RGB", (640, 480), color=(200, 100, 50))
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    src = buf.getvalue()
+
+    out_bytes, out_ctype = _ensure_talking_photo_payload(src, "image/jpeg")
+    assert out_ctype == "image/jpeg"
+    assert out_bytes == src  # 손대지 않음
+
+
 # ── DELETE /api/avatars/me/looks/{id} (라이브러리 정리) ─────────────────────
 
 
