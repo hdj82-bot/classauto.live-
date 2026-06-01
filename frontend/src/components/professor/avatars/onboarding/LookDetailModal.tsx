@@ -9,6 +9,8 @@ interface LookDetailModalProps {
   lastInput: LookGenerateInput | null;
   /** 입력(persona/outfit/bg/expression) + 새 extra 로 재생성. */
   onRegenerate: (input: LookGenerateInput) => Promise<void>;
+  /** 룩 삭제(라이브러리에서 제거). 제공되지 않으면 삭제 버튼을 노출하지 않는다. */
+  onDelete?: (lookId: string) => Promise<void>;
   /** 모달 닫기. */
   onClose: () => void;
   /** 다른 생성/폴링이 진행 중이면 disabled. */
@@ -31,12 +33,14 @@ export default function LookDetailModal({
   look,
   lastInput,
   onRegenerate,
+  onDelete,
   onClose,
   busy,
   t,
 }: LookDetailModalProps) {
   const [extra, setExtra] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Esc 로 닫기, body 스크롤 잠금.
   useEffect(() => {
@@ -71,6 +75,21 @@ export default function LookDetailModal({
       onClose();
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete || deleting || busy) return;
+    // 단순 confirm — 베타 UX 비용 최소화(전용 confirmation modal 도입은 과함).
+    if (typeof window !== "undefined" && !window.confirm(t("looks.detail.deleteConfirm"))) {
+      return;
+    }
+    setDeleting(true);
+    try {
+      await onDelete(look.look_id);
+      onClose();
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -128,6 +147,24 @@ export default function LookDetailModal({
         </div>
 
         <footer style={footerStyle}>
+          {onDelete ? (
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting || busy}
+              data-testid="look-detail-delete"
+              style={{
+                ...dangerBtn,
+                opacity: deleting || busy ? 0.5 : 1,
+                cursor: deleting || busy ? "not-allowed" : "pointer",
+                marginRight: "auto",
+              }}
+            >
+              {deleting
+                ? t("looks.detail.deleting")
+                : t("looks.detail.delete")}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onClose}
@@ -293,5 +330,17 @@ const primaryBtn: CSSProperties = {
   border: "1px solid transparent",
   background: "linear-gradient(135deg, #FFB627, #E89E0E)",
   color: "#0A0A0A",
+  fontFamily: "inherit",
+};
+
+const dangerBtn: CSSProperties = {
+  padding: "9px 14px",
+  fontSize: 12.5,
+  fontWeight: 600,
+  borderRadius: 10,
+  border: "1px solid var(--line-strong)",
+  background: "transparent",
+  color: "var(--danger, #C0392B)",
+  cursor: "pointer",
   fontFamily: "inherit",
 };

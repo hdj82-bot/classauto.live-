@@ -78,6 +78,17 @@ export default function PhotoAvatarOnboardingPage() {
     [flow, toast, t],
   );
 
+  const handleDelete = useCallback(
+    async (lookId: string) => {
+      try {
+        await flow.remove(lookId);
+      } catch {
+        toast(t("looks.error"), "error");
+      }
+    },
+    [flow, toast, t],
+  );
+
   const handleConfirm = useCallback(() => {
     toast(t("preview.confirmed"), "success");
     router.push("/professor/avatars");
@@ -158,6 +169,7 @@ export default function PhotoAvatarOnboardingPage() {
               <LookGenerateStep
                 looks={flow.looks}
                 onGenerate={handleGenerate}
+                onDelete={handleDelete}
                 looksPending={flow.looksPending}
                 lastInput={flow.lastInput}
                 reducedMotion={reducedMotion}
@@ -172,6 +184,10 @@ export default function PhotoAvatarOnboardingPage() {
                 looks={flow.looks}
                 selectedLookId={flow.selectedLookId}
                 onSelect={handleSelect}
+                onGenerate={handleGenerate}
+                onDelete={handleDelete}
+                lastInput={flow.lastInput}
+                looksPending={flow.looksPending}
                 reducedMotion={reducedMotion}
                 onBack={() => flow.goTo("generate")}
                 onRestart={() => flow.goTo("upload")}

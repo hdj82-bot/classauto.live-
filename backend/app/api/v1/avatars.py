@@ -980,6 +980,61 @@ async def select_look(
     return LookSelectResponse(default_look_id=look_id, message=message)
 
 
+@router.delete(
+    "/api/avatars/me/looks/{look_id}",
+    response_model=dict,
+    summary="룩 삭제 (라이브러리 정리)",
+)
+async def delete_look(
+    look_id: str,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """교수자의 룩 1개를 라이브러리에서 삭제한다.
+
+    - gpt 경로: 내부 UUID 로 식별. 레거시 heygen 경로: heygen_look_id 로도 시도(select 동일).
+    - 누적 cap(``PHOTO_AVATAR_LOOK_TOTAL_MAX``) 에서 즉시 빠진다 → 새 룩 생성 여유 확보.
+    - 기본 룩으로 선택돼 있으면 ``photo_avatar_default_look_id`` 도 함께 해제.
+      이미 Talking Photo 로 확정된 아바타(``photo_avatar_id``)는 별개로 보존
+      (사진 본체가 사라지는 게 아니라 라이브러리 카드만 정리하는 의미).
+    - S3 원본 이미지는 비동기 정리(향후) — 본 PR은 DB row 삭제까지만 한다(소액 leak,
+      cap 회복이 우선).
+    """
+    row = None
+    try:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.id == uuid.UUID(look_id),
+                )
+            )
+        ).scalar_one_or_none()
+    except ValueError:
+        row = None
+    if row is None:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.heygen_look_id == look_id,
+                )
+            )
+        ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 룩을 찾을 수 없습니다."
+        )
+
+    # 기본 룩으로 선택돼 있으면 해제(다음 사용 시 사용자가 다시 골라야 함).
+    if user.photo_avatar_default_look_id == look_id:
+        user.photo_avatar_default_look_id = None
+
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True}
+
+
 # ── 최근 선택한 아바타 (라이브러리 즉시 선택·적용) ────────────────────────────
 #
 # "기본 룩"(photo_avatar_default_look_id, 모든 강의의 폴백)과 별개로, 교수자가

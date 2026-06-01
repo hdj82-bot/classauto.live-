@@ -168,7 +168,7 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
   });
 });
 
-describe("LookSelectStep — 복귀 동선", () => {
+describe("LookSelectStep — 복귀 동선 + 16:9 모달", () => {
   it("선택 단계에서 '다른 사진으로 다시 시작' 동선을 제공한다", () => {
     const onRestart = vi.fn();
     render(
@@ -186,6 +186,51 @@ describe("LookSelectStep — 복귀 동선", () => {
     fireEvent.click(screen.getByTestId("select-restart"));
     expect(onRestart).toHaveBeenCalledTimes(1);
   });
+
+  it("ready 룩 클릭 시 선택 + 16:9 모달이 함께 열린다 (2026-06-01)", () => {
+    // 회귀 가드: 선택 단계에서 클릭이 '아무 동작 없음' 처럼 보이던 사고.
+    const onSelect = vi.fn();
+    render(
+      <LookSelectStep
+        looks={[readyLook("a")]}
+        selectedLookId={null}
+        onSelect={onSelect}
+        onGenerate={vi.fn().mockResolvedValue(undefined)}
+        onDelete={vi.fn().mockResolvedValue(undefined)}
+        lastInput={null}
+        looksPending={false}
+        reducedMotion={false}
+        onBack={vi.fn()}
+        onRestart={vi.fn()}
+        onNext={vi.fn()}
+        t={t}
+      />,
+    );
+    expect(screen.queryByTestId("look-detail-modal")).toBeNull();
+    fireEvent.click(screen.getByTestId("look-tile-a"));
+    expect(onSelect).toHaveBeenCalledWith("a");
+    expect(screen.getByTestId("look-detail-modal")).toBeTruthy();
+    // onDelete 가 주어졌을 때 삭제 버튼이 노출된다.
+    expect(screen.getByTestId("look-detail-delete")).toBeTruthy();
+  });
+
+  it("onDelete 가 없으면 모달에 삭제 버튼이 나타나지 않는다", () => {
+    render(
+      <LookSelectStep
+        looks={[readyLook("a")]}
+        selectedLookId={null}
+        onSelect={vi.fn()}
+        reducedMotion={false}
+        onBack={vi.fn()}
+        onRestart={vi.fn()}
+        onNext={vi.fn()}
+        t={t}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("look-tile-a"));
+    expect(screen.getByTestId("look-detail-modal")).toBeTruthy();
+    expect(screen.queryByTestId("look-detail-delete")).toBeNull();
+  });
 });
 
 // usePhotoAvatarFlow.goTo("upload") 가 stale 룩/선택을 비우는지 검증.
@@ -199,6 +244,7 @@ vi.mock("@/components/professor/avatars/onboarding/photoAvatarApi", () => ({
     ]),
   generateLooks: vi.fn().mockResolvedValue({ generation_id: "g" }),
   selectLook: vi.fn().mockResolvedValue({ ok: true }),
+  deleteLook: vi.fn().mockResolvedValue({ ok: true }),
   uploadPhotoAvatar: vi.fn(),
   isDeferredMode: vi.fn().mockReturnValue(false),
 }));

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  deleteLook,
   generateLooks,
   getPhotoAvatar,
   isDeferredMode,
@@ -55,6 +56,8 @@ export interface PhotoAvatarFlow {
   /** 구조화 옵션으로 룩 배치(기본 LOOK_BATCH_DEFAULT 장)를 생성한다. */
   generate: (input: LookGenerateInput) => Promise<void>;
   select: (lookId: string) => Promise<void>;
+  /** 라이브러리에서 룩 1개를 삭제(누적 cap 회복). */
+  remove: (lookId: string) => Promise<void>;
 }
 
 export function usePhotoAvatarFlow(): PhotoAvatarFlow {
@@ -149,6 +152,14 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     setDeferred(isDeferredMode());
   }, []);
 
+  const remove = useCallback(async (lookId: string) => {
+    // 낙관적 제거 — 실패하면 list 폴링이 다시 채운다.
+    setLooks((prev) => prev.filter((l) => l.look_id !== lookId));
+    setSelectedLookId((prev) => (prev === lookId ? null : prev));
+    await deleteLook(lookId);
+    setDeferred(isDeferredMode());
+  }, []);
+
   const goTo = useCallback(
     (next: OnboardingStep) => {
       // ① 업로드로 되돌아가면(다른 사진으로 다시 시작) 이전 룩/선택은 무효 —
@@ -179,5 +190,6 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     uploadPhoto,
     generate,
     select,
+    remove,
   };
 }
