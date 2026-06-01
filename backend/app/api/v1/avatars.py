@@ -98,6 +98,92 @@ def _ensure_talking_photo_payload(
         len(img_bytes), content_type, len(out), *img.size,
     )
     return out, "image/jpeg"
+
+
+async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
+    """``user.photo_avatar_id`` 가 비어 있으면 default look 으로부터 lazy 등록.
+
+    2026-06-01 결정: select 단계에서 HeyGen 을 호출하지 않고("최후에만 헤이젠"),
+    preview / 강의 렌더 진입 시점에 이 헬퍼가 한 번 등록한다(idempotent).
+
+    반환:
+    - ``photo_avatar_id`` 가 이미 있으면 그대로 반환.
+    - default_look_id 가 없거나 룩이 ready 가 아니면 ``None`` (상위에서 안내).
+    - 등록 성공 시 ``user.photo_avatar_id`` 를 set 하고 commit 후 talking_photo_id 반환.
+    - S3 / HeyGen 단계 실패는 단계별 로그 + ``HTTPException`` 으로 상위로 전파.
+    """
+    if user.photo_avatar_id:
+        return user.photo_avatar_id
+
+    look_id = user.photo_avatar_default_look_id
+    if not look_id:
+        return None
+
+    # default look 조회 — gpt 내부 UUID 또는 레거시 heygen_look_id 둘 다 시도.
+    row = None
+    try:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.id == uuid.UUID(look_id),
+                )
+            )
+        ).scalar_one_or_none()
+    except ValueError:
+        row = None
+    if row is None:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.heygen_look_id == look_id,
+                )
+            )
+        ).scalar_one_or_none()
+    if row is None or row.status != LookStatus.ready.value or not row.image_url:
+        return None
+
+    from urllib.parse import urlparse
+
+    from app.services.pipeline.heygen import HeyGenError, upload_talking_photo
+
+    key = urlparse(row.image_url).path.lstrip("/")
+    ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
+    try:
+        img_bytes = s3_svc.download_file(key)
+    except Exception as e:  # noqa: BLE001
+        logger.exception(
+            "photo-avatar-ensure: S3 다운로드 실패 — user=%s, look=%s, key=%s",
+            user.id, look_id, key,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"룩 이미지를 불러오지 못했습니다(S3): {e}",
+        ) from e
+
+    safe_bytes, safe_ctype = _ensure_talking_photo_payload(img_bytes, ctype)
+    try:
+        talking_photo_id = await upload_talking_photo(safe_bytes, content_type=safe_ctype)
+    except HeyGenError as e:
+        logger.warning(
+            "photo-avatar-ensure: HeyGen Talking Photo 등록 실패 — user=%s, look=%s, error=%s",
+            user.id, look_id, e,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"본인 아바타 등록에 실패했습니다(HeyGen): {e}",
+        ) from e
+
+    user.photo_avatar_id = talking_photo_id
+    await db.commit()
+    logger.info(
+        "photo-avatar-ensure: 등록 성공 — user=%s, look=%s, talking_photo_id=%s",
+        user.id, look_id, talking_photo_id,
+    )
+    return talking_photo_id
+
+
 _JPEG_MAGIC = b"\xff\xd8\xff"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -341,10 +427,18 @@ async def create_avatar_preview(
     상태 조회·완료 수령은 ``GET /api/avatars/me/preview`` 폴링으로 한다.
     """
     payload = payload or AvatarPreviewRequest()
-    if not user.photo_avatar_id:
+    # 2026-06-01: 기존엔 select 가 HeyGen 등록까지 했지만, 이제 select 는 default
+    # 만 저장한다. preview 진입 시점에 lazy 등록 — 사진→룩→default 까지 끝낸
+    # 사용자만 도달할 수 있는 시점이고, 어차피 preview 자체가 HeyGen 호출이므로
+    # 여기서 talking_photo 등록을 함께 수행한다(idempotent).
+    talking_photo_id = await _ensure_photo_avatar_id(user, db)
+    if not talking_photo_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="본인 아바타가 아직 등록되지 않았습니다. 먼저 사진으로 아바타를 만들어 주세요.",
+            detail=(
+                "본인 아바타가 아직 등록되지 않았습니다. 먼저 사진을 올리고 "
+                "기본 룩을 지정해 주세요."
+            ),
         )
 
     voice_id = payload.voice_id
@@ -382,7 +476,7 @@ async def create_avatar_preview(
         audio_url = s3_svc.presign_stored_s3_url(stored_audio_url) or stored_audio_url
         video_id = await create_video(
             audio_url=audio_url,
-            talking_photo_id=user.photo_avatar_id,
+            talking_photo_id=talking_photo_id,
             callback_id=f"avatar-preview:{user.id}",
         )
     except (HeyGenError, tts.TTSError) as e:
@@ -1006,55 +1100,27 @@ async def select_look(
             detail="아직 준비되지 않은 룩입니다.",
         )
 
-    message = "기본 아바타 룩으로 설정했습니다."
-    if settings.PHOTO_AVATAR_PROVIDER == "gpt":
-        if not row.image_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="이 룩에는 이미지가 없습니다.",
-            )
-        from urllib.parse import urlparse
+    # 2026-06-01: select 시점에 HeyGen 호출하지 않는다(사용자 요청 "최후에만 헤이젠").
+    # default_look_id 만 저장하고, HeyGen Talking Photo 등록은 ``preview`` (또는 첫
+    # 강의 렌더) 진입 시 ``_ensure_photo_avatar_id`` 가 lazy 로 처리한다.
+    if settings.PHOTO_AVATAR_PROVIDER == "gpt" and not row.image_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이 룩에는 이미지가 없습니다.",
+        )
 
-        from app.services.pipeline.heygen import HeyGenError, upload_talking_photo
-
-        key = urlparse(row.image_url).path.lstrip("/")
-        ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
-        # 단계별 분리 — S3 다운로드 실패 / HeyGen 등록 실패 / 그 외를 로그에서
-        # 구분할 수 있게 한다 (2026-06-01 사용자 보고 "기본 룩 선택에 실패" 진단용).
-        try:
-            img_bytes = s3_svc.download_file(key)
-        except Exception as e:  # noqa: BLE001 — S3 ClientError·FileNotFoundError 등
-            logger.exception(
-                "look-select: S3 다운로드 실패 — user=%s, look=%s, key=%s",
-                user.id, look_id, key,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"룩 이미지를 불러오지 못했습니다(S3): {e}",
-            ) from e
-        # HeyGen 거부 위험을 줄이기 위해 다운스케일 + JPEG 재인코딩 안전망.
-        safe_bytes, safe_ctype = _ensure_talking_photo_payload(img_bytes, ctype)
-        try:
-            talking_photo_id = await upload_talking_photo(safe_bytes, content_type=safe_ctype)
-        except HeyGenError as e:
-            logger.warning(
-                "look-select: HeyGen Talking Photo 등록 실패 — user=%s, look=%s, error=%s",
-                user.id, look_id, e,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"본인 아바타 등록에 실패했습니다(HeyGen): {e}",
-            ) from e
-        user.photo_avatar_id = talking_photo_id
-        # (E) 얼굴이 바뀌었으므로 이전 '움직이는 미리보기' 캐시는 무효(재생성 유도).
-        user.photo_avatar_preview_url = None
-        user.photo_avatar_preview_video_id = None
-        user.photo_avatar_preview_voice_id = None
-        message = "이 모습을 본인 아바타로 설정했습니다."
-
+    # 다른 룩으로 바뀌면 이전 talking_photo_id 와 미리보기 캐시는 무효
+    # (다음 사용 시점에 default 로부터 lazy 재등록되도록).
+    user.photo_avatar_id = None
+    user.photo_avatar_preview_url = None
+    user.photo_avatar_preview_video_id = None
+    user.photo_avatar_preview_voice_id = None
     user.photo_avatar_default_look_id = look_id
     await db.commit()
-    return LookSelectResponse(default_look_id=look_id, message=message)
+    return LookSelectResponse(
+        default_look_id=look_id,
+        message="기본 아바타 룩으로 설정했습니다. 미리보기를 만들 때 본인 아바타가 자동 등록됩니다.",
+    )
 
 
 @router.delete(

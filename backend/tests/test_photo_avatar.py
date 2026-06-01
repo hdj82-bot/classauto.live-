@@ -425,8 +425,14 @@ async def test_generate_looks_gpt_soft_cap(client, professor, db):
 
 
 @pytest.mark.asyncio
-async def test_select_gpt_look_registers_talking_photo(client, professor, db):
-    """gpt: 룩 이미지 → upload_talking_photo → photo_avatar_id + 미리보기 캐시 무효화."""
+async def test_select_gpt_look_does_not_call_heygen(client, professor, db):
+    """v0.4 (2026-06-01): select 시점에 HeyGen 호출 없음 — '최후에만 헤이젠'.
+
+    기존엔 select 가 upload_talking_photo 까지 호출해 photo_avatar_id 를 채웠지만,
+    이제 default_look_id 만 저장하고 HeyGen 등록은 preview / 강의 렌더에서 lazy
+    수행한다. select 시 photo_avatar_id 는 명시적으로 비워 다음 사용 시점에
+    default 로부터 새로 등록되도록 한다.
+    """
     from app.models.photo_avatar import PhotoAvatarLook
 
     look = PhotoAvatarLook(
@@ -437,19 +443,22 @@ async def test_select_gpt_look_registers_talking_photo(client, professor, db):
     )
     db.add(look)
     await db.flush()
-    # 무효화 확인용 — 이전 미리보기 캐시가 채워져 있다고 가정.
+    # 이전 미리보기 캐시·talking_photo_id 가 채워져 있다고 가정.
+    professor.photo_avatar_id = "tp_old"
     professor.photo_avatar_preview_url = "https://old/preview.mp4"
     professor.photo_avatar_preview_video_id = "vid-old"
     await db.flush()
     look_id = str(look.id)
 
-    with patch.object(settings, "PHOTO_AVATAR_PROVIDER", "gpt"), patch(
-        "app.services.pipeline.s3.download_file", return_value=b"img-bytes"
-    ), patch(
-        "app.services.pipeline.heygen.upload_talking_photo",
-        new_callable=AsyncMock,
-        return_value="tp_123",
-    ) as up:
+    # S3/HeyGen 둘 다 호출되면 안 된다.
+    with (
+        patch.object(settings, "PHOTO_AVATAR_PROVIDER", "gpt"),
+        patch("app.services.pipeline.s3.download_file") as s3_dl,
+        patch(
+            "app.services.pipeline.heygen.upload_talking_photo",
+            new_callable=AsyncMock,
+        ) as up,
+    ):
         resp = await client.post(
             f"/api/avatars/me/looks/{look_id}/select",
             headers=make_auth_header(professor),
@@ -457,12 +466,88 @@ async def test_select_gpt_look_registers_talking_photo(client, professor, db):
 
     assert resp.status_code == 200
     assert resp.json()["default_look_id"] == look_id
-    up.assert_awaited_once()
-    assert professor.photo_avatar_id == "tp_123"
+    # 핵심 회귀 가드 — select 가 HeyGen / S3 를 더 이상 건드리지 않는다.
+    up.assert_not_awaited()
+    s3_dl.assert_not_called()
+    # default 만 저장되고, 이전 talking_photo_id 와 미리보기 캐시는 무효 처리.
     assert professor.photo_avatar_default_look_id == look_id
-    # (E) 미리보기 캐시 무효화.
+    assert professor.photo_avatar_id is None
     assert professor.photo_avatar_preview_url is None
     assert professor.photo_avatar_preview_video_id is None
+
+
+@pytest.mark.asyncio
+async def test_ensure_photo_avatar_id_lazy_uploads_from_default_look(professor, db):
+    """preview/render 진입 시점의 lazy 등록 — _ensure_photo_avatar_id 단위 검증.
+
+    photo_avatar_id 가 비고 default_look_id 가 ready 룩을 가리키면, S3 다운로드 →
+    talking_photo 정규화 → HeyGen 업로드 → photo_avatar_id 저장이 idempotent 로
+    수행된다.
+    """
+    from app.api.v1.avatars import _ensure_photo_avatar_id
+    from app.models.photo_avatar import PhotoAvatarLook
+
+    look = PhotoAvatarLook(
+        user_id=professor.id,
+        image_url="https://b.s3.r.amazonaws.com/thumbnails/photo-avatar/x/look-en.jpg",
+        prompt="p",
+        status="ready",
+    )
+    db.add(look)
+    await db.flush()
+    professor.photo_avatar_id = None
+    professor.photo_avatar_default_look_id = str(look.id)
+    await db.flush()
+
+    with (
+        patch("app.services.pipeline.s3.download_file", return_value=b"img-bytes"),
+        patch(
+            "app.services.pipeline.heygen.upload_talking_photo",
+            new_callable=AsyncMock,
+            return_value="tp_lazy_42",
+        ) as up,
+    ):
+        out = await _ensure_photo_avatar_id(professor, db)
+
+    assert out == "tp_lazy_42"
+    up.assert_awaited_once()
+    assert professor.photo_avatar_id == "tp_lazy_42"
+
+
+@pytest.mark.asyncio
+async def test_ensure_photo_avatar_id_is_idempotent(professor, db):
+    """photo_avatar_id 가 이미 있으면 S3/HeyGen 모두 호출하지 않고 그대로 반환."""
+    from app.api.v1.avatars import _ensure_photo_avatar_id
+
+    professor.photo_avatar_id = "tp_cached"
+    professor.photo_avatar_default_look_id = "irrelevant"
+    await db.flush()
+
+    with (
+        patch("app.services.pipeline.s3.download_file") as s3_dl,
+        patch(
+            "app.services.pipeline.heygen.upload_talking_photo",
+            new_callable=AsyncMock,
+        ) as up,
+    ):
+        out = await _ensure_photo_avatar_id(professor, db)
+
+    assert out == "tp_cached"
+    s3_dl.assert_not_called()
+    up.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ensure_photo_avatar_id_returns_none_without_default(professor, db):
+    """default_look_id 가 없으면 None — 상위에서 400 안내."""
+    from app.api.v1.avatars import _ensure_photo_avatar_id
+
+    professor.photo_avatar_id = None
+    professor.photo_avatar_default_look_id = None
+    await db.flush()
+
+    out = await _ensure_photo_avatar_id(professor, db)
+    assert out is None
 
 
 # ── _ensure_talking_photo_payload (HeyGen 업로드 안전망) ───────────────────
