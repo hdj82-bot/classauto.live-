@@ -66,7 +66,11 @@ class TestRealCall:
     @pytest.mark.asyncio
     async def test_decodes_b64_to_bytes(self):
         edit = AsyncMock(return_value=_fake_edit_response(2))
-        with patch.object(settings, "OPENAI_IMAGE_MOCK", False), _patch_async_openai(edit):
+        with (
+            patch.object(settings, "OPENAI_IMAGE_MOCK", False),
+            patch.object(settings, "PHOTO_AVATAR_INPUT_FIDELITY", "high"),
+            _patch_async_openai(edit),
+        ):
             out = await oi.generate_instructor_looks(
                 b"img", "image/png", "researcher", "suit", "lab", "confident", "안경", 2
             )
@@ -75,9 +79,34 @@ class TestRealCall:
         # 계약: input_fidelity·quality·model 을 settings 에서 전달.
         kwargs = edit.await_args.kwargs
         assert kwargs["model"] == settings.OPENAI_IMAGE_MODEL
-        assert kwargs["input_fidelity"] == settings.PHOTO_AVATAR_INPUT_FIDELITY
+        assert kwargs["input_fidelity"] == "high"
         assert kwargs["quality"] == settings.PHOTO_AVATAR_IMAGE_QUALITY
         assert kwargs["n"] == 2
+
+    @pytest.mark.asyncio
+    async def test_input_fidelity_omitted_when_empty(self):
+        """gpt-image-2 처럼 input_fidelity 미지원 모델용 — 빈 문자열이면 파라미터 자체를 안 보낸다.
+
+        회귀 가드: 2026-06-01 프로덕션 사고 — gpt-image-2 + input_fidelity 조합이
+        OpenAI 400 invalid_input_fidelity_model 로 거부돼 룩 생성이 전부 실패했다.
+        """
+        edit = AsyncMock(return_value=_fake_edit_response(1))
+        with (
+            patch.object(settings, "OPENAI_IMAGE_MOCK", False),
+            patch.object(settings, "PHOTO_AVATAR_INPUT_FIDELITY", ""),
+            _patch_async_openai(edit),
+        ):
+            await oi.generate_instructor_looks(
+                b"img", "image/png", "educator", None, None, None, None, 1
+            )
+        kwargs = edit.await_args.kwargs
+        assert "input_fidelity" not in kwargs, (
+            "PHOTO_AVATAR_INPUT_FIDELITY 가 빈 문자열이면 파라미터를 보내지 않아야 한다 "
+            "(gpt-image-2 호환)"
+        )
+        # 다른 필수 파라미터는 그대로 전달된다.
+        assert kwargs["model"] == settings.OPENAI_IMAGE_MODEL
+        assert kwargs["quality"] == settings.PHOTO_AVATAR_IMAGE_QUALITY
 
     @pytest.mark.asyncio
     async def test_moderation_refusal_maps_to_specific_error(self):

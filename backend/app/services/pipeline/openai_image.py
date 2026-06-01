@@ -177,16 +177,22 @@ async def generate_instructor_looks(
     image_file = (f"reference.{ext}", image_bytes, content_type)
 
     client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    # input_fidelity 는 gpt-image-1 전용 파라미터다. gpt-image-2 처럼 지원하지 않는
+    # 모델에 보내면 OpenAI 가 400 `invalid_input_fidelity_model` 로 거부한다.
+    # PHOTO_AVATAR_INPUT_FIDELITY 가 빈 문자열이면 파라미터 자체를 생략해
+    # 모델 전환이 env 만으로 가능하도록 한다.
+    edit_kwargs: dict = {
+        "model": settings.OPENAI_IMAGE_MODEL,
+        "image": image_file,
+        "prompt": prompt,
+        "n": count,
+        "size": "1024x1024",  # 인물 중심 정사각 (HeyGen talking-head 적합)
+        "quality": settings.PHOTO_AVATAR_IMAGE_QUALITY,
+    }
+    if settings.PHOTO_AVATAR_INPUT_FIDELITY:
+        edit_kwargs["input_fidelity"] = settings.PHOTO_AVATAR_INPUT_FIDELITY
     try:
-        response = await client.images.edit(
-            model=settings.OPENAI_IMAGE_MODEL,
-            image=image_file,
-            prompt=prompt,
-            n=count,
-            size="1024x1024",  # 인물 중심 정사각 (HeyGen talking-head 적합)
-            quality=settings.PHOTO_AVATAR_IMAGE_QUALITY,
-            input_fidelity=settings.PHOTO_AVATAR_INPUT_FIDELITY,
-        )
+        response = await client.images.edit(**edit_kwargs)
     except openai.BadRequestError as exc:
         # gpt-image 모더레이션/정책 거부는 BadRequest 로 온다(code=moderation_blocked 등).
         code = str(getattr(exc, "code", "") or "")
