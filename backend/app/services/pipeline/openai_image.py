@@ -261,7 +261,9 @@ async def generate_instructor_looks(
     )
     image_file = (f"reference.{ext}", image_bytes, content_type)
 
-    client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    # high quality + 1536x1024 면 호출당 30-60초까지 걸린다. n>=3 동시 처리 시
+    # SDK 기본 60초 타임아웃을 넘어 ReadTimeout 으로 떨어질 수 있어 명시 상향.
+    client = openai.AsyncOpenAI(api_key=settings.OPENAI_API_KEY, timeout=180.0)
     # input_fidelity 는 gpt-image-1 전용 파라미터다. gpt-image-2 처럼 지원하지 않는
     # 모델에 보내면 OpenAI 가 400 `invalid_input_fidelity_model` 로 거부한다.
     # PHOTO_AVATAR_INPUT_FIDELITY 가 빈 문자열이면 파라미터 자체를 생략해

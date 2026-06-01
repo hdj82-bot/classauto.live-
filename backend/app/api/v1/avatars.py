@@ -960,13 +960,29 @@ async def select_look(
 
         key = urlparse(row.image_url).path.lstrip("/")
         ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
+        # 단계별 분리 — S3 다운로드 실패 / HeyGen 등록 실패 / 그 외를 로그에서
+        # 구분할 수 있게 한다 (2026-06-01 사용자 보고 "기본 룩 선택에 실패" 진단용).
         try:
             img_bytes = s3_svc.download_file(key)
-            talking_photo_id = await upload_talking_photo(img_bytes, content_type=ctype)
-        except HeyGenError as e:
+        except Exception as e:  # noqa: BLE001 — S3 ClientError·FileNotFoundError 등
+            logger.exception(
+                "look-select: S3 다운로드 실패 — user=%s, look=%s, key=%s",
+                user.id, look_id, key,
+            )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"본인 아바타 등록에 실패했습니다: {e}",
+                detail=f"룩 이미지를 불러오지 못했습니다(S3): {e}",
+            ) from e
+        try:
+            talking_photo_id = await upload_talking_photo(img_bytes, content_type=ctype)
+        except HeyGenError as e:
+            logger.warning(
+                "look-select: HeyGen Talking Photo 등록 실패 — user=%s, look=%s, error=%s",
+                user.id, look_id, e,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"본인 아바타 등록에 실패했습니다(HeyGen): {e}",
             ) from e
         user.photo_avatar_id = talking_photo_id
         # (E) 얼굴이 바뀌었으므로 이전 '움직이는 미리보기' 캐시는 무효(재생성 유도).
