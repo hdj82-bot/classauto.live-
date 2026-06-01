@@ -70,7 +70,10 @@
         "extraHelp": "We'll keep this look's base and tweak only the expression, outfit, or color you describe.",
         "regenerate": "Regenerate with this refinement",
         "regenerating": "Regenerating...",
-        "regenerated": "A new look is being generated and will appear below."
+        "regenerated": "A new look is being generated and will appear below.",
+        "delete": "Delete this look",
+        "deleting": "Deleting...",
+        "deleteConfirm": "Delete this look from your library? This cannot be undone."
       }
     },
 

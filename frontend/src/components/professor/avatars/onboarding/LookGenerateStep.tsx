@@ -15,6 +15,8 @@ interface LookGenerateStepProps {
   looks: Look[];
   /** 구조화 옵션으로 룩 배치를 생성한다(v0.2). */
   onGenerate: (input: LookGenerateInput) => Promise<void>;
+  /** 룩 1개를 라이브러리에서 삭제(LookDetailModal 내부 버튼). */
+  onDelete?: (lookId: string) => Promise<void>;
   /** 생성이 진행 중인지(generating 타일 존재). */
   looksPending: boolean;
   /** 직전 배치 입력 — LookDetailModal 의 재생성 base. */
@@ -41,6 +43,7 @@ interface LookGenerateStepProps {
 export default function LookGenerateStep({
   looks,
   onGenerate,
+  onDelete,
   looksPending,
   lastInput,
   reducedMotion,
@@ -154,6 +157,7 @@ export default function LookGenerateStep({
           look={activeLook}
           lastInput={lastInput}
           onRegenerate={handleGenerate}
+          onDelete={onDelete}
           onClose={() => setActiveLookId(null)}
           busy={busy}
           t={t}

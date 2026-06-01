@@ -1,15 +1,24 @@
 "use client";
 
-import { useMemo, type CSSProperties } from "react";
-import type { Look } from "./photoAvatarTypes";
+import { useMemo, useState, type CSSProperties } from "react";
+import type { Look, LookGenerateInput } from "./photoAvatarTypes";
 import { PersonIcon } from "./PhotoAvatarIcons";
 import LookTile from "./LookTile";
+import LookDetailModal from "./LookDetailModal";
 
 interface LookSelectStepProps {
   looks: Look[];
   selectedLookId: string | null;
   /** 기본 룩 선택(POST select). */
   onSelect: (lookId: string) => void;
+  /** 16:9 모달 안에서 미세 조정 재생성. */
+  onGenerate?: (input: LookGenerateInput) => Promise<void>;
+  /** 16:9 모달 안에서 룩 삭제. */
+  onDelete?: (lookId: string) => Promise<void>;
+  /** 모달 재생성용 base. */
+  lastInput?: LookGenerateInput | null;
+  /** generating 룩이 있을 때 모달 동작 disable. */
+  looksPending?: boolean;
   reducedMotion: boolean;
   /** ③ 으로 돌아가 추가 생성. */
   onBack: () => void;
@@ -23,13 +32,18 @@ interface LookSelectStepProps {
 /**
  * ④ 룩 갤러리에서 기본 룩 1개 선택.
  *
- * ready 룩만 선택 대상으로 노출한다. "추가 생성"은 명시 버튼으로 ③ 단계로
- * 되돌아간다(자동 재생성 없음 — docs §8).
+ * ready 룩만 노출한다. 타일 클릭 시 즉시 선택되고(낙관적) 동시에 16:9 상세
+ * 모달이 열려 큰 화면 확인·미세 조정 재생성·삭제가 가능하다(2026-06-01 정책).
+ * "추가 생성"은 ③ 단계로 되돌아간다.
  */
 export default function LookSelectStep({
   looks,
   selectedLookId,
   onSelect,
+  onGenerate,
+  onDelete,
+  lastInput = null,
+  looksPending = false,
   reducedMotion,
   onBack,
   onRestart,
@@ -40,6 +54,22 @@ export default function LookSelectStep({
     () => looks.filter((l) => l.status === "ready"),
     [looks],
   );
+  const [activeLookId, setActiveLookId] = useState<string | null>(null);
+  const activeLook =
+    activeLookId !== null
+      ? readyLooks.find((l) => l.look_id === activeLookId) ?? null
+      : null;
+
+  // 타일 클릭: 선택(기존) + 모달 오픈(신규). 둘 다 같은 핸들러에서 처리한다.
+  const handleTileClick = (lookId: string) => {
+    onSelect(lookId);
+    setActiveLookId(lookId);
+  };
+
+  // 모달이 재생성을 위임받았을 때 — 비어 있으면 no-op.
+  const handleRegenerate = async (input: LookGenerateInput) => {
+    if (onGenerate) await onGenerate(input);
+  };
 
   return (
     <div data-testid="step-select" style={cardStyle}>
@@ -61,7 +91,7 @@ export default function LookSelectStep({
               look={look}
               selected={selectedLookId === look.look_id}
               reducedMotion={reducedMotion}
-              onSelect={onSelect}
+              onSelect={handleTileClick}
               t={t}
             />
           ))}
@@ -91,6 +121,18 @@ export default function LookSelectStep({
           {t("select.next")}
         </button>
       </div>
+
+      {activeLook && (
+        <LookDetailModal
+          look={activeLook}
+          lastInput={lastInput}
+          onRegenerate={handleRegenerate}
+          onDelete={onDelete}
+          onClose={() => setActiveLookId(null)}
+          busy={looksPending}
+          t={t}
+        />
+      )}
     </div>
   );
 }

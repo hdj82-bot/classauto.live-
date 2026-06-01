@@ -276,6 +276,24 @@ export async function listLooks(): Promise<Look[]> {
   }
 }
 
+// ── ③' 룩 삭제 (라이브러리 정리) ─────────────────────────────────────────────
+/** DELETE /api/avatars/me/looks/{id}. deferred 면 mock 에서 제거. */
+export async function deleteLook(lookId: string): Promise<{ ok: boolean }> {
+  try {
+    const { data } = await api.delete<{ ok: boolean }>(
+      `/api/avatars/me/looks/${encodeURIComponent(lookId)}`,
+    );
+    return { ok: data?.ok ?? true };
+  } catch (err) {
+    if (isDeferredError(err)) {
+      mock.looks = mock.looks.filter((l) => l.look_id !== lookId);
+      if (mock.selectedLookId === lookId) mock.selectedLookId = null;
+      return { ok: true };
+    }
+    throw err;
+  }
+}
+
 // ── ④ 기본 룩 선택 ───────────────────────────────────────────────────────────
 /** POST /api/avatars/me/looks/{id}/select. deferred 면 mock 선택 기록. */
 export async function selectLook(lookId: string): Promise<{ ok: boolean }> {

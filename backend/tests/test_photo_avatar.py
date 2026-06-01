@@ -465,6 +465,57 @@ async def test_select_gpt_look_registers_talking_photo(client, professor, db):
     assert professor.photo_avatar_preview_video_id is None
 
 
+# ── DELETE /api/avatars/me/looks/{id} (라이브러리 정리) ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_gpt_look_removes_row_and_clears_default(client, professor, db):
+    """삭제 후 row 가 사라지고 default_look_id 도 해제된다 — cap 회복용 핵심 경로."""
+    from app.models.photo_avatar import PhotoAvatarLook
+    from sqlalchemy import select
+
+    look = PhotoAvatarLook(
+        user_id=professor.id,
+        image_url="https://b.s3.r.amazonaws.com/thumbnails/photo-avatar/x/look-del.png",
+        prompt="p",
+        status="ready",
+    )
+    db.add(look)
+    await db.flush()
+    look_id = str(look.id)
+    # 이 룩이 기본 룩으로 선택돼 있다고 가정 — 삭제 시 함께 해제돼야 한다.
+    professor.photo_avatar_default_look_id = look_id
+    await db.flush()
+
+    resp = await client.delete(
+        f"/api/avatars/me/looks/{look_id}",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+    # row 가 실제로 사라졌다.
+    remaining = (
+        await db.execute(select(PhotoAvatarLook).where(PhotoAvatarLook.id == look.id))
+    ).scalar_one_or_none()
+    assert remaining is None
+
+    # 기본 룩 포인터도 해제됐다.
+    await db.refresh(professor)
+    assert professor.photo_avatar_default_look_id is None
+
+
+@pytest.mark.asyncio
+async def test_delete_unknown_look_returns_404(client, professor):
+    """존재하지 않는 룩은 404. (유효 UUID 형식이지만 DB 에 없음.)"""
+    bogus = str(uuid.uuid4())
+    resp = await client.delete(
+        f"/api/avatars/me/looks/{bogus}",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 404
+
+
 # ── generate_gpt_looks 태스크 ─────────────────────────────────────────────────
 
 

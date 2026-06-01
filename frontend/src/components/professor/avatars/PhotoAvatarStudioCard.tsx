@@ -92,6 +92,17 @@ export default function PhotoAvatarStudioCard({
     [flow, toast, t],
   );
 
+  const handleDelete = useCallback(
+    async (lookId: string) => {
+      try {
+        await flow.remove(lookId);
+      } catch {
+        toast(t("looks.error"), "error");
+      }
+    },
+    [flow, toast, t],
+  );
+
   // ④ "기본 룩 지정" 확정 — flow.select 가 이미 기본 룩을 저장했으므로 여기선
   // 확정 상태로 전환하고 부모에게 알린다(갤러리 새로고침).
   const handleConfirm = useCallback(() => {
@@ -234,6 +245,7 @@ export default function PhotoAvatarStudioCard({
             <LookGenerateStep
               looks={flow.looks}
               onGenerate={handleGenerate}
+              onDelete={handleDelete}
               looksPending={flow.looksPending}
               lastInput={flow.lastInput}
               reducedMotion={reducedMotion}
@@ -248,6 +260,10 @@ export default function PhotoAvatarStudioCard({
               looks={flow.looks}
               selectedLookId={flow.selectedLookId}
               onSelect={handleSelect}
+              onGenerate={handleGenerate}
+              onDelete={handleDelete}
+              lastInput={flow.lastInput}
+              looksPending={flow.looksPending}
               reducedMotion={reducedMotion}
               onBack={() => flow.goTo("generate")}
               onRestart={restart}
