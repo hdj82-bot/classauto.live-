@@ -213,6 +213,37 @@ class TestBuildPrompt:
         assert "university professor" in p
         assert "PRESERVE EXACTLY" in p
 
+    def test_prop_and_pose_inject_directives(self):
+        """v0.3: prop·pose 가 주어지면 'INCLUDE in the scene'·'POSE the subject'
+        명령으로 프롬프트에 들어간다."""
+        p = oi.build_prompt(
+            "educator", None, None, None, None,
+            prop="mic_stand", pose="gesturing",
+        )
+        assert "INCLUDE in the scene" in p
+        assert "podcast" in p.lower()  # mic_stand 설명에 podcast microphone 포함
+        assert "POSE the subject" in p
+        assert "mid-gesture" in p or "gesture" in p.lower()
+
+    def test_holding_mic_pose_forces_handheld_mic(self):
+        """holding_mic 자세는 핸드헬드 마이크 가시성까지 함께 강제한다
+        (prop=mic_stand 가 따로 없어도)."""
+        p = oi.build_prompt(
+            "podcast_host", None, None, None, None, prop=None, pose="holding_mic",
+        )
+        # POSE 블록만 들어가고 prop 블록은 생략돼야 한다.
+        assert "INCLUDE in the scene" not in p
+        assert "POSE the subject" in p
+        # 핸드헬드 마이크가 보여야 한다.
+        assert "handheld" in p.lower()
+        assert "microphone" in p.lower()
+
+    def test_prop_pose_omitted_when_none(self):
+        """prop=None, pose=None 이면 둘 다 명령 블록을 생략한다 (하위호환)."""
+        p = oi.build_prompt("educator", None, None, None, None)
+        assert "INCLUDE in the scene" not in p
+        assert "POSE the subject" not in p
+
     def test_unknown_persona_falls_back_to_educator(self):
         p = oi.build_prompt("___nope___", None, None, None, None)
         assert "university professor" in p

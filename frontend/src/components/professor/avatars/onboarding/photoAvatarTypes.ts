@@ -73,12 +73,26 @@ export type ExpressionKey =
   | "confident"
   | "thoughtful";
 
+/** 소품(선택, null=없음). v0.3 — HeyGen 갤러리 류 다양성. */
+export type PropKey = "mic_stand";
+
+/** 손·팔 자세(선택, null=자동). v0.3. holding_mic 은 핸드헬드 마이크를 함께 강제. */
+export type PoseKey =
+  | "crossed_arms"
+  | "gesturing"
+  | "holding_mic"
+  | "relaxed_at_sides";
+
 /** 룩 배치 생성 입력 — LookGenerateRequest(persona 필수, 나머지 선택)에 대응. */
 export interface LookGenerateInput {
   persona: PersonaKey;
   outfit?: OutfitKey | null;
   background?: BackgroundKey | null;
   expression?: ExpressionKey | null;
+  /** 소품(v0.3). null=없음. */
+  prop?: PropKey | null;
+  /** 손·팔 자세(v0.3). null=자동. */
+  pose?: PoseKey | null;
   /** 추가 자유 묘사(≤500). */
   extra?: string | null;
 }

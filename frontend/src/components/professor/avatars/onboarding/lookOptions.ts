@@ -15,6 +15,8 @@ import type {
   LookGenerateInput,
   OutfitKey,
   PersonaKey,
+  PoseKey,
+  PropKey,
 } from "./photoAvatarTypes";
 
 export interface Option<K extends string> {
@@ -57,6 +59,19 @@ export const EXPRESSION_OPTIONS: Option<ExpressionKey>[] = [
   { key: "warm", label: "따뜻" },
   { key: "confident", label: "자신감" },
   { key: "thoughtful", label: "사려깊음" },
+];
+
+/** 소품(선택, null=없음). v0.3. */
+export const PROP_OPTIONS: Option<PropKey>[] = [
+  { key: "mic_stand", label: "스탠드 마이크" },
+];
+
+/** 손·팔 자세(선택, null=자동). v0.3. */
+export const POSE_OPTIONS: Option<PoseKey>[] = [
+  { key: "crossed_arms", label: "팔짱" },
+  { key: "gesturing", label: "말하는 제스처" },
+  { key: "holding_mic", label: "마이크 잡기" },
+  { key: "relaxed_at_sides", label: "자연스럽게" },
 ];
 
 /** persona 선택 시 채워줄 추천 기본 조합(사용자는 이후 자유 변경 가능). */
