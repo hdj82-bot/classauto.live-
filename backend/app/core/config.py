@@ -123,7 +123,9 @@ class Settings(BaseSettings):
     # Photo Avatar 룩 생성 상한 — 룩 1개당 이미지 생성 비용이 발생하므로
     # 한 번에 생성할 수 개수와 교수자당 누적 개수를 제한해 비용 폭주를 막는다.
     PHOTO_AVATAR_LOOK_BATCH_MAX: int = 4
-    PHOTO_AVATAR_LOOK_TOTAL_MAX: int = 20  # 교수자(계정)당 누적 — 강의당 아님
+    # 교수자(계정)당 누적 — 강의당 아님. 2026-06-01 사용자 결정으로 20→10.
+    # 라이브러리에 너무 많이 쌓이면 선택 피로가 커진다는 판단.
+    PHOTO_AVATAR_LOOK_TOTAL_MAX: int = 10
 
     # ── Photo Avatar v0.2: gpt-image-2 룩 + Talking Photo (docs/planning/12 §0) ──
     # 룩 생성 제공자 전환 feature flag. "gpt" = OpenAI gpt-image-2 즉석 생성 +

@@ -235,6 +235,7 @@ export default function PhotoAvatarStudioCard({
               looks={flow.looks}
               onGenerate={handleGenerate}
               looksPending={flow.looksPending}
+              lastInput={flow.lastInput}
               reducedMotion={reducedMotion}
               onNext={() => flow.goTo("select")}
               onRestart={restart}

@@ -105,8 +105,8 @@ export const LOOK_BATCH_DEFAULT = 3;
 
 /**
  * 교수자당 누적 룩 상한(클라이언트 가드레일). 계약
- * ``PHOTO_AVATAR_LOOK_TOTAL_MAX``(기본 20)에 정렬 — 무심코 다량 생성 방지.
+ * ``PHOTO_AVATAR_LOOK_TOTAL_MAX``(기본 10)에 정렬 — 무심코 다량 생성 방지.
  * 백엔드가 권위 있는 상한을 강제하더라도, UI 도 "추가 생성"을 여기서 막고
  * 초과 시 소프트 안내(docs §0.5②)를 노출한다.
  */
-export const LOOK_TOTAL_MAX = 20;
+export const LOOK_TOTAL_MAX = 10;

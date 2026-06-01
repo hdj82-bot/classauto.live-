@@ -48,6 +48,8 @@ export interface PhotoAvatarFlow {
   deferred: boolean;
   /** 룩 생성/조회가 진행 중인지(폴링 중). */
   looksPending: boolean;
+  /** 직전 룩 배치 생성에 사용된 입력 — LookDetailModal 의 재생성 base. */
+  lastInput: LookGenerateInput | null;
   goTo: (step: OnboardingStep) => void;
   uploadPhoto: (file: File) => Promise<void>;
   /** 구조화 옵션으로 룩 배치(기본 LOOK_BATCH_DEFAULT 장)를 생성한다. */
@@ -65,6 +67,7 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
   const [selectedLookId, setSelectedLookId] = useState<string | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [deferred, setDeferred] = useState(false);
+  const [lastInput, setLastInput] = useState<LookGenerateInput | null>(null);
 
   const looksTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const clearLooksTimer = useCallback(() => {
@@ -131,6 +134,7 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     async (input: LookGenerateInput) => {
       // 구조화 옵션으로 한 배치(기본 LOOK_BATCH_DEFAULT 장)를 생성한다.
       await generateLooks(input, LOOK_BATCH_DEFAULT);
+      setLastInput(input); // LookDetailModal 재생성용 base.
       const list = await listLooks();
       setLooks(list);
       setDeferred(isDeferredMode());
@@ -170,6 +174,7 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     initializing,
     deferred,
     looksPending,
+    lastInput,
     goTo,
     uploadPhoto,
     generate,

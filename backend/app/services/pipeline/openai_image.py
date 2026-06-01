@@ -43,63 +43,126 @@ class OpenAIModerationRefused(OpenAIImageError):
 # 창2: 아래 매핑을 실제 룩 품질에 맞게 정교화할 것. 키(enum 값)는 schemas/avatar.py
 # 의 PersonaT/OutfitT/BackgroundT/ExpressionT 와 1:1 로 유지(계약).
 
+# 키(enum 값)는 schemas/avatar.py 의 PersonaT/OutfitT/BackgroundT/ExpressionT 와
+# 1:1 로 유지(계약). 값은 영어 직접 — 별도 번역 LLM 호출 금지.
+#
+# 2026-06-01 정교화: 기존 매핑이 persona/outfit/background/expression 을 전혀
+# 반영하지 못하고 원본 사진의 배경만 바꾸는 결과가 나왔다(사용자 보고). 원인은
+# (1) 매핑 문장이 묘사적(passive — "wearing a blazer")이라 gpt-image-2 가
+# reference 사진의 의상을 그대로 유지했고, (2) HIDDEN_RULES 의 "Do not alter"
+# 어조가 의상·배경 교체보다 우선 적용된 것. 아래 매핑은 "REPLACE / DRESS /
+# PLACE / SHOW" 류 동작 동사 + 구체적 컬러·재질 디테일로 강화한다.
+
 PERSONA_PROMPTS: dict[str, str] = {
     "educator": (
-        "a friendly university professor with an approachable, trustworthy academic "
-        "presence, looking directly at the camera as if teaching a class"
+        "an approachable university professor mid-lecture, projecting warm academic "
+        "authority, body slightly angled toward camera, hands relaxed"
     ),
     "researcher": (
-        "a focused researcher with a scholarly, precise and composed demeanor, "
-        "intellectual and credible"
+        "a focused academic researcher in deep concentration, scholarly and precise, "
+        "intellectual gravitas, steady eye contact"
     ),
     "mentor": (
-        "a warm, encouraging mentor with a reassuring and supportive presence, "
-        "patient and attentive"
+        "a warm encouraging mentor in a one-on-one conversation, reassuring and "
+        "supportive presence, attentive posture leaning slightly in"
     ),
     "podcast_host": (
-        "a conversational podcast host with an engaging, relaxed and personable "
-        "presence, naturally expressive"
+        "a charismatic podcast host mid-conversation, relaxed and personable, "
+        "engaging body language, naturally expressive face"
     ),
 }
+# Outfit: 단순 명칭(blazer) → 구체적 컬러·재질·실루엣까지 지정해 reference 의
+# 원본 의상을 확실히 덮어쓰도록 강화. 색은 의도적으로 ‘짙은 네이비’류로 고정해
+# 강의 영상 톤에 자연스럽게 맞춘다.
 OUTFIT_PROMPTS: dict[str, str] = {
-    "suit": "a well-fitted tailored business suit with a clean shirt",
-    "blazer": "a smart blazer worn over a collared shirt",
-    "shirt": "a crisp, clean collared dress shirt",
-    "knit": "a tidy, refined knit sweater",
-    "tee": "a plain, good-quality fitted t-shirt",
-    "hoodie": "a clean, smart-casual hoodie",
+    "suit": (
+        "a sharply tailored charcoal-grey two-piece business suit with a crisp white "
+        "dress shirt and a subtle dark tie, clean lapels and visible shoulder line"
+    ),
+    "blazer": (
+        "a structured navy-blue wool blazer worn over a clean light-blue collared "
+        "shirt, no tie, smart-casual cut"
+    ),
+    "shirt": (
+        "a crisply pressed sky-blue Oxford dress shirt with the top button undone, "
+        "no jacket, clean collar lines"
+    ),
+    "knit": (
+        "a soft warm-beige fine-knit crewneck sweater layered over a thin white "
+        "shirt collar, refined and tidy texture"
+    ),
+    "tee": (
+        "a clean fitted heather-grey premium cotton t-shirt with a tidy crew neckline"
+    ),
+    "hoodie": (
+        "a clean charcoal full-zip hoodie worn unzipped over a plain dark tee, "
+        "smart-casual but composed"
+    ),
 }
+# Background: 단순 위치(lecture hall) → 인물 뒤로 보이는 구체적 디테일 + 부드러운
+# bokeh. 너무 화려하면 인물이 묻히므로 ‘softly blurred / shallow depth of field’
+# 를 일관되게 깐다.
 BACKGROUND_PROMPTS: dict[str, str] = {
-    "lecture": "a bright modern lecture hall, softly blurred behind the subject",
-    "lab": "a tidy, well-lit research laboratory, softly blurred behind the subject",
-    "study": "a warm study lined with bookshelves, softly blurred behind the subject",
-    "studio": "a clean, evenly lit neutral studio backdrop",
-    "lounge": "a warm lounge with greenery, softly blurred behind the subject",
-    "cafe": "a softly lit, cozy cafe interior, gently blurred behind the subject",
+    "lecture": (
+        "a bright modern university lecture hall with rows of empty seats and a large "
+        "whiteboard, softly out-of-focus behind the subject (shallow depth of field)"
+    ),
+    "lab": (
+        "a tidy well-lit research laboratory with glassware, monitors, and lab "
+        "benches gently bokeh'd behind the subject"
+    ),
+    "study": (
+        "a warm private study with floor-to-ceiling walnut bookshelves and a soft "
+        "warm lamp, softly out-of-focus behind the subject"
+    ),
+    "studio": (
+        "a clean evenly-lit neutral grey studio backdrop, professional headshot "
+        "context, no clutter"
+    ),
+    "lounge": (
+        "a warm contemporary lounge with potted greenery and soft natural daylight, "
+        "softly out-of-focus behind the subject"
+    ),
+    "cafe": (
+        "a softly lit cozy specialty-coffee cafe interior with warm wood tones and "
+        "subtle hanging lights, gently bokeh'd behind the subject"
+    ),
 }
+# Expression: 단순 형용사 → 입꼬리/눈가 등 구체적 표정 근육 묘사로 강화.
 EXPRESSION_PROMPTS: dict[str, str] = {
-    "neutral": "a calm, composed neutral expression",
-    "friendly": "a friendly, open expression with a light smile",
-    "warm": "a warm, gentle and welcoming smile",
-    "confident": "a confident, self-assured expression",
-    "thoughtful": "a thoughtful, attentive expression",
+    "neutral": "a calm composed neutral expression, relaxed mouth, steady eyes",
+    "friendly": (
+        "a friendly open expression with a gentle natural light smile and warm eyes"
+    ),
+    "warm": "a warm welcoming smile, soft crinkle at the eyes, kind and inviting",
+    "confident": (
+        "a confident self-assured expression, steady direct gaze, subtle composed "
+        "smile of authority"
+    ),
+    "thoughtful": (
+        "a thoughtful attentive expression, slight tilt of the head, subtly furrowed "
+        "brow as if listening intently"
+    ),
 }
 
-# 사용자에게 노출하지 않는 HeyGen 최적화 레이어 — 항상 주입(docs §0.5 ①·③, PRD Hidden Layer).
-# 정체성 보존(같은 인물)·talking-head 적합 프레이밍(정면·인물 중심 1:1~포트레이트·
-# 머리 ~30% 프레임·입/턱 비가림)을 강제한다. 정체성의 1차 보증은 images/edits +
-# input_fidelity:high 이고, 이 문장은 프레이밍·조명·화질을 보조한다.
+# 사용자에게 노출하지 않는 HeyGen 최적화 레이어 — 항상 주입(docs §0.5 ①·③).
+# 2026-06-01 정교화: "정체성 보존"을 얼굴 한정으로 명시(머리카락 정돈·의상·
+# 배경은 교체 허용)해 outfit/background 가 reference 사진에 묶이지 않게 한다.
+# talking-head 프레이밍(정면·인물 중심·머리 ~30% 프레임·입/턱 비가림)은 유지.
 _HIDDEN_HEYGEN_RULES = (
-    "Preserve the exact same person from the reference image — identical identity, "
-    "age, gender, ethnicity, facial proportions, hairstyle, and facial features. "
-    "Do not beautify, slim, or alter the face. "
-    "Single person only, upper-body portrait, direct frontal view at eye level, "
+    "PRESERVE EXACTLY (face only): the same person's identical facial identity, age, "
+    "gender, ethnicity, facial proportions, skin tone, eye shape and color, eyebrows, "
+    "nose, lips, and overall facial features as in the reference photo. "
+    "Do NOT beautify, slim, smooth, or alter the face. "
+    "Hairstyle should remain the same person's natural hair but may be neatly groomed. "
+    "Framing: single person only, upper-body portrait, direct frontal view at eye level, "
     "face centered and fully visible with the mouth and jawline unobstructed, "
     "head occupying about 30% of the frame with comfortable headroom. "
     "Soft, even frontal lighting with no harsh shadows. "
-    "Ultra photorealistic, DSLR portrait quality, natural and detailed skin texture, "
-    "sharp focus on the face. "
-    "Optimized as a still reference for a HeyGen talking-head avatar and lip-sync animation."
+    "Render style: ultra photorealistic, DSLR portrait quality (85mm f/2.8 look), "
+    "natural detailed skin texture with visible pores, sharp focus on the face. "
+    "This still will be animated as a HeyGen talking-head avatar, so the mouth area "
+    "must be unobstructed and lighting must be even and forward."
 )
 
 
@@ -110,19 +173,36 @@ def build_prompt(
     expression: str | None,
     extra: str | None,
 ) -> str:
-    """구조화 옵션 → gpt-image-2 영어 프롬프트. (창2: 문구 정교화 가능, 구조 유지.)"""
-    parts = [PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["educator"])]
+    """구조화 옵션 → gpt-image-2 영어 프롬프트.
+
+    2026-06-01 정교화: 명령형 구조(REPLACE / DRESS / PLACE / SHOW)로 재구성해
+    reference 사진의 의상·배경이 그대로 유지되던 회귀를 해소한다. 얼굴은 PRESERVE,
+    의상/배경/표정은 REPLACE/RENDER 로 의미를 분리한다.
+    """
+    persona_desc = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["educator"])
+    # 의상·배경·표정은 사용자가 명시한 항목만 강제 교체 지시문으로 포함한다.
+    # 자동(None) 인 항목은 모델이 persona 에 어울리게 알아서 채우게 둔다.
+    directives: list[str] = []
     if outfit and outfit in OUTFIT_PROMPTS:
-        parts.append(f"wearing {OUTFIT_PROMPTS[outfit]}")
+        directives.append(
+            f"REPLACE the clothing entirely — dress the subject in {OUTFIT_PROMPTS[outfit]}, "
+            f"overriding any clothing visible in the reference photo."
+        )
     if background and background in BACKGROUND_PROMPTS:
-        parts.append(f"in {BACKGROUND_PROMPTS[background]}")
+        directives.append(
+            f"REPLACE the background entirely — place the subject in {BACKGROUND_PROMPTS[background]}, "
+            f"overriding any background visible in the reference photo."
+        )
     if expression and expression in EXPRESSION_PROMPTS:
-        parts.append(EXPRESSION_PROMPTS[expression])
-    if extra:
-        parts.append(extra.strip())
-    subject = ", ".join(parts)
+        directives.append(
+            f"RENDER the subject with {EXPRESSION_PROMPTS[expression]}."
+        )
+    directive_block = " ".join(directives)
+    extra_block = f" Additional user request: {extra.strip()}." if extra and extra.strip() else ""
     return (
-        f"Create a photorealistic professional instructor avatar: {subject}. "
+        f"Generate a photorealistic upper-body portrait of {persona_desc}. "
+        f"{directive_block}"
+        f"{extra_block} "
         f"{_HIDDEN_HEYGEN_RULES}"
     )
 

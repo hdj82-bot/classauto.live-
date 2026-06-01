@@ -172,9 +172,28 @@ class TestBuildPrompt:
         assert "business suit" in p
         assert "laboratory" in p
         assert "검은 뿔테 안경" in p
-        # 숨은 규칙(정체성·talking-head 프레이밍)이 항상 주입된다.
-        assert "Preserve the exact same person" in p
+        # 숨은 규칙(face-only 보존·talking-head 프레이밍)이 항상 주입된다.
+        # 2026-06-01: "Preserve" 어조를 "PRESERVE EXACTLY (face only)" 로 강화.
+        assert "PRESERVE EXACTLY" in p
         assert "talking-head" in p
+
+    def test_replace_directives_for_outfit_and_background(self):
+        """outfit·background 가 'REPLACE ... entirely' 명령형으로 들어가야
+        gpt-image-2 가 reference 사진의 원래 의상·배경을 덮어쓴다.
+        (2026-06-01 회귀 가드: 옵션 미반영 사고.)"""
+        p = oi.build_prompt("educator", "blazer", "lecture", None, None)
+        assert "REPLACE the clothing entirely" in p
+        assert "REPLACE the background entirely" in p
+
+    def test_omits_directives_for_auto_options(self):
+        """outfit/background/expression 이 None 이면 명령 블록을 생략한다 —
+        모델이 persona 에 어울리게 알아서 채우게 둔다."""
+        p = oi.build_prompt("educator", None, None, None, None)
+        assert "REPLACE the clothing" not in p
+        assert "REPLACE the background" not in p
+        # persona·hidden rules 는 여전히 들어간다.
+        assert "university professor" in p
+        assert "PRESERVE EXACTLY" in p
 
     def test_unknown_persona_falls_back_to_educator(self):
         p = oi.build_prompt("___nope___", None, None, None, None)

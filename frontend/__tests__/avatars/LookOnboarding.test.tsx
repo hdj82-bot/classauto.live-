@@ -27,13 +27,22 @@ const readyLook = (id: string): Look => ({
   status: "ready",
 });
 
+const failedLook = (id: string): Look => ({
+  look_id: id,
+  image_url: null,
+  preview_image_url: null,
+  prompt: "p",
+  status: "failed",
+});
+
 describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
-  it("자유 프롬프트 갤러리 대신 옵션 폼을 렌더한다", () => {
+  it("자유 프롬프트 갤러리 대신 옵션 폼을 렌더하고 첫 생성에서는 '추가 요청' 필드를 노출하지 않는다", () => {
     render(
       <LookGenerateStep
         looks={[]}
         onGenerate={vi.fn()}
         looksPending={false}
+        lastInput={null}
         reducedMotion={false}
         onNext={vi.fn()}
         onRestart={vi.fn()}
@@ -41,9 +50,11 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
       />,
     );
     expect(screen.getByTestId("look-option-form")).toBeTruthy();
-    // v0.1 프리셋 갤러리·자유 입력은 제거됐다.
+    // v0.1 프리셋 갤러리는 제거됐고, v0.2 의 첫 생성에서도 extra 필드는 없다
+    // (extra 는 LookDetailModal 에서만 활성 — 2026-06-01 정책).
     expect(screen.queryByTestId("look-preset-gallery")).toBeNull();
     expect(screen.queryByTestId("look-prompt")).toBeNull();
+    expect(screen.queryByTestId("look-extra")).toBeNull();
   });
 
   it("'룩 생성' 클릭 시 기본 persona 추천 조합으로 구조화 입력을 전달한다", async () => {
@@ -53,6 +64,7 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
         looks={[]}
         onGenerate={onGenerate}
         looksPending={false}
+        lastInput={null}
         reducedMotion={false}
         onNext={vi.fn()}
         onRestart={vi.fn()}
@@ -62,7 +74,7 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
     fireEvent.click(screen.getByTestId("look-generate-btn"));
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
-    // 기본 educator + 추천 조합(blazer/lecture/friendly), extra 없음.
+    // 기본 educator + 추천 조합(blazer/lecture/friendly), extra 는 항상 null.
     expect(onGenerate).toHaveBeenCalledWith({
       persona: "educator",
       outfit: "blazer",
@@ -80,6 +92,7 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
         looks={looks}
         onGenerate={onGenerate}
         looksPending={false}
+        lastInput={null}
         reducedMotion={false}
         onNext={vi.fn()}
         onRestart={vi.fn()}
@@ -98,6 +111,7 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
         looks={[]}
         onGenerate={vi.fn()}
         looksPending={false}
+        lastInput={null}
         reducedMotion={false}
         onNext={vi.fn()}
         onRestart={onRestart}
@@ -106,6 +120,51 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
     );
     fireEvent.click(screen.getByTestId("generate-restart"));
     expect(onRestart).toHaveBeenCalledTimes(1);
+  });
+
+  it("실패한 룩 카드는 갤러리에 노출하지 않는다 (2026-06-01 정책)", () => {
+    // 회귀 가드: 이전에는 status='failed' 도 그대로 렌더돼 노이즈가 됐다.
+    const looks: Look[] = [
+      readyLook("ok-1"),
+      failedLook("fail-1"),
+      failedLook("fail-2"),
+      readyLook("ok-2"),
+    ];
+    render(
+      <LookGenerateStep
+        looks={looks}
+        onGenerate={vi.fn()}
+        looksPending={false}
+        lastInput={null}
+        reducedMotion={false}
+        onNext={vi.fn()}
+        onRestart={vi.fn()}
+        t={t}
+      />,
+    );
+    expect(screen.getByTestId("look-tile-ok-1")).toBeTruthy();
+    expect(screen.getByTestId("look-tile-ok-2")).toBeTruthy();
+    expect(screen.queryByTestId("look-tile-fail-1")).toBeNull();
+    expect(screen.queryByTestId("look-tile-fail-2")).toBeNull();
+  });
+
+  it("ready 룩 타일을 클릭하면 16:9 상세 모달이 열린다", () => {
+    render(
+      <LookGenerateStep
+        looks={[readyLook("ok-1")]}
+        onGenerate={vi.fn()}
+        looksPending={false}
+        lastInput={null}
+        reducedMotion={false}
+        onNext={vi.fn()}
+        onRestart={vi.fn()}
+        t={t}
+      />,
+    );
+    expect(screen.queryByTestId("look-detail-modal")).toBeNull();
+    fireEvent.click(screen.getByTestId("look-tile-ok-1"));
+    expect(screen.getByTestId("look-detail-modal")).toBeTruthy();
+    expect(screen.getByTestId("look-detail-extra")).toBeTruthy();
   });
 });
 

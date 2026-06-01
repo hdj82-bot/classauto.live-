@@ -29,10 +29,14 @@ interface LookOptionFormProps {
 }
 
 /**
- * v0.2 룩 생성 옵션 폼 — persona(필수)·outfit·background·expression 칩 선택 +
- * extra 자유 입력. 자유 프롬프트 갤러리(v0.1)를 대체한다. persona 를 고르면
- * 추천 조합(lookOptions.RECOMMENDED)으로 나머지를 채우고, 사용자는 이후 칩으로
- * 자유 변경한다. 출력은 계약 LookGenerateRequest 에 대응하는 LookGenerateInput.
+ * v0.2 룩 생성 옵션 폼 — persona(필수)·outfit·background·expression 칩 선택.
+ * persona 를 고르면 추천 조합(lookOptions.RECOMMENDED)으로 나머지를 채우고,
+ * 사용자는 이후 칩으로 자유 변경한다. 출력은 계약 LookGenerateRequest 에
+ * 대응하는 LookGenerateInput.
+ *
+ * 2026-06-01 정책 변경: "추가 요청(extra)" 필드는 첫 룩 생성에는 노출하지 않고,
+ * 생성된 룩을 클릭해 열리는 16:9 상세 모달(LookDetailModal)에서만 활성화한다
+ * (자신이 마음에 든 룩을 골라 표정·복장·색감 등 살짝 다듬을 때만 필요한 기능).
  */
 export default function LookOptionForm({
   onGenerate,
@@ -50,7 +54,6 @@ export default function LookOptionForm({
   const [expression, setExpression] = useState<ExpressionKey | null>(
     defaultInputFor("educator").expression ?? null,
   );
-  const [extra, setExtra] = useState("");
 
   // persona 변경 시 나머지를 그 추천 조합으로 재설정(빠른 시작 — 이후 자유 변경).
   const pickPersona = (key: PersonaKey) => {
@@ -63,13 +66,8 @@ export default function LookOptionForm({
 
   const submit = () => {
     if (disabled || capReached) return;
-    onGenerate({
-      persona,
-      outfit,
-      background,
-      expression,
-      extra: extra.trim() ? extra.trim() : null,
-    });
+    // 첫 룩 생성에는 extra 를 보내지 않는다(모달에서만 사용).
+    onGenerate({ persona, outfit, background, expression, extra: null });
   };
 
   return (
@@ -104,17 +102,6 @@ export default function LookOptionForm({
           value={expression}
           onChange={(v) => setExpression(v as ExpressionKey | null)}
           autoLabel={t("looks.options.auto")}
-        />
-      </FieldRow>
-      <FieldRow label={t("looks.options.extraLabel")}>
-        <input
-          type="text"
-          value={extra}
-          maxLength={500}
-          onChange={(e) => setExtra(e.target.value)}
-          placeholder={t("looks.options.extraPlaceholder")}
-          data-testid="look-extra"
-          style={inputStyle}
         />
       </FieldRow>
 
@@ -233,17 +220,6 @@ const chipStyle: CSSProperties = {
   cursor: "pointer",
   fontFamily: "inherit",
   transition: "background 120ms var(--ease-out), border-color 120ms var(--ease-out)",
-};
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  padding: "8px 12px",
-  fontSize: 13,
-  borderRadius: 10,
-  border: "1px solid var(--line-strong)",
-  background: "var(--bg-card)",
-  color: "var(--text)",
-  fontFamily: "inherit",
 };
 
 const primaryBtn: CSSProperties = {
