@@ -65,7 +65,8 @@ class TestMockPath:
 class TestRealCall:
     @pytest.mark.asyncio
     async def test_decodes_b64_to_bytes(self):
-        edit = AsyncMock(return_value=_fake_edit_response(2))
+        """v0.4 (2026-06-01): count 만큼 별도 호출(N분할). 각 호출은 n=1."""
+        edit = AsyncMock(return_value=_fake_edit_response(1))
         with (
             patch.object(settings, "OPENAI_IMAGE_MOCK", False),
             patch.object(settings, "PHOTO_AVATAR_INPUT_FIDELITY", "high"),
@@ -75,13 +76,54 @@ class TestRealCall:
                 b"img", "image/png", "researcher", "suit", "lab", "confident", "안경", 2
             )
         assert out == [b"fake-png-bytes", b"fake-png-bytes"]
-        edit.assert_awaited_once()
-        # 계약: input_fidelity·quality·model 을 settings 에서 전달.
+        # count 만큼 호출됐다(이전엔 1번 호출 + n=count).
+        assert edit.await_count == 2
+        # 마지막 호출의 계약 검증 — input_fidelity·quality·model + n=1.
         kwargs = edit.await_args.kwargs
         assert kwargs["model"] == settings.OPENAI_IMAGE_MODEL
         assert kwargs["input_fidelity"] == "high"
         assert kwargs["quality"] == settings.PHOTO_AVATAR_IMAGE_QUALITY
-        assert kwargs["n"] == 2
+        assert kwargs["n"] == 1, "v0.4: N 분할 호출이므로 각 요청은 n=1."
+
+    @pytest.mark.asyncio
+    async def test_pose_rotation_when_pose_is_none(self):
+        """pose=None 이면 호출별 prompt 에 relaxed/crossed/gesturing 이 순환된다.
+
+        회귀 가드(2026-06-01): 사용자 요청 "3장 중 하나는 정자세·하나는 팔짱·
+        하나는 말하는 제스처" 의 핵심 동작.
+        """
+        edit = AsyncMock(return_value=_fake_edit_response(1))
+        with (
+            patch.object(settings, "OPENAI_IMAGE_MOCK", False),
+            _patch_async_openai(edit),
+        ):
+            await oi.generate_instructor_looks(
+                b"img", "image/png", "educator", None, None, None, None, 3,
+                # pose 미지정 → rotation 발동.
+            )
+        assert edit.await_count == 3
+        prompts = [call.kwargs["prompt"] for call in edit.await_args_list]
+        # 각 호출의 prompt 에 해당 자세 키워드가 포함된다.
+        assert "relaxed naturally at the sides" in prompts[0]  # _POSE_ROTATION[0]
+        assert "arms crossed comfortably" in prompts[1]        # _POSE_ROTATION[1]
+        assert "mid-gesture" in prompts[2]                     # _POSE_ROTATION[2]
+
+    @pytest.mark.asyncio
+    async def test_pose_explicit_applies_to_all_calls(self):
+        """pose 가 명시되면 rotation 대신 모든 호출에 동일 적용(LookDetailModal 경로)."""
+        edit = AsyncMock(return_value=_fake_edit_response(1))
+        with (
+            patch.object(settings, "OPENAI_IMAGE_MOCK", False),
+            _patch_async_openai(edit),
+        ):
+            await oi.generate_instructor_looks(
+                b"img", "image/png", "educator", None, None, None, None, 3,
+                pose="holding_mic",
+            )
+        prompts = [call.kwargs["prompt"] for call in edit.await_args_list]
+        # 3장 모두 holding_mic 키워드 포함, 다른 rotation 키워드는 들어가지 않음.
+        assert all("handheld podcast microphone" in p for p in prompts)
+        assert not any("arms crossed comfortably" in p for p in prompts)
 
     @pytest.mark.asyncio
     async def test_size_is_landscape_16_9_class(self):
