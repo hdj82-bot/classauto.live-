@@ -75,13 +75,44 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
 
     await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
     // 기본 educator + 추천 조합(blazer/lecture/friendly), extra 는 항상 null.
+    // v0.3: prop·pose 기본값 null (자동).
     expect(onGenerate).toHaveBeenCalledWith({
       persona: "educator",
       outfit: "blazer",
       background: "lecture",
       expression: "friendly",
+      prop: null,
+      pose: null,
       extra: null,
     });
+  });
+
+  it("v0.3: 소품·손동작 칩 선택이 onGenerate 페이로드에 반영된다", async () => {
+    const onGenerate = vi.fn().mockResolvedValue(undefined);
+    render(
+      <LookGenerateStep
+        looks={[]}
+        onGenerate={onGenerate}
+        looksPending={false}
+        lastInput={null}
+        reducedMotion={false}
+        onNext={vi.fn()}
+        onRestart={vi.fn()}
+        t={t}
+      />,
+    );
+    // 소품: 스탠드 마이크. 손 동작: 마이크 잡기.
+    fireEvent.click(screen.getByText("스탠드 마이크"));
+    fireEvent.click(screen.getByText("마이크 잡기"));
+    fireEvent.click(screen.getByTestId("look-generate-btn"));
+
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
+    expect(onGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prop: "mic_stand",
+        pose: "holding_mic",
+      }),
+    );
   });
 
   it("누적 한도에 도달하면 생성 버튼 대신 소프트 안내를 노출한다", () => {

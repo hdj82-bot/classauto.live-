@@ -227,6 +227,8 @@ export async function generateLooks(
       outfit: input.outfit ?? null,
       background: input.background ?? null,
       expression: input.expression ?? null,
+      prop: input.prop ?? null,
+      pose: input.pose ?? null,
       extra: input.extra ?? null,
       count,
     });

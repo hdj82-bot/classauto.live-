@@ -176,6 +176,11 @@ PersonaT = Literal["educator", "researcher", "mentor", "podcast_host"]
 OutfitT = Literal["suit", "blazer", "shirt", "knit", "tee", "hoodie"]
 BackgroundT = Literal["lecture", "lab", "study", "studio", "lounge", "cafe"]
 ExpressionT = Literal["neutral", "friendly", "warm", "confident", "thoughtful"]
+# v0.3 (2026-06-01): 소품·손동작 옵션 — HeyGen 갤러리 류 다양성을 위해 추가.
+PropT = Literal["mic_stand"]
+"""소품. null=없음(기본). mic_stand=책상 위 팟캐스트 마이크 가시."""
+PoseT = Literal["crossed_arms", "gesturing", "holding_mic", "relaxed_at_sides"]
+"""손·팔 자세. null=자동(모델 알아서). holding_mic 은 핸드헬드 마이크를 든다."""
 
 
 class LookGenerateRequest(BaseModel):
@@ -189,6 +194,12 @@ class LookGenerateRequest(BaseModel):
     outfit: OutfitT | None = Field(default=None, description="복장. null=자동 추론.")
     background: BackgroundT | None = Field(default=None, description="배경. null=자동.")
     expression: ExpressionT | None = Field(default=None, description="표정. null=자동.")
+    prop: PropT | None = Field(
+        default=None, description="소품(v0.3). null=없음. mic_stand=책상 마이크."
+    )
+    pose: PoseT | None = Field(
+        default=None, description="손·팔 자세(v0.3). null=자동."
+    )
     extra: str | None = Field(
         default=None, max_length=500, description="추가 자유 묘사(선택)."
     )

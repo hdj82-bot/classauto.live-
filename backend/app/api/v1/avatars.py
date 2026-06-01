@@ -783,6 +783,8 @@ async def generate_looks(
             payload.background,
             payload.expression,
             payload.extra,
+            payload.prop,
+            payload.pose,
         )
         rows = [
             PhotoAvatarLook(
@@ -808,6 +810,8 @@ async def generate_looks(
             payload.background,
             payload.expression,
             payload.extra,
+            payload.prop,
+            payload.pose,
         )
         return LookGenerateResponse(
             generation_id=None,

@@ -51,7 +51,10 @@
         "outfitLabel": "Outfit",
         "backgroundLabel": "Background",
         "expressionLabel": "Expression",
-        "auto": "Auto"
+        "propLabel": "Prop",
+        "poseLabel": "Hand pose",
+        "auto": "Auto",
+        "propNone": "None"
       },
       "generateCta": "Generate {count} looks",
       "restart": "Start over with a different photo",

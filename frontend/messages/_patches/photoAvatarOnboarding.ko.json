@@ -51,7 +51,10 @@
         "outfitLabel": "복장",
         "backgroundLabel": "배경",
         "expressionLabel": "표정",
-        "auto": "자동"
+        "propLabel": "소품",
+        "poseLabel": "손 동작",
+        "auto": "자동",
+        "propNone": "없음"
       },
       "generateCta": "룩 {count}장 생성",
       "restart": "다른 사진으로 다시 시작",

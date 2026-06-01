@@ -232,6 +232,8 @@ def generate_gpt_looks(
     background: str | None,
     expression: str | None,
     extra: str | None,
+    prop: str | None = None,
+    pose: str | None = None,
 ) -> dict:
     """업로드 사진을 reference 로 gpt-image-2 룩을 생성해 placeholder 행을 채운다.
 
@@ -286,7 +288,16 @@ def generate_gpt_looks(
             ref_bytes = s3_svc.download_file(key)
             images = loop.run_until_complete(
                 openai_image.generate_instructor_looks(
-                    ref_bytes, ctype, persona, outfit, background, expression, extra, count
+                    ref_bytes,
+                    ctype,
+                    persona,
+                    outfit,
+                    background,
+                    expression,
+                    extra,
+                    count,
+                    prop=prop,
+                    pose=pose,
                 )
             )
         except OpenAIModerationRefused:

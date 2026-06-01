@@ -144,6 +144,36 @@ EXPRESSION_PROMPTS: dict[str, str] = {
         "brow as if listening intently"
     ),
 }
+# Prop (v0.3): 장면에 보이는 소품. 핸드헬드 마이크는 별도 POSE("holding_mic")가
+# 책임지므로 여기는 스탠드 마이크만 둔다.
+PROP_PROMPTS: dict[str, str] = {
+    "mic_stand": (
+        "a professional black broadcast/podcast condenser microphone on a desk arm "
+        "stand clearly visible in the foreground beside the subject (camera left or "
+        "right), tasteful and not blocking the face"
+    ),
+}
+# Pose (v0.3): 손·팔의 자세. HeyGen 갤러리 류 다양성 — 발화 제스처·팔짱·마이크
+# 잡기 등. "holding_mic" 은 핸드헬드 마이크의 존재까지 함께 강제한다.
+POSE_PROMPTS: dict[str, str] = {
+    "crossed_arms": (
+        "with both arms crossed comfortably over the chest, hands and forearms clearly "
+        "visible in the frame, confident relaxed stance"
+    ),
+    "gesturing": (
+        "both hands raised mid-gesture in front of the chest as if naturally "
+        "explaining a concept while speaking, expressive open hand position, hands "
+        "clearly visible in the frame"
+    ),
+    "holding_mic": (
+        "holding a professional handheld podcast microphone with one hand near the "
+        "mouth; the handheld microphone must be clearly visible in the scene"
+    ),
+    "relaxed_at_sides": (
+        "with arms relaxed naturally at the sides or one hand resting comfortably "
+        "on a surface, posture composed and unforced"
+    ),
+}
 
 # 사용자에게 노출하지 않는 HeyGen 최적화 레이어 — 항상 주입(docs §0.5 ①·③).
 # 2026-06-01 v2 정교화: 사용자 보고 "얼굴이 너무 타이트하게 잡혀 머리 위가 잘리고
@@ -177,12 +207,16 @@ def build_prompt(
     background: str | None,
     expression: str | None,
     extra: str | None,
+    prop: str | None = None,
+    pose: str | None = None,
 ) -> str:
     """구조화 옵션 → gpt-image-2 영어 프롬프트.
 
     2026-06-01 정교화: 명령형 구조(REPLACE / DRESS / PLACE / SHOW)로 재구성해
     reference 사진의 의상·배경이 그대로 유지되던 회귀를 해소한다. 얼굴은 PRESERVE,
     의상/배경/표정은 REPLACE/RENDER 로 의미를 분리한다.
+    v0.3: prop(소품)·pose(손·팔 자세) 추가 — HeyGen 갤러리 류 다양성을 위해.
+    holding_mic 자세는 핸드헬드 마이크의 존재까지 함께 강제한다.
     """
     persona_desc = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["educator"])
     # 의상·배경·표정은 사용자가 명시한 항목만 강제 교체 지시문으로 포함한다.
@@ -202,6 +236,10 @@ def build_prompt(
         directives.append(
             f"RENDER the subject with {EXPRESSION_PROMPTS[expression]}."
         )
+    if prop and prop in PROP_PROMPTS:
+        directives.append(f"INCLUDE in the scene: {PROP_PROMPTS[prop]}.")
+    if pose and pose in POSE_PROMPTS:
+        directives.append(f"POSE the subject {POSE_PROMPTS[pose]}.")
     directive_block = " ".join(directives)
     extra_block = f" Additional user request: {extra.strip()}." if extra and extra.strip() else ""
     return (
@@ -227,6 +265,8 @@ async def generate_instructor_looks(
     expression: str | None,
     extra: str | None,
     count: int,
+    prop: str | None = None,
+    pose: str | None = None,
 ) -> list[bytes]:
     """업로드 사진 reference 로 룩 이미지 ``count`` 개를 생성해 bytes 목록을 반환.
 
@@ -244,13 +284,15 @@ async def generate_instructor_looks(
         )
         return [_DUMMY_PNG for _ in range(count)]
 
-    prompt = build_prompt(persona, outfit, background, expression, extra)
+    prompt = build_prompt(persona, outfit, background, expression, extra, prop, pose)
     logger.info(
-        "gpt-image-2 룩 생성 요청: model=%s, quality=%s, fidelity=%s, count=%d",
+        "gpt-image-2 룩 생성 요청: model=%s, quality=%s, fidelity=%s, count=%d, prop=%s, pose=%s",
         settings.OPENAI_IMAGE_MODEL,
         settings.PHOTO_AVATAR_IMAGE_QUALITY,
         settings.PHOTO_AVATAR_INPUT_FIDELITY,
         count,
+        prop,
+        pose,
     )
 
     # ── 실제 gpt-image-2 호출 (images/edits) ────────────────────────────────
