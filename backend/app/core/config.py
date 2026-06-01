@@ -129,11 +129,15 @@ class Settings(BaseSettings):
     # 룩 생성 제공자 전환 feature flag. "gpt" = OpenAI gpt-image-2 즉석 생성 +
     # Talking Photo 최종(train 0). "heygen" = 기존 Design with AI 풀코스(롤백용).
     PHOTO_AVATAR_PROVIDER: str = "gpt"
-    # 룩 생성 모델·품질. tier 가 비용의 핵심 레버(high↔medium ~4배). 정체성 보존은
-    # tier 가 아니라 INPUT_FIDELITY 가 책임지므로 기본 medium 으로 충분.
+    # 룩 생성 모델·품질. tier 가 비용의 핵심 레버(high↔medium ~4배).
     OPENAI_IMAGE_MODEL: str = "gpt-image-2"
     PHOTO_AVATAR_IMAGE_QUALITY: str = "medium"  # low|medium|high
-    PHOTO_AVATAR_INPUT_FIDELITY: str = "high"   # reference(교수 사진) 얼굴 보존 강도
+    # reference(교수 사진) 얼굴 보존 강도. **gpt-image-1 전용 파라미터** —
+    # gpt-image-2 는 이 파라미터를 지원하지 않으며, 보내면 400
+    # `invalid_input_fidelity_model` 로 거부된다(2026-06-01 확인).
+    # 빈 문자열이면 호출 시 파라미터를 생략한다(openai_image.py 참조).
+    # 모델별 권장값: gpt-image-2 → "" / gpt-image-1 → "high".
+    PHOTO_AVATAR_INPUT_FIDELITY: str = ""
     PHOTO_AVATAR_LOOK_BATCH_DEFAULT: int = 3    # 한 번에 보여줄 후보 수
     # mock 모드: 켜면 OpenAI 를 호출하지 않고 더미 이미지를 반환(테스트 비용 ₩0).
     # HEYGEN_MOCK 와 동일 패턴.
