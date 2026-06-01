@@ -43,6 +43,61 @@ logger = logging.getLogger(__name__)
 # profile-photo·photo-avatar 두 업로드 엔드포인트가 공통으로 쓴다. 에러 문구는
 # 이 상수에서 자동 계산하므로(``// (1024*1024)``) 값만 바꾸면 메시지도 따라간다.
 _MAX_PROFILE_PHOTO = 20 * 1024 * 1024  # 20MB
+
+# HeyGen Talking Photo 업로드 한도 — 룩 이미지(gpt-image-2 1536x1024 PNG)는
+# 흔히 3-5MB 가 나와 HeyGen 제한(공식 명시는 없으나 실측 4-5MB 부근에서 거부)에
+# 닿을 수 있어, select 단계에서 안전망으로 다운스케일 + JPEG 재인코딩한다.
+_TALKING_PHOTO_MAX_BYTES = 4 * 1024 * 1024  # 4MB — HeyGen 안전 마진
+_TALKING_PHOTO_MAX_SIDE = 1280  # 긴 변 픽셀 — 인물 talking-head 충분
+
+
+def _ensure_talking_photo_payload(
+    img_bytes: bytes, content_type: str
+) -> tuple[bytes, str]:
+    """HeyGen Talking Photo 업로드용으로 이미지를 안전 사이즈로 정규화.
+
+    gpt-image-2 1536x1024 PNG 가 큰 경우 HeyGen 이 거부할 수 있어, 긴 변
+    ``_TALKING_PHOTO_MAX_SIDE`` 이내로 다운스케일하고 JPEG(품질 90)로 재인코딩한다.
+    원본이 이미 작고 4MB 이하면 그대로 통과(불필요한 압축 손실 회피).
+
+    Pillow 의존 — requirements 에 이미 포함됨.
+    """
+    if len(img_bytes) <= _TALKING_PHOTO_MAX_BYTES and content_type != "image/png":
+        # 이미 작은 JPEG 등은 손대지 않는다(추가 압축 손실 회피).
+        return img_bytes, content_type
+
+    from io import BytesIO
+
+    from PIL import Image
+
+    try:
+        img = Image.open(BytesIO(img_bytes))
+        img.load()
+    except Exception as e:  # noqa: BLE001 — corrupt image 등
+        logger.warning("talking_photo 리사이즈 — 디코드 실패, 원본 사용: %s", e)
+        return img_bytes, content_type
+
+    # RGBA·P 모드 → RGB 변환(JPEG 호환).
+    if img.mode in ("RGBA", "LA", "P"):
+        bg = Image.new("RGB", img.size, (255, 255, 255))
+        bg.paste(img.convert("RGBA"), mask=img.convert("RGBA").split()[-1] if "A" in img.mode else None)
+        img = bg
+
+    w, h = img.size
+    longest = max(w, h)
+    if longest > _TALKING_PHOTO_MAX_SIDE:
+        scale = _TALKING_PHOTO_MAX_SIDE / longest
+        new_size = (int(w * scale), int(h * scale))
+        img = img.resize(new_size, Image.LANCZOS)
+
+    buf = BytesIO()
+    img.save(buf, format="JPEG", quality=90, optimize=True)
+    out = buf.getvalue()
+    logger.info(
+        "talking_photo 정규화: %dB(%s) → %dB(JPEG, %dx%d)",
+        len(img_bytes), content_type, len(out), *img.size,
+    )
+    return out, "image/jpeg"
 _JPEG_MAGIC = b"\xff\xd8\xff"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -977,8 +1032,10 @@ async def select_look(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail=f"룩 이미지를 불러오지 못했습니다(S3): {e}",
             ) from e
+        # HeyGen 거부 위험을 줄이기 위해 다운스케일 + JPEG 재인코딩 안전망.
+        safe_bytes, safe_ctype = _ensure_talking_photo_payload(img_bytes, ctype)
         try:
-            talking_photo_id = await upload_talking_photo(img_bytes, content_type=ctype)
+            talking_photo_id = await upload_talking_photo(safe_bytes, content_type=safe_ctype)
         except HeyGenError as e:
             logger.warning(
                 "look-select: HeyGen Talking Photo 등록 실패 — user=%s, look=%s, error=%s",
