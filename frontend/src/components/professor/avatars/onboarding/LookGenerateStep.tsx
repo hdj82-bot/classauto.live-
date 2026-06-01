@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import {
   LOOK_TOTAL_MAX,
   type Look,
@@ -9,6 +9,7 @@ import {
 import { SparkleIcon } from "./PhotoAvatarIcons";
 import LookTile from "./LookTile";
 import LookOptionForm from "./LookOptionForm";
+import LookDetailModal from "./LookDetailModal";
 
 interface LookGenerateStepProps {
   looks: Look[];
@@ -16,6 +17,8 @@ interface LookGenerateStepProps {
   onGenerate: (input: LookGenerateInput) => Promise<void>;
   /** 생성이 진행 중인지(generating 타일 존재). */
   looksPending: boolean;
+  /** 직전 배치 입력 — LookDetailModal 의 재생성 base. */
+  lastInput: LookGenerateInput | null;
   reducedMotion: boolean;
   /** ③ 룩 선택 단계로. ready 룩이 1개 이상일 때 활성. */
   onNext: () => void;
@@ -25,27 +28,44 @@ interface LookGenerateStepProps {
 }
 
 /**
- * ② 구조화 옵션(persona/outfit/background/expression + extra)으로 룩 배치를
- * 생성한다(v0.2 gpt-image-2). 자유 프롬프트 갤러리(v0.1)를 옵션 폼으로 대체했다.
- * 누적 상한(LOOK_TOTAL_MAX)으로 과생성을 막고(docs §0.5②), 완성된 룩이 생기면
- * "다음: 룩 선택" 으로 ③ 선택 단계로 이어진다.
+ * ② 구조화 옵션(persona/outfit/background/expression)으로 룩 배치를
+ * 생성한다(v0.2 gpt-image-2). 누적 상한(LOOK_TOTAL_MAX)으로 과생성을 막고,
+ * 완성된 룩이 생기면 "다음: 룩 선택" 으로 ③ 선택 단계로 이어진다.
+ *
+ * 표시 정책(2026-06-01):
+ * - **실패한 룩은 갤러리에서 숨긴다** — 카드가 계속 남아 시각적 노이즈가 되는
+ *   문제를 해결한다. 백엔드의 cap 계산도 failed 를 제외하므로 정합한다.
+ * - 완성된 룩을 클릭하면 16:9 상세 모달이 열리고, 그 안에서만 "추가 요청"
+ *   필드로 미세 조정 재생성이 가능하다.
  */
 export default function LookGenerateStep({
   looks,
   onGenerate,
   looksPending,
+  lastInput,
   reducedMotion,
   onNext,
   onRestart,
   t,
 }: LookGenerateStepProps) {
   const [submitting, setSubmitting] = useState(false);
+  const [activeLookId, setActiveLookId] = useState<string | null>(null);
 
-  const total = looks.length;
-  const remaining = Math.max(0, LOOK_TOTAL_MAX - total);
+  // failed 는 표시에서 제외(누적 cap 도 백엔드가 failed 제외하므로 일관).
+  const visibleLooks = useMemo(
+    () => looks.filter((l) => l.status !== "failed"),
+    [looks],
+  );
+  // 누적 상한은 visibleLooks(=non-failed) 기준 — 백엔드 계산과 일치.
+  const remaining = Math.max(0, LOOK_TOTAL_MAX - visibleLooks.length);
   const capReached = remaining <= 0;
-  const readyCount = looks.filter((l) => l.status === "ready").length;
+  const readyCount = visibleLooks.filter((l) => l.status === "ready").length;
   const busy = submitting || looksPending;
+
+  const activeLook =
+    activeLookId !== null
+      ? visibleLooks.find((l) => l.look_id === activeLookId) ?? null
+      : null;
 
   const handleGenerate = async (input: LookGenerateInput) => {
     if (busy || capReached) return;
@@ -83,7 +103,7 @@ export default function LookGenerateStep({
       </div>
       <p style={descStyle}>{t("looks.description")}</p>
 
-      {/* 구조화 옵션 폼 — 칩 선택 후 "룩 N장 생성" */}
+      {/* 구조화 옵션 폼 — 칩 선택 후 "룩 N장 생성" (extra 는 없음) */}
       <LookOptionForm
         onGenerate={handleGenerate}
         disabled={busy}
@@ -91,17 +111,23 @@ export default function LookGenerateStep({
         t={t}
       />
 
-      {/* 비용 투명성 안내 (차별점 #2 / docs §8·§10) */}
+      {/* 안내 — 라이브러리 상한 (i18n looks.costNote 가 텍스트를 결정) */}
       {!capReached && (
         <p style={costNote}>{t("looks.costNote", { remaining })}</p>
       )}
 
-      {/* 진행/완료 타일 */}
-      {looks.length > 0 && (
+      {/* 진행/완료 타일 (failed 제외) */}
+      {visibleLooks.length > 0 && (
         <>
           <div style={gridStyle} data-testid="look-grid">
-            {looks.map((look) => (
-              <LookTile key={look.look_id} look={look} reducedMotion={reducedMotion} t={t} />
+            {visibleLooks.map((look) => (
+              <LookTile
+                key={look.look_id}
+                look={look}
+                reducedMotion={reducedMotion}
+                onSelect={(id) => setActiveLookId(id)}
+                t={t}
+              />
             ))}
           </div>
 
@@ -121,6 +147,17 @@ export default function LookGenerateStep({
             </button>
           </div>
         </>
+      )}
+
+      {activeLook && activeLook.status === "ready" && (
+        <LookDetailModal
+          look={activeLook}
+          lastInput={lastInput}
+          onRegenerate={handleGenerate}
+          onClose={() => setActiveLookId(null)}
+          busy={busy}
+          t={t}
+        />
       )}
     </div>
   );

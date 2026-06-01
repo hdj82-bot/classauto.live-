@@ -51,19 +51,27 @@
         "outfitLabel": "Outfit",
         "backgroundLabel": "Background",
         "expressionLabel": "Expression",
-        "extraLabel": "Extra",
-        "extraPlaceholder": "e.g. wearing glasses, bright mood (optional)",
         "auto": "Auto"
       },
       "generateCta": "Generate {count} looks",
       "restart": "Start over with a different photo",
-      "costNote": "Generating looks is a one-time onboarding step. You can make up to {remaining} more in this step.",
+      "costNote": "Just pick from the categories above. Your library can hold up to 10 looks.",
       "capReached": "Please pick from the looks you've already made. You can generate more again shortly.",
       "next": "Next: pick a look",
       "error": "Could not start look generation. Please try again shortly.",
       "tileAlt": "Generated look preview",
       "tileGenerating": "Generating",
-      "tileFailed": "Failed"
+      "tileFailed": "Failed",
+      "detail": {
+        "title": "Look detail",
+        "close": "Close",
+        "extraLabel": "Refinement",
+        "extraPlaceholder": "e.g. blue tie / a brighter smile / add glasses",
+        "extraHelp": "We'll keep this look's base and tweak only the expression, outfit, or color you describe.",
+        "regenerate": "Regenerate with this refinement",
+        "regenerating": "Regenerating...",
+        "regenerated": "A new look is being generated and will appear below."
+      }
     },
 
     "select": {

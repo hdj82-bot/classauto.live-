@@ -159,6 +159,7 @@ export default function PhotoAvatarOnboardingPage() {
                 looks={flow.looks}
                 onGenerate={handleGenerate}
                 looksPending={flow.looksPending}
+                lastInput={flow.lastInput}
                 reducedMotion={reducedMotion}
                 onNext={() => flow.goTo("select")}
                 onRestart={() => flow.goTo("upload")}
