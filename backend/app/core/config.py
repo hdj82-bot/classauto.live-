@@ -233,13 +233,30 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-# 1단계(베타 무료 배포)는 결제 비활성화 — STRIPE_* 는 검증에서 제외.
-# 결제 엔드포인트는 STRIPE_SECRET_KEY 가 비어 있으면 런타임에 503 으로 차단된다
-# (app/api/v1/payment.py 의 _require_stripe). Phase 7 유료 전환 시 다시 추가.
+# 프로덕션에서 비어 있으면 부팅을 막을 필수 키.
+# 핵심 파이프라인(스크립트·영상·룩·임베딩·저장)이 키 하나만 비어도 조용히
+# 죽기 때문에, 경고가 아니라 부팅 크래시로 즉시 드러나게 한다(실패는 시끄럽게).
+# 1단계(베타 무료 배포)는 결제 비활성화 — STRIPE_* 는 제외. 결제 엔드포인트는
+# STRIPE_SECRET_KEY 가 비어 있으면 런타임에 503 으로 차단된다
+# (app/api/v1/payment.py 의 _require_stripe). Phase 7 유료 전환 시 추가.
 _REQUIRED_IN_PROD = [
     "HEYGEN_WEBHOOK_SECRET",
     "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",      # 임베딩(RAG)·gpt-image 룩 생성
+    "HEYGEN_API_KEY",      # 아바타 영상 렌더
+    "S3_BUCKET",           # PPT·썸네일·룩 이미지 저장
+    "AWS_ACCESS_KEY_ID",   # S3 자격증명
+    "AWS_SECRET_ACCESS_KEY",
 ]
+
+# 키 자리에 그대로 남은 템플릿 placeholder — 비어 있지 않아 종전 검증을 통과한 뒤
+# 런타임 401 로 조용히 실패하던 것을 부팅에서 차단한다(.env.production 의 CHANGE_ME 등).
+_PLACEHOLDER_MARKERS = ("CHANGE_ME", "CHANGE-ME", "CHANGEME", "YOUR_", "YOUR-", "XXXXX")
+
+
+def _looks_like_placeholder(value: str) -> bool:
+    upper = value.strip().upper()
+    return any(marker in upper for marker in _PLACEHOLDER_MARKERS)
 
 
 def _validate_settings() -> None:
@@ -253,6 +270,8 @@ def _validate_settings() -> None:
             raise RuntimeError("JWT_ALGORITHM은 HS256만 허용됩니다.")
         if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
             raise RuntimeError("프로덕션에서 Google OAuth 설정은 필수입니다.")
+        if _looks_like_placeholder(settings.JWT_SECRET_KEY):
+            raise RuntimeError("JWT_SECRET_KEY 가 placeholder 값입니다 — 실제 시크릿으로 교체하세요.")
 
         # 빈 문자열·공백만 들어간 값도 누락으로 간주 — pydantic 의 default ""
         # 가 환경변수로 무심코 덮어써졌을 때 production 에서 사일런트 통과 차단.
@@ -262,6 +281,23 @@ def _validate_settings() -> None:
         ]
         if missing:
             raise RuntimeError(f"프로덕션 필수 환경변수 누락: {missing}")
+
+        # 비어있진 않지만 CHANGE_ME 류 placeholder 가 남은 키 — 런타임 401 전에 차단.
+        placeholders = [
+            k for k in _REQUIRED_IN_PROD
+            if _looks_like_placeholder(getattr(settings, k) or "")
+        ]
+        if placeholders:
+            raise RuntimeError(
+                f"프로덕션 필수 환경변수에 placeholder 값이 남아 있습니다: {placeholders}"
+            )
+
+        # 키 형식 sanity — 잘못 붙여넣은 키를 조기에 잡는다. 프록시/Azure 등 변형을
+        # 막지 않도록 하드 실패가 아니라 경고만 한다.
+        if settings.ANTHROPIC_API_KEY and not settings.ANTHROPIC_API_KEY.startswith("sk-ant-"):
+            logger.warning("ANTHROPIC_API_KEY 형식이 'sk-ant-' 로 시작하지 않습니다 — 키를 확인하세요.")
+        if settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith("sk-"):
+            logger.warning("OPENAI_API_KEY 형식이 'sk-' 로 시작하지 않습니다 — 키를 확인하세요.")
 
     # 개발/프로덕션 공통: 핵심 API 키 경고
     missing_keys = []
