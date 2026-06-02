@@ -43,21 +43,28 @@ export default function LookTile({
   const interactive = !!onSelect && (isReady || !!allowOpenAnyStatus);
   const Wrapper = interactive ? "button" : "div";
 
-  // 생성 중 진행 막대 — 1초마다 리렌더해 ETA 막대를 채운다. 시작 시각은 서버
-  // created_at(탭을 닫았다 열어도 정확) 우선, 없으면 처음 본 시각으로 폴백.
-  const [, setTick] = useState(0);
+  // 생성 중 진행 막대 — 1초마다 현재 시각을 상태에 담아 ETA 막대를 채운다.
+  // Date.now() 는 렌더가 아닌 effect 안에서만 호출한다(react-hooks/purity 준수).
+  // 시작 시각은 서버 created_at(탭을 닫았다 열어도 정확) 우선, 없으면 effect 가
+  // 처음 본 시각(firstSeenRef)으로 폴백한다.
+  const [nowMs, setNowMs] = useState<number | null>(null);
   const firstSeenRef = useRef<number | null>(null);
   useEffect(() => {
     if (!isGenerating) return;
-    if (firstSeenRef.current == null) firstSeenRef.current = Date.now();
-    const id = setInterval(() => setTick((n) => n + 1), 1000);
+    const tick = () => {
+      const t = Date.now();
+      if (firstSeenRef.current == null) firstSeenRef.current = t;
+      setNowMs(t);
+    };
+    tick(); // 즉시 1회 — 첫 렌더 직후 바로 막대가 차게.
+    const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [isGenerating]);
 
-  const startMs = look.createdAt
-    ? Date.parse(look.createdAt)
-    : firstSeenRef.current ?? Date.now();
-  const elapsed = Math.max(0, Date.now() - (Number.isNaN(startMs) ? Date.now() : startMs));
+  const parsedCreated = look.createdAt ? Date.parse(look.createdAt) : NaN;
+  const startMs = !Number.isNaN(parsedCreated) ? parsedCreated : firstSeenRef.current;
+  const elapsed =
+    nowMs != null && startMs != null ? Math.max(0, nowMs - startMs) : 0;
   // 막대는 92%까지만 차오른다 — 완료는 폴링이 확정하므로 끝까지 차면 거짓 완료처럼 보인다.
   const progressPct = Math.min(0.92, elapsed / LOOK_ETA_MS);
   const remainingSec = Math.max(0, Math.ceil((LOOK_ETA_MS - elapsed) / 1000));
