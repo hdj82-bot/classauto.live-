@@ -46,6 +46,10 @@ celery.conf.beat_schedule = {
         "task": "app.tasks.backup.daily_db_backup",
         "schedule": crontab(hour=3, minute=0),  # UTC 03:00 = KST 12:00
     },
+    "reap-stuck-photo-avatar-looks": {
+        "task": "app.tasks.photo_avatar.reap_stuck_looks",
+        "schedule": 300,  # 5분 간격 — 정체된 룩을 failed 로 정리(누적 cap 회복)
+    },
 }
 
 # autodiscover_tasks 제거됨 — 위 include= 로 대체 (Django 스타일 tasks.py 탐색 회피)

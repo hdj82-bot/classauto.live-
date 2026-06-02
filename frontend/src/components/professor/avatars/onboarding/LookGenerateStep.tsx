@@ -80,6 +80,30 @@ export default function LookGenerateStep({
     }
   };
 
+  // 타일 클릭: ready 는 상세 모달, 그 외(주로 generating 정체)는 정리(삭제)한다.
+  // 워커 장애 등으로 generating 룩이 누적 cap 을 점유해 생성 폼이 사라지면,
+  // 사용자가 멈춘 룩을 눌러 직접 비워 빠져나올 수 있게 한다(백엔드 reaper 와 별개의
+  // 즉시 회복 경로).
+  const handleTileClick = (id: string) => {
+    const look = visibleLooks.find((l) => l.look_id === id);
+    if (!look) return;
+    if (look.status === "ready") {
+      setActiveLookId(id);
+      return;
+    }
+    if (!onDelete) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(t("looks.removePendingConfirm"))
+    ) {
+      return;
+    }
+    void onDelete(id);
+  };
+
+  // 정체/실패로 cap 을 채웠는데 ready 가 없으면(완전 정지) 회복 안내를 띄운다.
+  const stuckOnly = capReached && readyCount === 0;
+
   return (
     <div data-testid="step-generate" style={cardStyle}>
       <div
@@ -119,6 +143,13 @@ export default function LookGenerateStep({
         <p style={costNote}>{t("looks.costNote", { remaining })}</p>
       )}
 
+      {/* 완전 정지(cap 도달 + ready 0) 회복 안내 — 멈춘 룩을 눌러 정리하도록 유도 */}
+      {stuckOnly && onDelete && (
+        <p style={stuckHint} data-testid="stuck-hint">
+          {t("looks.capReachedHint")}
+        </p>
+      )}
+
       {/* 진행/완료 타일 (failed 제외) */}
       {visibleLooks.length > 0 && (
         <>
@@ -128,7 +159,8 @@ export default function LookGenerateStep({
                 key={look.look_id}
                 look={look}
                 reducedMotion={reducedMotion}
-                onSelect={(id) => setActiveLookId(id)}
+                onSelect={handleTileClick}
+                allowOpenAnyStatus={!!onDelete}
                 t={t}
               />
             ))}
@@ -219,6 +251,13 @@ const costNote: CSSProperties = {
   fontSize: 11.5,
   lineHeight: 1.5,
   color: "var(--text-faint)",
+};
+
+const stuckHint: CSSProperties = {
+  margin: "12px 0 0",
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: "var(--text-muted)",
 };
 
 const gridStyle: CSSProperties = {
