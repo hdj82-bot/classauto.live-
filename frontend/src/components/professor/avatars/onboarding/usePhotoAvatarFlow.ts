@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteLook,
   generateLooks,
@@ -11,6 +11,7 @@ import {
   selectLook,
   uploadPhotoAvatar,
 } from "./photoAvatarApi";
+import { categoryLabel } from "./lookOptions";
 import { LOOK_BATCH_DEFAULT } from "./photoAvatarTypes";
 import type {
   Look,
@@ -74,6 +75,15 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
   const [initializing, setInitializing] = useState(true);
   const [deferred, setDeferred] = useState(false);
   const [lastInput, setLastInput] = useState<LookGenerateInput | null>(null);
+  // look_id → 생성에 쓴 구조화 입력. 한국어 카테고리 라벨(categoryLabel)을 룩마다
+  // 정확히 붙이기 위한 세션 메모리. localStorage 미사용(CLAUDE.md) — 새로고침 시
+  // 비워지고, 그때는 라벨 없이(영어 프롬프트 비노출) 표시된다.
+  const [lookInputs, setLookInputs] = useState<Record<string, LookGenerateInput>>({});
+
+  // 현재 룩 목록의 스냅샷(ref) — generate 직후 "새로 추가된 look_id" 를 stale
+  // 클로저 없이 가려내기 위함. setLooks 가 일어나는 모든 경로보다 항상 한 발 뒤의
+  // 커밋 값을 들고 있어, 새 배치가 들어오기 직전 상태와 비교할 수 있다.
+  const looksRef = useRef<Look[]>([]);
 
   const looksTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const clearLooksTimer = useCallback(() => {
@@ -126,6 +136,11 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     [clearLooksTimer],
   );
 
+  // looksRef 를 항상 최신 커밋 값으로 동기화(generate 의 diff 기준).
+  useEffect(() => {
+    looksRef.current = looks;
+  }, [looks]);
+
   const uploadPhoto = useCallback(async (file: File) => {
     // v0.2 gpt: 업로드 즉시 그룹 ready → 곧장 룩 생성 단계로(train 없음).
     const g = await uploadPhotoAvatar(file);
@@ -139,9 +154,20 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
   const generate = useCallback(
     async (input: LookGenerateInput) => {
       // 구조화 옵션으로 한 배치(기본 LOOK_BATCH_DEFAULT 장)를 생성한다.
+      const beforeIds = new Set(looksRef.current.map((l) => l.look_id));
       await generateLooks(input, LOOK_BATCH_DEFAULT);
       setLastInput(input); // LookDetailModal 재생성용 base.
       const list = await listLooks();
+      // 이번 배치로 새로 생긴 룩에만 이 입력을 기록(한국어 카테고리 라벨용).
+      // 이전 배치의 룩은 각자 자신의 입력을 이미 들고 있으므로 건드리지 않는다.
+      const newIds = list.filter((l) => !beforeIds.has(l.look_id)).map((l) => l.look_id);
+      if (newIds.length > 0) {
+        setLookInputs((prev) => {
+          const next = { ...prev };
+          for (const id of newIds) next[id] = input;
+          return next;
+        });
+      }
       setLooks(list);
       setDeferred(isDeferredMode());
       startLooksPolling();
@@ -193,10 +219,22 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
 
   const looksPending = looks.some((l) => l.status === "generating");
 
+  // 표시용으로 각 룩에 한국어 카테고리 라벨을 부여한다(영어 프롬프트 비노출).
+  // 입력을 모르는 룩(새로고침 후·레거시)은 라벨 없이 둔다 — 화면은 라벨이 있을
+  // 때만 캡션을 그린다.
+  const enrichedLooks = useMemo<Look[]>(
+    () =>
+      looks.map((l) => {
+        const input = lookInputs[l.look_id];
+        return input ? { ...l, categoryLabel: categoryLabel(input) } : l;
+      }),
+    [looks, lookInputs],
+  );
+
   return {
     step,
     group,
-    looks,
+    looks: enrichedLooks,
     selectedLookId,
     initializing,
     deferred,

@@ -83,6 +83,14 @@ export default function LookGenerateStep({
     }
   };
 
+  // 모달의 "추가 요청" 재생성 — 진행 중(busy)이어도 막지 않는다(backend 가 누적
+  // cap 으로 통제). 한도 도달일 때만 막는다. 모달이 자체 submitting 을 관리하므로
+  // 여기선 setSubmitting 을 건드리지 않는다(인라인 폼 버튼과 독립).
+  const handleRegenerate = async (input: LookGenerateInput) => {
+    if (capReached) return;
+    await onGenerate(input);
+  };
+
   // ready 타일 클릭 = 상세 모달. 삭제/저장은 타일 우상단 ⋮ 메뉴로 처리한다.
   const handleTileClick = (id: string) => setActiveLookId(id);
 
@@ -136,6 +144,13 @@ export default function LookGenerateStep({
       {/* 안내 — 항상 노출하는 굵은 빨간 안내문구(생성 한도·정리 규칙). */}
       <p style={costNote} data-testid="looks-cost-note">{t("looks.costNote")}</p>
 
+      {/* 생성 중에는 "창 닫아도 계속됨" 안내를 띄운다(사용자 요청 2026-06-02). */}
+      {looksPending && (
+        <p style={backgroundNote} data-testid="looks-background-note">
+          {t("looks.backgroundNote")}
+        </p>
+      )}
+
       {/* 진행/완료 타일 (failed 제외) */}
       {visibleLooks.length > 0 && (
         <>
@@ -175,10 +190,11 @@ export default function LookGenerateStep({
         <LookDetailModal
           look={activeLook}
           lastInput={lastInput}
-          onRegenerate={handleGenerate}
+          onRegenerate={handleRegenerate}
           onDelete={onDelete}
           onClose={() => setActiveLookId(null)}
           busy={busy}
+          capReached={capReached}
           t={t}
         />
       )}
@@ -240,6 +256,14 @@ const costNote: CSSProperties = {
   fontWeight: 700,
   lineHeight: 1.5,
   color: "#D92D20",
+};
+
+// 생성이 백그라운드에서 이어진다는 안내(차분한 톤).
+const backgroundNote: CSSProperties = {
+  margin: "8px 0 0",
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: "var(--text-muted)",
 };
 
 const gridStyle: CSSProperties = {

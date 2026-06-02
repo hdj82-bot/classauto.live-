@@ -13,8 +13,11 @@ interface LookDetailModalProps {
   onDelete?: (lookId: string) => Promise<void>;
   /** 모달 닫기. */
   onClose: () => void;
-  /** 다른 생성/폴링이 진행 중이면 disabled. */
+  /** 다른 생성/폴링이 진행 중이면 삭제 버튼을 disabled. (재생성은 막지 않는다 —
+   *  백엔드가 누적 cap 으로 과생성을 통제하므로, 진행 중이어도 추가 요청은 받는다.) */
   busy: boolean;
+  /** 누적 한도(LOOK_TOTAL_MAX) 도달 — 재생성 버튼을 비활성하고 안내한다. */
+  capReached?: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -36,11 +39,15 @@ export default function LookDetailModal({
   onDelete,
   onClose,
   busy,
+  capReached = false,
   t,
 }: LookDetailModalProps) {
   const [extra, setExtra] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // 재생성 요청을 보낸 직후의 성공 피드백("새 룩을 생성 중...")을 모달 안에서
+  // 보여준다 — 예전엔 곧장 닫혀 사용자가 "반응이 없다"고 느꼈다(2026-06-02).
+  const [requested, setRequested] = useState(false);
 
   // Esc 로 닫기, body 스크롤 잠금.
   useEffect(() => {
@@ -57,7 +64,9 @@ export default function LookDetailModal({
   }, [onClose]);
 
   const src = look.image_url ?? look.preview_image_url ?? "";
-  const disabled = busy || submitting || extra.trim().length === 0;
+  // busy(다른 룩 생성 중)는 더는 재생성을 막지 않는다 — 막으면 버튼이 말없이
+  // 죽어 "반응 없음"으로 보였다. 한도 도달(capReached)·빈 입력·전송 중만 막는다.
+  const disabled = submitting || capReached || extra.trim().length === 0;
 
   const handleRegenerate = async () => {
     if (disabled) return;
@@ -72,7 +81,9 @@ export default function LookDetailModal({
         expression: lastInput?.expression ?? null,
         extra: extra.trim(),
       });
-      onClose();
+      // 닫지 않고 성공 피드백을 남긴다 — 새 룩은 갤러리(모달 뒤)에 추가된다.
+      setExtra("");
+      setRequested(true);
     } finally {
       setSubmitting(false);
     }
@@ -107,7 +118,13 @@ export default function LookDetailModal({
         style={dialogStyle}
       >
         <header style={headerStyle}>
-          <h3 style={titleStyle}>{t("looks.detail.title")}</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+            <h3 style={titleStyle}>{t("looks.detail.title")}</h3>
+            {/* 영어 프롬프트 대신 한국어 카테고리 조합을 부제로 노출(2026-06-02). */}
+            {look.categoryLabel && (
+              <span style={subtitleStyle}>{look.categoryLabel}</span>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -120,12 +137,12 @@ export default function LookDetailModal({
         </header>
 
         <div style={bodyStyle}>
-          <div style={frameStyle} aria-label={look.prompt || t("looks.tileAlt")}>
+          <div style={frameStyle} aria-label={look.categoryLabel || t("looks.tileAlt")}>
             {src ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={src}
-                alt={look.prompt || t("looks.tileAlt")}
+                alt={look.categoryLabel || t("looks.tileAlt")}
                 style={imgStyle}
               />
             ) : null}
@@ -135,7 +152,10 @@ export default function LookDetailModal({
             {t("looks.detail.extraLabel")}
             <textarea
               value={extra}
-              onChange={(e) => setExtra(e.target.value)}
+              onChange={(e) => {
+                setExtra(e.target.value);
+                if (requested) setRequested(false); // 다시 입력하면 성공 안내 해제
+              }}
               maxLength={500}
               placeholder={t("looks.detail.extraPlaceholder")}
               rows={3}
@@ -143,7 +163,17 @@ export default function LookDetailModal({
               style={extraInput}
             />
           </label>
-          <p style={helpText}>{t("looks.detail.extraHelp")}</p>
+          {capReached ? (
+            <p style={capNote} data-testid="look-detail-cap">
+              {t("looks.detail.capReachedNote")}
+            </p>
+          ) : requested ? (
+            <p style={successNote} data-testid="look-detail-regenerated">
+              {t("looks.detail.regenerated")}
+            </p>
+          ) : (
+            <p style={helpText}>{t("looks.detail.extraHelp")}</p>
+          )}
         </div>
 
         <footer style={footerStyle}>
@@ -206,8 +236,9 @@ const overlayStyle: CSSProperties = {
 };
 
 const dialogStyle: CSSProperties = {
-  width: "min(960px, 100%)",
-  maxHeight: "92vh",
+  // 더 큰 창 — 가로(3:2) 룩이 잘리지 않고 넉넉히 보이도록(사용자 요청 2026-06-02).
+  width: "min(1120px, 100%)",
+  maxHeight: "94vh",
   display: "flex",
   flexDirection: "column",
   background: "var(--bg-card)",
@@ -230,6 +261,15 @@ const titleStyle: CSSProperties = {
   fontSize: 15.5,
   fontWeight: 700,
   color: "var(--text)",
+};
+
+const subtitleStyle: CSSProperties = {
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: "var(--gold-on-light, #B88308)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const closeBtn: CSSProperties = {
@@ -306,6 +346,22 @@ const helpText: CSSProperties = {
   fontSize: 11.5,
   lineHeight: 1.5,
   color: "var(--text-faint)",
+};
+
+const successNote: CSSProperties = {
+  margin: 0,
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.5,
+  color: "var(--gold-on-light, #B88308)",
+};
+
+const capNote: CSSProperties = {
+  margin: 0,
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.5,
+  color: "#D92D20",
 };
 
 const footerStyle: CSSProperties = {

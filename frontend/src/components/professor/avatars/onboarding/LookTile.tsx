@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import type { Look } from "./photoAvatarTypes";
+import { LOOK_ETA_MS, type Look } from "./photoAvatarTypes";
 import { CheckIcon, PersonIcon } from "./PhotoAvatarIcons";
 
 interface LookTileProps {
@@ -38,9 +38,37 @@ export default function LookTile({
   t,
 }: LookTileProps) {
   const isReady = look.status === "ready";
+  const isGenerating = look.status === "generating";
   // ready 는 "선택", non-ready 는 "정리(삭제)" 용도로 클릭을 연다(opt-in).
   const interactive = !!onSelect && (isReady || !!allowOpenAnyStatus);
   const Wrapper = interactive ? "button" : "div";
+
+  // 생성 중 진행 막대 — 1초마다 현재 시각을 상태에 담아 ETA 막대를 채운다.
+  // Date.now() 는 렌더가 아닌 effect 안에서만 호출한다(react-hooks/purity 준수).
+  // 시작 시각은 서버 created_at(탭을 닫았다 열어도 정확) 우선, 없으면 effect 가
+  // 처음 본 시각(fallbackStart)으로 폴백한다. 렌더에서 ref 를 읽지 않도록(=
+  // react-hooks/refs) 둘 다 state 로 둔다.
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  const [fallbackStart, setFallbackStart] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isGenerating) return;
+    const tick = () => {
+      const t = Date.now();
+      setFallbackStart((prev) => prev ?? t);
+      setNowMs(t);
+    };
+    tick(); // 즉시 1회 — 첫 렌더 직후 바로 막대가 차게.
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [isGenerating]);
+
+  const parsedCreated = look.createdAt ? Date.parse(look.createdAt) : NaN;
+  const startMs = !Number.isNaN(parsedCreated) ? parsedCreated : fallbackStart;
+  const elapsed =
+    nowMs != null && startMs != null ? Math.max(0, nowMs - startMs) : 0;
+  // 막대는 92%까지만 차오른다 — 완료는 폴링이 확정하므로 끝까지 차면 거짓 완료처럼 보인다.
+  const progressPct = Math.min(0.92, elapsed / LOOK_ETA_MS);
+  const remainingSec = Math.max(0, Math.ceil((LOOK_ETA_MS - elapsed) / 1000));
 
   // ⋮ 메뉴 — '저장'은 ready·미저장에만, '삭제'는 onDelete 가 있으면 항상.
   const canSave = !!onSave && isReady && !look.saved;
@@ -89,7 +117,7 @@ export default function LookTile({
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={look.image_url ?? look.preview_image_url ?? ""}
-              alt={look.prompt || t("looks.tileAlt")}
+              alt={look.categoryLabel || t("looks.tileAlt")}
               style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
             />
           ) : look.status === "failed" ? (
@@ -100,7 +128,7 @@ export default function LookTile({
               </span>
             </span>
           ) : (
-            // generating
+            // generating — 막대형 진행률 + 남은 시간 추정.
             <span style={centerBox}>
               {!reducedMotion ? (
                 <span style={ringStyle} aria-hidden="true" />
@@ -109,6 +137,28 @@ export default function LookTile({
               )}
               <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
                 {t("looks.tileGenerating")}
+              </span>
+              <span
+                style={progressTrack}
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progressPct * 100)}
+                aria-label={t("looks.tileGenerating")}
+              >
+                <span
+                  style={{
+                    ...progressFill,
+                    width: `${Math.round(progressPct * 100)}%`,
+                    // reduced-motion 이면 폭 전환 애니메이션을 끈다.
+                    transition: reducedMotion ? "none" : "width 1s linear",
+                  }}
+                />
+              </span>
+              <span style={progressLabel}>
+                {remainingSec > 0
+                  ? t("looks.tileEta", { sec: remainingSec })
+                  : t("looks.tileFinishing")}
               </span>
             </span>
           )}
@@ -125,9 +175,11 @@ export default function LookTile({
           )}
         </span>
 
-        {look.prompt && (
-          <span style={captionStyle} title={look.prompt}>
-            {look.prompt}
+        {/* 캡션: 영어 프롬프트 대신 한국어 카테고리 조합만 노출(2026-06-02).
+            입력을 모르는 룩(새로고침 후 등)은 캡션을 그리지 않는다. */}
+        {look.categoryLabel && (
+          <span style={captionStyle} title={look.categoryLabel}>
+            {look.categoryLabel}
           </span>
         )}
       </Wrapper>
@@ -215,7 +267,9 @@ const thumbStyle: CSSProperties = {
   display: "block",
   position: "relative",
   width: "100%",
-  aspectRatio: "3 / 4",
+  // 백엔드가 룩을 16:9 로 출력한다(3:2 생성 후 선명 크롭). 프레임도 16:9 로 맞춰
+  // cover 가 잘라내지 않게 한다(이전 3:4 세로 프레임이 하단을 잘랐던 문제 해소).
+  aspectRatio: "16 / 9",
   borderRadius: 10,
   overflow: "hidden",
   background: "var(--bg-subtle)",
@@ -237,6 +291,32 @@ const ringStyle: CSSProperties = {
   border: "3px solid var(--gold-soft)",
   borderTopColor: "var(--gold)",
   animation: "studio-spin 0.9s linear infinite",
+};
+
+const progressTrack: CSSProperties = {
+  display: "block",
+  width: "72%",
+  maxWidth: 160,
+  height: 6,
+  marginTop: 10,
+  borderRadius: 999,
+  background: "var(--gold-soft, #FFE6A8)",
+  overflow: "hidden",
+};
+
+const progressFill: CSSProperties = {
+  display: "block",
+  height: "100%",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #FFB627, #E89E0E)",
+};
+
+const progressLabel: CSSProperties = {
+  marginTop: 6,
+  fontSize: 10.5,
+  fontWeight: 600,
+  color: "var(--text-faint)",
+  fontVariantNumeric: "tabular-nums",
 };
 
 const selectedBadge: CSSProperties = {

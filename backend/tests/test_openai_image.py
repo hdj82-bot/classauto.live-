@@ -308,3 +308,69 @@ class TestBuildPrompt:
     def test_unknown_persona_falls_back_to_educator(self):
         p = oi.build_prompt("___nope___", None, None, None, None)
         assert "university professor" in p
+
+
+# ── 16:9 선명 크롭 (3:2 → 16:9, 위쪽 우선 제거로 하단 보존) ────────────────────
+
+
+def _png_bytes(w: int, h: int) -> bytes:
+    """단색 PNG bytes 를 만든다(크롭 입력용)."""
+    import io
+
+    from PIL import Image
+
+    out = io.BytesIO()
+    Image.new("RGB", (w, h), (123, 45, 67)).save(out, format="PNG")
+    return out.getvalue()
+
+
+def _dims(png: bytes) -> tuple[int, int]:
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(png)) as im:
+        return im.size
+
+
+class TestCropTo16x9:
+    def test_3_2_becomes_16_9(self):
+        """1536x1024(3:2) → 가로 유지, 세로만 줄여 16:9(1536x864)."""
+        out = oi.crop_to_16_9(_png_bytes(1536, 1024), top_bias=0.9)
+        w, h = _dims(out)
+        assert w == 1536
+        assert h == round(1536 * 9 / 16)  # 864
+        assert abs(w / h - 16 / 9) < 0.01
+
+    def test_top_bias_preserves_bottom(self):
+        """top_bias=1.0 이면 초과분을 전부 위에서 잘라 하단(손·허리)을 보존한다.
+
+        세로 그라데이션(위=검정, 아래=흰색)을 넣어, 크롭 결과의 맨 아랫줄이 원본의
+        맨 아랫줄(흰색)과 동일한지로 '하단이 잘리지 않았음'을 검증한다.
+        """
+        import io
+
+        from PIL import Image
+
+        src = Image.new("RGB", (160, 100))
+        for y in range(100):
+            shade = int(255 * y / 99)
+            for x in range(160):
+                src.putpixel((x, y), (shade, shade, shade))
+        buf = io.BytesIO()
+        src.save(buf, format="PNG")
+
+        out = oi.crop_to_16_9(buf.getvalue(), top_bias=1.0)
+        with Image.open(io.BytesIO(out)) as im:
+            w, h = im.size
+            # 맨 아랫줄이 흰색(원본 최하단)이어야 한다 — 하단 무손실.
+            assert im.getpixel((w // 2, h - 1))[0] >= 250
+
+    def test_already_16_9_is_unchanged(self):
+        out = oi.crop_to_16_9(_png_bytes(1600, 900))
+        w, h = _dims(out)
+        assert (w, h) == (1600, 900)
+
+    def test_invalid_bytes_returns_original(self):
+        """파싱 불가한 입력이면 원본을 그대로 돌려준다(생성 차단 방지)."""
+        assert oi.crop_to_16_9(b"not-an-image") == b"not-an-image"

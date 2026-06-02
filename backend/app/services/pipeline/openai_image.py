@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import logging
 
 import openai
@@ -26,6 +27,53 @@ import openai
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# 16:9 목표 비율(가로/세로).
+_TARGET_16_9 = 16 / 9
+
+
+def crop_to_16_9(png_bytes: bytes, top_bias: float | None = None) -> bytes:
+    """3:2(1536x1024) 룩을 **선명하게** 16:9 로 크롭한다(흐림·여백 없음).
+
+    gpt-image-2 는 16:9 를 직접 만들지 못해 1536x1024(3:2) 로 생성한다. 이 함수는
+    그 고화질 결과를 그대로 살린 채 세로를 16:9 에 맞게 잘라(=확대 효과) 강의
+    영상 톤에 맞춘다. 잘리는 세로 초과분은 ``top_bias`` 만큼 **위쪽 여백에서 우선**
+    덜어내 하단(손·허리)을 보존한다(사용자 핵심 요구: "하단이 짤리지 않게").
+
+    실패하면(이미지 파싱 등) 원본 bytes 를 그대로 돌려준다(생성 자체를 막지 않음).
+    """
+    if top_bias is None:
+        top_bias = settings.PHOTO_AVATAR_16_9_TOP_BIAS
+    top_bias = max(0.0, min(1.0, top_bias))
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(png_bytes)) as im:
+            im = im.convert("RGB")
+            w, h = im.size
+            if w <= 0 or h <= 0:
+                return png_bytes
+            ratio = w / h
+            if abs(ratio - _TARGET_16_9) < 1e-3:
+                return png_bytes  # 이미 16:9
+            if ratio < _TARGET_16_9:
+                # 세로가 16:9 보다 길다(3:2 등) → 세로를 줄여 16:9. 위쪽에서 우선 자른다.
+                target_h = round(w / _TARGET_16_9)
+                excess = h - target_h
+                top = int(round(excess * top_bias))
+                box = (0, top, w, top + target_h)
+            else:
+                # 가로가 16:9 보다 넓다 → 좌우를 균등하게 자른다(드문 경우).
+                target_w = round(h * _TARGET_16_9)
+                left = (w - target_w) // 2
+                box = (left, 0, left + target_w, h)
+            cropped = im.crop(box)
+            out = io.BytesIO()
+            cropped.save(out, format="PNG")
+            return out.getvalue()
+    except Exception:  # pragma: no cover - 방어적: 후처리 실패는 원본으로 폴백
+        logger.warning("16:9 크롭 실패 — 원본 비율 그대로 사용", exc_info=True)
+        return png_bytes
 
 
 class OpenAIImageError(Exception):
@@ -190,6 +238,8 @@ POSE_PROMPTS: dict[str, str] = {
 # 2026-06-01 v2 정교화: 사용자 보고 "얼굴이 너무 타이트하게 잡혀 머리 위가 잘리고
 # 몸이 안 보임" → 와이드 가로(landscape 16:9 계열) + 인물 작게 + 어깨/상체 충분히
 # 보이는 프레이밍으로 전환. 정체성은 얼굴 한정 보존 유지(머리 정돈·의상·배경 교체).
+# 2026-06-02: 생성은 3:2(1536x1024)지만 후처리로 위쪽을 잘라 16:9 로 만든다. 그래서
+# 머리 위 여백을 넉넉히, 손·허리는 하단에서 조금 띄워 크롭 후에도 둘 다 살아남게 한다.
 _HIDDEN_HEYGEN_RULES = (
     "PRESERVE EXACTLY (face only): the same person's identical facial identity, age, "
     "gender, ethnicity, facial proportions, skin tone, eye shape and color, eyebrows, "
@@ -197,14 +247,17 @@ _HIDDEN_HEYGEN_RULES = (
     "Do NOT beautify, slim, smooth, or alter the face. "
     "Hairstyle should remain the same person's natural hair but may be neatly groomed. "
     "FRAMING (mandatory, must follow exactly): waist-up portrait in a wide landscape "
-    "composition. The visible body MUST extend from generous headroom above the hair "
-    "down to the waist or hip line (approximately 90% of the vertical frame is the "
-    "subject's head-and-torso). BOTH hands and forearms MUST be clearly visible in "
-    "the frame — never crop above the chest, never crop the hands out. Single person "
-    "only, centered or slightly off-center with the background clearly visible on "
-    "both sides. Head occupies roughly 15-18% of the frame WIDTH (small enough that "
-    "the full upper body and hands fit comfortably). Eye level, direct frontal view, "
-    "mouth and jawline unobstructed. Natural relaxed posture. "
+    "composition. IMPORTANT: this image will be cropped to 16:9 by trimming the TOP, "
+    "so leave GENEROUS empty headroom above the hair (about 20% of the image height is "
+    "empty space above the head) and keep the waist and BOTH hands comfortably ABOVE "
+    "the very bottom edge (a small margin, about 8-10% of the height, below the hands). "
+    "The subject's head-and-torso should occupy roughly the central 70% of the vertical "
+    "frame. BOTH hands and forearms MUST be clearly visible in the frame — never crop "
+    "above the chest, never crop the hands out. Single person only, centered or slightly "
+    "off-center with the background clearly visible on both sides. Head occupies roughly "
+    "15-18% of the frame WIDTH (small enough that the full upper body and hands fit "
+    "comfortably). Eye level, direct frontal view, mouth and jawline unobstructed. "
+    "Natural relaxed posture. "
     "Soft, even frontal lighting with no harsh shadows. "
     "Render style: ultra photorealistic, DSLR environmental portrait look at "
     "35mm f/5.6 (deeper depth of field — both the subject and the entire background "

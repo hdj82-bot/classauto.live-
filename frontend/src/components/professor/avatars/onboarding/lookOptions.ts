@@ -85,6 +85,30 @@ export const RECOMMENDED: Record<
   podcast_host: { outfit: "tee", background: "studio", expression: "confident" },
 };
 
+/** key→한국어 라벨 빠른 조회(라벨은 위 OPTIONS 가 단일 출처). */
+function labelOf<K extends string>(options: Option<K>[], key: K | null | undefined): string | null {
+  if (!key) return null;
+  return options.find((o) => o.key === key)?.label ?? null;
+}
+
+/**
+ * 생성 입력 → 사람이 읽는 한국어 카테고리 조합 라벨.
+ * 예: { persona:"podcast_host", outfit:"tee", background:"studio", expression:"confident" }
+ *   → "팟캐스트 진행자 · 티셔츠 · 스튜디오 · 자신감".
+ * persona 는 항상 포함하고, 자동(null)인 항목은 건너뛴다. 영어 프롬프트를 화면에
+ * 노출하지 않기 위한 표시용 라벨(2026-06-02 사용자 요청).
+ */
+export function categoryLabel(input: LookGenerateInput): string {
+  return [
+    labelOf(PERSONA_OPTIONS, input.persona),
+    labelOf(OUTFIT_OPTIONS, input.outfit),
+    labelOf(BACKGROUND_OPTIONS, input.background),
+    labelOf(EXPRESSION_OPTIONS, input.expression),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 /** persona 의 추천 조합으로 초기 입력을 만든다. */
 export function defaultInputFor(persona: PersonaKey): LookGenerateInput {
   const r = RECOMMENDED[persona];
