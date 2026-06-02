@@ -251,7 +251,9 @@ _REQUIRED_IN_PROD = [
 
 # 키 자리에 그대로 남은 템플릿 placeholder — 비어 있지 않아 종전 검증을 통과한 뒤
 # 런타임 401 로 조용히 실패하던 것을 부팅에서 차단한다(.env.production 의 CHANGE_ME 등).
-_PLACEHOLDER_MARKERS = ("CHANGE_ME", "CHANGE-ME", "CHANGEME", "YOUR_", "YOUR-", "XXXXX")
+# 주의: 너무 일반적인 패턴(예: "XXXXX")은 정상 시크릿("x"*32 등)을 오탐하므로
+# 템플릿에서만 쓰이는 구체적 마커로 한정한다.
+_PLACEHOLDER_MARKERS = ("CHANGE_ME", "CHANGE-ME", "CHANGEME", "YOUR_", "YOUR-", "PLACEHOLDER")
 
 
 def _looks_like_placeholder(value: str) -> bool:
