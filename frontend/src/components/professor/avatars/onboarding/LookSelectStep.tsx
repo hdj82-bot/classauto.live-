@@ -159,6 +159,11 @@ export default function LookSelectStep({
             t={t}
           />
           <p style={inlineGenNote} data-testid="select-cost-note">{t("looks.costNote")}</p>
+          {looksPending && (
+            <p style={inlineBackgroundNote} data-testid="select-background-note">
+              {t("looks.backgroundNote")}
+            </p>
+          )}
         </section>
       )}
 
@@ -203,6 +208,7 @@ export default function LookSelectStep({
           onDelete={onDelete}
           onClose={() => setActiveLookId(null)}
           busy={looksPending}
+          capReached={capReached}
           t={t}
         />
       )}
@@ -273,6 +279,13 @@ const inlineGenNote: CSSProperties = {
   fontWeight: 700,
   lineHeight: 1.5,
   color: "#D92D20",
+};
+
+const inlineBackgroundNote: CSSProperties = {
+  margin: "6px 0 0",
+  fontSize: 12,
+  lineHeight: 1.5,
+  color: "var(--text-muted)",
 };
 
 const emptyBox: CSSProperties = {

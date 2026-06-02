@@ -3,6 +3,7 @@
 ``GET /api/avatars`` 와 ``POST /api/avatars/profile-photo`` 가 사용한다.
 프론트(아바타 갤러리 페이지·studio 우측 패널)가 1:1 로 소비하는 wire shape.
 """
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -241,6 +242,13 @@ class LookItem(BaseModel):
     saved: bool = Field(
         default=False,
         description="라이브러리에 저장(확정)된 룩이면 true. 후보(미저장)는 false.",
+    )
+    created_at: datetime | None = Field(
+        default=None,
+        description=(
+            "룩 행 생성 시각(ISO8601, UTC). 프론트가 generating 룩의 진행 막대 ETA 를 "
+            "서버 기준으로 계산해, 탭을 닫았다 다시 열어도 경과 시간을 정확히 잇는다."
+        ),
     )
 
 

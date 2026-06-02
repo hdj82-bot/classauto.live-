@@ -37,6 +37,7 @@ interface LookWire {
   prompt?: string | null;
   status: LookStatus;
   saved?: boolean;
+  created_at?: string | null;
 }
 
 interface PreviewWire {
@@ -117,16 +118,17 @@ const now = () => Date.now();
  * (design-system: 이모지/플레이스홀더는 골드 그라데이션 SVG로 통일).
  */
 function makeLookPreview(index: number): string {
+  // 16:9 (320x180) — 실제 룩 출력 비율과 동일하게 맞춘 mock 썸네일.
   const stop = ["#FFC74D", "#FFB627", "#E89E0E", "#B88308"][index % 4];
   const tint = 0.06 + (index % 4) * 0.03;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="320" viewBox="0 0 240 320">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180">
   <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0%" stop-color="#FFC74D"/><stop offset="100%" stop-color="${stop}"/>
   </linearGradient></defs>
-  <rect width="240" height="320" fill="#FAFAF7"/>
-  <rect width="240" height="320" fill="${stop}" opacity="${tint}"/>
-  <circle cx="120" cy="118" r="46" fill="url(#g)"/>
-  <path d="M44 320c0-46 34-78 76-78s76 32 76 78z" fill="url(#g)"/>
+  <rect width="320" height="180" fill="#FAFAF7"/>
+  <rect width="320" height="180" fill="${stop}" opacity="${tint}"/>
+  <circle cx="160" cy="74" r="34" fill="url(#g)"/>
+  <path d="M112 180c0-34 22-58 48-58s48 24 48 58z" fill="url(#g)"/>
 </svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
@@ -154,6 +156,7 @@ function mockLooksToDomain(): Look[] {
       prompt: l.prompt,
       status: l.status,
       saved: l.saved,
+      createdAt: new Date(l.startedAt).toISOString(),
     };
   });
 }
@@ -276,6 +279,7 @@ export async function listLooks(): Promise<Look[]> {
       prompt: w.prompt ?? null,
       status: w.status,
       saved: w.saved ?? false,
+      createdAt: w.created_at ?? null,
     }));
   } catch (err) {
     if (isDeferredError(err)) return mockLooksToDomain();

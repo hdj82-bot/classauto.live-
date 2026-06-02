@@ -326,6 +326,11 @@ def generate_gpt_looks(
 
         created = 0
         for r, img in zip(rows, images):
+            # 16:9 로 선명하게 크롭(설정 시) — gpt-image-2 가 16:9 를 직접 못 만들어
+            # 1536x1024(3:2)로 생성된 결과를 강의 영상(16:9) 톤에 맞춘다. 위쪽 여백을
+            # 우선 잘라 하단(손·허리)을 보존한다.
+            if settings.PHOTO_AVATAR_OUTPUT_16_9:
+                img = openai_image.crop_to_16_9(img)
             s3_key = f"thumbnails/photo-avatar/{user.id}/look-{uuid.uuid4().hex[:8]}.png"
             s3_svc.upload_file(img, s3_key, content_type="image/png")
             r.image_url = (

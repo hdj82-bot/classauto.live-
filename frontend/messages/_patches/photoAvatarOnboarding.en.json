@@ -74,7 +74,10 @@
       "error": "Could not start look generation. Please try again shortly.",
       "tileAlt": "Generated look preview",
       "tileGenerating": "Generating",
+      "tileEta": "about {sec}s left",
+      "tileFinishing": "Almost done…",
       "tileFailed": "Failed",
+      "backgroundNote": "Generation runs on the server. You can close this window — it keeps going and resumes when you return.",
       "detail": {
         "title": "Look detail",
         "close": "Close",
@@ -86,7 +89,8 @@
         "regenerated": "A new look is being generated and will appear below.",
         "delete": "Delete this look",
         "deleting": "Deleting...",
-        "deleteConfirm": "Delete this look from your library? This cannot be undone."
+        "deleteConfirm": "Delete this look from your library? This cannot be undone.",
+        "capReachedNote": "You've reached the maximum number of looks. Clear some looks in the gallery and try again."
       }
     },
 

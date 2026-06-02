@@ -1049,6 +1049,7 @@ async def list_looks(
                 status=r.status if r.status in ("generating", "ready", "failed") else "ready",
                 is_default=(lid == user.photo_avatar_default_look_id),
                 saved=r.saved_to_library,
+                created_at=r.created_at,
             )
         )
     return items

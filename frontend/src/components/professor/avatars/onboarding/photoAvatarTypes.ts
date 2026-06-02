@@ -44,6 +44,18 @@ export interface Look {
   status: LookStatus;
   /** 라이브러리에 저장(확정)된 룩이면 true. 후보(미저장)는 false. */
   saved: boolean;
+  /**
+   * 사람이 읽는 한국어 카테고리 조합 라벨(예: "팟캐스트 진행자 · 티셔츠 · 스튜디오 ·
+   * 자신감"). 영어 ``prompt`` 대신 화면에 노출한다. 생성에 쓴 구조화 입력으로부터
+   * 만들어지며(usePhotoAvatarFlow), 입력을 알 수 없는 룩(새로고침 후·레거시)은 null.
+   */
+  categoryLabel?: string | null;
+  /**
+   * 룩 행 생성 시각(ISO8601). generating 룩의 진행 막대 ETA 를 서버 기준으로
+   * 계산해 탭을 닫았다 다시 열어도 경과 시간을 잇는다. 없으면 클라이언트가 처음
+   * 본 시각으로 폴백한다.
+   */
+  createdAt?: string | null;
 }
 
 /** POST /api/avatars/me/looks 응답 — 배치 생성 작업 식별자. */
@@ -112,6 +124,14 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   "select",
   "preview",
 ];
+
+/**
+ * 룩 1장 생성 예상 소요(ms). gpt-image-2 high + 1536x1024 는 호출당 30~60초가
+ * 걸리고, 배치는 병렬이라 S3 업로드·16:9 크롭까지 합쳐 대략 이 정도다. 실제 완료
+ * 신호(폴링)가 우선이며, 이 값은 진행 막대의 ETA 추정에만 쓴다(막대는 92%까지만
+ * 차오르고 완료는 폴링이 확정).
+ */
+export const LOOK_ETA_MS = 70000;
 
 /** 룩 배치 1회 상한 (계약: count ≤ PHOTO_AVATAR_LOOK_BATCH_MAX=4). */
 export const LOOK_BATCH_MAX = 4;
