@@ -1048,6 +1048,7 @@ async def list_looks(
                 prompt=r.prompt,
                 status=r.status if r.status in ("generating", "ready", "failed") else "ready",
                 is_default=(lid == user.photo_avatar_default_look_id),
+                saved=r.saved_to_library,
             )
         )
     return items
@@ -1116,11 +1117,84 @@ async def select_look(
     user.photo_avatar_preview_video_id = None
     user.photo_avatar_preview_voice_id = None
     user.photo_avatar_default_look_id = look_id
+    # 기본 룩 지정 = 확정 → 라이브러리에도 자동 저장(사용자 결정 2026-06-02).
+    row.saved_to_library = True
     await db.commit()
     return LookSelectResponse(
         default_look_id=look_id,
         message="기본 아바타 룩으로 설정했습니다. 미리보기를 만들 때 본인 아바타가 자동 등록됩니다.",
     )
+
+
+@router.post(
+    "/api/avatars/me/looks/{look_id}/save",
+    response_model=dict,
+    summary="룩 라이브러리에 저장 (확정)",
+)
+async def save_look_to_library(
+    look_id: str,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """후보 룩을 라이브러리에 저장(확정)한다.
+
+    온보딩에서 생성한 룩은 후보일 뿐이고, 이 엔드포인트(또는 기본 룩 지정)로
+    확정한 것만 라이브러리에 노출된다. 라이브러리 상한
+    (``PHOTO_AVATAR_LIBRARY_MAX``)을 초과하면 400 으로 막는다.
+    """
+    row = None
+    try:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.id == uuid.UUID(look_id),
+                )
+            )
+        ).scalar_one_or_none()
+    except ValueError:
+        row = None
+    if row is None:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.heygen_look_id == look_id,
+                )
+            )
+        ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 룩을 찾을 수 없습니다."
+        )
+    if row.status != LookStatus.ready.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="아직 준비되지 않은 룩입니다.",
+        )
+
+    if not row.saved_to_library:
+        saved_count = (
+            await db.execute(
+                select(func.count())
+                .select_from(PhotoAvatarLook)
+                .where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.saved_to_library.is_(True),
+                )
+            )
+        ).scalar() or 0
+        if saved_count >= settings.PHOTO_AVATAR_LIBRARY_MAX:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"라이브러리는 최대 {settings.PHOTO_AVATAR_LIBRARY_MAX}개까지 "
+                    "저장할 수 있습니다. 기존 항목을 정리한 뒤 다시 시도해 주세요."
+                ),
+            )
+        row.saved_to_library = True
+        await db.commit()
+    return {"ok": True, "saved": True}
 
 
 @router.delete(

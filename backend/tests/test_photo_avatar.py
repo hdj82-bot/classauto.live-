@@ -292,13 +292,62 @@ async def test_list_and_select_look(client, professor, db):
         assert len(body) == 1
         assert body[0]["look_id"] == "look-1"
         assert body[0]["is_default"] is False
+        assert body[0]["saved"] is False  # 생성 직후엔 후보(미저장)
 
         sel = await client.post(
             "/api/avatars/me/looks/look-1/select", headers=make_auth_header(professor)
         )
-    assert sel.status_code == 200
-    assert sel.json()["default_look_id"] == "look-1"
-    assert professor.photo_avatar_default_look_id == "look-1"
+        assert sel.status_code == 200
+        assert sel.json()["default_look_id"] == "look-1"
+        assert professor.photo_avatar_default_look_id == "look-1"
+
+        # 기본 룩 지정(확정) = 라이브러리 자동 저장 → saved=True 로 노출
+        after = await client.get(
+            "/api/avatars/me/looks", headers=make_auth_header(professor)
+        )
+    assert after.json()[0]["saved"] is True
+
+
+@pytest.mark.asyncio
+async def test_save_look_to_library_and_cap(client, professor, db):
+    """⋮ '라이브러리에 저장' — saved 전이 + 라이브러리 상한 초과 시 400."""
+    from app.models.photo_avatar import PhotoAvatarLook
+
+    look = PhotoAvatarLook(
+        user_id=professor.id,
+        heygen_look_id="save-1",
+        image_url="https://h/save1.png",
+        preview_image_url="https://h/save1.png",
+        prompt="정장",
+        status="ready",
+    )
+    db.add(look)
+    await db.flush()
+
+    with patch.object(settings, "PHOTO_AVATAR_PROVIDER", "heygen"):
+        ok = await client.post(
+            "/api/avatars/me/looks/save-1/save", headers=make_auth_header(professor)
+        )
+        assert ok.status_code == 200
+        assert ok.json()["saved"] is True
+
+        # 상한(LIBRARY_MAX) 도달 시 추가 저장 차단
+        with patch.object(settings, "PHOTO_AVATAR_LIBRARY_MAX", 1):
+            another = PhotoAvatarLook(
+                user_id=professor.id,
+                heygen_look_id="save-2",
+                image_url="https://h/save2.png",
+                preview_image_url="https://h/save2.png",
+                prompt="니트",
+                status="ready",
+            )
+            db.add(another)
+            await db.flush()
+            blocked = await client.post(
+                "/api/avatars/me/looks/save-2/save",
+                headers=make_auth_header(professor),
+            )
+    assert blocked.status_code == 400
 
 
 # ── 최근 선택한 아바타 (라이브러리 즉시 선택·적용) ────────────────────────────

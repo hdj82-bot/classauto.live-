@@ -36,6 +36,7 @@ interface LookWire {
   preview_image_url?: string | null;
   prompt?: string | null;
   status: LookStatus;
+  saved?: boolean;
 }
 
 interface PreviewWire {
@@ -90,6 +91,7 @@ interface MockLook {
   startedAt: number;
   image_url: string | null;
   preview_image_url: string | null;
+  saved: boolean;
 }
 
 interface MockStore {
@@ -151,6 +153,7 @@ function mockLooksToDomain(): Look[] {
       preview_image_url: l.preview_image_url,
       prompt: l.prompt,
       status: l.status,
+      saved: l.saved,
     };
   });
 }
@@ -246,6 +249,7 @@ export async function generateLooks(
           startedAt: started,
           image_url: null,
           preview_image_url: null,
+          saved: false,
         });
       }
       return { generation_id: `gen-mock-${started}` };
@@ -271,6 +275,7 @@ export async function listLooks(): Promise<Look[]> {
       preview_image_url: w.preview_image_url ?? null,
       prompt: w.prompt ?? null,
       status: w.status,
+      saved: w.saved ?? false,
     }));
   } catch (err) {
     if (isDeferredError(err)) return mockLooksToDomain();
@@ -296,8 +301,26 @@ export async function deleteLook(lookId: string): Promise<{ ok: boolean }> {
   }
 }
 
+// ── ③'' 룩 라이브러리에 저장 (확정) ──────────────────────────────────────────
+/** POST /api/avatars/me/looks/{id}/save. deferred 면 mock 에서 saved=true. */
+export async function saveLook(lookId: string): Promise<{ ok: boolean }> {
+  try {
+    const { data } = await api.post<{ ok: boolean }>(
+      `/api/avatars/me/looks/${encodeURIComponent(lookId)}/save`,
+    );
+    return { ok: data?.ok ?? true };
+  } catch (err) {
+    if (isDeferredError(err)) {
+      const l = mock.looks.find((x) => x.look_id === lookId);
+      if (l) l.saved = true;
+      return { ok: true };
+    }
+    throw err;
+  }
+}
+
 // ── ④ 기본 룩 선택 ───────────────────────────────────────────────────────────
-/** POST /api/avatars/me/looks/{id}/select. deferred 면 mock 선택 기록. */
+/** POST /api/avatars/me/looks/{id}/select. 확정이므로 라이브러리에도 자동 저장. */
 export async function selectLook(lookId: string): Promise<{ ok: boolean }> {
   try {
     const { data } = await api.post<{ ok: boolean }>(
@@ -307,6 +330,9 @@ export async function selectLook(lookId: string): Promise<{ ok: boolean }> {
   } catch (err) {
     if (isDeferredError(err)) {
       mock.selectedLookId = lookId;
+      // 기본 룩 지정 = 확정 → 라이브러리 자동 저장(백엔드와 동일).
+      const l = mock.looks.find((x) => x.look_id === lookId);
+      if (l) l.saved = true;
       return { ok: true };
     }
     throw err;

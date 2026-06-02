@@ -123,9 +123,12 @@ class Settings(BaseSettings):
     # Photo Avatar 룩 생성 상한 — 룩 1개당 이미지 생성 비용이 발생하므로
     # 한 번에 생성할 수 개수와 교수자당 누적 개수를 제한해 비용 폭주를 막는다.
     PHOTO_AVATAR_LOOK_BATCH_MAX: int = 4
-    # 교수자(계정)당 누적 — 강의당 아님. 2026-06-01 사용자 결정으로 20→10.
-    # 라이브러리에 너무 많이 쌓이면 선택 피로가 커진다는 판단.
-    PHOTO_AVATAR_LOOK_TOTAL_MAX: int = 10
+    # 온보딩에서 만들 수 있는 룩 후보(non-failed)의 누적 상한. 2026-06-02 사용자
+    # 결정으로 20. 이 한도에 도달하면 후보를 삭제해야 다시 생성할 수 있다.
+    PHOTO_AVATAR_LOOK_TOTAL_MAX: int = 20
+    # 라이브러리(saved_to_library)에 보관 가능한 확정 룩 수의 상한. 후보(20)와 별개로
+    # 사용자가 '확정/저장'한 것만 들어가며, 선택 피로를 막기 위해 10 으로 둔다.
+    PHOTO_AVATAR_LIBRARY_MAX: int = 10
     # 룩이 이 시간(분) 넘게 generating 에 머물면 reaper 가 failed 로 정리한다.
     # 워커 장애로 정체된 룩이 누적 cap 을 영구 점유해 생성 버튼이 사라지는 것을
     # 막는다(app.tasks.photo_avatar.reap_stuck_looks). 정상 생성 소요(수 분)보다

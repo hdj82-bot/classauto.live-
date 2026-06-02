@@ -115,27 +115,25 @@ export default function LookOptionForm({
         />
       </FieldRow>
 
-      {capReached ? (
-        <p style={softNote} data-testid="look-cap-note" aria-live="polite">
-          {t("looks.capReached")}
-        </p>
-      ) : (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={disabled}
-            data-testid="look-generate-btn"
-            style={{
-              ...primaryBtn,
-              opacity: disabled ? 0.5 : 1,
-              cursor: disabled ? "not-allowed" : "pointer",
-            }}
-          >
-            {t("looks.generateCta", { count: LOOK_BATCH_DEFAULT })}
-          </button>
-        </div>
-      )}
+      {/* 생성 버튼은 한도(20)에 도달해도 사라지지 않고 비활성으로 남는다 —
+          버튼이 갑자기 없어지는 혼란을 막는다(사용자 요청 2026-06-02). 한도/정리
+          안내는 상위 LookGenerateStep 의 굵은 빨간 문구가 담당한다. */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={disabled || capReached}
+          data-testid="look-generate-btn"
+          aria-disabled={disabled || capReached}
+          style={{
+            ...primaryBtn,
+            opacity: disabled || capReached ? 0.5 : 1,
+            cursor: disabled || capReached ? "not-allowed" : "pointer",
+          }}
+        >
+          {t("looks.generateCta", { count: LOOK_BATCH_DEFAULT })}
+        </button>
+      </div>
     </div>
   );
 }
@@ -241,11 +239,4 @@ const primaryBtn: CSSProperties = {
   background: "linear-gradient(135deg, #FFB627, #E89E0E)",
   color: "#0A0A0A",
   fontFamily: "inherit",
-};
-
-const softNote: CSSProperties = {
-  margin: "14px 0 0",
-  fontSize: 12,
-  lineHeight: 1.55,
-  color: "var(--text-muted)",
 };

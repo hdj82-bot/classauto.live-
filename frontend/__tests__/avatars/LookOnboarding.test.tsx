@@ -19,12 +19,13 @@ import {
 // 가짜 t 로 동작을 검증한다(옵션 라벨은 lookOptions 데이터에 한국어로 있음).
 const t = (key: string) => key;
 
-const readyLook = (id: string): Look => ({
+const readyLook = (id: string, saved = false): Look => ({
   look_id: id,
   image_url: "data:image/svg+xml;utf8,x",
   preview_image_url: null,
   prompt: "p",
   status: "ready",
+  saved,
 });
 
 const failedLook = (id: string): Look => ({
@@ -33,6 +34,7 @@ const failedLook = (id: string): Look => ({
   preview_image_url: null,
   prompt: "p",
   status: "failed",
+  saved: false,
 });
 
 describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
@@ -108,7 +110,9 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
     expect(screen.queryByText("말하는 제스처")).toBeNull();
   });
 
-  it("누적 한도에 도달하면 생성 버튼 대신 소프트 안내를 노출한다", () => {
+  it("누적 한도(20)에 도달해도 생성 버튼은 사라지지 않고 비활성으로 남으며 안내문구를 노출한다", () => {
+    // 2026-06-02 정책: 버튼이 갑자기 없어지는 혼란을 막는다. 한도 도달 시 버튼은
+    // disabled 로 남고, 굵은 빨간 안내문구(looks-cost-note)가 정리 규칙을 알린다.
     const looks = Array.from({ length: LOOK_TOTAL_MAX }, (_, i) => readyLook(`l${i}`));
     const onGenerate = vi.fn();
     render(
@@ -123,8 +127,11 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
         t={t}
       />,
     );
-    expect(screen.queryByTestId("look-generate-btn")).toBeNull();
-    expect(screen.getByTestId("look-cap-note")).toBeTruthy();
+    const btn = screen.getByTestId("look-generate-btn") as HTMLButtonElement;
+    expect(btn).toBeTruthy();
+    expect(btn.disabled).toBe(true);
+    expect(screen.getByTestId("looks-cost-note")).toBeTruthy();
+    fireEvent.click(btn);
     expect(onGenerate).not.toHaveBeenCalled();
   });
 
@@ -312,10 +319,11 @@ vi.mock("@/components/professor/avatars/onboarding/photoAvatarApi", () => ({
   listLooks: vi
     .fn()
     .mockResolvedValue([
-      { look_id: "k1", image_url: "x", preview_image_url: null, prompt: "p", status: "ready" },
+      { look_id: "k1", image_url: "x", preview_image_url: null, prompt: "p", status: "ready", saved: false },
     ]),
   generateLooks: vi.fn().mockResolvedValue({ generation_id: "g" }),
   selectLook: vi.fn().mockResolvedValue({ ok: true }),
+  saveLook: vi.fn().mockResolvedValue({ ok: true }),
   deleteLook: vi.fn().mockResolvedValue({ ok: true }),
   uploadPhotoAvatar: vi.fn(),
   isDeferredMode: vi.fn().mockReturnValue(false),

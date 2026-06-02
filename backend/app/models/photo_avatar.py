@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -41,6 +41,11 @@ class PhotoAvatarLook(Base):
     # "generating"|"ready"|"failed" — LookStatus 값을 문자열로 저장(enum 타입 미사용).
     status: Mapped[str] = mapped_column(
         String(20), default=LookStatus.generating.value, nullable=False
+    )
+    # 온보딩에서 생성한 룩은 "후보"이고, 사용자가 ⋮ 메뉴로 '라이브러리에 저장'하거나
+    # 기본 룩으로 지정(확정)한 룩만 saved_to_library=true 가 되어 라이브러리에 노출된다.
+    saved_to_library: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

@@ -443,6 +443,7 @@ interface LookItemWire {
   prompt?: string | null;
   status: "generating" | "ready" | "failed";
   is_default?: boolean;
+  saved?: boolean;
 }
 
 /** 저장된 본인 Design with AI 룩 1개 (라이브러리 항목). */
@@ -454,6 +455,8 @@ export interface MyLook {
   status: "generating" | "ready" | "failed";
   /** 교수자가 기본 룩(모든 강의 폴백)으로 지정한 항목이면 true. */
   is_default: boolean;
+  /** 라이브러리에 저장(확정)된 룩이면 true. 라이브러리는 이 값이 true 인 것만 노출. */
+  saved: boolean;
 }
 
 /** GET /api/avatars/me/looks — 저장된 본인 룩 목록. deferred(미배포)면 빈 목록. */
@@ -466,6 +469,7 @@ export async function listMyLooks(): Promise<MyLook[]> {
       prompt: w.prompt ?? null,
       status: w.status,
       is_default: w.is_default ?? false,
+      saved: w.saved ?? false,
     }));
   } catch (err) {
     if (isDeferredError(err)) return [];

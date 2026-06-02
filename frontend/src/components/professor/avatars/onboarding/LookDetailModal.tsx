@@ -251,6 +251,11 @@ const bodyStyle: CSSProperties = {
   flexDirection: "column",
   gap: 14,
   overflowY: "auto",
+  // flex 컬럼(maxHeight 92vh + overflow:hidden) 안에서 스크롤이 실제로 동작하려면
+  // 스크롤 영역에 flex:1 + minHeight:0 이 필요하다. 없으면 내용이 dialog 를 넘쳐
+  // 하단(이미지 아래·footer)이 잘려 보인다. (사용자 보고: "하단이 짤린다".)
+  flex: "1 1 auto",
+  minHeight: 0,
 };
 
 // 2026-06-01 v2: 강제 16:9 프레임 → 자연 비율. 이전엔 정사각(1024x1024) 이미지를
