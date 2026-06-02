@@ -16,6 +16,7 @@ from app.db.session import SyncSessionLocal, get_db
 from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.qa_log import QALog
+from app.models.session import LearningSession
 from app.models.user import User
 from app.services.pipeline.qa import answer_question
 
@@ -37,6 +38,19 @@ async def ask_question(
 
     def _run():
         with SyncSessionLocal() as db:
+            # 권한·정합 검증 — 본인 세션이고 그 세션이 이 강의의 것인지 확인한다.
+            # (검증 없으면 임의 학생이 아무 강의의 RAG 를 호출하고 비용을 그 강의에
+            #  전가할 수 있다.)
+            session = db.execute(
+                select(LearningSession).where(LearningSession.id == body.session_id)
+            ).scalar_one_or_none()
+            if (
+                session is None
+                or session.user_id != user.id
+                or session.lecture_id != body.lecture_id
+            ):
+                raise PermissionError("이 세션에 대한 권한이 없습니다.")
+
             lecture = db.execute(
                 select(Lecture).where(Lecture.id == body.lecture_id)
             ).scalar_one_or_none()
@@ -74,6 +88,8 @@ async def ask_question(
         result = await loop.run_in_executor(None, _run)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except Exception:
         raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
 

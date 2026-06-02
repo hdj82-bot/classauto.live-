@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, API_URL } from "@/lib/api";
 import { tokens as tokenStorage } from "@/lib/tokens";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -212,9 +212,10 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
   useEffect(() => {
     if (!sessionId) return;
     const pause = () => {
-      const url = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+      // 중앙 API_URL 사용 — prod 빌드에 env 누락 시 api.ts 가 먼저 throw 하므로
+      // 여기서 localhost 로 조용히 새지 않는다.
       const tok = tokenStorage.getAccess();
-      fetch(`${url}/api/v1/sessions/${sessionId}?status=paused`, {
+      fetch(`${API_URL}/api/v1/sessions/${sessionId}?status=paused`, {
         method: "PATCH",
         keepalive: true,
         headers: tok ? { Authorization: `Bearer ${tok}` } : undefined,

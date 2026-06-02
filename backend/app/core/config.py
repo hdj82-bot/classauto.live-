@@ -228,6 +228,11 @@ class Settings(BaseSettings):
 
     # ── Frontend ────────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:3000"
+    # FRONTEND_URL 외 추가 허용 CORS origin(쉼표 구분) — apex/www/커스텀 도메인 등.
+    # 예: "https://classauto.live,https://www.classauto.live"
+    CORS_EXTRA_ORIGINS: str = ""
+    # Vercel 프리뷰 배포(https://*.vercel.app) 허용 — 프리뷰에서 API 테스트 시 필요.
+    CORS_ALLOW_VERCEL_PREVIEWS: bool = False
 
 
 settings = Settings()
