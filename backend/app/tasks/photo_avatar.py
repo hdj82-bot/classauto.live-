@@ -343,6 +343,30 @@ def generate_gpt_looks(
             user_id, count, created,
         )
         return {"user_id": user_id, "status": "ready", "created": created}
+    except Exception:
+        # OpenAI 외 예상치 못한 오류(S3 다운/업로드·DB·네트워크 등)도 대상 placeholder
+        # 가 generating 에 영구히 남지 않도록 failed 로 정리한 뒤 예외를 다시 올린다.
+        # (reap_stuck_looks 가 backstop 이지만, beat 미가동 시에도 즉시 회복되도록
+        # 태스크 자신이 1차로 정리한다.) 예외는 삼키지 않고 재전파해 로그·메트릭에
+        # 실패가 드러나게 한다.
+        logger.exception("gpt 룩 생성 중 예외 — 대상 룩을 failed 처리: user=%s", user_id)
+        try:
+            db.rollback()
+            ids = [uuid.UUID(x) for x in look_ids]
+            db.execute(
+                update(PhotoAvatarLook)
+                .where(
+                    PhotoAvatarLook.user_id == uuid.UUID(user_id),
+                    PhotoAvatarLook.id.in_(ids),
+                    PhotoAvatarLook.status == LookStatus.generating.value,
+                )
+                .values(status=LookStatus.failed.value)
+            )
+            db.commit()
+        except Exception:
+            logger.exception("failed 정리 자체가 실패: user=%s", user_id)
+            db.rollback()
+        raise
     finally:
         loop.close()
         db.close()

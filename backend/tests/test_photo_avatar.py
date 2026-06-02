@@ -100,6 +100,40 @@ def test_reap_stuck_looks_fails_old_generating_rows():
     assert "UPDATE" in compiled
 
 
+def test_generate_gpt_looks_marks_failed_on_unexpected_error():
+    """OpenAI 외 예외(S3 다운로드 실패 등)도 대상 룩을 failed 로 정리하고 재전파한다."""
+    from app.tasks import photo_avatar as t
+    from app.models.photo_avatar import LookStatus
+
+    uid = uuid.uuid4()
+    lid = uuid.uuid4()
+
+    user = MagicMock()
+    user.id = uid
+    user.profile_image_url = "https://example/photo.jpg"
+
+    row = MagicMock()
+    row.id = lid
+    row.status = LookStatus.generating.value
+
+    db = MagicMock()
+    db.query.return_value.filter.return_value.one.return_value = user
+    db.query.return_value.filter.return_value.all.return_value = [row]
+
+    with patch.object(t, "SyncSessionLocal", return_value=db), patch(
+        "app.services.pipeline.s3.download_file", side_effect=RuntimeError("s3 down")
+    ):
+        with pytest.raises(RuntimeError):
+            t.generate_gpt_looks.apply(
+                args=[str(uid), [str(lid)], "educator", None, None, None, None]
+            ).get(propagate=True)
+
+    # except 경로가 rollback 후 generating→failed 정리 UPDATE 를 실행했는지.
+    db.rollback.assert_called()
+    assert db.execute.called
+    assert "UPDATE" in str(db.execute.call_args.args[0]).upper()
+
+
 # ── API 엔드포인트 ────────────────────────────────────────────────────────────
 
 
