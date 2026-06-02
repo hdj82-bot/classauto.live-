@@ -42,6 +42,8 @@ export interface Look {
   preview_image_url: string | null;
   prompt: string | null;
   status: LookStatus;
+  /** 라이브러리에 저장(확정)된 룩이면 true. 후보(미저장)는 false. */
+  saved: boolean;
 }
 
 /** POST /api/avatars/me/looks 응답 — 배치 생성 작업 식별자. */
@@ -118,9 +120,14 @@ export const LOOK_BATCH_MAX = 4;
 export const LOOK_BATCH_DEFAULT = 3;
 
 /**
- * 교수자당 누적 룩 상한(클라이언트 가드레일). 계약
- * ``PHOTO_AVATAR_LOOK_TOTAL_MAX``(기본 10)에 정렬 — 무심코 다량 생성 방지.
- * 백엔드가 권위 있는 상한을 강제하더라도, UI 도 "추가 생성"을 여기서 막고
- * 초과 시 소프트 안내(docs §0.5②)를 노출한다.
+ * 온보딩에서 만들 수 있는 룩 후보(non-failed)의 누적 상한(클라이언트 가드레일).
+ * 계약 ``PHOTO_AVATAR_LOOK_TOTAL_MAX``(기본 20)에 정렬. 도달 시 생성 버튼은
+ * 사라지지 않고 비활성 + 안내 문구만 노출한다(삭제하면 다시 생성 가능).
  */
-export const LOOK_TOTAL_MAX = 10;
+export const LOOK_TOTAL_MAX = 20;
+
+/**
+ * 라이브러리(saved)에 보관 가능한 확정 룩 수의 상한. 계약
+ * ``PHOTO_AVATAR_LIBRARY_MAX``(기본 10)에 정렬 — 후보(20)와 별개.
+ */
+export const LIBRARY_MAX = 10;

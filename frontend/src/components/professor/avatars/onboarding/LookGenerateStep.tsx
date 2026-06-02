@@ -15,8 +15,10 @@ interface LookGenerateStepProps {
   looks: Look[];
   /** 구조화 옵션으로 룩 배치를 생성한다(v0.2). */
   onGenerate: (input: LookGenerateInput) => Promise<void>;
-  /** 룩 1개를 라이브러리에서 삭제(LookDetailModal 내부 버튼). */
+  /** 룩 1개를 삭제(타일 ⋮ 메뉴 + LookDetailModal). */
   onDelete?: (lookId: string) => Promise<void>;
+  /** 후보 룩을 라이브러리에 저장(타일 ⋮ 메뉴). */
+  onSave?: (lookId: string) => Promise<void>;
   /** 생성이 진행 중인지(generating 타일 존재). */
   looksPending: boolean;
   /** 직전 배치 입력 — LookDetailModal 의 재생성 base. */
@@ -44,6 +46,7 @@ export default function LookGenerateStep({
   looks,
   onGenerate,
   onDelete,
+  onSave,
   looksPending,
   lastInput,
   reducedMotion,
@@ -80,29 +83,21 @@ export default function LookGenerateStep({
     }
   };
 
-  // 타일 클릭: ready 는 상세 모달, 그 외(주로 generating 정체)는 정리(삭제)한다.
-  // 워커 장애 등으로 generating 룩이 누적 cap 을 점유해 생성 폼이 사라지면,
-  // 사용자가 멈춘 룩을 눌러 직접 비워 빠져나올 수 있게 한다(백엔드 reaper 와 별개의
-  // 즉시 회복 경로).
-  const handleTileClick = (id: string) => {
-    const look = visibleLooks.find((l) => l.look_id === id);
-    if (!look) return;
-    if (look.status === "ready") {
-      setActiveLookId(id);
-      return;
-    }
+  // ready 타일 클릭 = 상세 모달. 삭제/저장은 타일 우상단 ⋮ 메뉴로 처리한다.
+  const handleTileClick = (id: string) => setActiveLookId(id);
+
+  // ⋮ 메뉴 삭제 — 큰 모달을 열지 않고 바로 삭제(가벼운 confirm 만).
+  const handleMenuDelete = (id: string) => {
     if (!onDelete) return;
     if (
       typeof window !== "undefined" &&
-      !window.confirm(t("looks.removePendingConfirm"))
+      !window.confirm(t("looks.detail.deleteConfirm"))
     ) {
       return;
     }
     void onDelete(id);
   };
-
-  // 정체/실패로 cap 을 채웠는데 ready 가 없으면(완전 정지) 회복 안내를 띄운다.
-  const stuckOnly = capReached && readyCount === 0;
+  const handleMenuSave = onSave ? (id: string) => void onSave(id) : undefined;
 
   return (
     <div data-testid="step-generate" style={cardStyle}>
@@ -138,17 +133,8 @@ export default function LookGenerateStep({
         t={t}
       />
 
-      {/* 안내 — 라이브러리 상한 (i18n looks.costNote 가 텍스트를 결정) */}
-      {!capReached && (
-        <p style={costNote}>{t("looks.costNote", { remaining })}</p>
-      )}
-
-      {/* 완전 정지(cap 도달 + ready 0) 회복 안내 — 멈춘 룩을 눌러 정리하도록 유도 */}
-      {stuckOnly && onDelete && (
-        <p style={stuckHint} data-testid="stuck-hint">
-          {t("looks.capReachedHint")}
-        </p>
-      )}
+      {/* 안내 — 항상 노출하는 굵은 빨간 안내문구(생성 한도·정리 규칙). */}
+      <p style={costNote} data-testid="looks-cost-note">{t("looks.costNote")}</p>
 
       {/* 진행/완료 타일 (failed 제외) */}
       {visibleLooks.length > 0 && (
@@ -160,7 +146,8 @@ export default function LookGenerateStep({
                 look={look}
                 reducedMotion={reducedMotion}
                 onSelect={handleTileClick}
-                allowOpenAnyStatus={!!onDelete}
+                onDelete={onDelete ? handleMenuDelete : undefined}
+                onSave={handleMenuSave}
                 t={t}
               />
             ))}
@@ -246,18 +233,13 @@ const primaryBtn: CSSProperties = {
   fontFamily: "inherit",
 };
 
+// 굵고 빨간 안내문구 — 생성 한도·정리 규칙을 눈에 띄게(사용자 요청 2026-06-02).
 const costNote: CSSProperties = {
   margin: "12px 0 0",
-  fontSize: 11.5,
+  fontSize: 13,
+  fontWeight: 700,
   lineHeight: 1.5,
-  color: "var(--text-faint)",
-};
-
-const stuckHint: CSSProperties = {
-  margin: "12px 0 0",
-  fontSize: 12,
-  lineHeight: 1.5,
-  color: "var(--text-muted)",
+  color: "#D92D20",
 };
 
 const gridStyle: CSSProperties = {

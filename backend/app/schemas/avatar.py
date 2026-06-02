@@ -238,6 +238,10 @@ class LookItem(BaseModel):
     is_default: bool = Field(
         default=False, description="교수자가 기본 룩으로 선택한 항목이면 true."
     )
+    saved: bool = Field(
+        default=False,
+        description="라이브러리에 저장(확정)된 룩이면 true. 후보(미저장)는 false.",
+    )
 
 
 class LookSelectResponse(BaseModel):

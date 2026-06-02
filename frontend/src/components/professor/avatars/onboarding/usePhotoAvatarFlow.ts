@@ -7,6 +7,7 @@ import {
   getPhotoAvatar,
   isDeferredMode,
   listLooks,
+  saveLook,
   selectLook,
   uploadPhotoAvatar,
 } from "./photoAvatarApi";
@@ -56,6 +57,8 @@ export interface PhotoAvatarFlow {
   /** 구조화 옵션으로 룩 배치(기본 LOOK_BATCH_DEFAULT 장)를 생성한다. */
   generate: (input: LookGenerateInput) => Promise<void>;
   select: (lookId: string) => Promise<void>;
+  /** 후보 룩을 라이브러리에 저장(확정). */
+  save: (lookId: string) => Promise<void>;
   /** 라이브러리에서 룩 1개를 삭제(누적 cap 회복). */
   remove: (lookId: string) => Promise<void>;
 }
@@ -148,7 +151,20 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
 
   const select = useCallback(async (lookId: string) => {
     setSelectedLookId(lookId); // 낙관적 — 갤러리 선택 즉시 반영
+    // 기본 룩 지정 = 확정 → 라이브러리 자동 저장(백엔드와 동일). 낙관적 반영.
+    setLooks((prev) =>
+      prev.map((l) => (l.look_id === lookId ? { ...l, saved: true } : l)),
+    );
     await selectLook(lookId);
+    setDeferred(isDeferredMode());
+  }, []);
+
+  const save = useCallback(async (lookId: string) => {
+    // 낙관적 저장 — 실패하면 list 폴링/재조회가 보정한다.
+    setLooks((prev) =>
+      prev.map((l) => (l.look_id === lookId ? { ...l, saved: true } : l)),
+    );
+    await saveLook(lookId);
     setDeferred(isDeferredMode());
   }, []);
 
@@ -190,6 +206,7 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     uploadPhoto,
     generate,
     select,
+    save,
     remove,
   };
 }

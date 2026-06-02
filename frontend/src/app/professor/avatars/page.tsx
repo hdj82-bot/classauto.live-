@@ -216,8 +216,10 @@ export default function AvatarsPage() {
   // avatar_id 로 그대로 통용되므로(video.py) 동일 Avatar shape 로 정규화한다.
   const libraryItems = useMemo<Avatar[]>(() => {
     const customAvatars = avatars.filter((a) => a.is_custom);
+    // 라이브러리는 "확정(saved)된" 룩만 노출한다 — 온보딩에서 생성한 모든 후보가
+    // 자동으로 라이브러리에 쌓이지 않게(사용자 결정 2026-06-02).
     const lookAvatars: Avatar[] = looks
-      .filter((l) => l.status === "ready")
+      .filter((l) => l.status === "ready" && l.saved)
       .map((l) => ({
         id: l.id,
         name: l.prompt?.trim() || t("lookUntitled"),

@@ -169,6 +169,7 @@ function mockBackendWithLook() {
             prompt: "네이비 정장",
             status: "ready",
             is_default: true,
+            saved: true,
           },
         ],
       };

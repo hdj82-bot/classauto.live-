@@ -18,8 +18,10 @@ interface LookSelectStepProps {
   onSelect: (lookId: string) => void;
   /** 16:9 모달 안에서 미세 조정 재생성. */
   onGenerate?: (input: LookGenerateInput) => Promise<void>;
-  /** 16:9 모달 안에서 룩 삭제. */
+  /** 룩 삭제(타일 ⋮ 메뉴 + 16:9 모달). */
   onDelete?: (lookId: string) => Promise<void>;
+  /** 후보 룩을 라이브러리에 저장(타일 ⋮ 메뉴). */
+  onSave?: (lookId: string) => Promise<void>;
   /** 모달 재생성용 base. */
   lastInput?: LookGenerateInput | null;
   /** generating 룩이 있을 때 모달 동작 disable. */
@@ -51,6 +53,7 @@ export default function LookSelectStep({
   onSelect,
   onGenerate,
   onDelete,
+  onSave,
   lastInput = null,
   looksPending = false,
   reducedMotion,
@@ -83,6 +86,19 @@ export default function LookSelectStep({
     onSelect(lookId);
     setActiveLookId(lookId);
   };
+
+  // ⋮ 메뉴 — 큰 모달 없이 바로 삭제(가벼운 confirm)/라이브러리 저장.
+  const handleMenuDelete = (lookId: string) => {
+    if (!onDelete) return;
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(t("looks.detail.deleteConfirm"))
+    ) {
+      return;
+    }
+    void onDelete(lookId);
+  };
+  const handleMenuSave = onSave ? (lookId: string) => void onSave(lookId) : undefined;
 
   // 모달이 재생성을 위임받았을 때 — 비어 있으면 no-op.
   const handleRegenerate = async (input: LookGenerateInput) => {
@@ -121,6 +137,8 @@ export default function LookSelectStep({
               selected={selectedLookId === look.look_id}
               reducedMotion={reducedMotion}
               onSelect={handleTileClick}
+              onDelete={onDelete ? handleMenuDelete : undefined}
+              onSave={handleMenuSave}
               t={t}
             />
           ))}
@@ -140,9 +158,7 @@ export default function LookSelectStep({
             capReached={capReached}
             t={t}
           />
-          {!capReached && (
-            <p style={inlineGenNote}>{t("looks.costNote", { remaining })}</p>
-          )}
+          <p style={inlineGenNote} data-testid="select-cost-note">{t("looks.costNote")}</p>
         </section>
       )}
 
@@ -253,9 +269,10 @@ const inlineGenDesc: CSSProperties = {
 
 const inlineGenNote: CSSProperties = {
   margin: "10px 0 0",
-  fontSize: 11.5,
+  fontSize: 13,
+  fontWeight: 700,
   lineHeight: 1.5,
-  color: "var(--text-faint)",
+  color: "#D92D20",
 };
 
 const emptyBox: CSSProperties = {
