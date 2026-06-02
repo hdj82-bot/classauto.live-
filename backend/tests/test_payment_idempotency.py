@@ -145,6 +145,11 @@ def test_production_blank_stripe_no_longer_raises(blank_value, monkeypatch):
         STRIPE_PRICE_BASIC=blank_value,
         STRIPE_PRICE_PRO=blank_value,
         ANTHROPIC_API_KEY="anth_x",
+        OPENAI_API_KEY="oai_x",
+        HEYGEN_API_KEY="hg_x",
+        S3_BUCKET="ifl-bucket",
+        AWS_ACCESS_KEY_ID="aws_id",
+        AWS_SECRET_ACCESS_KEY="aws_secret",
     )
     monkeypatch.setattr(cfg, "settings", fresh)
     # raise 하지 않으면 통과 — 명시적으로 호출해서 회귀 시 즉시 실패하도록.
@@ -165,6 +170,11 @@ def test_production_all_present_passes(monkeypatch):
         STRIPE_PRICE_BASIC="price_basic",
         STRIPE_PRICE_PRO="price_pro",
         ANTHROPIC_API_KEY="anth_x",
+        OPENAI_API_KEY="oai_x",
+        HEYGEN_API_KEY="hg_x",
+        S3_BUCKET="ifl-bucket",
+        AWS_ACCESS_KEY_ID="aws_id",
+        AWS_SECRET_ACCESS_KEY="aws_secret",
     )
     monkeypatch.setattr(cfg, "settings", fresh)
     cfg._validate_settings()  # no raise
