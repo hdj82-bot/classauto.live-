@@ -9,7 +9,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
+
+from sqlalchemy import update
 
 from app.celery_app import celery
 from app.core.config import settings
@@ -342,4 +345,47 @@ def generate_gpt_looks(
         return {"user_id": user_id, "status": "ready", "created": created}
     finally:
         loop.close()
+        db.close()
+
+
+# ── 정체된 룩 정리(reaper) — 누적 cap 의 영구 점유 방지 ────────────────────────
+
+
+@celery.task
+def reap_stuck_looks() -> dict:
+    """오래 ``generating`` 에 머문 룩을 ``failed`` 로 정리한다(주기 태스크).
+
+    워커 장애·중복 큐잉·브로커 단절 등으로 ``generate_gpt_looks`` 가 끝내 완료하지
+    못하면 행이 ``generating`` 에 남는다. 누적 cap(``PHOTO_AVATAR_LOOK_TOTAL_MAX``)
+    은 failed 를 제외한 룩으로 계산하므로, 정체된 generating 룩이 cap 을 영구
+    점유해 **룩 생성 버튼이 사라지고 사용자가 빠져나올 수 없는** 상태가 된다.
+
+    ``created_at`` 이 ``PHOTO_AVATAR_LOOK_STUCK_MINUTES`` 임계를 넘긴 generating 룩을
+    failed 로 돌려(failed 는 cap 에서 제외 + UI 에서 숨김) 자가 회복시킨다. 실제로
+    완료될 작업을 너무 일찍 죽이지 않도록 임계는 정상 생성 소요(수 분)보다 넉넉히
+    크게 둔다.
+    """
+    db = SyncSessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            minutes=settings.PHOTO_AVATAR_LOOK_STUCK_MINUTES
+        )
+        result = db.execute(
+            update(PhotoAvatarLook)
+            .where(
+                PhotoAvatarLook.status == LookStatus.generating.value,
+                PhotoAvatarLook.created_at < cutoff,
+            )
+            .values(status=LookStatus.failed.value)
+        )
+        db.commit()
+        reaped = result.rowcount or 0
+        if reaped:
+            logger.warning(
+                "정체된 룩 %d건을 failed 로 정리(임계=%d분 초과 generating)",
+                reaped,
+                settings.PHOTO_AVATAR_LOOK_STUCK_MINUTES,
+            )
+        return {"reaped": reaped}
+    finally:
         db.close()

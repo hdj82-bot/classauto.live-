@@ -8,8 +8,13 @@ interface LookTileProps {
   look: Look;
   selected?: boolean;
   reducedMotion?: boolean;
-  /** 제공되면 클릭으로 선택 가능. ready 가 아니면 비활성. */
+  /** 제공되면 클릭으로 선택 가능. 기본은 ready 타일만 클릭 가능. */
   onSelect?: (lookId: string) => void;
+  /**
+   * true 면 generating·failed 타일도 클릭 가능하게 한다(정체·실패 룩을 정리하기
+   * 위함). 생성 단계에서만 켠다 — 선택 단계는 ready 타일만 골라야 하므로 기본 false.
+   */
+  allowOpenAnyStatus?: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -22,22 +27,26 @@ export default function LookTile({
   selected,
   reducedMotion,
   onSelect,
+  allowOpenAnyStatus,
   t,
 }: LookTileProps) {
-  const selectable = !!onSelect && look.status === "ready";
-  const Wrapper = selectable ? "button" : "div";
+  const isReady = look.status === "ready";
+  // ready 는 "선택", non-ready 는 "정리(삭제)" 용도로 클릭을 연다(opt-in).
+  const interactive = !!onSelect && (isReady || !!allowOpenAnyStatus);
+  const Wrapper = interactive ? "button" : "div";
 
   return (
     <Wrapper
-      type={selectable ? "button" : undefined}
-      onClick={selectable ? () => onSelect?.(look.look_id) : undefined}
-      aria-pressed={selectable ? !!selected : undefined}
-      disabled={selectable ? false : undefined}
+      type={interactive ? "button" : undefined}
+      onClick={interactive ? () => onSelect?.(look.look_id) : undefined}
+      // 선택 토글 의미는 ready 타일에만 부여(non-ready 는 정리용 버튼).
+      aria-pressed={interactive && isReady ? !!selected : undefined}
+      disabled={interactive ? false : undefined}
       data-testid={`look-tile-${look.look_id}`}
       data-status={look.status}
       style={{
         ...tileStyle,
-        cursor: selectable ? "pointer" : "default",
+        cursor: interactive ? "pointer" : "default",
         borderColor: selected ? "var(--gold)" : "var(--line)",
         boxShadow: selected ? "0 0 0 3px var(--gold-medium)" : "var(--shadow-sm)",
       }}

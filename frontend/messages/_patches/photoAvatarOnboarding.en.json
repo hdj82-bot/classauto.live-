@@ -60,6 +60,8 @@
       "restart": "Start over with a different photo",
       "costNote": "Just pick from the categories above. Your library can hold up to 10 looks.",
       "capReached": "Please pick from the looks you've already made. You can generate more again shortly.",
+      "capReachedHint": "Stalled looks are taking up your slots. Tap a stalled look to clear it, then you can generate again.",
+      "removePendingConfirm": "Clear this stalled or failed look? Freeing the slot lets you generate again.",
       "next": "Next: pick a look",
       "error": "Could not start look generation. Please try again shortly.",
       "tileAlt": "Generated look preview",

@@ -81,6 +81,25 @@ def test_poll_photo_avatar_looks_creates_rows():
     assert all(o.status == "ready" for o in added)
 
 
+def test_reap_stuck_looks_fails_old_generating_rows():
+    """reaper 가 오래 generating 인 룩을 failed 로 일괄 전이하고 건수를 돌려준다."""
+    from app.tasks import photo_avatar as t
+
+    db = MagicMock()
+    db.execute.return_value.rowcount = 2
+
+    with patch.object(t, "SyncSessionLocal", return_value=db):
+        out = t.reap_stuck_looks.apply().get(propagate=True)
+
+    assert out == {"reaped": 2}
+    db.execute.assert_called_once()
+    db.commit.assert_called_once()
+    db.close.assert_called_once()
+    # generating → failed UPDATE 인지 확인(컬럼/상태 매핑 회귀 방지).
+    compiled = str(db.execute.call_args.args[0]).upper()
+    assert "UPDATE" in compiled
+
+
 # ── API 엔드포인트 ────────────────────────────────────────────────────────────
 
 

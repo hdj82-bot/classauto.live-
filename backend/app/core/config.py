@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     # 교수자(계정)당 누적 — 강의당 아님. 2026-06-01 사용자 결정으로 20→10.
     # 라이브러리에 너무 많이 쌓이면 선택 피로가 커진다는 판단.
     PHOTO_AVATAR_LOOK_TOTAL_MAX: int = 10
+    # 룩이 이 시간(분) 넘게 generating 에 머물면 reaper 가 failed 로 정리한다.
+    # 워커 장애로 정체된 룩이 누적 cap 을 영구 점유해 생성 버튼이 사라지는 것을
+    # 막는다(app.tasks.photo_avatar.reap_stuck_looks). 정상 생성 소요(수 분)보다
+    # 넉넉히 크게 둬 실제 진행 중인 작업을 죽이지 않는다.
+    PHOTO_AVATAR_LOOK_STUCK_MINUTES: int = 15
 
     # ── Photo Avatar v0.2: gpt-image-2 룩 + Talking Photo (docs/planning/12 §0) ──
     # 룩 생성 제공자 전환 feature flag. "gpt" = OpenAI gpt-image-2 즉석 생성 +
