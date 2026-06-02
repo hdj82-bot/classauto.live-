@@ -61,14 +61,17 @@ app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(PrometheusMiddleware)
 
-# CORS — 프로덕션에서는 명시적 origin만 허용
+# CORS — 프로덕션에서는 명시적 origin만 허용.
+# FRONTEND_URL(단일) 외에 apex/www/커스텀 도메인을 CORS_EXTRA_ORIGINS(쉼표 구분)로,
+# Vercel 프리뷰는 정규식으로 허용한다. allow_credentials=True 라 와일드카드("*")는
+# 쓸 수 없으므로 origin 목록을 명시적으로 구성한다.
 _cors_origins = [settings.FRONTEND_URL]
 if settings.ENVIRONMENT == "development":
     _cors_origins.append("http://localhost:3000")
+_cors_origins += [o.strip() for o in settings.CORS_EXTRA_ORIGINS.split(",") if o.strip()]
+_cors_origins = list(dict.fromkeys(_cors_origins))  # 순서 보존 중복 제거
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
+_cors_kwargs: dict = dict(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
@@ -76,6 +79,10 @@ app.add_middleware(
     # preflight 응답 24h 캐시 — 브라우저가 OPTIONS 요청을 매번 보내지 않도록.
     max_age=86400,
 )
+if settings.CORS_ALLOW_VERCEL_PREVIEWS:
+    _cors_kwargs["allow_origin_regex"] = r"https://.*\.vercel\.app"
+
+app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, **_cors_kwargs)
 
 # 기존 라우터 등록
 app.include_router(auth_router)
