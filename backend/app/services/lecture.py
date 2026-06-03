@@ -152,6 +152,113 @@ async def get_public_lecture_by_slug(
     )
 
 
+async def get_lecture_slideshow_by_slug(db: AsyncSession, slug: str):
+    """공개 강의의 클라이언트 슬라이드쇼 재생 데이터를 반환한다.
+
+    본문은 MP4 가 아니라 슬라이드 이미지 + 구간 TTS 음성 + 타임라인으로 재생된다
+    (docs/planning/08-cost-optimization.md). 타임라인·텍스트(VideoScript.segments)에
+    슬라이드 PNG(SlideEmbedding)와 구간 음성(VideoRender.audio_url)을 슬라이드 번호로
+    합쳐 내려준다. 만료 강의는 빈 슬라이드 목록을 반환한다.
+
+    슬라이드 번호 규약:
+    - segment.slide_index / VideoRender.slide_number = 0-based(approve_video 에서 동일).
+    - SlideEmbedding.slide_number = 1-based(parser.py) → slide_index + 1.
+    """
+    from app.models.embedding import SlideEmbedding
+    from app.models.video_render import RenderStatus, VideoRender
+    from app.schemas.lecture import SlideshowResponse, SlideshowSlide
+    from app.services.pipeline.s3 import presign_stored_s3_url
+
+    result = await db.execute(
+        select(Lecture).where(
+            Lecture.slug == slug, Lecture.is_published == True  # noqa: E712
+        )
+    )
+    lecture = result.scalar_one_or_none()
+    if not lecture:
+        raise ValueError("강의를 찾을 수 없습니다.")
+
+    now = datetime.now(timezone.utc)
+    is_expired = lecture.expires_at is not None and lecture.expires_at < now
+    if is_expired:
+        return SlideshowResponse(
+            lecture_id=lecture.id, is_expired=True, total_seconds=0, slides=[]
+        )
+
+    # 타임라인 + 텍스트 — 가장 최근 Video 의 스크립트.
+    video_result = await db.execute(
+        select(Video)
+        .options(selectinload(Video.script))
+        .where(Video.lecture_id == lecture.id)
+        .order_by(Video.created_at.desc())
+    )
+    video = video_result.scalars().first()
+    script = video.script if video else None
+    segments = (script.segments if script else None) or []
+    subtitle_segments = (script.subtitle_segments if script else None) or []
+
+    # slide_index → 번역 자막(자막 언어가 음성과 다를 때만 채워짐).
+    subtitle_by_index: dict[int, str] = {}
+    for sub in subtitle_segments:
+        if isinstance(sub, dict) and isinstance(sub.get("slide_index"), int):
+            subtitle_by_index[sub["slide_index"]] = sub.get("text") or ""
+
+    # slide_index → 슬라이드 PNG(SlideEmbedding.slide_number 1-based → idx+1).
+    images_by_index: dict[int, str | None] = {}
+    if lecture.pipeline_task_id:
+        emb_result = await db.execute(
+            select(SlideEmbedding.slide_number, SlideEmbedding.slide_image_url).where(
+                SlideEmbedding.task_id == lecture.pipeline_task_id
+            )
+        )
+        for slide_number, image_url in emb_result.all():
+            images_by_index[int(slide_number) - 1] = image_url
+
+    # slide_index → 구간 음성(최신 ready 렌더의 audio_url). 슬라이드별 1개.
+    render_result = await db.execute(
+        select(VideoRender)
+        .where(
+            VideoRender.lecture_id == lecture.id,
+            VideoRender.status == RenderStatus.ready,
+        )
+        .order_by(VideoRender.created_at.desc())
+    )
+    audio_by_index: dict[int, str] = {}
+    for r in render_result.scalars().all():
+        if r.slide_number is None or not r.audio_url:
+            continue
+        audio_by_index.setdefault(int(r.slide_number), r.audio_url)
+
+    slides: list[SlideshowSlide] = []
+    total_seconds = 0.0
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        idx = seg.get("slide_index")
+        if not isinstance(idx, int) or idx < 0:
+            continue
+        end = float(seg.get("end_seconds") or 0)
+        total_seconds = max(total_seconds, end)
+        slides.append(
+            SlideshowSlide(
+                slide_index=idx,
+                image_url=presign_stored_s3_url(images_by_index.get(idx)),
+                audio_url=presign_stored_s3_url(audio_by_index.get(idx)),
+                start_seconds=float(seg.get("start_seconds") or 0),
+                end_seconds=end,
+                text=seg.get("text") or "",
+                subtitle_text=subtitle_by_index.get(idx),
+            )
+        )
+
+    return SlideshowResponse(
+        lecture_id=lecture.id,
+        is_expired=False,
+        total_seconds=total_seconds,
+        slides=slides,
+    )
+
+
 async def _resolve_lecture_duration_seconds(
     db: AsyncSession, lecture_id: uuid.UUID
 ) -> int | None:

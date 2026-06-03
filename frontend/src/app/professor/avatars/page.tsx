@@ -7,14 +7,14 @@ import { useToast } from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useAvatarsI18n } from "@/components/professor/avatars/useAvatarsI18n";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
-import AvatarCard from "@/components/professor/avatars/AvatarCard";
-import AvatarPreviewStage from "@/components/professor/avatars/AvatarPreviewStage";
 import AvatarLibrary from "@/components/professor/avatars/AvatarLibrary";
 import AvatarViewerModal from "@/components/professor/avatars/AvatarViewerModal";
 import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
+import SampleVoicePicker from "@/components/professor/avatars/SampleVoicePicker";
 import {
   applyAvatarToLecture,
+  applyVoiceToLecture,
   deleteMyLook,
   deleteMyVoice,
   getLectureTitle,
@@ -41,12 +41,15 @@ import type { VoiceOption } from "@/components/professor/avatars/voicePresets";
  * /professor/avatars — 강의 아바타 고르기 (HeyGen 스타일 대수술).
  *
  * docs/planning/05-instructor-pages.md (아바타 선택) + 12-self-avatar-onboarding.md
- * + design-system v2 (라이트 베이지 + 골드). 세 갈래:
- *  ① 내 사진으로 아바타 만들기 — Photo Avatar + Design with AI 룩 온보딩을
- *     카드 안에 인라인 임베드(PhotoAvatarStudioCard, 별도 라우트로 안 보냄).
- *  ② 내 목소리로 음성 만들기 — 파일 업로드 + 브라우저 직접 녹음(MediaRecorder)
- *     + 강의 주제 연관 읽기 대본(VoiceCloneUploadCard).
- *  ③ 기본 HeyGen 남/여 샘플을 영상으로 비교하고 강의에 적용.
+ * + design-system v2 (라이트 베이지 + 골드). Q&A 아바타 = ①룩 + ②목소리:
+ *  ① 룩 — 저장된 아바타·룩 라이브러리(AvatarLibrary)에서 고르거나, "내 사진으로
+ *     아바타 만들기"(PhotoAvatarStudioCard)로 새로 생성한다.
+ *  ② 목소리 — 본인 목소리(VoiceCloneUploadCard) 또는 샘플 보이스(SampleVoicePicker)
+ *     중 하나를 고른다. 강의 진행 목소리와 Q&A 목소리를 일치시키기 위해 음성 선택을
+ *     스튜디오에서 이 페이지로 옮겼다(스튜디오엔 발화 속도만 남김).
+ *
+ * 우측 상단 "룩과 목소리 아바타 제작" 이 ①선택 룩(avatar_id) + ②선택 목소리(voice_id)
+ * 를 현재 강의에 함께 적용하고 studio 로 복귀한다(렌더 시 HeyGen 이 룩+음성 결합).
  *
  * 백엔드 계약이 미배포면 avatarsApi/photoAvatarApi 가 fixture/mock 으로 폴백한다.
  * ``?lecture={id}`` 진입 시 선택/이름 변경이 해당 강의에 저장되고 studio 로
@@ -64,12 +67,16 @@ export default function AvatarsPage() {
 
   const [avatars, setAvatars] = useState<Avatar[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [deferred, setDeferred] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   // 큰 보기(뷰어) 모달 대상 id. 카드/최근 박스 클릭 시 연다.
   const [viewerId, setViewerId] = useState<string | null>(null);
+
+  // 강의에 적용할 음성. null = 기본 보이스(성별 기준). voiceTouched 가 true 일 때만
+  // "제작" 시 voice_id 를 PATCH 한다(사용자가 고르지 않았으면 기존 강의 음성 보존).
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
+  const [voiceTouched, setVoiceTouched] = useState(false);
 
   // 저장된 본인 룩(라이브러리) + 가장 최근 선택(서버 영속) — 재방문 시 재생성 없이
   // 바로 고르도록 복원한다.
@@ -116,13 +123,12 @@ export default function AvatarsPage() {
     let cancelled = false;
     (async () => {
       try {
-        setError(false);
         const { avatars: list, deferred: isDeferred } = await listAvatars();
         if (cancelled) return;
         setAvatars(list);
         setDeferred(isDeferred);
       } catch {
-        if (!cancelled) setError(true);
+        /* 실패 시 라이브러리는 비고, 위쪽 "내 사진으로 아바타 만들기"부터 시작한다. */
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -202,21 +208,6 @@ export default function AvatarsPage() {
     };
   }, []);
 
-  // 본인 아바타(is_custom)·룩은 위쪽 "저장된 아바타·룩 라이브러리"(AvatarLibrary)가
-  // 전담한다. 아래 섹션은 표준 HeyGen 아바타만 성별로 그룹핑한다(중복 노출 방지).
-  const sections = useMemo(() => {
-    const male = avatars.filter((a) => !a.is_custom && a.gender === "male");
-    const female = avatars.filter((a) => !a.is_custom && a.gender === "female");
-    const other = avatars.filter(
-      (a) => !a.is_custom && a.gender !== "male" && a.gender !== "female",
-    );
-    return [
-      { key: "male", label: t("sectionMale"), items: male },
-      { key: "female", label: t("sectionFemale"), items: female },
-      { key: "other", label: t("sectionOther"), items: other },
-    ].filter((s) => s.items.length > 0);
-  }, [avatars, t]);
-
   // 라이브러리 = 교수자가 만든 본인 아바타(talking photo) + ready 룩. 룩은 렌더용
   // avatar_id 로 그대로 통용되므로(video.py) 동일 Avatar shape 로 정규화한다.
   const libraryItems = useMemo<Avatar[]>(() => {
@@ -253,11 +244,6 @@ export default function AvatarsPage() {
       );
     },
     [avatars, libraryItems],
-  );
-
-  const selectedAvatar = useMemo(
-    () => resolveAvatar(selectedId),
-    [resolveAvatar, selectedId],
   );
 
   const recentAvatar = useMemo(
@@ -306,13 +292,22 @@ export default function AvatarsPage() {
     [toast, t, refreshAvatars],
   );
 
-  // 지정한 아바타/룩을 현재 강의에 적용(재생성 없음). 헤더·최근 박스가 공유한다.
+  // 샘플/본인 목소리 선택 — "제작" 시 voice_id 로 적용한다(null = 기본 보이스).
+  const handleSelectVoice = useCallback((id: string | null) => {
+    setSelectedVoiceId(id);
+    setVoiceTouched(true);
+  }, []);
+
+  // 지정한 룩(아바타) + 선택한 목소리를 현재 강의에 함께 적용해 Q&A 아바타를
+  // "제작"한다(재생성 없음 — 렌더 시 HeyGen 이 룩+음성 결합). 헤더·최근 박스가 공유.
   const doApply = useCallback(
     async (id: string | null) => {
       if (!lectureId || !id) return;
       setApplying(true);
       try {
         await applyAvatarToLecture(lectureId, id);
+        // 사용자가 목소리를 골랐을 때만 voice_id 를 덮어쓴다(미선택 시 기존 음성 보존).
+        if (voiceTouched) await applyVoiceToLecture(lectureId, selectedVoiceId);
         toast(t("applySuccess"), "success");
         router.push(`/professor/studio/${lectureId}`);
       } catch {
@@ -321,7 +316,7 @@ export default function AvatarsPage() {
         setApplying(false);
       }
     },
-    [lectureId, router, toast, t],
+    [lectureId, router, toast, t, voiceTouched, selectedVoiceId],
   );
 
   const handleApply = useCallback(
@@ -449,7 +444,7 @@ export default function AvatarsPage() {
                 disabled={!selectedId || applying}
                 data-testid="avatars-apply"
               >
-                {applying ? t("applying") : t("applyToLecture")}
+                {applying ? t("creating") : t("createAvatar")}
               </PrimaryButton>
             ) : undefined
           }
@@ -516,12 +511,14 @@ export default function AvatarsPage() {
           t={t}
         />
 
-        {/* 클릭한 아바타를 크게 재생 + 음성 함께 듣기 */}
-        <AvatarPreviewStage
-          avatar={selectedAvatar}
+        {/* ②-b 샘플 목소리 선택 — 스튜디오 "음성과 자막"에서 옮겨온 음성 선택.
+            본인 목소리(위 카드) 또는 샘플 보이스 중 하나를 골라 강의 목소리로 쓴다. */}
+        <SampleVoicePicker
           voices={voices}
-          voicesLoading={voicesLoading}
-          reducedMotion={reducedMotion}
+          loading={voicesLoading}
+          selectedId={selectedVoiceId}
+          onSelect={handleSelectVoice}
+          ownVoiceId={voiceClone.voice_id ?? null}
           t={t}
         />
 
@@ -537,73 +534,6 @@ export default function AvatarsPage() {
             onClose={() => setViewerId(null)}
             t={t}
           />
-        )}
-
-        {error ? (
-          <div
-            role="alert"
-            style={{
-              borderRadius: 14,
-              border: "1px solid rgba(239,68,68,0.3)",
-              background: "rgba(239,68,68,0.06)",
-              padding: 20,
-              fontSize: 13,
-              color: "var(--warning)",
-            }}
-          >
-            {t("loadError")}
-          </div>
-        ) : avatars.length === 0 ? (
-          <div
-            style={{
-              borderRadius: 14,
-              border: "1px solid var(--line)",
-              background: "var(--bg-card)",
-              padding: 32,
-              textAlign: "center",
-              fontSize: 13,
-              color: "var(--text-muted)",
-            }}
-          >
-            {t("empty")}
-          </div>
-        ) : (
-          sections.map((section) => (
-            <section key={section.key} data-testid={`avatars-section-${section.key}`}>
-              <h2
-                style={{
-                  margin: "0 0 12px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "var(--text-faint)",
-                }}
-              >
-                {section.label}
-              </h2>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fill, minmax(150px, 1fr))",
-                  gap: 14,
-                }}
-              >
-                {section.items.map((a) => (
-                  <AvatarCard
-                    key={a.id}
-                    avatar={a}
-                    selected={a.id === selectedId}
-                    onSelect={handleSelect}
-                    renameEnabled={renameEnabled}
-                    onRename={(name) => handleRename(a.id, name)}
-                    t={t}
-                  />
-                ))}
-              </div>
-            </section>
-          ))
         )}
       </div>
     </PageContainer>

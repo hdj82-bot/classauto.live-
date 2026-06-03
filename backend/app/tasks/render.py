@@ -121,10 +121,19 @@ def render_slide(
             )
             return {"render_id": render_id, "heygen_job_id": render.heygen_job_id, "skipped": True}
 
-        # ── 예산 서킷 브레이커 ──
-        # 누적 HeyGen 비용이 일/월 한도를 넘으면 TTS·HeyGen 호출 전에 즉시 차단해
-        # 비용 낭비를 막는다. mock 모드는 budget 모듈이 자체적으로 통과시킨다.
-        assert_heygen_budget(db)
+        # 본문 렌더 방식 — "slideshow"(기본)면 HeyGen 영상을 굽지 않고 TTS 음성까지만
+        # 만들어 완료한다(docs/planning/08-cost-optimization.md). "heygen"이면 레거시
+        # 슬라이드별 립싱크 렌더.
+        from app.core.config import settings as _settings
+        slideshow_mode = (
+            getattr(_settings, "LECTURE_BODY_PROVIDER", "slideshow") == "slideshow"
+        )
+
+        # ── 예산 서킷 브레이커 (HeyGen 전용) ──
+        # 누적 HeyGen 비용이 일/월 한도를 넘으면 호출 전에 즉시 차단해 비용 낭비를
+        # 막는다. 슬라이드쇼 모드는 HeyGen 을 쓰지 않으므로 이 게이트를 건너뛴다.
+        if not slideshow_mode:
+            assert_heygen_budget(db)
 
         # 단계 진입 시점에만 상태 갱신 — 이미 진행 단계 이후면 덮어쓰지 않음
         if render.status in (RenderStatus.pending,):
@@ -170,6 +179,23 @@ def render_slide(
                 "TTS idempotent skip — audio_url 및 S3 객체 존재: render_id=%s, key=%s",
                 render_id, s3_audio_key,
             )
+
+        # ── 슬라이드쇼 모드: HeyGen 렌더 없이 음성만으로 완료 ──
+        # 본문은 슬라이드 이미지 + 이 구간 TTS 음성 + 타임라인(VideoScript.segments)을
+        # 클라이언트가 동기 재생한다(영상 굽기 없음). audio_url 만 채우고 ready 로 마쳐
+        # 슬라이드별 HeyGen 클립 비용을 제거한다. 학생 플레이어는 slideshow 엔드포인트로
+        # 이 음성을 받아 재생한다.
+        if slideshow_mode:
+            from datetime import datetime, timezone
+            if render.status != RenderStatus.ready:
+                render.status = RenderStatus.ready
+                render.completed_at = datetime.now(timezone.utc)
+                db.commit()
+            logger.info(
+                "render_slide 슬라이드쇼 완료(HeyGen 생략) — render_id=%s, slide=%s",
+                render_id, render.slide_number,
+            )
+            return {"render_id": render_id, "audio_url": audio_url, "mode": "slideshow"}
 
         # ── Critical 8: HeyGen 단계 idempotency ──
         if render.heygen_job_id:

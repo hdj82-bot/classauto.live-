@@ -57,6 +57,13 @@
     "applyError": "아바타를 강의에 적용하지 못했습니다.",
     "applyHintNoLecture": "강의 편집기에서 '아바타 변경'으로 들어오면 선택한 아바타를 바로 강의에 적용할 수 있습니다.",
 
+    "createAvatar": "룩과 목소리 아바타 제작",
+    "creating": "제작하는 중...",
+
+    "sampleVoiceTitle": "샘플 목소리 선택",
+    "sampleVoiceDescription": "위에서 만든 본인 목소리 대신 쓸 수 있는 샘플 보이스입니다. 본인 목소리 또는 샘플 보이스 중 하나를 골라 '룩과 목소리 아바타 제작'을 누르면 강의 영상과 Q&A 답변이 그 목소리로 발화합니다. ▶로 미리 들어 보세요.",
+    "sampleVoiceDefault": "기본 보이스 (성별 기준)",
+
     "recentTitle": "최근 선택한 아바타",
     "recentApplyNote": "재생성 없이 이 강의에 바로 적용할 수 있어요 (비용 0).",
     "libraryTitle": "저장된 아바타·룩 라이브러리",

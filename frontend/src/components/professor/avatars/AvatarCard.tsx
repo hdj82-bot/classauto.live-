@@ -36,8 +36,8 @@ const mediaWrapStyle: CSSProperties = {
  * 아바타 카드 — 정지 썸네일 + 클릭 선택.
  *
  * 마우스 hover 자동 영상재생은 제거했다(작은 창에서 보기 어렵고 산만함). 카드는
- * 썸네일만 보여 주고, 클릭하면 선택되어 상단 ``AvatarPreviewStage`` 에서 크게
- * 음성과 함께 재생된다.
+ * 썸네일만 보여 주고, 클릭하면 "저장된 아바타·룩 라이브러리"에서 선택 상태가 되어
+ * 우측 상단 "룩과 목소리 아바타 제작"의 대상(룩)이 된다.
  */
 export default function AvatarCard({
   avatar,

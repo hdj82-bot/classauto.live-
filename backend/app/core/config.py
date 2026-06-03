@@ -120,6 +120,13 @@ class Settings(BaseSettings):
     # 예산 서킷 브레이커 — create_video 직전 누적 HeyGen 비용 검사. 0 이면 해당 한도 비활성.
     HEYGEN_DAILY_BUDGET_USD: float = 3.0
     HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
+
+    # ── 강의 본문 렌더 방식 (docs/planning/08-cost-optimization.md) ──────────────
+    # "slideshow"(기본) = 본문을 HeyGen 영상으로 굽지 않고, 슬라이드 이미지 + 구간
+    # TTS 음성 + 타임라인(VideoScript.segments)을 클라이언트가 동기 재생한다. 슬라이드
+    # 마다 HeyGen 클립을 만들던 비용(슬라이드 N × $1/분 올림 과금)을 제거한다. HeyGen
+    # 립싱크는 Q&A 답변 등에만 쓴다. "heygen" = 슬라이드별 립싱크 렌더(레거시·롤백용).
+    LECTURE_BODY_PROVIDER: str = "slideshow"  # slideshow | heygen
     # Photo Avatar 룩 생성 상한 — 룩 1개당 이미지 생성 비용이 발생하므로
     # 한 번에 생성할 수 개수와 교수자당 누적 개수를 제한해 비용 폭주를 막는다.
     PHOTO_AVATAR_LOOK_BATCH_MAX: int = 4
