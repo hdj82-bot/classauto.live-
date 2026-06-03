@@ -42,8 +42,11 @@ export function useVideoShortcuts({ enabled = true, onShowHelp }: Options = {}) 
       // 수정자 키 조합은 페이지 단축키와 충돌 가능 → 무시.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
-      const video = document.getElementsByTagName("video")[0] as
-        | HTMLVideoElement
+      // 본문이 단일 영상이면 <video>, 슬라이드쇼면 구간 음성 <audio> 를 제어 대상으로
+      // 삼는다(둘 다 HTMLMediaElement — play/pause/currentTime 동일 인터페이스).
+      const video = (document.getElementsByTagName("video")[0] ||
+        document.getElementsByTagName("audio")[0]) as
+        | HTMLMediaElement
         | undefined;
 
       switch (e.key) {
