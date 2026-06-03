@@ -73,10 +73,10 @@ export default function AvatarsPage() {
   // 큰 보기(뷰어) 모달 대상 id. 카드/최근 박스 클릭 시 연다.
   const [viewerId, setViewerId] = useState<string | null>(null);
 
-  // 강의에 적용할 음성. null = 기본 보이스(성별 기준). voiceTouched 가 true 일 때만
-  // "제작" 시 voice_id 를 PATCH 한다(사용자가 고르지 않았으면 기존 강의 음성 보존).
+  // "아바타 제작에 사용" 으로 고른 단일 음성 id. null = 아무것도 선택 안 함.
+  // 본인 목소리(VoiceCloneUploadCard)와 샘플 보이스(SampleVoicePicker)가 이 한 값을
+  // 공유해 상호 배타가 된다(둘 다 동시 활성 불가). 선택했을 때만 "제작" 시 PATCH.
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
-  const [voiceTouched, setVoiceTouched] = useState(false);
 
   // 저장된 본인 룩(라이브러리) + 가장 최근 선택(서버 영속) — 재방문 시 재생성 없이
   // 바로 고르도록 복원한다.
@@ -292,11 +292,22 @@ export default function AvatarsPage() {
     [toast, t, refreshAvatars],
   );
 
-  // 샘플/본인 목소리 선택 — "제작" 시 voice_id 로 적용한다(null = 기본 보이스).
-  const handleSelectVoice = useCallback((id: string | null) => {
-    setSelectedVoiceId(id);
-    setVoiceTouched(true);
+  // 본인 클론 음성 id (있으면). 샘플 목록에서 제외하고, "내 목소리" 토글의 값이 된다.
+  const ownVoiceId = voiceClone.voice_id ?? null;
+  const ownVoiceSelected = !!ownVoiceId && selectedVoiceId === ownVoiceId;
+
+  // 샘플 보이스 토글 — 같은 음성을 다시 누르면 해제. 본인 목소리 선택은 자동 해제된다
+  // (단일 selectedVoiceId 라 다른 값으로 덮어써짐).
+  const handleToggleSampleVoice = useCallback((id: string) => {
+    setSelectedVoiceId((prev) => (prev === id ? null : id));
   }, []);
+
+  // "내 목소리" 토글 — 켜면 selectedVoiceId = 본인 음성, 다시 누르면 해제(null).
+  // 샘플이 켜져 있었으면 본인 음성으로 덮어써져 자동 해제된다.
+  const handleToggleOwnVoice = useCallback(() => {
+    if (!ownVoiceId) return;
+    setSelectedVoiceId((prev) => (prev === ownVoiceId ? null : ownVoiceId));
+  }, [ownVoiceId]);
 
   // 지정한 룩(아바타) + 선택한 목소리를 현재 강의에 함께 적용해 Q&A 아바타를
   // "제작"한다(재생성 없음 — 렌더 시 HeyGen 이 룩+음성 결합). 헤더·최근 박스가 공유.
@@ -306,8 +317,8 @@ export default function AvatarsPage() {
       setApplying(true);
       try {
         await applyAvatarToLecture(lectureId, id);
-        // 사용자가 목소리를 골랐을 때만 voice_id 를 덮어쓴다(미선택 시 기존 음성 보존).
-        if (voiceTouched) await applyVoiceToLecture(lectureId, selectedVoiceId);
+        // 음성을 골랐을 때만 voice_id 를 덮어쓴다(미선택 시 기존 강의 음성 보존).
+        if (selectedVoiceId) await applyVoiceToLecture(lectureId, selectedVoiceId);
         toast(t("applySuccess"), "success");
         router.push(`/professor/studio/${lectureId}`);
       } catch {
@@ -316,7 +327,7 @@ export default function AvatarsPage() {
         setApplying(false);
       }
     },
-    [lectureId, router, toast, t, voiceTouched, selectedVoiceId],
+    [lectureId, router, toast, t, selectedVoiceId],
   );
 
   const handleApply = useCallback(
@@ -418,6 +429,8 @@ export default function AvatarsPage() {
     setVoiceUploading(true);
     try {
       await deleteMyVoice();
+      // 삭제하는 본인 음성이 "사용 중" 이었으면 선택도 해제한다.
+      setSelectedVoiceId((prev) => (prev === ownVoiceId ? null : prev));
       setVoiceClone({ status: "none" });
       await reloadVoices();
     } catch {
@@ -425,7 +438,7 @@ export default function AvatarsPage() {
     } finally {
       setVoiceUploading(false);
     }
-  }, [toast, t, reloadVoices]);
+  }, [toast, t, reloadVoices, ownVoiceId]);
 
   if (loading) return <LoadingSpinner fullScreen label={t("loading")} />;
 
@@ -498,7 +511,8 @@ export default function AvatarsPage() {
           onLibraryChanged={refreshAvatars}
         />
 
-        {/* ② 내 목소리로 음성 만들기 — 파일 업로드 + 브라우저 직접 녹음 + 읽기 대본 */}
+        {/* ② 내 목소리로 음성 만들기 — 파일 업로드 + 브라우저 직접 녹음 + 읽기 대본
+            + "이 음성을 아바타 제작에 사용"(샘플 보이스와 상호 배타) */}
         <VoiceCloneUploadCard
           onSubmit={handleVoiceUpload}
           onDelete={handleVoiceDelete}
@@ -508,6 +522,8 @@ export default function AvatarsPage() {
           uploading={voiceUploading}
           voiceName={voiceClone.name}
           message={voiceClone.message}
+          selectedForAvatar={ownVoiceSelected}
+          onUseForAvatar={handleToggleOwnVoice}
           t={t}
         />
 
@@ -517,8 +533,8 @@ export default function AvatarsPage() {
           voices={voices}
           loading={voicesLoading}
           selectedId={selectedVoiceId}
-          onSelect={handleSelectVoice}
-          ownVoiceId={voiceClone.voice_id ?? null}
+          onSelect={handleToggleSampleVoice}
+          ownVoiceId={ownVoiceId}
           t={t}
         />
 

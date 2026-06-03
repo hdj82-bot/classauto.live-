@@ -60,9 +60,18 @@
     "createAvatar": "룩과 목소리 아바타 제작",
     "creating": "제작하는 중...",
 
+    "useForAvatar": "이 음성을 아바타 제작에 사용",
+    "usingForAvatar": "✓ 아바타 제작에 사용 중 · 클릭해 취소",
+
     "sampleVoiceTitle": "샘플 목소리 선택",
-    "sampleVoiceDescription": "위에서 만든 본인 목소리 대신 쓸 수 있는 샘플 보이스입니다. 본인 목소리 또는 샘플 보이스 중 하나를 골라 '룩과 목소리 아바타 제작'을 누르면 강의 영상과 Q&A 답변이 그 목소리로 발화합니다. ▶로 미리 들어 보세요.",
-    "sampleVoiceDefault": "기본 보이스 (성별 기준)",
+    "sampleVoiceDescription": "위에서 만든 본인 목소리 대신 쓸 수 있는 샘플 보이스입니다. 본인 목소리 또는 샘플 보이스 중 하나만 '아바타 제작에 사용'할 수 있습니다. ▶로 미리 듣고, ★로 즐겨찾기하세요.",
+    "voiceSearch": "음성 검색 (이름·특성)",
+    "favoritesOnly": "즐겨찾기만",
+    "favoriteAdd": "즐겨찾기 추가",
+    "favoriteRemove": "즐겨찾기 해제",
+    "moreVoices": "더 많은 음성 →",
+    "sampleVoiceSearchEmpty": "검색 결과가 없습니다.",
+    "sampleVoiceFavEmpty": "즐겨찾기한 음성이 없습니다. ★로 추가하거나 검색해서 고르세요.",
 
     "recentTitle": "최근 선택한 아바타",
     "recentApplyNote": "재생성 없이 이 강의에 바로 적용할 수 있어요 (비용 0).",
