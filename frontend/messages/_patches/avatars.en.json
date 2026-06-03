@@ -60,9 +60,18 @@
     "createAvatar": "Create avatar (look + voice)",
     "creating": "Creating...",
 
+    "useForAvatar": "Use this voice for the avatar",
+    "usingForAvatar": "✓ In use for the avatar · click to cancel",
+
     "sampleVoiceTitle": "Choose a sample voice",
-    "sampleVoiceDescription": "Sample voices you can use instead of your own cloned voice. Pick your own voice or a sample voice, then press 'Create avatar (look + voice)' and the lecture video and Q&A answers will speak in it. Tap ▶ to preview.",
-    "sampleVoiceDefault": "Default voice (by gender)",
+    "sampleVoiceDescription": "Sample voices you can use instead of your own cloned voice. Only one — your own voice or a sample voice — can be 'used for the avatar'. Tap ▶ to preview and ★ to favorite.",
+    "voiceSearch": "Search voices (name, trait)",
+    "favoritesOnly": "Favorites only",
+    "favoriteAdd": "Add to favorites",
+    "favoriteRemove": "Remove from favorites",
+    "moreVoices": "More voices →",
+    "sampleVoiceSearchEmpty": "No matching voices.",
+    "sampleVoiceFavEmpty": "No favorited voices yet. Add with ★ or search to pick one.",
 
     "recentTitle": "Recently selected avatar",
     "recentApplyNote": "Apply to this lecture instantly — no re-generation (zero cost).",

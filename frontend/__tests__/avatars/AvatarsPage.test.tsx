@@ -322,9 +322,9 @@ describe("AvatarsPage", () => {
     const card = await screen.findByTestId("avatar-card-look_1");
     fireEvent.click(within(card).getByRole("button"));
 
-    // 샘플 보이스 선택.
-    const voiceOpt = await screen.findByTestId("sample-voice-option-v_adam");
-    fireEvent.click(voiceOpt);
+    // 샘플 보이스 "이 음성을 아바타 제작에 사용" 버튼 클릭.
+    const useBtn = await screen.findByTestId("sample-voice-use-v_adam");
+    fireEvent.click(useBtn);
 
     const applyBtn = screen.getByTestId("avatars-apply") as HTMLButtonElement;
     await waitFor(() => expect(applyBtn.disabled).toBe(false));
@@ -341,5 +341,54 @@ describe("AvatarsPage", () => {
         voice_id: "v_adam",
       }),
     );
+  });
+
+  it("makes own-voice and sample-voice 'use' buttons mutually exclusive", async () => {
+    apiGet.mockImplementation(async (url: string) => {
+      if (url === "/api/avatars") {
+        throw Object.assign(new Error("nf"), { response: { status: 404 } });
+      }
+      if (url === "/api/avatars/me/voice") {
+        return { data: { status: "ready", voice_id: "my_clone", name: "내 음성" } };
+      }
+      if (url === "/api/voices") {
+        return {
+          data: {
+            voices: [
+              { voice_id: "v_adam", name: "Adam", gender: "male", preview_url: "https://x/a.mp3" },
+            ],
+            total: 1,
+          },
+        };
+      }
+      throw new Error(`unhandled GET ${url}`);
+    });
+
+    renderPage(<AvatarsPage />);
+
+    // 본인 음성 박스의 "사용" 토글 + 샘플 보이스의 "사용" 토글.
+    const ownUse = await screen.findByTestId("voice-clone-use");
+    const sampleUse = await screen.findByTestId("sample-voice-use-v_adam");
+
+    // 본인 클론 음성(my_clone)은 샘플 목록에서 제외된다(위 박스와 중복).
+    expect(screen.queryByTestId("sample-voice-use-my_clone")).toBeNull();
+
+    // 처음엔 둘 다 비활성.
+    expect(ownUse.getAttribute("aria-pressed")).toBe("false");
+    expect(sampleUse.getAttribute("aria-pressed")).toBe("false");
+
+    // 본인 음성 사용 → 본인만 활성.
+    fireEvent.click(ownUse);
+    await waitFor(() => expect(ownUse.getAttribute("aria-pressed")).toBe("true"));
+    expect(sampleUse.getAttribute("aria-pressed")).toBe("false");
+
+    // 샘플 사용 클릭 → 본인은 자동 해제, 샘플만 활성(상호 배타).
+    fireEvent.click(sampleUse);
+    await waitFor(() => expect(sampleUse.getAttribute("aria-pressed")).toBe("true"));
+    expect(ownUse.getAttribute("aria-pressed")).toBe("false");
+
+    // 활성 버튼 재클릭 → 해제(취소).
+    fireEvent.click(sampleUse);
+    await waitFor(() => expect(sampleUse.getAttribute("aria-pressed")).toBe("false"));
   });
 });

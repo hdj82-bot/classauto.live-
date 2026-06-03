@@ -24,6 +24,10 @@ interface VoiceCloneUploadCardProps {
   voiceName?: string | null;
   /** 서버 메시지 (실패 사유 등). */
   message?: string | null;
+  /** 본인 음성이 "아바타 제작에 사용" 으로 선택됐는지(샘플 보이스와 상호 배타). */
+  selectedForAvatar?: boolean;
+  /** "이 음성을 아바타 제작에 사용" 토글 — 부모가 단일 선택(상호 배타)을 관리한다. */
+  onUseForAvatar?: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -56,6 +60,8 @@ export default function VoiceCloneUploadCard({
   uploading,
   voiceName,
   message,
+  selectedForAvatar = false,
+  onUseForAvatar,
   t,
 }: VoiceCloneUploadCardProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -371,32 +377,49 @@ export default function VoiceCloneUploadCard({
           </p>
         </div>
 
-        {/* 우측: 생성된 본인 음성 */}
+        {/* 우측: 생성된 본인 음성 — 넓은 박스 + "아바타 제작에 사용" 토글 */}
         {status === "ready" ? (
           <div
             data-testid="voice-clone-ready"
             style={{
               marginLeft: "auto",
               flexShrink: 0,
-              width: 150,
-              padding: 10,
+              width: 300,
+              maxWidth: "100%",
+              padding: 14,
               borderRadius: 12,
-              textAlign: "center",
-              background: "var(--bg-card)",
-              border: "2px solid var(--gold)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+              background: selectedForAvatar ? "var(--gold-soft)" : "var(--bg-card)",
+              border: `2px solid ${selectedForAvatar ? "var(--gold)" : "var(--gold-medium)"}`,
               boxShadow: "var(--shadow-sm)",
             }}
           >
-            <span style={{ display: "block", fontSize: 10, fontWeight: 700, color: "var(--gold-on-light)", marginBottom: 6 }}>
-              {t("voiceMyBadge")}
-            </span>
-            <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {voiceName || t("voiceMyBadge")}
-            </span>
-            <span style={{ display: "block", marginTop: 6, fontSize: 10.5, lineHeight: 1.5, color: "var(--text-faint)" }}>
-              {t("voiceReadyHint")}
-            </span>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+            <div style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 10, fontWeight: 700, color: "var(--gold-on-light)", marginBottom: 4 }}>
+                {t("voiceMyBadge")}
+              </span>
+              <span style={{ display: "block", fontSize: 15, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {voiceName || t("voiceMyBadge")}
+              </span>
+            </div>
+
+            {/* 주 액션: 이 음성을 아바타 제작에 사용 (토글, 샘플과 상호 배타) */}
+            {onUseForAvatar && (
+              <button
+                type="button"
+                onClick={onUseForAvatar}
+                aria-pressed={selectedForAvatar}
+                data-testid="voice-clone-use"
+                style={avatarUseBtnStyle(selectedForAvatar)}
+              >
+                {selectedForAvatar ? t("usingForAvatar") : t("useForAvatar")}
+              </button>
+            )}
+
+            {/* 보조 액션: 미리듣기 · 삭제 */}
+            <div style={{ display: "flex", gap: 6 }}>
               {onPreview && (
                 <button
                   type="button"
@@ -404,14 +427,14 @@ export default function VoiceCloneUploadCard({
                   disabled={previewing}
                   data-testid="voice-clone-preview"
                   style={{
-                    width: "100%",
+                    flex: 1,
                     padding: "6px 10px",
                     fontSize: 12,
-                    fontWeight: 700,
+                    fontWeight: 600,
                     borderRadius: 8,
-                    border: "1px solid transparent",
-                    background: "linear-gradient(135deg, #FFB627, #E89E0E)",
-                    color: "#0A0A0A",
+                    border: "1px solid var(--line-strong)",
+                    background: "var(--bg-card)",
+                    color: "var(--text)",
                     cursor: previewing ? "wait" : "pointer",
                     fontFamily: "inherit",
                     whiteSpace: "nowrap",
@@ -427,8 +450,8 @@ export default function VoiceCloneUploadCard({
                   disabled={uploading}
                   data-testid="voice-clone-delete"
                   style={{
-                    width: "100%",
-                    padding: "5px 10px",
+                    flex: 1,
+                    padding: "6px 10px",
                     fontSize: 11.5,
                     fontWeight: 600,
                     borderRadius: 8,
@@ -561,6 +584,25 @@ const primaryBtn: CSSProperties = {
   color: "#0A0A0A",
   fontFamily: "inherit",
 };
+
+/** "이 음성을 아바타 제작에 사용" 토글 — 활성(사용 중)이면 골드 채움, 비활성이면 골드 외곽선. */
+function avatarUseBtnStyle(active: boolean): CSSProperties {
+  return {
+    width: "100%",
+    padding: "9px 12px",
+    fontSize: 12.5,
+    fontWeight: 700,
+    borderRadius: 9,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    border: `1px solid ${active ? "transparent" : "var(--gold-on-light)"}`,
+    background: active ? "linear-gradient(135deg, #FFB627, #E89E0E)" : "var(--bg-card)",
+    color: active ? "#0A0A0A" : "var(--gold-on-light)",
+  };
+}
 
 // 녹음 정지 버튼 — 진행 중임을 알리는 연한 경고 톤.
 const recordBtn: CSSProperties = {
