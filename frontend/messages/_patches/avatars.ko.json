@@ -84,6 +84,10 @@
     "renameSuccess": "아바타 이름을 변경했습니다.",
     "renameError": "아바타 이름을 변경하지 못했습니다.",
     "renameHintNoLecture": "이름 변경은 강의별로 저장됩니다. 강의 편집기에서 진입해 주세요.",
+    "lookRenameSuccess": "룩 이름을 저장했습니다.",
+    "lookRenameError": "룩 이름을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    "viewerClose": "닫기",
+    "viewerNoImage": "이미지가 없습니다.",
 
     "uploadTitle": "내 사진으로 아바타 만들기",
     "uploadDescription": "정면을 바라본 상반신 사진을 업로드하면 본인 모습의 아바타를 생성합니다. 생성에는 몇 분이 걸릴 수 있습니다.",

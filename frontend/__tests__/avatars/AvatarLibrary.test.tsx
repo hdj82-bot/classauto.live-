@@ -33,7 +33,8 @@ describe("AvatarLibrary 컴포넌트", () => {
         recent={null}
         items={[]}
         selectedId={null}
-        onSelect={vi.fn()}
+        onOpen={vi.fn()}
+        onRenameLook={vi.fn()}
         onApply={vi.fn()}
         canApply={false}
         applying={false}
@@ -52,7 +53,8 @@ describe("AvatarLibrary 컴포넌트", () => {
         recent={avatar("look-1", { name: "네이비 정장" })}
         items={[avatar("look-1", { name: "네이비 정장" })]}
         selectedId="look-1"
-        onSelect={vi.fn()}
+        onOpen={vi.fn()}
+        onRenameLook={vi.fn()}
         onApply={onApply}
         canApply
         applying={false}
@@ -74,7 +76,8 @@ describe("AvatarLibrary 컴포넌트", () => {
         recent={avatar("look-1")}
         items={[avatar("look-1")]}
         selectedId={null}
-        onSelect={vi.fn()}
+        onOpen={vi.fn()}
+        onRenameLook={vi.fn()}
         onApply={vi.fn()}
         canApply={false}
         applying={false}
@@ -86,14 +89,15 @@ describe("AvatarLibrary 컴포넌트", () => {
     expect(screen.queryByTestId("recent-apply")).toBeNull();
   });
 
-  it("라이브러리 카드를 클릭하면 재생성 없이 즉시 onSelect 가 호출된다", () => {
-    const onSelect = vi.fn();
+  it("라이브러리 카드를 클릭하면 큰 보기(onOpen)가 해당 룩으로 열린다", () => {
+    const onOpen = vi.fn();
     render(
       <AvatarLibrary
         recent={null}
         items={[avatar("look-1"), avatar("look-2")]}
         selectedId={null}
-        onSelect={onSelect}
+        onOpen={onOpen}
+        onRenameLook={vi.fn()}
         onApply={vi.fn()}
         canApply={false}
         applying={false}
@@ -104,7 +108,40 @@ describe("AvatarLibrary 컴포넌트", () => {
     );
     const card = screen.getByTestId("avatar-card-look-2");
     fireEvent.click(within(card).getByRole("button"));
-    expect(onSelect).toHaveBeenCalledWith("look-2");
+    expect(onOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "look-2" }),
+    );
+  });
+
+  it("룩이면 최근 박스에 연필이 떠 이름을 저장하고, 썸네일 클릭은 큰 보기를 연다", () => {
+    const onOpen = vi.fn();
+    const onRenameLook = vi.fn();
+    render(
+      <AvatarLibrary
+        recent={avatar("look-1", { name: "내 룩", isLook: true })}
+        items={[avatar("look-1", { name: "내 룩", isLook: true })]}
+        selectedId="look-1"
+        onOpen={onOpen}
+        onRenameLook={onRenameLook}
+        onApply={vi.fn()}
+        canApply={false}
+        applying={false}
+        renameEnabled={false}
+        onRename={vi.fn()}
+        t={t}
+      />,
+    );
+    // 썸네일 클릭 → 큰 보기.
+    fireEvent.click(screen.getByTestId("recent-open"));
+    expect(onOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "look-1" }),
+    );
+    // 연필 → 입력 → 저장.
+    fireEvent.click(screen.getByTestId("recent-name-edit"));
+    const input = screen.getByTestId("recent-name-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "연구실 정장" } });
+    fireEvent.click(screen.getByTestId("recent-name-save"));
+    expect(onRenameLook).toHaveBeenCalledWith("look-1", "연구실 정장");
   });
 });
 

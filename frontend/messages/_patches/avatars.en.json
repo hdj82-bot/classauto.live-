@@ -84,6 +84,10 @@
     "renameSuccess": "Avatar name updated.",
     "renameError": "Could not update the avatar name.",
     "renameHintNoLecture": "Names are saved per lecture. Please enter from the lecture editor.",
+    "lookRenameSuccess": "Look name saved.",
+    "lookRenameError": "Could not save the look name. Please try again shortly.",
+    "viewerClose": "Close",
+    "viewerNoImage": "No image available.",
 
     "uploadTitle": "Create an avatar from your photo",
     "uploadDescription": "Upload a front-facing upper-body photo to generate an avatar of yourself. Generation can take a few minutes.",
