@@ -134,6 +134,42 @@
   height: 100%;
   object-fit: contain;
 }
+/* 슬라이드쇼 — 현재 슬라이드 이미지(클릭 시 재생/일시정지). */
+.slideClick {
+  width: 100%;
+  height: 100%;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+  z-index: 1;
+}
+.slideImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+/* 자막 — 슬라이드 하단 중앙. */
+.caption {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  max-width: 86%;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: rgba(10, 10, 10, 0.72);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.5;
+  text-align: center;
+  backdrop-filter: blur(4px);
+  z-index: 3;
+  pointer-events: none;
+}
 .video::before {
   content: "";
   position: absolute;
