@@ -199,6 +199,18 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
     try {
       await saveLook(lookId);
     } catch (err) {
+      // 502/타임아웃 등으로 클라이언트가 오류를 받아도 서버엔 이미 커밋됐을 수 있다
+      // (Railway 게이트웨이 오류·콜드스타트). 서버 상태를 재조회해 실제로 저장됐으면
+      // 성공으로 처리한다 — "저장됐는데 실패 토스트가 뜨는" 거짓 실패를 막는다
+      // (2026-06-03 사용자 보고: 누르면 실패했지만 새로고침하면 '저장됨'이었음).
+      try {
+        const list = await listLooks();
+        setLooks(list);
+        setDeferred(isDeferredMode());
+        if (list.find((l) => l.look_id === lookId)?.saved) return; // 실제로 저장됨
+      } catch {
+        // 재조회마저 실패 — 아래에서 낙관 갱신을 롤백하고 원 오류를 전파한다.
+      }
       setLooks((prev) =>
         prev.map((l) => (l.look_id === lookId ? { ...l, saved: false } : l)),
       );
