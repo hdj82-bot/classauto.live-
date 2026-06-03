@@ -57,6 +57,13 @@
     "applyError": "Could not apply the avatar to the lecture.",
     "applyHintNoLecture": "Enter from the lecture editor via 'Change avatar' to apply your selection directly to a lecture.",
 
+    "createAvatar": "Create avatar (look + voice)",
+    "creating": "Creating...",
+
+    "sampleVoiceTitle": "Choose a sample voice",
+    "sampleVoiceDescription": "Sample voices you can use instead of your own cloned voice. Pick your own voice or a sample voice, then press 'Create avatar (look + voice)' and the lecture video and Q&A answers will speak in it. Tap ▶ to preview.",
+    "sampleVoiceDefault": "Default voice (by gender)",
+
     "recentTitle": "Recently selected avatar",
     "recentApplyNote": "Apply to this lecture instantly — no re-generation (zero cost).",
     "libraryTitle": "Saved avatars & looks",
