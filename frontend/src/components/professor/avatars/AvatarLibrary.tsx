@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { Avatar } from "./avatarsTypes";
 import AvatarCard from "./AvatarCard";
 
@@ -10,8 +10,10 @@ interface AvatarLibraryProps {
   /** 라이브러리 항목 — 교수자가 만든 본인 아바타 + ready 룩. */
   items: Avatar[];
   selectedId: string | null;
-  /** 카드 클릭 → 즉시 선택(재생성 없음). 부모가 최근 선택으로 영속화한다. */
-  onSelect: (id: string) => void;
+  /** 카드/최근 박스 클릭 → 큰 보기(뷰어) 열기. 부모가 선택·영속화도 함께 처리한다. */
+  onOpen: (avatar: Avatar) => void;
+  /** 룩 이름 저장(연필). avatar.isLook 일 때만 노출. */
+  onRenameLook: (id: string, name: string) => void;
   /** "최근 선택한 아바타" 를 현재 강의에 적용(기존 applyAvatarToLecture 재사용). */
   onApply: () => void;
   /** 강의 컨텍스트(?lecture=)가 있어 적용이 가능한지. */
@@ -39,7 +41,8 @@ export default function AvatarLibrary({
   recent,
   items,
   selectedId,
-  onSelect,
+  onOpen,
+  onRenameLook,
   onApply,
   canApply,
   applying,
@@ -55,64 +58,22 @@ export default function AvatarLibrary({
       <h2 style={headingStyle}>{t("libraryTitle")}</h2>
       <p style={descStyle}>{t("libraryDescription")}</p>
 
-      {/* 최근 선택한 아바타 — 크게 보여 주고 우측에서 바로 적용 */}
+      {/* 최근 선택한 아바타 — 클릭하면 크게 보기, 연필로 이름 지정.
+          key={recent.id} 로 항목이 바뀌면 내부 편집 상태가 자연히 초기화된다. */}
       {recent && (
-        <div data-testid="recent-avatar-box" style={recentBoxStyle}>
-          <div style={recentThumbStyle}>
-            {recent.preview_image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={recent.preview_image_url}
-                alt={recent.name}
-                style={fillStyle}
-              />
-            ) : recent.preview_video_url ? (
-              <video
-                src={recent.preview_video_url}
-                muted
-                playsInline
-                preload="metadata"
-                aria-hidden="true"
-                style={fillStyle}
-              />
-            ) : (
-              <span aria-hidden="true" style={initialStyle}>
-                {recent.name.slice(0, 1)}
-              </span>
-            )}
-          </div>
-
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-            <span style={recentEyebrowStyle}>{t("recentTitle")}</span>
-            <span style={recentNameStyle} title={recent.name}>
-              {recent.name}
-            </span>
-            <p style={recentNoteStyle}>{t("recentApplyNote")}</p>
-
-            <div style={{ marginTop: "auto", paddingTop: 12 }}>
-              {canApply ? (
-                <button
-                  type="button"
-                  onClick={onApply}
-                  disabled={applying}
-                  data-testid="recent-apply"
-                  style={{
-                    ...applyBtnStyle,
-                    opacity: applying ? 0.55 : 1,
-                    cursor: applying ? "wait" : "pointer",
-                  }}
-                >
-                  {applying ? t("applying") : t("applyToLecture")}
-                </button>
-              ) : (
-                <p style={recentHintStyle}>{t("applyHintNoLecture")}</p>
-              )}
-            </div>
-          </div>
-        </div>
+        <RecentAvatarBox
+          key={recent.id}
+          recent={recent}
+          onOpen={onOpen}
+          onRenameLook={onRenameLook}
+          onApply={onApply}
+          canApply={canApply}
+          applying={applying}
+          t={t}
+        />
       )}
 
-      {/* 라이브러리 그리드 — 클릭 시 재생성 없이 즉시 선택 */}
+      {/* 라이브러리 그리드 — 클릭 시 큰 보기(뷰어) */}
       {items.length > 0 && (
         <div data-testid="avatar-library-grid" style={gridStyle}>
           {items.map((a) => (
@@ -120,7 +81,7 @@ export default function AvatarLibrary({
               key={a.id}
               avatar={a}
               selected={a.id === selectedId}
-              onSelect={onSelect}
+              onSelect={() => onOpen(a)}
               renameEnabled={renameEnabled}
               onRename={(name) => onRename(a.id, name)}
               onDelete={onDelete}
@@ -131,6 +92,172 @@ export default function AvatarLibrary({
       )}
     </section>
   );
+}
+
+/** 최근 선택 박스 — 큰 보기 + 연필 인라인 이름. key={recent.id} 로 마운트되어
+ *  항목 전환 시 편집 상태가 자동 초기화된다(setState-in-effect 회피). */
+function RecentAvatarBox({
+  recent,
+  onOpen,
+  onRenameLook,
+  onApply,
+  canApply,
+  applying,
+  t,
+}: {
+  recent: Avatar;
+  onOpen: (avatar: Avatar) => void;
+  onRenameLook: (id: string, name: string) => void;
+  onApply: () => void;
+  canApply: boolean;
+  applying: boolean;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(recent.name);
+
+  const commit = () => {
+    const next = draft.trim();
+    if (next !== recent.name) onRenameLook(recent.id, next);
+    setEditing(false);
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setEditing(false);
+    }
+  };
+
+  return (
+    <div data-testid="recent-avatar-box" style={recentBoxStyle}>
+      <button
+        type="button"
+        onClick={() => onOpen(recent)}
+        style={recentThumbStyle}
+        aria-label={recent.name}
+        data-testid="recent-open"
+      >
+        {recent.preview_image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={recent.preview_image_url} alt={recent.name} style={fillStyle} />
+        ) : recent.preview_video_url ? (
+          <video
+            src={recent.preview_video_url}
+            muted
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
+            style={fillStyle}
+          />
+        ) : (
+          <span aria-hidden="true" style={initialStyle}>
+            {recent.name.slice(0, 1)}
+          </span>
+        )}
+      </button>
+
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <span style={recentEyebrowStyle}>{t("recentTitle")}</span>
+
+        {/* 이름 줄 — 영어 프롬프트 대신 사용자 지정 이름. 룩이면 연필로 편집. */}
+        {editing ? (
+          <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={onKey}
+              maxLength={80}
+              aria-label={t("renameLabel")}
+              placeholder={t("renamePlaceholder")}
+              data-testid="recent-name-input"
+              style={recentNameInput}
+            />
+            <button type="button" onClick={commit} style={miniBtn(true)} data-testid="recent-name-save">
+              {t("renameSave")}
+            </button>
+            <button type="button" onClick={() => setEditing(false)} style={miniBtn(false)}>
+              {t("renameCancel")}
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 6, alignItems: "center", minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => onOpen(recent)}
+              style={recentNameBtn}
+              title={recent.name}
+            >
+              {recent.name}
+            </button>
+            {recent.isLook && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(recent.name);
+                  setEditing(true);
+                }}
+                style={recentPencilBtn}
+                aria-label={t("renameEdit")}
+                title={t("renameEdit")}
+                data-testid="recent-name-edit"
+              >
+                <PencilIcon />
+              </button>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop: "auto", paddingTop: 12 }}>
+          {canApply ? (
+            <button
+              type="button"
+              onClick={onApply}
+              disabled={applying}
+              data-testid="recent-apply"
+              style={{
+                ...applyBtnStyle,
+                opacity: applying ? 0.55 : 1,
+                cursor: applying ? "wait" : "pointer",
+              }}
+            >
+              {applying ? t("applying") : t("applyToLecture")}
+            </button>
+          ) : (
+            <p style={recentHintStyle}>{t("applyHintNoLecture")}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function miniBtn(primary: boolean): CSSProperties {
+  return {
+    flexShrink: 0,
+    padding: "5px 10px",
+    fontSize: 12,
+    fontWeight: 700,
+    borderRadius: 8,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    border: `1px solid ${primary ? "transparent" : "var(--line-strong)"}`,
+    color: primary ? "#0A0A0A" : "var(--text-muted)",
+    background: primary ? "var(--gold)" : "var(--bg-card)",
+  };
 }
 
 const cardStyle: CSSProperties = {
@@ -168,13 +295,17 @@ const recentBoxStyle: CSSProperties = {
 
 const recentThumbStyle: CSSProperties = {
   position: "relative",
-  width: 108,
+  // 가로형 룩을 16:9 로 넓게(세로 크롭 답답함 해소). 클릭하면 큰 보기.
+  width: 200,
   flexShrink: 0,
-  aspectRatio: "3 / 4",
+  aspectRatio: "16 / 9",
   borderRadius: 12,
   overflow: "hidden",
   background: "var(--bg-card)",
   border: "1px solid var(--gold-medium)",
+  padding: 0,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 
 const fillStyle: CSSProperties = {
@@ -202,21 +333,49 @@ const recentEyebrowStyle: CSSProperties = {
   color: "var(--gold-on-light)",
 };
 
-const recentNameStyle: CSSProperties = {
+const recentNameBtn: CSSProperties = {
   marginTop: 4,
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  textAlign: "left",
   fontSize: 17,
   fontWeight: 700,
   color: "var(--text)",
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  minWidth: 0,
 };
 
-const recentNoteStyle: CSSProperties = {
-  margin: "6px 0 0",
-  fontSize: 12,
-  lineHeight: 1.5,
-  color: "var(--text-muted)",
+const recentNameInput: CSSProperties = {
+  flex: 1,
+  minWidth: 0,
+  padding: "6px 9px",
+  fontSize: 14,
+  fontWeight: 600,
+  borderRadius: 8,
+  border: "1px solid var(--line-strong)",
+  background: "var(--bg-card)",
+  color: "var(--text)",
+  fontFamily: "inherit",
+  outline: "none",
+};
+
+const recentPencilBtn: CSSProperties = {
+  flexShrink: 0,
+  width: 26,
+  height: 26,
+  borderRadius: 7,
+  border: "1px solid var(--gold-medium)",
+  background: "var(--bg-card)",
+  color: "var(--gold-on-light, #B88308)",
+  display: "grid",
+  placeItems: "center",
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
 
 const recentHintStyle: CSSProperties = {

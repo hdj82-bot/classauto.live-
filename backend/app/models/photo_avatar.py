@@ -38,6 +38,9 @@ class PhotoAvatarLook(Base):
     image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     preview_image_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     prompt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 교수자가 라이브러리에서 직접 붙인 룩 이름(연필 아이콘). NULL 이면 프론트가
+    # 폴백 라벨("이름 없는 룩")을 표시한다. 영어 prompt 를 표시명으로 쓰던 것을 대체.
+    name: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # "generating"|"ready"|"failed" — LookStatus 값을 문자열로 저장(enum 타입 미사용).
     status: Mapped[str] = mapped_column(
         String(20), default=LookStatus.generating.value, nullable=False

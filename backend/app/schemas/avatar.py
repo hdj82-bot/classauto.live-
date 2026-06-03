@@ -235,6 +235,10 @@ class LookItem(BaseModel):
         default=None, description="미리보기 썸네일(presigned)."
     )
     prompt: str | None = Field(default=None, description="생성에 쓴 프롬프트.")
+    name: str | None = Field(
+        default=None,
+        description="교수자가 라이브러리에서 직접 붙인 룩 이름. 없으면 null.",
+    )
     status: Literal["generating", "ready", "failed"] = Field(..., description="룩 상태.")
     is_default: bool = Field(
         default=False, description="교수자가 기본 룩으로 선택한 항목이면 true."
@@ -249,6 +253,16 @@ class LookItem(BaseModel):
             "룩 행 생성 시각(ISO8601, UTC). 프론트가 generating 룩의 진행 막대 ETA 를 "
             "서버 기준으로 계산해, 탭을 닫았다 다시 열어도 경과 시간을 정확히 잇는다."
         ),
+    )
+
+
+class LookNameUpdate(BaseModel):
+    """``PATCH /api/avatars/me/looks/{look_id}/name`` 요청 — 룩 이름 변경."""
+
+    name: str | None = Field(
+        default=None,
+        max_length=80,
+        description="새 룩 이름. 공백·빈 문자열이면 이름을 지운다(null).",
     )
 
 

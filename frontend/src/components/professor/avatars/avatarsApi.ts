@@ -441,6 +441,7 @@ interface LookItemWire {
   look_id: string;
   preview_image_url?: string | null;
   prompt?: string | null;
+  name?: string | null;
   status: "generating" | "ready" | "failed";
   is_default?: boolean;
   saved?: boolean;
@@ -452,6 +453,8 @@ export interface MyLook {
   id: string;
   preview_image_url: string | null;
   prompt: string | null;
+  /** 교수자가 직접 붙인 룩 이름(연필). 없으면 null → 프론트가 폴백 라벨 표시. */
+  name: string | null;
   status: "generating" | "ready" | "failed";
   /** 교수자가 기본 룩(모든 강의 폴백)으로 지정한 항목이면 true. */
   is_default: boolean;
@@ -467,12 +470,33 @@ export async function listMyLooks(): Promise<MyLook[]> {
       id: w.look_id,
       preview_image_url: w.preview_image_url ?? null,
       prompt: w.prompt ?? null,
+      name: w.name ?? null,
       status: w.status,
       is_default: w.is_default ?? false,
       saved: w.saved ?? false,
     }));
   } catch (err) {
     if (isDeferredError(err)) return [];
+    throw err;
+  }
+}
+
+/**
+ * PATCH /api/avatars/me/looks/{id}/name — 룩 표시 이름을 저장한다(연필).
+ * 빈 문자열/공백이면 이름 해제(null). 미배포(404 등)는 멱등 성공으로 폴백.
+ */
+export async function renameMyLook(
+  lookId: string,
+  name: string,
+): Promise<{ ok: boolean; name: string | null }> {
+  try {
+    const { data } = await api.patch<{ ok: boolean; name: string | null }>(
+      `/api/avatars/me/looks/${encodeURIComponent(lookId)}/name`,
+      { name },
+    );
+    return { ok: data?.ok ?? true, name: data?.name ?? null };
+  } catch (err) {
+    if (isDeferredError(err)) return { ok: true, name: name.trim() || null };
     throw err;
   }
 }

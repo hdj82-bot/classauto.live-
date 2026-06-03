@@ -26,6 +26,11 @@ export interface Avatar {
   is_custom?: boolean;
   /** is_custom 아바타의 생성 상태. HeyGen 표준 아바타는 항상 ready 취급. */
   status?: CustomAvatarStatus;
+  /**
+   * 라이브러리 룩(PhotoAvatarLook)이면 true — 연필로 이름 변경이 가능한 대상.
+   * HeyGen 표준 아바타(is_custom=false)는 이름 변경 불가라 false/undefined.
+   */
+  isLook?: boolean;
 }
 
 export interface ProfilePhotoResponse {

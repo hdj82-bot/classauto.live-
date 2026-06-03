@@ -28,7 +28,6 @@ interface AvatarCardProps {
 const mediaWrapStyle: CSSProperties = {
   position: "relative",
   width: "100%",
-  aspectRatio: "3 / 4",
   background: "var(--bg-subtle)",
   overflow: "hidden",
 };
@@ -136,7 +135,13 @@ export default function AvatarCard({
           fontFamily: "inherit",
         }}
       >
-        <span style={mediaWrapStyle}>
+        <span
+          style={{
+            ...mediaWrapStyle,
+            // 가로형 룩(1536×1024)은 16:9 로 넓게, 표준 세로 아바타는 기존 3:4 유지.
+            aspectRatio: avatar.isLook ? "16 / 9" : "3 / 4",
+          }}
+        >
           {avatar.preview_image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img

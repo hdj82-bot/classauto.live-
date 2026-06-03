@@ -10,6 +10,7 @@ import { useReducedMotion } from "@/components/professor/avatars/useReducedMotio
 import AvatarCard from "@/components/professor/avatars/AvatarCard";
 import AvatarPreviewStage from "@/components/professor/avatars/AvatarPreviewStage";
 import AvatarLibrary from "@/components/professor/avatars/AvatarLibrary";
+import AvatarViewerModal from "@/components/professor/avatars/AvatarViewerModal";
 import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import {
@@ -22,6 +23,7 @@ import {
   listAvatars,
   listMyLooks,
   renameAvatarForLecture,
+  renameMyLook,
   requestVoiceScript,
   setRecentAvatar,
   uploadVoiceSample,
@@ -66,6 +68,8 @@ export default function AvatarsPage() {
   const [deferred, setDeferred] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+  // 큰 보기(뷰어) 모달 대상 id. 카드/최근 박스 클릭 시 연다.
+  const [viewerId, setViewerId] = useState<string | null>(null);
 
   // 저장된 본인 룩(라이브러리) + 가장 최근 선택(서버 영속) — 재방문 시 재생성 없이
   // 바로 고르도록 복원한다.
@@ -223,10 +227,12 @@ export default function AvatarsPage() {
       .filter((l) => l.status === "ready" && l.saved)
       .map((l) => ({
         id: l.id,
-        name: l.prompt?.trim() || t("lookUntitled"),
+        // 영어 prompt 대신 사용자 지정 이름. 없으면 폴백 라벨(연필로 직접 붙인다).
+        name: l.name?.trim() || t("lookUntitled"),
         preview_image_url: l.preview_image_url,
         preview_video_url: null,
         is_custom: true,
+        isLook: true,
         status: "ready" as const,
       }));
     // 같은 id 중복 제거(본인 아바타와 룩이 우연히 겹칠 일은 없으나 방어적으로).
@@ -259,12 +265,46 @@ export default function AvatarsPage() {
     [resolveAvatar, recentId],
   );
 
+  // 큰 보기(뷰어) 대상 — 목록이 갱신되면(이름 변경 등) 자동으로 최신 값을 반영한다.
+  const viewerAvatar = useMemo(
+    () => resolveAvatar(viewerId),
+    [resolveAvatar, viewerId],
+  );
+
   // 아바타/룩 선택 — 재생성 없이 즉시. 최근 선택을 서버에 영속화한다(실패는 무시).
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
     setRecentId(id);
     void setRecentAvatar(id).catch(() => {});
   }, []);
+
+  // 카드/최근 박스 클릭 — 큰 보기(뷰어)를 열고, 동시에 선택(최근/미리보기 반영)한다.
+  const handleOpen = useCallback(
+    (avatar: Avatar) => {
+      handleSelect(avatar.id);
+      setViewerId(avatar.id);
+    },
+    [handleSelect],
+  );
+
+  // 룩 이름 저장(연필) — 낙관적으로 룩 목록의 name 을 갱신하고 서버에 반영한다.
+  const handleRenameLook = useCallback(
+    async (lookId: string, name: string) => {
+      const next = name.trim();
+      setLooks((prev) =>
+        prev.map((l) => (l.id === lookId ? { ...l, name: next || null } : l)),
+      );
+      try {
+        await renameMyLook(lookId, next);
+        toast(t("lookRenameSuccess"), "success");
+      } catch {
+        toast(t("lookRenameError"), "error");
+        // 실패 시 서버 기준으로 되돌린다.
+        await refreshAvatars();
+      }
+    },
+    [toast, t, refreshAvatars],
+  );
 
   // 지정한 아바타/룩을 현재 강의에 적용(재생성 없음). 헤더·최근 박스가 공유한다.
   const doApply = useCallback(
@@ -445,7 +485,8 @@ export default function AvatarsPage() {
           recent={recentAvatar}
           items={libraryItems}
           selectedId={selectedId}
-          onSelect={handleSelect}
+          onOpen={handleOpen}
+          onRenameLook={handleRenameLook}
           onApply={() => doApply(recentId)}
           canApply={!!lectureId}
           applying={applying}
@@ -483,6 +524,20 @@ export default function AvatarsPage() {
           reducedMotion={reducedMotion}
           t={t}
         />
+
+        {/* 라이브러리 룩/아바타 큰 보기 — 가로형 전체 + 연필 이름 지정 */}
+        {viewerAvatar && (
+          <AvatarViewerModal
+            key={viewerAvatar.id}
+            avatar={viewerAvatar}
+            canApply={!!lectureId}
+            applying={applying}
+            onApply={(id) => doApply(id)}
+            onRename={handleRenameLook}
+            onClose={() => setViewerId(null)}
+            t={t}
+          />
+        )}
 
         {error ? (
           <div

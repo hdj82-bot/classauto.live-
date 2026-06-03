@@ -760,6 +760,64 @@ async def test_delete_unknown_look_returns_404(client, professor):
     assert resp.status_code == 404
 
 
+# ── PATCH /api/avatars/me/looks/{id}/name (룩 이름 변경) ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_rename_look_sets_and_clears_name(client, professor, db):
+    """이름을 저장하고, GET 목록·빈 문자열 해제까지 반영된다."""
+    from app.models.photo_avatar import PhotoAvatarLook
+
+    look = PhotoAvatarLook(
+        user_id=professor.id,
+        image_url="https://b.s3.r.amazonaws.com/thumbnails/photo-avatar/x/look-n.png",
+        prompt="long english prompt",
+        status="ready",
+        saved_to_library=True,
+    )
+    db.add(look)
+    await db.flush()
+    look_id = str(look.id)
+
+    # 이름 저장(공백은 trim).
+    resp = await client.patch(
+        f"/api/avatars/me/looks/{look_id}/name",
+        json={"name": "  연구실 정장 룩  "},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "name": "연구실 정장 룩"}
+
+    # GET 목록에 name 이 실린다.
+    listing = await client.get(
+        "/api/avatars/me/looks", headers=make_auth_header(professor)
+    )
+    assert listing.status_code == 200
+    item = next(i for i in listing.json() if i["look_id"] == look_id)
+    assert item["name"] == "연구실 정장 룩"
+
+    # 빈 문자열이면 이름 해제(null).
+    resp2 = await client.patch(
+        f"/api/avatars/me/looks/{look_id}/name",
+        json={"name": "   "},
+        headers=make_auth_header(professor),
+    )
+    assert resp2.status_code == 200
+    assert resp2.json() == {"ok": True, "name": None}
+
+
+@pytest.mark.asyncio
+async def test_rename_unknown_look_returns_404(client, professor):
+    """존재하지 않는 룩 이름 변경은 404."""
+    bogus = str(uuid.uuid4())
+    resp = await client.patch(
+        f"/api/avatars/me/looks/{bogus}/name",
+        json={"name": "x"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 404
+
+
 # ── generate_gpt_looks 태스크 ─────────────────────────────────────────────────
 
 

@@ -25,6 +25,7 @@ from app.schemas.avatar import (
     LookGenerateRequest,
     LookGenerateResponse,
     LookItem,
+    LookNameUpdate,
     LookSelectResponse,
     PhotoAvatarStatusResponse,
     ProfilePhotoResponse,
@@ -1046,6 +1047,7 @@ async def list_looks(
                     r.preview_image_url or r.image_url
                 ),
                 prompt=r.prompt,
+                name=r.name,
                 status=r.status if r.status in ("generating", "ready", "failed") else "ready",
                 is_default=(lid == user.photo_avatar_default_look_id),
                 saved=r.saved_to_library,
@@ -1251,6 +1253,55 @@ async def delete_look(
     await db.delete(row)
     await db.commit()
     return {"ok": True}
+
+
+@router.patch(
+    "/api/avatars/me/looks/{look_id}/name",
+    response_model=dict,
+    summary="룩 이름 변경 (라이브러리 표시명)",
+)
+async def rename_look(
+    look_id: str,
+    payload: LookNameUpdate,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """라이브러리 룩에 교수자가 직접 붙이는 표시 이름을 저장한다.
+
+    영어 prompt 를 표시명으로 노출하던 것을 대체한다(연필 아이콘). 공백/빈 문자열은
+    이름 해제(NULL)로 처리한다. 식별은 삭제·선택과 동일하게 내부 UUID 우선, 레거시
+    heygen_look_id 폴백.
+    """
+    row = None
+    try:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.id == uuid.UUID(look_id),
+                )
+            )
+        ).scalar_one_or_none()
+    except ValueError:
+        row = None
+    if row is None:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.heygen_look_id == look_id,
+                )
+            )
+        ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 룩을 찾을 수 없습니다."
+        )
+
+    name = (payload.name or "").strip()
+    row.name = name[:80] or None
+    await db.commit()
+    return {"ok": True, "name": row.name}
 
 
 # ── 최근 선택한 아바타 (라이브러리 즉시 선택·적용) ────────────────────────────
