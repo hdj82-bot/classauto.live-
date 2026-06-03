@@ -16,8 +16,8 @@ interface LookSelectStepProps {
   selectedLookId: string | null;
   /** 기본 룩 선택(POST select). */
   onSelect: (lookId: string) => void;
-  /** 16:9 모달 안에서 미세 조정 재생성. */
-  onGenerate?: (input: LookGenerateInput) => Promise<void>;
+  /** 16:9 모달 안에서 미세 조정 재생성. count=1 로 1장만, 새 룩 id 목록을 돌려준다. */
+  onGenerate?: (input: LookGenerateInput, count?: number) => Promise<string[]>;
   /** 룩 삭제(타일 ⋮ 메뉴 + 16:9 모달). */
   onDelete?: (lookId: string) => Promise<void>;
   /** 후보 룩을 라이브러리에 저장(타일 ⋮ 메뉴). */
@@ -76,10 +76,22 @@ export default function LookSelectStep({
 
   const [activeLookId, setActiveLookId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  // generating(재생성 직후) 룩도 모달에 표시할 수 있게 visibleLooks 에서 찾는다.
   const activeLook =
     activeLookId !== null
-      ? readyLooks.find((l) => l.look_id === activeLookId) ?? null
+      ? visibleLooks.find((l) => l.look_id === activeLookId) ?? null
       : null;
+
+  // 상세 모달 좌우 네비게이션 — visibleLooks(ready+generating) 순서대로 이동.
+  const navIndex = activeLookId
+    ? visibleLooks.findIndex((l) => l.look_id === activeLookId)
+    : -1;
+  const goToOffset = (delta: number) => {
+    const next = navIndex + delta;
+    if (next >= 0 && next < visibleLooks.length) {
+      setActiveLookId(visibleLooks[next].look_id);
+    }
+  };
 
   // 타일 클릭: 선택(기존) + 모달 오픈(신규). 둘 다 같은 핸들러에서 처리한다.
   const handleTileClick = (lookId: string) => {
@@ -100,9 +112,11 @@ export default function LookSelectStep({
   };
   const handleMenuSave = onSave ? (lookId: string) => void onSave(lookId) : undefined;
 
-  // 모달이 재생성을 위임받았을 때 — 비어 있으면 no-op.
+  // 모달의 "추가 요청" 재생성 — count=1(1장만), 새 룩으로 모달을 전환해 진행률 표시.
   const handleRegenerate = async (input: LookGenerateInput) => {
-    if (onGenerate) await onGenerate(input);
+    if (!onGenerate) return;
+    const ids = await onGenerate(input, 1);
+    if (ids && ids.length > 0) setActiveLookId(ids[0]);
   };
 
   // 인라인 폼이 새 배치 생성을 의뢰. cap 도달이면 비활성.
@@ -200,18 +214,26 @@ export default function LookSelectStep({
         </button>
       )}
 
-      {activeLook && (
-        <LookDetailModal
-          look={activeLook}
-          lastInput={lastInput}
-          onRegenerate={handleRegenerate}
-          onDelete={onDelete}
-          onClose={() => setActiveLookId(null)}
-          busy={looksPending}
-          capReached={capReached}
-          t={t}
-        />
-      )}
+      {activeLook &&
+        (activeLook.status === "ready" || activeLook.status === "generating") && (
+          <LookDetailModal
+            look={activeLook}
+            lastInput={lastInput}
+            onRegenerate={handleRegenerate}
+            onDelete={onDelete}
+            onClose={() => setActiveLookId(null)}
+            onPrev={navIndex > 0 ? () => goToOffset(-1) : undefined}
+            onNext={
+              navIndex >= 0 && navIndex < visibleLooks.length - 1
+                ? () => goToOffset(1)
+                : undefined
+            }
+            reducedMotion={reducedMotion}
+            busy={looksPending}
+            capReached={capReached}
+            t={t}
+          />
+        )}
     </div>
   );
 }

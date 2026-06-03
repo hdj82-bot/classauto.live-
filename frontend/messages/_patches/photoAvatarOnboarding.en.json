@@ -81,6 +81,8 @@
       "detail": {
         "title": "Look detail",
         "close": "Close",
+        "prev": "Previous look",
+        "next": "Next look",
         "extraLabel": "Refinement",
         "extraPlaceholder": "e.g. blue tie / a brighter smile / add glasses",
         "extraHelp": "We'll keep this look's base and tweak only the expression, outfit, or color you describe.",

@@ -57,11 +57,12 @@ export default function PhotoAvatarOnboardingPage() {
   );
 
   const handleGenerate = useCallback(
-    async (input: LookGenerateInput) => {
+    async (input: LookGenerateInput, count?: number) => {
       try {
-        await flow.generate(input);
+        return await flow.generate(input, count);
       } catch {
         toast(t("looks.error"), "error");
+        return [];
       }
     },
     [flow, toast, t],

@@ -13,8 +13,11 @@ import LookDetailModal from "./LookDetailModal";
 
 interface LookGenerateStepProps {
   looks: Look[];
-  /** 구조화 옵션으로 룩 배치를 생성한다(v0.2). */
-  onGenerate: (input: LookGenerateInput) => Promise<void>;
+  /**
+   * 구조화 옵션으로 룩을 생성한다(v0.2). count 미지정 시 기본 배치, 모달 재생성은
+   * count=1. 새로 생긴 룩 id 목록을 돌려받아 그 룩(상세 모달)로 전환한다.
+   */
+  onGenerate: (input: LookGenerateInput, count?: number) => Promise<string[]>;
   /** 룩 1개를 삭제(타일 ⋮ 메뉴 + LookDetailModal). */
   onDelete?: (lookId: string) => Promise<void>;
   /** 후보 룩을 라이브러리에 저장(타일 ⋮ 메뉴). */
@@ -73,6 +76,18 @@ export default function LookGenerateStep({
       ? visibleLooks.find((l) => l.look_id === activeLookId) ?? null
       : null;
 
+  // 상세 모달 좌우 네비게이션 — visibleLooks(=ready+generating, failed 제외) 순서대로
+  // 이전/다음 룩으로 이동한다. 모달을 닫고 다시 클릭하지 않아도 둘러볼 수 있다.
+  const navIndex = activeLookId
+    ? visibleLooks.findIndex((l) => l.look_id === activeLookId)
+    : -1;
+  const goToOffset = (delta: number) => {
+    const next = navIndex + delta;
+    if (next >= 0 && next < visibleLooks.length) {
+      setActiveLookId(visibleLooks[next].look_id);
+    }
+  };
+
   const handleGenerate = async (input: LookGenerateInput) => {
     if (busy || capReached) return;
     setSubmitting(true);
@@ -86,9 +101,12 @@ export default function LookGenerateStep({
   // 모달의 "추가 요청" 재생성 — 진행 중(busy)이어도 막지 않는다(backend 가 누적
   // cap 으로 통제). 한도 도달일 때만 막는다. 모달이 자체 submitting 을 관리하므로
   // 여기선 setSubmitting 을 건드리지 않는다(인라인 폼 버튼과 독립).
+  // count=1 — 모달 재생성은 1장만 만든다(사용자 요청 2026-06-03). 새로 생긴 룩으로
+  // 모달을 곧장 전환해 그 룩의 생성 진행률(%)이 모달 안에서 바로 보이게 한다.
   const handleRegenerate = async (input: LookGenerateInput) => {
     if (capReached) return;
-    await onGenerate(input);
+    const ids = await onGenerate(input, 1);
+    if (ids && ids.length > 0) setActiveLookId(ids[0]);
   };
 
   // ready 타일 클릭 = 상세 모달. 삭제/저장은 타일 우상단 ⋮ 메뉴로 처리한다.
@@ -186,18 +204,26 @@ export default function LookGenerateStep({
         </>
       )}
 
-      {activeLook && activeLook.status === "ready" && (
-        <LookDetailModal
-          look={activeLook}
-          lastInput={lastInput}
-          onRegenerate={handleRegenerate}
-          onDelete={onDelete}
-          onClose={() => setActiveLookId(null)}
-          busy={busy}
-          capReached={capReached}
-          t={t}
-        />
-      )}
+      {activeLook &&
+        (activeLook.status === "ready" || activeLook.status === "generating") && (
+          <LookDetailModal
+            look={activeLook}
+            lastInput={lastInput}
+            onRegenerate={handleRegenerate}
+            onDelete={onDelete}
+            onClose={() => setActiveLookId(null)}
+            onPrev={navIndex > 0 ? () => goToOffset(-1) : undefined}
+            onNext={
+              navIndex >= 0 && navIndex < visibleLooks.length - 1
+                ? () => goToOffset(1)
+                : undefined
+            }
+            reducedMotion={reducedMotion}
+            busy={busy}
+            capReached={capReached}
+            t={t}
+          />
+        )}
     </div>
   );
 }

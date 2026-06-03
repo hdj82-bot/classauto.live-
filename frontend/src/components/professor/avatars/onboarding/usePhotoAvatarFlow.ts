@@ -55,8 +55,12 @@ export interface PhotoAvatarFlow {
   lastInput: LookGenerateInput | null;
   goTo: (step: OnboardingStep) => void;
   uploadPhoto: (file: File) => Promise<void>;
-  /** 구조화 옵션으로 룩 배치(기본 LOOK_BATCH_DEFAULT 장)를 생성한다. */
-  generate: (input: LookGenerateInput) => Promise<void>;
+  /**
+   * 구조화 옵션으로 룩을 생성한다. count 미지정 시 기본 배치(LOOK_BATCH_DEFAULT 장),
+   * 상세 모달의 "추가 요청" 재생성은 count=1 로 1장만 만든다. 이번 호출로 새로 생긴
+   * 룩의 id 목록을 돌려줘 호출부가 그 룩(상세 모달)로 곧장 전환할 수 있게 한다.
+   */
+  generate: (input: LookGenerateInput, count?: number) => Promise<string[]>;
   select: (lookId: string) => Promise<void>;
   /** 후보 룩을 라이브러리에 저장(확정). */
   save: (lookId: string) => Promise<void>;
@@ -152,13 +156,13 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
   }, []);
 
   const generate = useCallback(
-    async (input: LookGenerateInput) => {
-      // 구조화 옵션으로 한 배치(기본 LOOK_BATCH_DEFAULT 장)를 생성한다.
+    async (input: LookGenerateInput, count: number = LOOK_BATCH_DEFAULT) => {
+      // 구조화 옵션으로 count 장을 생성한다(기본 LOOK_BATCH_DEFAULT, 모달 재생성=1).
       const beforeIds = new Set(looksRef.current.map((l) => l.look_id));
-      await generateLooks(input, LOOK_BATCH_DEFAULT);
+      await generateLooks(input, count);
       setLastInput(input); // LookDetailModal 재생성용 base.
       const list = await listLooks();
-      // 이번 배치로 새로 생긴 룩에만 이 입력을 기록(한국어 카테고리 라벨용).
+      // 이번 호출로 새로 생긴 룩에만 이 입력을 기록(한국어 카테고리 라벨용).
       // 이전 배치의 룩은 각자 자신의 입력을 이미 들고 있으므로 건드리지 않는다.
       const newIds = list.filter((l) => !beforeIds.has(l.look_id)).map((l) => l.look_id);
       if (newIds.length > 0) {
@@ -171,6 +175,7 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
       setLooks(list);
       setDeferred(isDeferredMode());
       startLooksPolling();
+      return newIds; // 호출부가 새 룩(상세 모달)로 곧장 전환할 수 있게.
     },
     [startLooksPolling],
   );
