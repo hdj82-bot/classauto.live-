@@ -97,6 +97,17 @@ class SlideshowResponse(BaseModel):
     slides: list[SlideshowSlide]
 
 
+class LectureDownloadResponse(BaseModel):
+    """``POST/GET /api/lectures/{id}/download`` — on-demand mp4 합성 상태/URL.
+
+    status: none(미요청) | building(합성 중) | ready(완료) | failed.
+    url 은 ready 일 때만 presigned 다운로드 URL.
+    """
+
+    status: str
+    url: str | None = None
+
+
 class LectureCreate(BaseModel):
     course_id: uuid.UUID
     title: str = Field(..., min_length=1, max_length=255)

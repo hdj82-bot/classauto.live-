@@ -20,6 +20,7 @@ celery = Celery(
         "app.tasks.render",
         "app.tasks.pipeline",
         "app.tasks.photo_avatar",
+        "app.tasks.export",
     ],
 )
 
