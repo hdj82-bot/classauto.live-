@@ -448,7 +448,11 @@ vi.mock("@/components/professor/avatars/onboarding/photoAvatarApi", () => ({
 }));
 
 import { usePhotoAvatarFlow } from "@/components/professor/avatars/onboarding/usePhotoAvatarFlow";
-import { generateLooks } from "@/components/professor/avatars/onboarding/photoAvatarApi";
+import {
+  generateLooks,
+  saveLook,
+  listLooks,
+} from "@/components/professor/avatars/onboarding/photoAvatarApi";
 
 describe("usePhotoAvatarFlow — 업로드 복귀 시 stale 룩 초기화", () => {
   beforeEach(() => vi.clearAllMocks());
@@ -481,6 +485,54 @@ describe("usePhotoAvatarFlow — 업로드 복귀 시 stale 룩 초기화", () =
     expect(result.current.looks).toHaveLength(0);
     expect(result.current.selectedLookId).toBeNull();
 
+    unmount();
+  });
+});
+
+describe("usePhotoAvatarFlow — 저장 거짓 실패 보정(502)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const educatorInput = {
+    persona: "educator" as const,
+    outfit: "blazer" as const,
+    background: "lecture" as const,
+    expression: "friendly" as const,
+    extra: null,
+  };
+
+  it("saveLook 이 실패해도 서버 재조회에서 saved=true 면 에러를 던지지 않는다", async () => {
+    const { result, unmount } = renderHook(() => usePhotoAvatarFlow());
+    await waitFor(() => expect(result.current.initializing).toBe(false));
+    await act(async () => {
+      await result.current.generate(educatorInput);
+    });
+    // 502 처럼 saveLook 은 실패하지만, 서버엔 이미 커밋됨 → 재조회가 saved=true 반환.
+    vi.mocked(saveLook).mockRejectedValueOnce(new Error("502 Bad Gateway"));
+    vi.mocked(listLooks).mockResolvedValueOnce([
+      { look_id: "k1", image_url: "x", preview_image_url: null, prompt: "p", status: "ready", saved: true },
+    ]);
+    await act(async () => {
+      // 거짓 실패를 던지지 않아야 한다(toast 실패 방지).
+      await expect(result.current.save("k1")).resolves.toBeUndefined();
+    });
+    expect(result.current.looks.find((l) => l.look_id === "k1")?.saved).toBe(true);
+    unmount();
+  });
+
+  it("saveLook 실패 + 재조회도 미저장이면 롤백하고 에러를 전파한다", async () => {
+    const { result, unmount } = renderHook(() => usePhotoAvatarFlow());
+    await waitFor(() => expect(result.current.initializing).toBe(false));
+    await act(async () => {
+      await result.current.generate(educatorInput);
+    });
+    vi.mocked(saveLook).mockRejectedValueOnce(new Error("500"));
+    vi.mocked(listLooks).mockResolvedValueOnce([
+      { look_id: "k1", image_url: "x", preview_image_url: null, prompt: "p", status: "ready", saved: false },
+    ]);
+    await act(async () => {
+      await expect(result.current.save("k1")).rejects.toThrow();
+    });
+    expect(result.current.looks.find((l) => l.look_id === "k1")?.saved).toBe(false);
     unmount();
   });
 });
