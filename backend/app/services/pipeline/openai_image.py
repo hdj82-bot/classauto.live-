@@ -37,8 +37,13 @@ def crop_to_16_9(png_bytes: bytes, top_bias: float | None = None) -> bytes:
 
     gpt-image-2 는 16:9 를 직접 만들지 못해 1536x1024(3:2) 로 생성한다. 이 함수는
     그 고화질 결과를 그대로 살린 채 세로를 16:9 에 맞게 잘라(=확대 효과) 강의
-    영상 톤에 맞춘다. 잘리는 세로 초과분은 ``top_bias`` 만큼 **위쪽 여백에서 우선**
-    덜어내 하단(손·허리)을 보존한다(사용자 핵심 요구: "하단이 짤리지 않게").
+    영상 톤에 맞춘다. 잘리는 세로 초과분은 ``top_bias`` 만큼 위쪽에서 덜어낸다.
+    기본 ``top_bias=0.0`` 은 초과분을 **전부 아래에서** 잘라 **머리 위(상단)를
+    무손실 보존**한다(2026-06-03 사용자 요구: "자세히 보기 시 머리 윗부분이 짤림 →
+    스튜디오 샷처럼 머리 위가 다 나와야 함"). gpt-image-2 의 프레이밍이 들쭉날쭉해
+    위쪽을 자르면 머리가 잘리는 사고가 있어, 머리는 절대 자르지 않는 쪽을 택했다.
+    대신 하단(손·허리 일부)은 잘릴 수 있다 — 프롬프트가 머리를 위쪽에 작은 여백으로
+    배치하도록 유도한다(``_HIDDEN_HEYGEN_RULES``).
 
     실패하면(이미지 파싱 등) 원본 bytes 를 그대로 돌려준다(생성 자체를 막지 않음).
     """
@@ -238,8 +243,10 @@ POSE_PROMPTS: dict[str, str] = {
 # 2026-06-01 v2 정교화: 사용자 보고 "얼굴이 너무 타이트하게 잡혀 머리 위가 잘리고
 # 몸이 안 보임" → 와이드 가로(landscape 16:9 계열) + 인물 작게 + 어깨/상체 충분히
 # 보이는 프레이밍으로 전환. 정체성은 얼굴 한정 보존 유지(머리 정돈·의상·배경 교체).
-# 2026-06-02: 생성은 3:2(1536x1024)지만 후처리로 위쪽을 잘라 16:9 로 만든다. 그래서
-# 머리 위 여백을 넉넉히, 손·허리는 하단에서 조금 띄워 크롭 후에도 둘 다 살아남게 한다.
+# 2026-06-03: 생성은 3:2(1536x1024)지만 후처리로 **아래쪽**을 잘라 16:9 로 만든다
+# (TOP_BIAS=0.0). 그래서 머리는 위쪽에 작은 여백으로 두고(머리 위 무손실), 손·허리는
+# 중하단에 배치한다(크롭으로 하단 일부가 잘려도 머리는 항상 살아남게). 이전엔 위쪽을
+# 잘라 머리 위가 짤리는 사고가 있었다(사용자 핵심 요구: "머리 위가 다 나와야 함").
 _HIDDEN_HEYGEN_RULES = (
     "PRESERVE EXACTLY (face only): the same person's identical facial identity, age, "
     "gender, ethnicity, facial proportions, skin tone, eye shape and color, eyebrows, "
@@ -247,16 +254,18 @@ _HIDDEN_HEYGEN_RULES = (
     "Do NOT beautify, slim, smooth, or alter the face. "
     "Hairstyle should remain the same person's natural hair but may be neatly groomed. "
     "FRAMING (mandatory, must follow exactly): waist-up portrait in a wide landscape "
-    "composition. IMPORTANT: this image will be cropped to 16:9 by trimming the TOP, "
-    "so leave GENEROUS empty headroom above the hair (about 20% of the image height is "
-    "empty space above the head) and keep the waist and BOTH hands comfortably ABOVE "
-    "the very bottom edge (a small margin, about 8-10% of the height, below the hands). "
-    "The subject's head-and-torso should occupy roughly the central 70% of the vertical "
-    "frame. BOTH hands and forearms MUST be clearly visible in the frame — never crop "
-    "above the chest, never crop the hands out. Single person only, centered or slightly "
-    "off-center with the background clearly visible on both sides. Head occupies roughly "
-    "15-18% of the frame WIDTH (small enough that the full upper body and hands fit "
-    "comfortably). Eye level, direct frontal view, mouth and jawline unobstructed. "
+    "composition. IMPORTANT: this image will be cropped to 16:9 by trimming the BOTTOM, "
+    "so the ENTIRE head — including the very top of the hair — MUST be fully inside the "
+    "frame with only a SMALL headroom above the hair (about 6-8% of the image height of "
+    "empty space above the head); the top of the head must NEVER touch or exceed the top "
+    "edge. Place the chest, waist and hands in the middle-and-lower area; the lowest part "
+    "of the body may be trimmed off, so the head and face must NEVER depend on the bottom. "
+    "The subject's head-and-shoulders should occupy roughly the upper-central 65% of the "
+    "vertical frame. Both hands should remain visible if possible, but the FULL HEAD takes "
+    "absolute priority over the hands. Single person only, centered or slightly off-center "
+    "with the background clearly visible on both sides. Head occupies roughly 15-18% of the "
+    "frame WIDTH (small enough that the full head and upper body fit comfortably). "
+    "Eye level, direct frontal view, mouth and jawline unobstructed. "
     "Natural relaxed posture. "
     "Soft, even frontal lighting with no harsh shadows. "
     "Render style: ultra photorealistic, DSLR environmental portrait look at "

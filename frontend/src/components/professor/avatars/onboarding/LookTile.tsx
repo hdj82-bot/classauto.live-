@@ -68,6 +68,7 @@ export default function LookTile({
     nowMs != null && startMs != null ? Math.max(0, nowMs - startMs) : 0;
   // 막대는 92%까지만 차오른다 — 완료는 폴링이 확정하므로 끝까지 차면 거짓 완료처럼 보인다.
   const progressPct = Math.min(0.92, elapsed / LOOK_ETA_MS);
+  const pctNum = Math.round(progressPct * 100);
   const remainingSec = Math.max(0, Math.ceil((LOOK_ETA_MS - elapsed) / 1000));
 
   // ⋮ 메뉴 — '저장'은 ready·미저장에만, '삭제'는 onDelete 가 있으면 항상.
@@ -128,32 +129,44 @@ export default function LookTile({
               </span>
             </span>
           ) : (
-            // generating — 막대형 진행률 + 남은 시간 추정.
-            <span style={centerBox}>
-              {!reducedMotion ? (
-                <span style={ringStyle} aria-hidden="true" />
-              ) : (
-                <PersonIcon size={28} mono style={{ color: "var(--text-faint)" }} />
-              )}
-              <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-                {t("looks.tileGenerating")}
-              </span>
-              <span
-                style={progressTrack}
-                role="progressbar"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={Math.round(progressPct * 100)}
-                aria-label={t("looks.tileGenerating")}
-              >
-                <span
-                  style={{
-                    ...progressFill,
-                    width: `${Math.round(progressPct * 100)}%`,
-                    // reduced-motion 이면 폭 전환 애니메이션을 끈다.
-                    transition: reducedMotion ? "none" : "width 1s linear",
-                  }}
-                />
+            // generating — 원형 진행률(%) + 남은 시간 추정. 숫자 %를 크게 보여줘
+            // "언제까지 기다려야 하는지" 가 즉시 보이게 한다(사용자 요청 2026-06-03).
+            <span
+              style={centerBox}
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={pctNum}
+              aria-label={t("looks.tileGenerating")}
+            >
+              <span style={ringWrap}>
+                <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
+                  <circle
+                    cx={RING_SIZE / 2}
+                    cy={RING_SIZE / 2}
+                    r={RING_R}
+                    fill="none"
+                    stroke="var(--gold-soft, #FFE6A8)"
+                    strokeWidth={RING_STROKE}
+                  />
+                  <circle
+                    cx={RING_SIZE / 2}
+                    cy={RING_SIZE / 2}
+                    r={RING_R}
+                    fill="none"
+                    stroke="var(--gold, #E89E0E)"
+                    strokeWidth={RING_STROKE}
+                    strokeLinecap="round"
+                    strokeDasharray={RING_CIRC}
+                    strokeDashoffset={RING_CIRC * (1 - progressPct)}
+                    // 12시 방향에서 시작하도록 회전.
+                    transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
+                    style={{
+                      transition: reducedMotion ? "none" : "stroke-dashoffset 1s linear",
+                    }}
+                  />
+                </svg>
+                <span style={ringPercent}>{pctNum}%</span>
               </span>
               <span style={progressLabel}>
                 {remainingSec > 0
@@ -284,31 +297,29 @@ const centerBox: CSSProperties = {
   justifyContent: "center",
 };
 
-const ringStyle: CSSProperties = {
-  width: 32,
-  height: 32,
-  borderRadius: "50%",
-  border: "3px solid var(--gold-soft)",
-  borderTopColor: "var(--gold)",
-  animation: "studio-spin 0.9s linear infinite",
+// 원형 진행률(determinate ring + 중앙 % 숫자) — 막대 대신 숫자 %를 크게 노출.
+const RING_SIZE = 46;
+const RING_STROKE = 5;
+const RING_R = (RING_SIZE - RING_STROKE) / 2;
+const RING_CIRC = 2 * Math.PI * RING_R;
+
+const ringWrap: CSSProperties = {
+  position: "relative",
+  width: RING_SIZE,
+  height: RING_SIZE,
+  display: "grid",
+  placeItems: "center",
 };
 
-const progressTrack: CSSProperties = {
-  display: "block",
-  width: "72%",
-  maxWidth: 160,
-  height: 6,
-  marginTop: 10,
-  borderRadius: 999,
-  background: "var(--gold-soft, #FFE6A8)",
-  overflow: "hidden",
-};
-
-const progressFill: CSSProperties = {
-  display: "block",
-  height: "100%",
-  borderRadius: 999,
-  background: "linear-gradient(90deg, #FFB627, #E89E0E)",
+const ringPercent: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "grid",
+  placeItems: "center",
+  fontSize: 13,
+  fontWeight: 800,
+  color: "var(--text)",
+  fontVariantNumeric: "tabular-nums",
 };
 
 const progressLabel: CSSProperties = {
