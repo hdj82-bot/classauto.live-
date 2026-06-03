@@ -39,6 +39,10 @@ class Lecture(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     video_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # on-demand 다운로드용 합성 mp4(슬라이드+구간 음성, ffmpeg). 학생용 재생과 분리.
+    # mp4_status: none|building|ready|failed (NULL=아직 요청 안 함).
+    mp4_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    mp4_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     thumbnail_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     slug: Mapped[str] = mapped_column(String(300), unique=True, nullable=False, index=True)
     order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

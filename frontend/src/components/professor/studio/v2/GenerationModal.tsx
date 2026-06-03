@@ -49,6 +49,8 @@ export interface GenerationModalProps {
   onDevBackground?: () => void;
   /** 완료 후 "영상 확인하기" 핸들러. */
   onViewVideo?: () => void;
+  /** 완료 후 추가 액션 슬롯(예: mp4 다운로드 버튼). done 일 때만 렌더. */
+  downloadSlot?: React.ReactNode;
 }
 
 const overlayStyle = (open: boolean): CSSProperties => ({
@@ -100,6 +102,7 @@ export default function GenerationModal({
   onDevComplete,
   onDevBackground,
   onViewVideo,
+  downloadSlot,
 }: GenerationModalProps) {
   const ringFillRef = useRef<SVGCircleElement | null>(null);
   const [confettiBits, setConfettiBits] = useState<{ left: number; delay: number; bg: string }[]>([]);
@@ -533,19 +536,22 @@ export default function GenerationModal({
             진행 상황은 자동으로 저장됩니다.
           </div>
           {done && onViewVideo ? (
-            <PrimaryButton
-              variant="primary"
-              size="md"
-              onClick={onViewVideo}
-              trailingIcon={
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14" />
-                  <path d="M12 5l7 7-7 7" />
-                </svg>
-              }
-            >
-              영상 확인하기
-            </PrimaryButton>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              {downloadSlot}
+              <PrimaryButton
+                variant="primary"
+                size="md"
+                onClick={onViewVideo}
+                trailingIcon={
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12h14" />
+                    <path d="M12 5l7 7-7 7" />
+                  </svg>
+                }
+              >
+                영상 확인하기
+              </PrimaryButton>
+            </div>
           ) : (
             <span
               className="inline-flex items-center gap-1.5 rounded-full"

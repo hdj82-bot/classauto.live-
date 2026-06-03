@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.video import Video
 from app.schemas.lecture import (
     LectureCreate,
+    LectureDownloadResponse,
     LecturePublicResponse,
     LectureResponse,
     LectureUpdate,
@@ -330,3 +331,62 @@ async def get_lecture_slideshow(
         return await get_lecture_slideshow_by_slug(db, slug)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# ── 강의 mp4 on-demand 다운로드 (교수자) ──────────────────────────────────────
+
+@router.post(
+    "/api/lectures/{lecture_id}/download",
+    response_model=LectureDownloadResponse,
+    summary="강의 mp4 다운로드 합성 요청 (교수자 전용)",
+)
+async def request_lecture_download(
+    lecture_id: uuid.UUID,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """본문 슬라이드쇼를 mp4 로 합성 요청한다(on-demand·캐시).
+
+    이미 ``ready`` 면 바로 URL 을 돌려주고, 진행 중이면 ``building`` 을 반환한다.
+    ``force=true`` 면 캐시를 무시하고 다시 합성한다.
+    """
+    lecture = await assert_professor_owns_lecture(db, lecture_id, professor.id)
+
+    if not force and lecture.mp4_status == "ready" and lecture.mp4_url:
+        return LectureDownloadResponse(
+            status="ready", url=presign_stored_s3_url(lecture.mp4_url)
+        )
+    if not force and lecture.mp4_status == "building":
+        return LectureDownloadResponse(status="building", url=None)
+
+    lecture.mp4_status = "building"
+    if force:
+        lecture.mp4_url = None
+    await db.commit()
+
+    from app.tasks.export import compose_lecture_mp4  # noqa: PLC0415
+
+    compose_lecture_mp4.delay(str(lecture_id), str(professor.id))
+    return LectureDownloadResponse(status="building", url=None)
+
+
+@router.get(
+    "/api/lectures/{lecture_id}/download",
+    response_model=LectureDownloadResponse,
+    summary="강의 mp4 다운로드 상태 (교수자 전용)",
+)
+async def get_lecture_download(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """mp4 다운로드 합성 상태/URL. ready 면 presigned URL 을 함께 돌려준다."""
+    lecture = await assert_professor_owns_lecture(db, lecture_id, professor.id)
+    status_val = lecture.mp4_status or "none"
+    url = (
+        presign_stored_s3_url(lecture.mp4_url)
+        if status_val == "ready"
+        else None
+    )
+    return LectureDownloadResponse(status=status_val, url=url)
