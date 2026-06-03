@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, API_URL } from "@/lib/api";
+import { useSlideshowPlayback } from "./useSlideshowPlayback";
 import { tokens as tokenStorage } from "@/lib/tokens";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -98,10 +99,27 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
   const [loading, setLoading] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [progressSec, setProgressSec] = useState(0);
-  const [durationSec, setDurationSec] = useState(0);
+  // 본문은 단일 영상이 아니라 슬라이드쇼(이미지 + 구간 음성 + 타임라인)로 재생한다.
+  // 진행 콜백은 ref 로 최신화해 훅(안정 콜백)과 퀴즈/집중도 로직의 순환 의존을 끊는다.
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [captionsOn, setCaptionsOn] = useState(true);
+  const handleProgressRef = useRef<(sec: number) => void>(() => {});
+  const handleProgress = useCallback(
+    (sec: number) => handleProgressRef.current(sec),
+    [],
+  );
+  const player = useSlideshowPlayback(slug, handleProgress);
+  // 렌더에서 쓰는 필드/안정 메서드는 구조분해(멤버로 ref 에 접근하지 않도록).
+  const {
+    audioRef,
+    currentSlide,
+    ready: playerReady,
+    pause: pausePlayer,
+    play: playPlayer,
+  } = player;
+  const isPlaying = player.isPlaying;
+  const progressSec = Math.floor(player.currentTime);
+  const durationSec = player.duration;
 
   // Q&A
   const [qaMessages, setQaMessages] = useState<QAMessage[]>([
@@ -231,28 +249,18 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
   const attention = useAttention({ sessionId: sessionId || "" });
 
   // ─── 인터스티셜 퀴즈: 트리거 / 일시정지·재개 / 응답 제출 ───
-  const pauseForQuiz = () => {
-    const v = videoRef.current;
-    if (v) {
-      v.pause();
-      setIsPlaying(false);
-    }
-  };
-  const resumeAfterQuiz = () => {
-    const v = videoRef.current;
-    if (v && !v.ended) {
-      v.play().catch(() => {});
-      setIsPlaying(true);
-    }
-  };
+  const resumeAfterQuiz = () => playPlayer();
 
   /** 아직 출제되지 않은 다음 퀴즈를 연다. 열었으면 true. */
-  const openQuiz = (quiz: PlaybackQuiz) => {
-    shownQuizRef.current.add(quiz.id);
-    quizOpenRef.current = true;
-    pauseForQuiz();
-    setActiveQuiz(quiz);
-  };
+  const openQuiz = useCallback(
+    (quiz: PlaybackQuiz) => {
+      shownQuizRef.current.add(quiz.id);
+      quizOpenRef.current = true;
+      pausePlayer();
+      setActiveQuiz(quiz);
+    },
+    [pausePlayer],
+  );
   const triggerNextQuiz = (): boolean => {
     if (quizOpenRef.current) return false;
     const next = quizzesRef.current.find((q) => !shownQuizRef.current.has(q.id));
@@ -260,6 +268,23 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     openQuiz(next);
     return true;
   };
+
+  // 슬라이드쇼 진행 콜백 — 집중도 진행 + 타임스탬프 퀴즈 자동 출제. ref 로 최신
+  // 클로저를 담아 훅의 안정 콜백(handleProgress)이 항상 최신 로직을 부른다.
+  useEffect(() => {
+    handleProgressRef.current = (sec: number) => {
+      attention.setProgress(sec);
+      if (!quizOpenRef.current) {
+        const due = quizzesRef.current.find(
+          (q) =>
+            q.timestamp_seconds != null &&
+            sec >= q.timestamp_seconds &&
+            !shownQuizRef.current.has(q.id),
+        );
+        if (due) openQuiz(due);
+      }
+    };
+  }, [attention, openQuiz]);
 
   const handleQuizClose = () => {
     setActiveQuiz(null);
@@ -295,49 +320,16 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     }
   };
 
-  // ─── 영상 핸들러 ───
-  const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
-    const sec = Math.floor(videoRef.current.currentTime);
-    setProgressSec(sec);
-    attention.setProgress(sec);
-    // 타임스탬프 도달 시 자동 출제 (퀴즈가 열려있지 않고, 아직 안 푼 것만).
-    if (!quizOpenRef.current) {
-      const due = quizzesRef.current.find(
-        (q) =>
-          q.timestamp_seconds != null &&
-          sec >= q.timestamp_seconds &&
-          !shownQuizRef.current.has(q.id),
-      );
-      if (due) openQuiz(due);
-    }
-  };
-  const handleLoadedMetadata = () => {
-    if (videoRef.current) setDurationSec(videoRef.current.duration || 0);
-  };
-  const togglePlay = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) {
-      v.play().catch(() => {});
-      setIsPlaying(true);
-    } else {
-      v.pause();
-      setIsPlaying(false);
-    }
-  };
-  const seekDelta = (delta: number) => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + delta));
-  };
+  // ─── 재생 컨트롤 (슬라이드쇼 엔진에 위임) ───
+  const togglePlay = () => player.togglePlay();
+  const seekDelta = (delta: number) => player.seekDelta(delta);
   const toggleFullscreen = () => {
-    const v = videoRef.current;
-    if (!v) return;
+    const el = stageRef.current;
+    if (!el) return;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     } else {
-      v.requestFullscreen?.().catch(() => {});
+      el.requestFullscreen?.().catch(() => {});
     }
   };
 
@@ -473,17 +465,23 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
         {/* Body */}
         <div className={styles.body}>
           <div className={styles.stage}>
-            <div className={styles.video}>
-              {lecture.video_url ? (
-                <video
-                  ref={videoRef}
-                  src={lecture.video_url}
-                  preload="metadata"
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
+            <div className={styles.video} ref={stageRef}>
+              {/* 본문 = 슬라이드쇼: 현재 슬라이드 이미지 + 숨겨진 구간 음성 + 자막. */}
+              <audio ref={audioRef} preload="auto" aria-hidden="true" />
+              {currentSlide?.image_url ? (
+                <button
+                  type="button"
+                  className={styles.slideClick}
                   onClick={togglePlay}
-                  aria-label={lecture.title}
-                />
+                  aria-label={t("student.playerV2.controlPlay")}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={currentSlide.image_url}
+                    alt={lecture.title}
+                    className={styles.slideImg}
+                  />
+                </button>
               ) : (
                 <div className={styles.placeholder}>
                   <div className={styles.playOrb}>
@@ -492,10 +490,20 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                     </svg>
                   </div>
                   <span className={styles.placeholderLabel}>
-                    {t("student.playerV2.videoNotReady")}
+                    {playerReady
+                      ? t("student.playerV2.videoNotReady")
+                      : t("student.entry.loadingLecture")}
                   </span>
                 </div>
               )}
+
+              {/* 자막 — 슬라이드별 텍스트(자막 언어가 다르면 번역본). 토글 가능. */}
+              {captionsOn && currentSlide?.image_url &&
+                (currentSlide.subtitle_text || currentSlide.text) && (
+                  <div className={styles.caption} aria-live="off">
+                    {currentSlide.subtitle_text || currentSlide.text}
+                  </div>
+                )}
             </div>
 
             {/* Bottom controls */}
@@ -507,11 +515,10 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                 aria-valuemin={0}
                 aria-valuemax={durationSec || 100}
                 onClick={(e) => {
-                  const v = videoRef.current;
-                  if (!v || !durationSec) return;
+                  if (!durationSec) return;
                   const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
                   const x = e.clientX - rect.left;
-                  v.currentTime = (x / rect.width) * durationSec;
+                  player.seekTo((x / rect.width) * durationSec);
                 }}
               >
                 <div
@@ -670,7 +677,10 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                   <button
                     type="button"
                     className={styles.ctrl}
+                    onClick={() => setCaptionsOn((v) => !v)}
                     aria-label={t("student.playerV2.controlCaptions")}
+                    aria-pressed={captionsOn}
+                    style={captionsOn ? undefined : { opacity: 0.5 }}
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -877,8 +887,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
             triggerNextQuiz();
           }}
           onRestart={() => {
-            const v = videoRef.current;
-            if (v) v.currentTime = 0;
+            player.restart();
             attention.resume();
           }}
         />
