@@ -20,6 +20,8 @@ interface AvatarLibraryProps {
   /** 강의 컨텍스트에서 카드 인라인 이름 변경 허용 여부. */
   renameEnabled: boolean;
   onRename: (avatarId: string, name: string) => void;
+  /** 라이브러리 항목을 ⋮ 메뉴로 삭제(라이브러리에서 제거). */
+  onDelete?: (avatarId: string) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -43,6 +45,7 @@ export default function AvatarLibrary({
   applying,
   renameEnabled,
   onRename,
+  onDelete,
   t,
 }: AvatarLibraryProps) {
   if (!recent && items.length === 0) return null;
@@ -120,6 +123,7 @@ export default function AvatarLibrary({
               onSelect={onSelect}
               renameEnabled={renameEnabled}
               onRename={(name) => onRename(a.id, name)}
+              onDelete={onDelete}
               t={t}
             />
           ))}

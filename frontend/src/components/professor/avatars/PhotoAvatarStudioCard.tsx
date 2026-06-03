@@ -18,6 +18,18 @@ interface PhotoAvatarStudioCardProps {
   reducedMotion: boolean;
   /** 기본 룩을 지정(확정)했을 때 — 페이지가 갤러리를 새로고침할 수 있다. */
   onConfirmed?: () => void;
+  /**
+   * 라이브러리 구성이 바뀌었을 때(룩 저장/삭제/선택) — 페이지가 상단 "저장된
+   * 아바타·룩 라이브러리"를 즉시 다시 불러오게 한다(새로고침 없이 반영).
+   */
+  onLibraryChanged?: () => void;
+}
+
+/** 백엔드 오류 응답의 detail 문구를 꺼낸다(없으면 null). */
+function backendDetail(err: unknown): string | null {
+  const e = err as { response?: { data?: { detail?: unknown } } } | undefined;
+  const d = e?.response?.data?.detail;
+  return typeof d === "string" && d.trim() ? d : null;
 }
 
 /**
@@ -45,6 +57,7 @@ const PHOTO_MAX_BYTES = 20 * 1024 * 1024;
 export default function PhotoAvatarStudioCard({
   reducedMotion,
   onConfirmed,
+  onLibraryChanged,
 }: PhotoAvatarStudioCardProps) {
   const { t } = usePhotoAvatarI18n();
   const { t: tAvatars } = useAvatarsI18n();
@@ -86,22 +99,25 @@ export default function PhotoAvatarStudioCard({
       setConfirmed(false);
       try {
         await flow.select(lookId);
+        // 기본 룩 지정 = 라이브러리 자동 저장 → 상단 라이브러리 즉시 갱신.
+        onLibraryChanged?.();
       } catch {
         toast(t("select.error"), "error");
       }
     },
-    [flow, toast, t],
+    [flow, toast, t, onLibraryChanged],
   );
 
   const handleDelete = useCallback(
     async (lookId: string) => {
       try {
         await flow.remove(lookId);
+        onLibraryChanged?.();
       } catch {
         toast(t("looks.error"), "error");
       }
     },
-    [flow, toast, t],
+    [flow, toast, t, onLibraryChanged],
   );
 
   const handleSave = useCallback(
@@ -109,11 +125,14 @@ export default function PhotoAvatarStudioCard({
       try {
         await flow.save(lookId);
         toast(t("looks.savedToast"), "success");
-      } catch {
-        toast(t("looks.saveError"), "error");
+        // 저장 성공 → 상단 "저장된 아바타·룩 라이브러리" 를 즉시 다시 불러온다.
+        onLibraryChanged?.();
+      } catch (err) {
+        // 서버가 사유(상한 초과 등)를 주면 그대로 보여 준다 — 일반 문구보다 행동 가능.
+        toast(backendDetail(err) ?? t("looks.saveError"), "error");
       }
     },
-    [flow, toast, t],
+    [flow, toast, t, onLibraryChanged],
   );
 
   // ④ "기본 룩 지정" 확정 — flow.select 가 이미 기본 룩을 저장했으므로 여기선
