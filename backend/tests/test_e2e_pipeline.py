@@ -284,7 +284,8 @@ def test_e2e_render_slide_pipeline():
 
     mock_tts_result = TTSResult(audio_bytes=b"tts-audio", provider="elevenlabs", duration_seconds=1.2)
 
-    with patch("app.tasks.render.SyncSessionLocal") as mock_session_cls, \
+    with patch("app.core.config.settings.LECTURE_BODY_PROVIDER", "heygen"), \
+         patch("app.tasks.render.SyncSessionLocal") as mock_session_cls, \
          patch("app.services.pipeline.tts.synthesize", new_callable=AsyncMock, return_value=mock_tts_result) as mock_tts, \
          patch("app.services.pipeline.s3.upload_audio_bytes", return_value="https://s3/audio/test.mp3") as mock_s3_audio, \
          patch("app.services.pipeline.s3.file_exists", return_value=False), \

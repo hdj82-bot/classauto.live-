@@ -148,7 +148,8 @@ def test_render_slide_records_heygen_cost_after_create_video():
 
     tts_result = TTSResult(audio_bytes=b"a", provider="elevenlabs", duration_seconds=1.0)
 
-    with patch.object(render_task, "SyncSessionLocal", return_value=main_db), \
+    with patch("app.core.config.settings.LECTURE_BODY_PROVIDER", "heygen"), \
+         patch.object(render_task, "SyncSessionLocal", return_value=main_db), \
          patch("app.services.pipeline.tts.synthesize", new_callable=AsyncMock, return_value=tts_result), \
          patch("app.services.pipeline.s3.file_exists", return_value=False), \
          patch("app.services.pipeline.s3.upload_audio_bytes", return_value="https://s3/x.mp3"), \
