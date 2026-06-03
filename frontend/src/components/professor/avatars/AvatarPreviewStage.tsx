@@ -160,29 +160,19 @@ export default function AvatarPreviewStage({
     }
   }, [isCustomRender, preview.voiceId]);
 
-  // 영상/음성 재생: 아바타·렌더 영상·모드가 바뀌면 (재)시작.
+  // 아바타가 바뀌면 이전 음성을 멈추고 정지 상태로 둔다. **선택만으로는 음성을
+  // 재생하지 않는다** — 사용자가 ▶ 재생을 눌러야 소리가 난다(라이브러리 카드를
+  // 고를 때마다 음성이 튀어나오던 문제 해결, 2026-06-03).
+  // 일반 아바타의 idle 클립은 muted 라 무음으로 잔잔히 반복해 시각적 생동감만 준다.
+  // 본인 렌더 클립은 오디오가 영상에 구워져 있어 자동재생하지 않는다.
   useEffect(() => {
     stop();
     setPlaying(false);
     if (!avatar) return;
     if (reducedMotion) return; // 자동재생 안 함 — 재생 버튼 대기.
-    const option =
-      getVoiceById(voicesRef.current, voiceIdRef.current) ??
-      randomVoice(voicesRef.current);
-    playVideo();
-    if (!isCustomRender && option && supported) {
-      play(option, sampleText, handleEnded);
-    }
-    setPlaying(true);
+    if (hasVideo && !isCustomRender) playVideo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    avatar?.id,
-    effectiveVideoUrl,
-    isCustomRender,
-    reducedMotion,
-    sampleText,
-    supported,
-  ]);
+  }, [avatar?.id, effectiveVideoUrl, isCustomRender, reducedMotion]);
 
   const handleGenerate = useCallback(
     (force: boolean) => {

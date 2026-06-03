@@ -477,6 +477,22 @@ export async function listMyLooks(): Promise<MyLook[]> {
   }
 }
 
+/**
+ * DELETE /api/avatars/me/looks/{id} — 저장된 룩 1개를 라이브러리에서 삭제한다.
+ * 미배포/이미 없음(404)은 멱등하게 성공으로 본다(폴백). 그 외 오류는 throw.
+ */
+export async function deleteMyLook(lookId: string): Promise<{ ok: boolean }> {
+  try {
+    const { data } = await api.delete<{ ok: boolean }>(
+      `/api/avatars/me/looks/${encodeURIComponent(lookId)}`,
+    );
+    return { ok: data?.ok ?? true };
+  } catch (err) {
+    if (isDeferredError(err)) return { ok: true };
+    throw err;
+  }
+}
+
 // ── 최근 선택한 아바타 (GET/POST /api/avatars/me/recent) ───────────────────────
 //
 // 가장 최근에 고른 아바타/룩 id 를 서버에 영속화한다(localStorage 미사용). 다음

@@ -191,11 +191,19 @@ export function usePhotoAvatarFlow(): PhotoAvatarFlow {
   }, []);
 
   const save = useCallback(async (lookId: string) => {
-    // 낙관적 저장 — 실패하면 list 폴링/재조회가 보정한다.
+    // 낙관적 저장 — 실패하면 saved 플래그를 되돌려 ⋮ 메뉴의 '저장'이 다시 떠
+    // 재시도할 수 있게 한다(예전엔 saved=true 로 굳어 메뉴가 사라졌다).
     setLooks((prev) =>
       prev.map((l) => (l.look_id === lookId ? { ...l, saved: true } : l)),
     );
-    await saveLook(lookId);
+    try {
+      await saveLook(lookId);
+    } catch (err) {
+      setLooks((prev) =>
+        prev.map((l) => (l.look_id === lookId ? { ...l, saved: false } : l)),
+      );
+      throw err;
+    }
     setDeferred(isDeferredMode());
   }, []);
 

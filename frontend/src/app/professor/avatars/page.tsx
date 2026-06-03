@@ -14,6 +14,7 @@ import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStu
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import {
   applyAvatarToLecture,
+  deleteMyLook,
   deleteMyVoice,
   getLectureTitle,
   getMyVoice,
@@ -288,6 +289,34 @@ export default function AvatarsPage() {
     [doApply, selectedId],
   );
 
+  // 라이브러리 항목 삭제 — ⋮ 메뉴. 가벼운 confirm 후 낙관적으로 제거하고 서버에서
+  // 삭제한다. 삭제한 항목이 현재 선택/최근이었다면 그 상태도 비운다.
+  const handleLibraryDelete = useCallback(
+    async (id: string) => {
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(t("cardDeleteConfirm"))
+      ) {
+        return;
+      }
+      // 낙관적 제거 — 룩(라이브러리 본체)과 본인 아바타 양쪽에서 동시에 뺀다.
+      setLooks((prev) => prev.filter((l) => l.id !== id));
+      setAvatars((prev) => prev.filter((a) => !(a.is_custom && a.id === id)));
+      setSelectedId((prev) => (prev === id ? null : prev));
+      setRecentId((prev) => (prev === id ? null : prev));
+      try {
+        await deleteMyLook(id);
+        toast(t("cardDeleteSuccess"), "success");
+      } catch {
+        toast(t("cardDeleteError"), "error");
+      } finally {
+        // 서버 기준으로 목록을 다시 맞춘다(낙관적 제거 보정).
+        await refreshAvatars();
+      }
+    },
+    [t, toast, refreshAvatars],
+  );
+
   const handleRename = useCallback(
     async (avatarId: string, name: string) => {
       setAvatars((prev) =>
@@ -422,6 +451,7 @@ export default function AvatarsPage() {
           applying={applying}
           renameEnabled={renameEnabled}
           onRename={handleRename}
+          onDelete={handleLibraryDelete}
           t={t}
         />
 
@@ -429,6 +459,7 @@ export default function AvatarsPage() {
         <PhotoAvatarStudioCard
           reducedMotion={reducedMotion}
           onConfirmed={refreshAvatars}
+          onLibraryChanged={refreshAvatars}
         />
 
         {/* ② 내 목소리로 음성 만들기 — 파일 업로드 + 브라우저 직접 녹음 + 읽기 대본 */}
