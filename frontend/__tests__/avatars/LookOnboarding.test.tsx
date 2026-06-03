@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import LookGenerateStep from "@/components/professor/avatars/onboarding/LookGenerateStep";
 import LookSelectStep from "@/components/professor/avatars/onboarding/LookSelectStep";
+import LookDetailModal from "@/components/professor/avatars/onboarding/LookDetailModal";
 import {
   LOOK_BATCH_DEFAULT,
   LOOK_TOTAL_MAX,
@@ -196,6 +197,123 @@ describe("LookGenerateStep — 구조화 옵션 폼 (v0.2)", () => {
     fireEvent.click(screen.getByTestId("look-tile-ok-1"));
     expect(screen.getByTestId("look-detail-modal")).toBeTruthy();
     expect(screen.getByTestId("look-detail-extra")).toBeTruthy();
+  });
+
+  it("상세 모달에서 좌우 화살표로 이전/다음 룩을 모달을 닫지 않고 둘러본다 (2026-06-03)", () => {
+    render(
+      <LookGenerateStep
+        looks={[readyLook("a"), readyLook("b"), readyLook("c")]}
+        onGenerate={vi.fn().mockResolvedValue([])}
+        looksPending={false}
+        lastInput={null}
+        reducedMotion={false}
+        onNext={vi.fn()}
+        onRestart={vi.fn()}
+        t={t}
+      />,
+    );
+    // 첫 룩(a)에서 열면 좌측(이전)은 없고 우측(다음)만 있다.
+    fireEvent.click(screen.getByTestId("look-tile-a"));
+    expect(screen.queryByTestId("look-detail-prev")).toBeNull();
+    expect(screen.getByTestId("look-detail-next")).toBeTruthy();
+    // 다음으로 이동 → 가운데(b): 양쪽 화살표 모두 표시.
+    fireEvent.click(screen.getByTestId("look-detail-next"));
+    expect(screen.getByTestId("look-detail-prev")).toBeTruthy();
+    expect(screen.getByTestId("look-detail-next")).toBeTruthy();
+    // 다시 다음 → 마지막(c): 우측(다음)은 사라지고 좌측(이전)만.
+    fireEvent.click(screen.getByTestId("look-detail-next"));
+    expect(screen.getByTestId("look-detail-prev")).toBeTruthy();
+    expect(screen.queryByTestId("look-detail-next")).toBeNull();
+  });
+
+  it("상세 모달 재생성은 count=1(1장만)로 onGenerate 를 호출한다 (2026-06-03)", async () => {
+    const onGenerate = vi.fn().mockResolvedValue([]);
+    const lastInput = {
+      persona: "researcher" as const,
+      outfit: "suit" as const,
+      background: "lab" as const,
+      expression: "confident" as const,
+    };
+    render(
+      <LookGenerateStep
+        looks={[readyLook("a")]}
+        onGenerate={onGenerate}
+        looksPending={false}
+        lastInput={lastInput}
+        reducedMotion={false}
+        onNext={vi.fn()}
+        onRestart={vi.fn()}
+        t={t}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("look-tile-a"));
+    // 추가 요청을 입력해야 재생성 버튼이 활성화된다.
+    fireEvent.change(screen.getByTestId("look-detail-extra"), {
+      target: { value: "안경 추가" },
+    });
+    fireEvent.click(screen.getByTestId("look-detail-regenerate"));
+    await waitFor(() => expect(onGenerate).toHaveBeenCalledTimes(1));
+    // 두 번째 인자가 1 — 배치(3)가 아니라 1장만.
+    expect(onGenerate).toHaveBeenCalledWith(
+      {
+        persona: "researcher",
+        outfit: "suit",
+        background: "lab",
+        expression: "confident",
+        extra: "안경 추가",
+      },
+      1,
+    );
+  });
+});
+
+describe("LookDetailModal — 생성 중 진행률 + 네비게이션", () => {
+  const generatingLook = (id: string): Look => ({
+    look_id: id,
+    image_url: null,
+    preview_image_url: null,
+    prompt: "p",
+    status: "generating",
+    saved: false,
+    createdAt: null,
+  });
+
+  it("generating 룩이면 이미지 대신 진행률(progressbar %)을 보여준다", () => {
+    render(
+      <LookDetailModal
+        look={generatingLook("g1")}
+        lastInput={null}
+        onRegenerate={vi.fn().mockResolvedValue(undefined)}
+        onClose={vi.fn()}
+        reducedMotion
+        busy={false}
+        t={t}
+      />,
+    );
+    // 진행률(원형 ring)이 progressbar 로 노출되고, 이미지는 없다.
+    expect(screen.getByRole("progressbar")).toBeTruthy();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("onPrev/onNext 가 주어지면 화살표를 렌더하고 클릭 시 콜백을 호출한다", () => {
+    const onPrev = vi.fn();
+    const onNext = vi.fn();
+    render(
+      <LookDetailModal
+        look={readyLook("r1")}
+        lastInput={null}
+        onRegenerate={vi.fn().mockResolvedValue(undefined)}
+        onClose={vi.fn()}
+        onPrev={onPrev}
+        onNext={onNext}
+        busy={false}
+        t={t}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("look-detail-prev"));
+    fireEvent.click(screen.getByTestId("look-detail-next"));
+    expect(onPrev).toHaveBeenCalledTimes(1);
+    expect(onNext).toHaveBeenCalledTimes(1);
   });
 });
 

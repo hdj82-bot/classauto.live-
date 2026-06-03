@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import type { Look, LookGenerateInput } from "./photoAvatarTypes";
+import LookProgressRing from "./LookProgressRing";
 
 interface LookDetailModalProps {
   look: Look;
@@ -13,6 +14,12 @@ interface LookDetailModalProps {
   onDelete?: (lookId: string) => Promise<void>;
   /** 모달 닫기. */
   onClose: () => void;
+  /** 이전 룩으로 이동(없으면 좌측 화살표 숨김 — 맨 앞). */
+  onPrev?: () => void;
+  /** 다음 룩으로 이동(없으면 우측 화살표 숨김 — 맨 뒤). */
+  onNext?: () => void;
+  /** 생성 중 룩의 진행률 링 애니메이션 감속용. */
+  reducedMotion?: boolean;
   /** 다른 생성/폴링이 진행 중이면 삭제 버튼을 disabled. (재생성은 막지 않는다 —
    *  백엔드가 누적 cap 으로 과생성을 통제하므로, 진행 중이어도 추가 요청은 받는다.) */
   busy: boolean;
@@ -38,6 +45,9 @@ export default function LookDetailModal({
   onRegenerate,
   onDelete,
   onClose,
+  onPrev,
+  onNext,
+  reducedMotion,
   busy,
   capReached = false,
   t,
@@ -45,14 +55,21 @@ export default function LookDetailModal({
   const [extra, setExtra] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  // 재생성 요청을 보낸 직후의 성공 피드백("새 룩을 생성 중...")을 모달 안에서
-  // 보여준다 — 예전엔 곧장 닫혀 사용자가 "반응이 없다"고 느꼈다(2026-06-02).
-  const [requested, setRequested] = useState(false);
 
-  // Esc 로 닫기, body 스크롤 잠금.
+  const isGenerating = look.status === "generating";
+
+  // Esc 로 닫기, ←/→ 로 이전·다음 룩 이동, body 스크롤 잠금. 화살표는 입력 중
+  // (textarea/input)에는 커서 이동을 위해 가로채지 않는다.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "TEXTAREA" || tag === "INPUT") return;
+      if (e.key === "ArrowLeft") onPrev?.();
+      else if (e.key === "ArrowRight") onNext?.();
     };
     document.addEventListener("keydown", onKey);
     const prevOverflow = document.body.style.overflow;
@@ -61,7 +78,13 @@ export default function LookDetailModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [onClose]);
+  }, [onClose, onPrev, onNext]);
+
+  // 다른 룩으로 전환(화살표 이동·재생성 후 새 룩으로 점프)되면 입력칸을 비운다 —
+  // 이전 룩에 쓰던 "추가 요청"이 다음 룩으로 새어가지 않게.
+  useEffect(() => {
+    setExtra("");
+  }, [look.look_id]);
 
   const src = look.image_url ?? look.preview_image_url ?? "";
   // busy(다른 룩 생성 중)는 더는 재생성을 막지 않는다 — 막으면 버튼이 말없이
@@ -81,9 +104,8 @@ export default function LookDetailModal({
         expression: lastInput?.expression ?? null,
         extra: extra.trim(),
       });
-      // 닫지 않고 성공 피드백을 남긴다 — 새 룩은 갤러리(모달 뒤)에 추가된다.
-      setExtra("");
-      setRequested(true);
+      // 닫지 않는다 — 부모가 새로 생긴 룩(생성 중)으로 모달을 전환하면 그 룩의
+      // 진행률(%)이 이 자리에서 바로 보인다(look_id 변경 → extra 자동 초기화).
     } finally {
       setSubmitting(false);
     }
@@ -138,7 +160,17 @@ export default function LookDetailModal({
 
         <div style={bodyStyle}>
           <div style={frameStyle} aria-label={look.categoryLabel || t("looks.tileAlt")}>
-            {src ? (
+            {isGenerating ? (
+              // 생성 중(재생성 직후 등) — 이미지 대신 큰 진행률(%)을 보여준다.
+              <div style={generatingArea}>
+                <LookProgressRing
+                  createdAt={look.createdAt}
+                  reducedMotion={reducedMotion}
+                  size={120}
+                  t={t}
+                />
+              </div>
+            ) : src ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={src}
@@ -146,16 +178,37 @@ export default function LookDetailModal({
                 style={imgStyle}
               />
             ) : null}
+
+            {/* 좌우 화살표 — 모달을 닫지 않고 이전/다음 룩을 바로 열람. */}
+            {onPrev && (
+              <button
+                type="button"
+                onClick={onPrev}
+                style={{ ...navArrow, left: 12 }}
+                aria-label={t("looks.detail.prev")}
+                data-testid="look-detail-prev"
+              >
+                <ChevronIcon dir="left" />
+              </button>
+            )}
+            {onNext && (
+              <button
+                type="button"
+                onClick={onNext}
+                style={{ ...navArrow, right: 12 }}
+                aria-label={t("looks.detail.next")}
+                data-testid="look-detail-next"
+              >
+                <ChevronIcon dir="right" />
+              </button>
+            )}
           </div>
 
           <label style={extraLabel}>
             {t("looks.detail.extraLabel")}
             <textarea
               value={extra}
-              onChange={(e) => {
-                setExtra(e.target.value);
-                if (requested) setRequested(false); // 다시 입력하면 성공 안내 해제
-              }}
+              onChange={(e) => setExtra(e.target.value)}
               maxLength={500}
               placeholder={t("looks.detail.extraPlaceholder")}
               rows={3}
@@ -166,10 +219,6 @@ export default function LookDetailModal({
           {capReached ? (
             <p style={capNote} data-testid="look-detail-cap">
               {t("looks.detail.capReachedNote")}
-            </p>
-          ) : requested ? (
-            <p style={successNote} data-testid="look-detail-regenerated">
-              {t("looks.detail.regenerated")}
             </p>
           ) : (
             <p style={helpText}>{t("looks.detail.extraHelp")}</p>
@@ -221,6 +270,28 @@ export default function LookDetailModal({
         </footer>
       </div>
     </div>
+  );
+}
+
+function ChevronIcon({ dir }: { dir: "left" | "right" }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {dir === "left" ? (
+        <polyline points="15 18 9 12 15 6" />
+      ) : (
+        <polyline points="9 18 15 12 9 6" />
+      )}
+    </svg>
   );
 }
 
@@ -303,12 +374,39 @@ const bodyStyle: CSSProperties = {
 // 이제 백엔드가 1536x1024 (3:2 가로) 로 만들고 모달도 자연 비율로 보여준다.
 // max-height: 70vh 로 화면을 넘지 않게 하고, 너비는 컨테이너에 맞춰 줄어든다.
 const frameStyle: CSSProperties = {
+  position: "relative", // 좌우 화살표(navArrow) 기준.
   width: "100%",
   borderRadius: 12,
   background: "#0A0A0A",
   display: "grid",
   placeItems: "center",
   overflow: "hidden",
+};
+
+// 생성 중 룩의 진행률 영역 — 이미지가 없을 때 16:9 자리를 차지해 모달이 안 무너지게.
+const generatingArea: CSSProperties = {
+  width: "100%",
+  aspectRatio: "16 / 9",
+  display: "grid",
+  placeItems: "center",
+};
+
+// 좌우 네비게이션 화살표 — 프레임 위에 떠 있는 원형 버튼.
+const navArrow: CSSProperties = {
+  position: "absolute",
+  top: "50%",
+  transform: "translateY(-50%)",
+  width: 40,
+  height: 40,
+  borderRadius: "50%",
+  border: "none",
+  background: "rgba(10, 10, 10, 0.55)",
+  color: "#fff",
+  display: "grid",
+  placeItems: "center",
+  cursor: "pointer",
+  zIndex: 2,
+  fontFamily: "inherit",
 };
 
 const imgStyle: CSSProperties = {
@@ -346,14 +444,6 @@ const helpText: CSSProperties = {
   fontSize: 11.5,
   lineHeight: 1.5,
   color: "var(--text-faint)",
-};
-
-const successNote: CSSProperties = {
-  margin: 0,
-  fontSize: 12,
-  fontWeight: 700,
-  lineHeight: 1.5,
-  color: "var(--gold-on-light, #B88308)",
 };
 
 const capNote: CSSProperties = {

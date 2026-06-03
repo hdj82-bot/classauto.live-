@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { LOOK_ETA_MS, type Look } from "./photoAvatarTypes";
+import { type Look } from "./photoAvatarTypes";
 import { CheckIcon, PersonIcon } from "./PhotoAvatarIcons";
+import LookProgressRing from "./LookProgressRing";
 
 interface LookTileProps {
   look: Look;
@@ -38,38 +39,9 @@ export default function LookTile({
   t,
 }: LookTileProps) {
   const isReady = look.status === "ready";
-  const isGenerating = look.status === "generating";
   // ready 는 "선택", non-ready 는 "정리(삭제)" 용도로 클릭을 연다(opt-in).
   const interactive = !!onSelect && (isReady || !!allowOpenAnyStatus);
   const Wrapper = interactive ? "button" : "div";
-
-  // 생성 중 진행 막대 — 1초마다 현재 시각을 상태에 담아 ETA 막대를 채운다.
-  // Date.now() 는 렌더가 아닌 effect 안에서만 호출한다(react-hooks/purity 준수).
-  // 시작 시각은 서버 created_at(탭을 닫았다 열어도 정확) 우선, 없으면 effect 가
-  // 처음 본 시각(fallbackStart)으로 폴백한다. 렌더에서 ref 를 읽지 않도록(=
-  // react-hooks/refs) 둘 다 state 로 둔다.
-  const [nowMs, setNowMs] = useState<number | null>(null);
-  const [fallbackStart, setFallbackStart] = useState<number | null>(null);
-  useEffect(() => {
-    if (!isGenerating) return;
-    const tick = () => {
-      const t = Date.now();
-      setFallbackStart((prev) => prev ?? t);
-      setNowMs(t);
-    };
-    tick(); // 즉시 1회 — 첫 렌더 직후 바로 막대가 차게.
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [isGenerating]);
-
-  const parsedCreated = look.createdAt ? Date.parse(look.createdAt) : NaN;
-  const startMs = !Number.isNaN(parsedCreated) ? parsedCreated : fallbackStart;
-  const elapsed =
-    nowMs != null && startMs != null ? Math.max(0, nowMs - startMs) : 0;
-  // 막대는 92%까지만 차오른다 — 완료는 폴링이 확정하므로 끝까지 차면 거짓 완료처럼 보인다.
-  const progressPct = Math.min(0.92, elapsed / LOOK_ETA_MS);
-  const pctNum = Math.round(progressPct * 100);
-  const remainingSec = Math.max(0, Math.ceil((LOOK_ETA_MS - elapsed) / 1000));
 
   // ⋮ 메뉴 — '저장'은 ready·미저장에만, '삭제'는 onDelete 가 있으면 항상.
   const canSave = !!onSave && isReady && !look.saved;
@@ -129,50 +101,14 @@ export default function LookTile({
               </span>
             </span>
           ) : (
-            // generating — 원형 진행률(%) + 남은 시간 추정. 숫자 %를 크게 보여줘
-            // "언제까지 기다려야 하는지" 가 즉시 보이게 한다(사용자 요청 2026-06-03).
-            <span
-              style={centerBox}
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={pctNum}
-              aria-label={t("looks.tileGenerating")}
-            >
-              <span style={ringWrap}>
-                <svg width={RING_SIZE} height={RING_SIZE} viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}>
-                  <circle
-                    cx={RING_SIZE / 2}
-                    cy={RING_SIZE / 2}
-                    r={RING_R}
-                    fill="none"
-                    stroke="var(--gold-soft, #FFE6A8)"
-                    strokeWidth={RING_STROKE}
-                  />
-                  <circle
-                    cx={RING_SIZE / 2}
-                    cy={RING_SIZE / 2}
-                    r={RING_R}
-                    fill="none"
-                    stroke="var(--gold, #E89E0E)"
-                    strokeWidth={RING_STROKE}
-                    strokeLinecap="round"
-                    strokeDasharray={RING_CIRC}
-                    strokeDashoffset={RING_CIRC * (1 - progressPct)}
-                    // 12시 방향에서 시작하도록 회전.
-                    transform={`rotate(-90 ${RING_SIZE / 2} ${RING_SIZE / 2})`}
-                    style={{
-                      transition: reducedMotion ? "none" : "stroke-dashoffset 1s linear",
-                    }}
-                  />
-                </svg>
-                <span style={ringPercent}>{pctNum}%</span>
-              </span>
-              <span style={progressLabel}>
-                {remainingSec > 0
-                  ? t("looks.tileEta", { sec: remainingSec })
-                  : t("looks.tileFinishing")}
-              </span>
+            // generating — 원형 진행률(%) + 남은 시간 추정(LookProgressRing 공유).
+            <span style={centerBox}>
+              <LookProgressRing
+                createdAt={look.createdAt}
+                reducedMotion={reducedMotion}
+                size={46}
+                t={t}
+              />
             </span>
           )}
 
@@ -295,39 +231,6 @@ const centerBox: CSSProperties = {
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
-};
-
-// 원형 진행률(determinate ring + 중앙 % 숫자) — 막대 대신 숫자 %를 크게 노출.
-const RING_SIZE = 46;
-const RING_STROKE = 5;
-const RING_R = (RING_SIZE - RING_STROKE) / 2;
-const RING_CIRC = 2 * Math.PI * RING_R;
-
-const ringWrap: CSSProperties = {
-  position: "relative",
-  width: RING_SIZE,
-  height: RING_SIZE,
-  display: "grid",
-  placeItems: "center",
-};
-
-const ringPercent: CSSProperties = {
-  position: "absolute",
-  inset: 0,
-  display: "grid",
-  placeItems: "center",
-  fontSize: 13,
-  fontWeight: 800,
-  color: "var(--text)",
-  fontVariantNumeric: "tabular-nums",
-};
-
-const progressLabel: CSSProperties = {
-  marginTop: 6,
-  fontSize: 10.5,
-  fontWeight: 600,
-  color: "var(--text-faint)",
-  fontVariantNumeric: "tabular-nums",
 };
 
 const selectedBadge: CSSProperties = {
