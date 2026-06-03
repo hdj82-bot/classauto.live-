@@ -63,6 +63,12 @@
     "libraryDescription": "Avatars and looks you've created. Pick one to select and apply instantly — no re-generation.",
     "lookUntitled": "My look",
 
+    "menuOpen": "Open menu",
+    "cardDelete": "Delete",
+    "cardDeleteConfirm": "Remove this item from your library? This can't be undone.",
+    "cardDeleteSuccess": "Removed from your library.",
+    "cardDeleteError": "Could not delete. Please try again shortly.",
+
     "renameLabel": "Display name for this lecture",
     "renamePlaceholder": "Enter an avatar name",
     "renameEdit": "Rename",

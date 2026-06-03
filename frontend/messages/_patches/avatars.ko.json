@@ -63,6 +63,12 @@
     "libraryDescription": "지금까지 만든 본인 아바타와 룩이에요. 하나를 고르면 재생성 없이 바로 선택·적용됩니다.",
     "lookUntitled": "내 룩",
 
+    "menuOpen": "메뉴 열기",
+    "cardDelete": "삭제",
+    "cardDeleteConfirm": "이 항목을 라이브러리에서 삭제할까요? 되돌릴 수 없습니다.",
+    "cardDeleteSuccess": "라이브러리에서 삭제했습니다.",
+    "cardDeleteError": "삭제하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+
     "renameLabel": "강의에서 표시할 이름",
     "renamePlaceholder": "아바타 이름 입력",
     "renameEdit": "이름 변경",

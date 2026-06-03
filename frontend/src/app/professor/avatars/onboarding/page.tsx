@@ -95,8 +95,18 @@ export default function PhotoAvatarOnboardingPage() {
       try {
         await flow.save(lookId);
         toast(t("looks.savedToast"), "success");
-      } catch {
-        toast(t("looks.saveError"), "error");
+      } catch (err) {
+        // 서버가 사유(상한 초과 등)를 주면 그대로 노출한다.
+        const e = err as
+          | { response?: { data?: { detail?: unknown } } }
+          | undefined;
+        const detail = e?.response?.data?.detail;
+        toast(
+          typeof detail === "string" && detail.trim()
+            ? detail
+            : t("looks.saveError"),
+          "error",
+        );
       }
     },
     [flow, toast, t],

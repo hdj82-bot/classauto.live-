@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  useEffect,
+  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
@@ -15,6 +17,11 @@ interface AvatarCardProps {
   renameEnabled: boolean;
   /** 강의별 표시 이름 저장 콜백. */
   onRename: (name: string) => void;
+  /**
+   * 제공되면 우상단 ⋮ 메뉴로 이 항목을 라이브러리에서 삭제할 수 있다. 라이브러리
+   * 카드에만 넘긴다 — 표준 HeyGen 아바타는 삭제 대상이 아니다.
+   */
+  onDelete?: (id: string) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -39,10 +46,32 @@ export default function AvatarCard({
   onSelect,
   renameEnabled,
   onRename,
+  onDelete,
   t,
 }: AvatarCardProps) {
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState(avatar.name);
+
+  // 우상단 ⋮ 메뉴 — onDelete 가 있을 때만(라이브러리 카드).
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   const hasVideo = !!avatar.preview_video_url;
 
@@ -77,6 +106,7 @@ export default function AvatarCard({
         : null;
 
   return (
+    <div style={{ position: "relative" }}>
     <div
       data-testid={`avatar-card-${avatar.id}`}
       data-selected={selected ? "true" : "false"}
@@ -173,25 +203,6 @@ export default function AvatarCard({
             >
               <span aria-hidden="true">▶</span>
               {t("playPreviewLarge")}
-            </span>
-          )}
-
-          {avatar.is_custom && (
-            <span
-              style={{
-                position: "absolute",
-                top: 6,
-                left: 6,
-                padding: "2px 8px",
-                borderRadius: 999,
-                fontSize: 10,
-                fontWeight: 700,
-                color: "var(--gold-on-light)",
-                background: "var(--gold-soft)",
-                border: "1px solid var(--gold-medium)",
-              }}
-            >
-              {t("customBadge")}
             </span>
           )}
 
@@ -308,8 +319,106 @@ export default function AvatarCard({
         </div>
       )}
     </div>
+
+      {/* 우상단 ⋮ 메뉴 — 라이브러리에서 삭제(카드 선택 버튼 바깥 형제). */}
+      {onDelete && (
+        <div ref={menuRef} style={cardMenuAnchor}>
+          <button
+            type="button"
+            aria-label={t("menuOpen")}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            data-testid={`avatar-card-menu-${avatar.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
+            }}
+            style={cardMenuButton}
+          >
+            <CardDotsIcon />
+          </button>
+          {menuOpen && (
+            <div role="menu" style={cardMenuDropdown}>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid={`avatar-card-delete-${avatar.id}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onDelete(avatar.id);
+                }}
+                style={{ ...cardMenuItem, color: "var(--danger, #C0392B)" }}
+              >
+                {t("cardDelete")}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
+
+function CardDotsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.8" />
+      <circle cx="12" cy="12" r="1.8" />
+      <circle cx="12" cy="19" r="1.8" />
+    </svg>
+  );
+}
+
+const cardMenuAnchor: CSSProperties = {
+  position: "absolute",
+  top: 8,
+  right: 8,
+  zIndex: 3,
+};
+
+const cardMenuButton: CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: 8,
+  border: "1px solid var(--line)",
+  background: "rgba(255,255,255,0.9)",
+  color: "var(--text)",
+  display: "grid",
+  placeItems: "center",
+  cursor: "pointer",
+  boxShadow: "var(--shadow-sm)",
+  fontFamily: "inherit",
+};
+
+const cardMenuDropdown: CSSProperties = {
+  position: "absolute",
+  top: 32,
+  right: 0,
+  minWidth: 130,
+  background: "var(--bg-card)",
+  border: "1px solid var(--line-strong)",
+  borderRadius: 10,
+  boxShadow: "0 10px 28px rgba(0,0,0,0.16)",
+  padding: 4,
+  display: "flex",
+  flexDirection: "column",
+  gap: 2,
+};
+
+const cardMenuItem: CSSProperties = {
+  textAlign: "left",
+  padding: "8px 10px",
+  fontSize: 12.5,
+  fontWeight: 600,
+  borderRadius: 7,
+  border: "none",
+  background: "transparent",
+  color: "var(--text)",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  whiteSpace: "nowrap",
+};
 
 function renameBtnStyle(primary: boolean): CSSProperties {
   return {
