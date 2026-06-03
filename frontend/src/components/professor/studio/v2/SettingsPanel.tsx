@@ -1,9 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { LANGUAGES, QUIZ_DIFFICULTY_LABEL } from "../studioTypes";
 import type {
   LangCode,
@@ -14,7 +11,6 @@ import type {
   TtsVoice,
   VoiceGender,
 } from "../studioTypes";
-import { setVoiceFavorite } from "@/components/professor/avatars/voicesApi";
 
 /**
  * Studio v2 — 우측 settings panel.
@@ -38,17 +34,19 @@ export interface SettingsPanelProps {
   voiceLang: LangCode;
   /** 영상 자막 언어. null = 음성과 동일. */
   subtitleLang: LangCode | null;
-  /** 선택한 ElevenLabs 보이스 ID. null = 기본 보이스. */
-  voiceId: string | null;
-  /** 발화 속도 배율 (1.0 = 기본). */
+  /** @deprecated 보이스 선택은 "Q&A 아바타 선택" 페이지로 이동 — 패널에선 미사용(렌더 시 voice_id 는 강의에 저장된 값 사용). */
+  voiceId?: string | null;
+  /** 발화 속도 배율 (1.0 = 기본). 이 패널에 남는 유일한 음성 컨트롤. */
   voiceSpeed?: number;
-  /** GET /api/voices 로 받은 보이스 목록. */
+  /** @deprecated 보이스 목록(드롭다운)은 아바타 페이지로 이동 — 패널에선 미사용. */
   voices?: TtsVoice[];
+  /** @deprecated 보이스 목록 로딩 — 패널에선 미사용. */
   voicesLoading?: boolean;
   /** @deprecated 음성 언어 선택 UI 제거됨 — voiceLang 은 자막 "동일" 비교용으로만 유지. */
   onChangeVoiceLang?: (lang: LangCode) => void;
   /** null 전달 = 자막을 음성과 동일하게. */
   onChangeSubtitleLang?: (lang: LangCode | null) => void;
+  /** @deprecated 보이스 선택이 아바타 페이지로 이동해 패널에선 호출하지 않는다. */
   onChangeVoiceId?: (id: string | null) => void;
   onChangeVoiceSpeed?: (speed: number) => void;
   // ───────────────────────────────────────────────────────────────────────────
@@ -267,12 +265,8 @@ export default function SettingsPanel({
   avatarName,
   voiceLang,
   subtitleLang,
-  voiceId,
   voiceSpeed = 1.0,
-  voices = [],
-  voicesLoading = false,
   onChangeSubtitleLang,
-  onChangeVoiceId,
   onChangeVoiceSpeed,
   onChangeAvatar,
   avatarScale = 1.0,
@@ -286,12 +280,8 @@ export default function SettingsPanel({
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
-  // 아코디언 헤더 요약: 선택한 보이스 이름 + 속도 배율.
-  const selectedVoice = voices.find((v) => v.voice_id === voiceId) ?? null;
-  const selectedVoiceName = selectedVoice
-    ? selectedVoice.display_name || selectedVoice.name
-    : "기본 보이스";
-  const summaryVoiceVal = `${selectedVoiceName} · ${voiceSpeed.toFixed(1)}×`;
+  // 아코디언 헤더 요약: 발화 속도 배율(보이스 선택은 아바타 페이지로 이동).
+  const summaryVoiceVal = `${voiceSpeed.toFixed(1)}×`;
   // 퀴즈 아코디언 요약: 개수 + 작성됨 수.
   const authoredCount = quizPoints.filter((p) => p.authoredId !== null).length;
   const summaryQuizVal =
@@ -396,18 +386,16 @@ export default function SettingsPanel({
             <span style={summaryValStyle}>{summaryVoiceVal}</span>
           </summary>
           <div style={aBodyStyle}>
-            {/* ── 음성 (영상에서 나올 TTS) ── */}
+            {/* ── 발화 속도 (음성 선택은 "Q&A 아바타 선택" 페이지로 이동) ── */}
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               <div style={subSectionLabelStyle}>
                 <span style={subTagStyle("gold")}>음성</span>
-                <span>영상에서 나올 목소리</span>
+                <span>발화 속도</span>
               </div>
-              <VoiceSelect
-                voices={voices}
-                loading={voicesLoading}
-                value={voiceId}
-                onChange={(id) => onChangeVoiceId?.(id)}
-              />
+              <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                목소리는 ‘Q&amp;A 아바타 선택’에서 아바타와 함께 정합니다. 여기서는 발화
+                속도만 조절합니다.
+              </p>
               <SpeedSlider
                 value={voiceSpeed}
                 onChange={(v) => onChangeVoiceSpeed?.(v)}
@@ -874,379 +862,3 @@ function LangSelect({
     </select>
   );
 }
-
-/** 보이스의 한국어 표기: 고유명(title) + 특성·성별·국적(meta). */
-function voiceTitle(v: TtsVoice): string {
-  return v.display_name || v.name;
-}
-function voiceMeta(v: TtsVoice): string {
-  const parts = [v.description_ko, v.gender_ko, v.accent_ko].filter(
-    (p): p is string => !!p,
-  );
-  return parts.join(" · ");
-}
-
-function PlayIcon({ playing }: { playing: boolean }) {
-  return playing ? (
-    <svg viewBox="0 0 24 24" width="11" height="11" fill="var(--gold-on-light, #B88308)" aria-hidden="true">
-      <rect x="6" y="5" width="4" height="14" rx="1" />
-      <rect x="14" y="5" width="4" height="14" rx="1" />
-    </svg>
-  ) : (
-    <svg viewBox="0 0 24 24" width="11" height="11" fill="var(--gold-on-light, #B88308)" aria-hidden="true">
-      <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
-    </svg>
-  );
-}
-
-function PreviewButton({
-  url,
-  playing,
-  onToggle,
-}: {
-  url: string | null | undefined;
-  playing: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      disabled={!url}
-      aria-label={playing ? "미리듣기 정지" : "미리듣기"}
-      title={url ? "미리듣기" : "미리듣기 샘플 없음"}
-      style={{
-        flexShrink: 0,
-        display: "inline-grid",
-        placeItems: "center",
-        width: 28,
-        height: 28,
-        borderRadius: 7,
-        border: "1px solid var(--line-strong)",
-        background: playing ? "var(--gold-soft)" : "var(--bg-card)",
-        cursor: url ? "pointer" : "not-allowed",
-        opacity: url ? 1 : 0.4,
-      }}
-    >
-      <PlayIcon playing={playing} />
-    </button>
-  );
-}
-
-function VoiceSelect({
-  voices,
-  loading,
-  value,
-  onChange,
-}: {
-  voices: TtsVoice[];
-  loading: boolean;
-  value: string | null;
-  onChange: (id: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
-  // 현재 강의 편집 경로(/professor/studio/{id})면 음성 라이브러리 링크에 lecture
-  // 를 실어, 거기서 '강의 편집으로 돌아가기'가 가능하게 한다.
-  const pathname = usePathname();
-  const studioMatch = pathname?.match(/\/professor\/studio\/([^/?#]+)/);
-  const voicesHref = studioMatch
-    ? `/professor/voices?lecture=${encodeURIComponent(studioMatch[1])}`
-    : "/professor/voices";
-  // 사용자가 이 세션에서 토글한 즐겨찾기 override. 미지정 보이스는 props 의
-  // is_favorite 를 그대로 사용한다(effect 로 state 를 시드하지 않음 — cascading
-  // render·react-hooks/set-state-in-effect 회피).
-  const [favOverrides, setFavOverrides] = useState<Map<string, boolean>>(
-    new Map(),
-  );
-
-  const selected = voices.find((v) => v.voice_id === value) ?? null;
-
-  const stopAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    setPlayingId(null);
-  };
-
-  const togglePreview = (v: TtsVoice) => {
-    if (typeof window === "undefined" || !v.preview_url) return;
-    if (playingId === v.voice_id) {
-      stopAudio();
-      return;
-    }
-    stopAudio();
-    try {
-      const audio = new Audio(v.preview_url);
-      audio.onended = () => setPlayingId((cur) => (cur === v.voice_id ? null : cur));
-      audioRef.current = audio;
-      setPlayingId(v.voice_id);
-      void audio.play().catch(() => stopAudio());
-    } catch {
-      stopAudio();
-    }
-  };
-
-  // 바깥 클릭 시 닫기 + 오디오 정지. 언마운트 시에도 오디오 정리.
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
-
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) audioRef.current.pause();
-    };
-  }, []);
-
-  // override 가 있으면 그것을, 없으면 백엔드 is_favorite 를 사용.
-  const isFav = (v: TtsVoice): boolean => {
-    const override = favOverrides.get(v.voice_id);
-    return override !== undefined ? override : !!v.is_favorite;
-  };
-
-  if (loading) {
-    return (
-      <div style={{ fontSize: 11.5, color: "var(--text-subtle)" }}>
-        보이스 목록을 불러오는 중…
-      </div>
-    );
-  }
-
-  if (voices.length === 0) {
-    return (
-      <div style={{ fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
-        선택 가능한 ElevenLabs 보이스가 없습니다. 기본 보이스로 생성됩니다.
-      </div>
-    );
-  }
-
-  const toggleFavorite = async (v: TtsVoice) => {
-    const next = !isFav(v);
-    setFavOverrides((prev) => new Map(prev).set(v.voice_id, next));
-    try {
-      await setVoiceFavorite(v.voice_id, next);
-    } catch {
-      // 실패 시 롤백 (네트워크/권한 오류 등)
-      setFavOverrides((prev) => new Map(prev).set(v.voice_id, !next));
-    }
-  };
-
-  const shown = favoritesOnly ? voices.filter((v) => isFav(v)) : voices;
-
-  const triggerLabel = selected
-    ? `${voiceTitle(selected)}${selected.gender_ko ? ` · ${selected.gender_ko}` : ""}${
-        selected.accent_ko ? ` · ${selected.accent_ko}` : ""
-      }`
-    : "기본 보이스 (성별 기준)";
-
-  return (
-    <div ref={rootRef} style={{ position: "relative" }}>
-      {/* 즐겨찾기만 보기 토글 + 음성 라이브러리 페이지 링크 */}
-      <div
-        className="flex items-center justify-between"
-        style={{ marginBottom: 6 }}
-      >
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 11.5,
-            color: "var(--text-subtle)",
-            fontWeight: 500,
-          }}
-        >
-          <Switch
-            on={favoritesOnly}
-            onClick={() => setFavoritesOnly((o) => !o)}
-            label="즐겨찾기한 보이스만 보기"
-          />
-          즐겨찾기만
-        </span>
-        <Link
-          href={voicesHref}
-          style={{
-            fontSize: 11.5,
-            fontWeight: 600,
-            color: "var(--gold-on-light, #B88308)",
-            textDecoration: "none",
-          }}
-        >
-          더 많은 음성 →
-        </Link>
-      </div>
-
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <button
-          type="button"
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-          style={{
-            ...selectStyle,
-            flex: 1,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 6,
-            textAlign: "left",
-          }}
-        >
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {triggerLabel}
-          </span>
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="var(--text-subtle)" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-        <PreviewButton
-          url={selected?.preview_url}
-          playing={!!selected && playingId === selected.voice_id}
-          onToggle={() => selected && togglePreview(selected)}
-        />
-      </div>
-
-      {open && (
-        <div
-          role="listbox"
-          aria-label="ElevenLabs 보이스 목록"
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            zIndex: 20,
-            maxHeight: 280,
-            overflowY: "auto",
-            background: "var(--bg-card)",
-            border: "1px solid var(--line-strong)",
-            borderRadius: 10,
-            boxShadow: "var(--shadow-md, 0 8px 24px rgba(10,10,10,0.12))",
-            padding: 4,
-          }}
-        >
-          <button
-            type="button"
-            role="option"
-            aria-selected={value === null}
-            onClick={() => {
-              onChange(null);
-              setOpen(false);
-            }}
-            style={voiceRowStyle(value === null)}
-          >
-            <span style={{ fontWeight: 600, fontSize: 12.5 }}>기본 보이스 (성별 기준)</span>
-          </button>
-          {shown.length === 0 ? (
-            <div style={{ padding: "10px 9px", fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
-              즐겨찾기한 보이스가 없습니다. 별표(☆)로 추가하거나 “더 많은 음성”에서 고르세요.
-            </div>
-          ) : (
-            shown.map((v) => {
-              const meta = voiceMeta(v);
-              const isSel = v.voice_id === value;
-              const favRow = isFav(v);
-              return (
-                <div key={v.voice_id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={isSel}
-                    onClick={() => {
-                      onChange(v.voice_id);
-                      setOpen(false);
-                    }}
-                    style={{ ...voiceRowStyle(isSel), flex: 1 }}
-                  >
-                    <span style={{ fontWeight: 600, fontSize: 12.5 }}>{voiceTitle(v)}</span>
-                    {meta && (
-                      <span style={{ fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.4 }}>
-                        {meta}
-                      </span>
-                    )}
-                  </button>
-                  <FavoriteStar
-                    favorite={favRow}
-                    onToggle={() => toggleFavorite(v)}
-                  />
-                  <PreviewButton
-                    url={v.preview_url}
-                    playing={playingId === v.voice_id}
-                    onToggle={() => togglePreview(v)}
-                  />
-                </div>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function FavoriteStar({
-  favorite,
-  onToggle,
-}: {
-  favorite: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggle();
-      }}
-      aria-pressed={favorite}
-      aria-label={favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-      title={favorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
-      style={{
-        flexShrink: 0,
-        display: "inline-grid",
-        placeItems: "center",
-        width: 28,
-        height: 28,
-        borderRadius: 7,
-        border: "1px solid var(--line-strong)",
-        background: favorite ? "var(--gold-soft)" : "var(--bg-card)",
-        color: favorite ? "var(--gold-on-light, #B88308)" : "var(--text-faint)",
-        cursor: "pointer",
-        fontSize: 14,
-        lineHeight: 1,
-      }}
-    >
-      {favorite ? "★" : "☆"}
-    </button>
-  );
-}
-
-const voiceRowStyle = (selected: boolean): CSSProperties => ({
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
-  alignItems: "flex-start",
-  width: "100%",
-  textAlign: "left",
-  padding: "7px 9px",
-  borderRadius: 7,
-  border: "none",
-  cursor: "pointer",
-  fontFamily: "inherit",
-  color: "var(--text)",
-  background: selected ? "var(--gold-soft)" : "transparent",
-});
