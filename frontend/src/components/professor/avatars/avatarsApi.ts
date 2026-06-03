@@ -136,6 +136,25 @@ export async function applyAvatarToLecture(
   }
 }
 
+/**
+ * PATCH /api/lectures/{id} { voice_id }. deferred 면 시뮬레이션 성공.
+ *
+ * "룩과 목소리 아바타 제작" 시 선택한 룩(avatar_id)과 함께 호출해 Q&A 아바타의
+ * 목소리(본인 클론 또는 샘플 보이스)를 강의에 적용한다. voiceId=null 은 "기본
+ * 보이스(성별 기준)" 를 의미한다(studio 음성 패널과 동일 계약).
+ */
+export async function applyVoiceToLecture(
+  lectureId: string,
+  voiceId: string | null,
+): Promise<void> {
+  try {
+    await api.patch(`/api/lectures/${lectureId}`, { voice_id: voiceId });
+  } catch (err) {
+    if (isDeferredError(err)) return;
+    throw err;
+  }
+}
+
 /** PATCH /api/lectures/{id} { avatar_name }. deferred 면 시뮬레이션 성공. */
 export async function renameAvatarForLecture(
   lectureId: string,
