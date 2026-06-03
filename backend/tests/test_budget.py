@@ -154,7 +154,8 @@ def test_render_slide_blocks_on_budget_and_skips_heygen():
     main_db = MagicMock()
     main_db.query.return_value.filter.return_value.one.return_value = render
 
-    with patch.object(render_task, "SyncSessionLocal", return_value=main_db), \
+    with patch("app.core.config.settings.LECTURE_BODY_PROVIDER", "heygen"), \
+         patch.object(render_task, "SyncSessionLocal", return_value=main_db), \
          patch("app.services.pipeline.budget.assert_heygen_budget",
                side_effect=BudgetExceededError("HeyGen 일 예산 초과: $3.00 / $3.00")), \
          patch("app.services.pipeline.tts.synthesize", new_callable=AsyncMock) as mock_tts, \

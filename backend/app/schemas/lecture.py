@@ -61,6 +61,42 @@ class SlidesResponse(BaseModel):
     slides: list[SlideMeta]
 
 
+class SlideshowSlide(BaseModel):
+    """클라이언트 슬라이드쇼 재생용 슬라이드 1장 — 이미지 + 구간 TTS 음성 + 타임라인.
+
+    학생 플레이어는 본문 영상(MP4) 대신 슬라이드 이미지 + 이 구간 음성을 타임라인에
+    맞춰 동기 재생한다(docs/planning/08-cost-optimization.md). ``audio_url`` 이 아직
+    null 이면 해당 슬라이드의 TTS 가 아직 생성되지 않은 것이다.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    slide_index: int = Field(..., ge=0, description="슬라이드 인덱스 (0-based)")
+    image_url: str | None = Field(
+        default=None, description="슬라이드 PNG presigned URL. 없으면 null."
+    )
+    audio_url: str | None = Field(
+        default=None,
+        description="이 슬라이드 구간 TTS 음성 presigned URL. 생성 전이면 null.",
+    )
+    start_seconds: float = Field(default=0, description="강의 타임라인상 시작 초.")
+    end_seconds: float = Field(default=0, description="강의 타임라인상 끝 초.")
+    text: str = Field(default="", description="발화 텍스트(자막=음성과 동일일 때).")
+    subtitle_text: str | None = Field(
+        default=None,
+        description="자막 언어가 음성과 다를 때의 번역 자막. null = 음성과 동일.",
+    )
+
+
+class SlideshowResponse(BaseModel):
+    """``GET /api/lectures/{slug}/slideshow`` 응답 — 학생 플레이어가 슬라이드쇼로 재생."""
+
+    lecture_id: uuid.UUID
+    is_expired: bool = False
+    total_seconds: float = Field(default=0, description="전체 타임라인 길이(초).")
+    slides: list[SlideshowSlide]
+
+
 class LectureCreate(BaseModel):
     course_id: uuid.UUID
     title: str = Field(..., min_length=1, max_length=255)

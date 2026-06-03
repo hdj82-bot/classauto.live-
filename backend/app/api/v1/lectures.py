@@ -17,12 +17,14 @@ from app.schemas.lecture import (
     LectureUpdate,
     SlideMeta,
     SlidesResponse,
+    SlideshowResponse,
 )
 from app.schemas.video import VideoStatusResponse
 from app.services.lecture import (
     assert_professor_owns_lecture,
     create_lecture,
     delete_lecture,
+    get_lecture_slideshow_by_slug,
     get_public_lecture_by_slug,
     list_course_lectures,
     list_my_lectures,
@@ -306,5 +308,25 @@ async def get_public_lecture(
     """
     try:
         return await get_public_lecture_by_slug(db, slug)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get(
+    "/api/lectures/{slug}/slideshow",
+    response_model=SlideshowResponse,
+    summary="공개 강의 슬라이드쇼 재생 데이터 (인증 불필요)",
+)
+async def get_lecture_slideshow(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """학생 플레이어용 슬라이드쇼 데이터(슬라이드 이미지 + 구간 음성 + 타임라인).
+
+    본문은 MP4 가 아니라 이 데이터로 클라이언트가 동기 재생한다
+    (docs/planning/08-cost-optimization.md). 만료 강의는 빈 슬라이드 목록을 반환한다.
+    """
+    try:
+        return await get_lecture_slideshow_by_slug(db, slug)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

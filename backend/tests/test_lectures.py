@@ -650,3 +650,54 @@ async def test_get_lecture_slides_other_professor_forbidden(
         headers=make_auth_header(other),
     )
     assert resp.status_code == 404
+
+
+# ── GET /api/lectures/{slug}/slideshow (공개, 클라이언트 슬라이드쇼) ────────────
+
+@pytest.mark.asyncio
+async def test_slideshow_returns_segments_with_audio(
+    client, db, lecture, professor, video_pending
+):
+    """본문 슬라이드쇼 데이터 — 타임라인·텍스트 + 생성된 구간 음성(presigned)을 합쳐 반환.
+
+    슬라이드 0 만 TTS(ready)면 그 슬라이드만 audio_url 이 채워지고, 미생성 슬라이드는
+    null 로 내려와 플레이어가 음성 없이도 진행할 수 있다.
+    """
+    # 슬라이드 0 의 구간 음성(ready 렌더). slide_number 는 0-based(=slide_index).
+    r = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        avatar_id="",
+        tts_provider="elevenlabs",
+        script_text="안녕하세요, 오늘은 파이썬을 배웁니다.",
+        slide_number=0,
+        status=RenderStatus.ready,
+        audio_url="https://external.example/audio/slide0.mp3",
+    )
+    db.add(r)
+    await db.commit()
+
+    resp = await client.get(f"/api/lectures/{lecture.slug}/slideshow")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["is_expired"] is False
+    assert data["total_seconds"] == 60  # 두 번째 세그먼트 end_seconds
+    assert len(data["slides"]) == 2
+
+    s0, s1 = data["slides"]
+    assert s0["slide_index"] == 0
+    assert s0["text"].startswith("안녕하세요")
+    assert s0["start_seconds"] == 0 and s0["end_seconds"] == 30
+    # 외부 URL(우리 버킷 아님)은 presign 통과 → 그대로 노출.
+    assert s0["audio_url"] == "https://external.example/audio/slide0.mp3"
+    # 슬라이드 1 은 아직 TTS 미생성 → 음성 null (플레이어는 음성 없이 진행).
+    assert s1["slide_index"] == 1
+    assert s1["audio_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_slideshow_404_for_unknown_slug(client):
+    resp = await client.get("/api/lectures/no-such-slug-xyz/slideshow")
+    assert resp.status_code == 404
