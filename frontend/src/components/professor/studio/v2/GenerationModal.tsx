@@ -11,8 +11,14 @@ import {
 /**
  * Studio v2 — 영상 생성 진행 모달 (prototype SCREEN 4).
  *
- * 풀스크린 backdrop blur. 큰 원형 진행률 + 4단계 stages + 백그라운드 옵션 +
+ * 풀스크린 backdrop blur. 큰 원형 진행률 + 2단계 stages + 백그라운드 옵션 +
  * (비용 정보 제거) 진행 상황 박스.
+ *
+ * 진행 단계 모델 (08 Phase 1): 본문은 TTS-only + 클라이언트 슬라이드쇼.
+ * 슬라이드별 HeyGen 합성·최종 인코딩이 사라졌으므로 단계는
+ *   1) 스크립트 검토 완료  2) 음성(TTS) 생성
+ * 두 단계뿐이다. HeyGen 아바타는 학생 Q&A 답변 영상 전용이라 본문 생성
+ * 진행에는 등장하지 않는다.
  *
  * 비용 표시 정책 (planning/05 §1.1): prototype 의 `gen-cost` 박스는 슬라이드
  * 진행률·예상 영상 길이·월 한도(편수) 만 보여주는 진행 정보 박스로 대체.
@@ -26,8 +32,8 @@ export interface GenerationModalProps {
   percent: number;
   /** ETA 표시 (예: "2분 18초"). */
   eta?: string;
-  /** 현재 진행 중인 stage (1~4). 그보다 낮은 stage 는 done, 같은 stage 는 active. */
-  activeStage: 1 | 2 | 3 | 4;
+  /** 현재 진행 중인 stage (1~2). 그보다 낮은 stage 는 done, 같은 stage 는 active. */
+  activeStage: 1 | 2;
   /** 강의 제목 (서브헤더용). */
   lectureTitle: string;
   /** 슬라이드 개수. */
@@ -130,26 +136,16 @@ export default function GenerationModal({
     return () => cancelAnimationFrame(handle);
   }, [done]);
 
+  // 본문 생성은 2단계 — 스크립트 검토 완료 → 음성(TTS) 생성. 08 Phase 1 에서
+  // 슬라이드별 HeyGen 합성·최종 인코딩 단계가 제거됐다(본문=슬라이드쇼 재생).
   const stages = [
     { id: 1, title: "스크립트 검토 완료", detail: `${slideCount} / ${slideCount} 슬라이드 채택됨`, time: "0초" },
     {
       id: 2,
-      title: "TTS 음성 생성 중…",
+      title: "음성(TTS) 생성 중…",
       detail: `${Math.min(processedSlides, slideCount)} / ${slideCount} 슬라이드`,
       time: eta ?? "—",
       live: `현재: 슬라이드 ${Math.min(processedSlides, slideCount)} 음성 생성`,
-    },
-    {
-      id: 3,
-      title: "AI 아바타 영상 합성",
-      detail: activeStage < 3 ? "대기 중 — 예상 시작: 2분 후" : "합성 진행 중",
-      time: activeStage >= 3 ? eta ?? "—" : "—",
-    },
-    {
-      id: 4,
-      title: "최종 인코딩",
-      detail: activeStage < 4 ? "대기 중 — 예상 시작: 6분 후" : "인코딩 진행 중",
-      time: activeStage >= 4 ? eta ?? "—" : "—",
     },
   ];
 
@@ -460,6 +456,17 @@ export default function GenerationModal({
                   subtle
                 />
               )}
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: 11,
+                  color: "var(--text-subtle)",
+                  lineHeight: 1.5,
+                }}
+              >
+                본문은 슬라이드 + 음성(TTS)로 재생됩니다. 아바타 영상은 학생 Q&amp;A
+                답변에만 사용돼 본문 생성 단계에는 포함되지 않습니다.
+              </p>
             </div>
           )}
 

@@ -257,7 +257,7 @@ def test_e2e_step5_notify():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def test_e2e_render_slide_pipeline():
-    """render_slide 태스크가 TTS → S3 업로드 → HeyGen 요청 전체 플로우를 실행하는지 검증."""
+    """render_slide 태스크가 TTS → S3 업로드 전체 플로우를 실행하는지 검증 (본문 HeyGen 미사용)."""
     from app.tasks.render import render_slide
     from app.models.video_render import RenderStatus
     from app.services.pipeline.tts import TTSResult
@@ -269,18 +269,18 @@ def test_e2e_render_slide_pipeline():
     mock_render.instructor_id = instructor_id
     mock_render.avatar_id = "avatar-test"
     mock_render.status = RenderStatus.pending
-    # Critical 8: idempotent skip 분기 비활성화 — 신규 렌더 상태로 진입
+    # 신규 렌더 상태로 진입 (idempotent skip 분기 비활성화)
     mock_render.audio_url = None
-    mock_render.heygen_job_id = None
+    mock_render.lecture_id = uuid.uuid4()
 
-    # render task 가 lecture 에서 voice_gender / voice_id / voice_speed / avatar_scale 를
-    # lookup 한다. mock 으로 명시하지 않으면 MagicMock 객체가 그대로 흘러 synthesize/
-    # create_video 인자에 들어가 assert 가 깨지므로 구체값으로 고정한다.
+    # render task 가 lecture 에서 voice_gender / voice_id / voice_speed 를 lookup 한다.
+    # mock 으로 명시하지 않으면 MagicMock 객체가 그대로 흘러 synthesize 인자에 들어가
+    # assert 가 깨지므로 구체값으로 고정한다.
     mock_lecture = MagicMock()
     mock_lecture.voice_gender = "male"
     mock_lecture.voice_id = None
     mock_lecture.voice_speed = 1.0
-    mock_lecture.avatar_scale = 1.0
+    mock_lecture.cloned_voice_id = None
 
     mock_tts_result = TTSResult(audio_bytes=b"tts-audio", provider="elevenlabs", duration_seconds=1.2)
 
@@ -288,9 +288,8 @@ def test_e2e_render_slide_pipeline():
          patch("app.services.pipeline.tts.synthesize", new_callable=AsyncMock, return_value=mock_tts_result) as mock_tts, \
          patch("app.services.pipeline.s3.upload_audio_bytes", return_value="https://s3/audio/test.mp3") as mock_s3_audio, \
          patch("app.services.pipeline.s3.file_exists", return_value=False), \
-         patch("app.services.pipeline.heygen.create_video", new_callable=AsyncMock, return_value="heygen-vid-001") as mock_heygen, \
-         patch("app.services.pipeline.cost_log.record_once"), \
-         patch("app.services.pipeline.cost_log.record"):
+         patch("app.services.pipeline.heygen.create_video", new_callable=AsyncMock) as mock_heygen, \
+         patch("app.services.pipeline.cost_log.record_once_committed"):
         mock_db = MagicMock()
         mock_db.query.return_value.filter.return_value.one.return_value = mock_render
         # render task 의 두 번째 query — Lecture lookup (first()) 도 명시 매핑.
@@ -314,20 +313,15 @@ def test_e2e_render_slide_pipeline():
     # S3 오디오 업로드 검증
     mock_s3_audio.assert_called_once_with(b"tts-audio", str(render_id))
 
-    # HeyGen 비디오 생성 검증 — 0016 이후 gender, #239 이후 avatar_scale 함께 전달
-    mock_heygen.assert_called_once_with(
-        audio_url="https://s3/audio/test.mp3",
-        avatar_id="avatar-test",
-        gender="male",
-        callback_id=str(render_id),
-        avatar_scale=1.0,
-    )
+    # 본문은 HeyGen 을 호출하지 않는다.
+    mock_heygen.assert_not_called()
 
-    # 결과 검증
+    # 결과 검증 — TTS 완료 = ready
     assert result["render_id"] == str(render_id)
-    assert result["heygen_job_id"] == "heygen-vid-001"
-    assert mock_render.heygen_job_id == "heygen-vid-001"
+    assert result["status"] == "ready"
+    assert result.get("audio_url") == "https://s3/audio/test.mp3"
     assert mock_render.audio_url == "https://s3/audio/test.mp3"
+    assert mock_render.status == RenderStatus.ready
 
 
 # ══════════════════════════════════════════════════════════════════════════════

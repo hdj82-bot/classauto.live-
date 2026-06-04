@@ -8,10 +8,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.course import Course
+from app.models.embedding import SlideEmbedding
 from app.models.lecture import Lecture
 from app.models.user import User, UserRole
-from app.models.video import Video
-from app.schemas.lecture import LectureCreate, LecturePublicResponse, LectureUpdate
+from app.models.video import Video, VideoScript
+from app.models.video_render import RenderStatus, VideoRender
+from app.schemas.lecture import (
+    LectureCreate,
+    LecturePlayResponse,
+    LecturePublicResponse,
+    LectureUpdate,
+    PlaySegment,
+)
+from app.services.pipeline.s3 import presign_stored_s3_url
 from app.services.render import cancel_in_flight_renders_for_lecture
 from app.utils.slug import slugify
 
@@ -173,6 +182,157 @@ async def _resolve_lecture_duration_seconds(
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
+
+
+# ── 학생 재생 타임라인 (계약 A) ────────────────────────────────────────────────
+
+
+async def _resolve_lecture_by_ref(
+    db: AsyncSession, ref: str | uuid.UUID
+) -> Lecture:
+    """학생 재생용 강의를 id(UUID) 또는 slug 로 조회한다.
+
+    학생 플레이어 라우트가 slug 기반이라(/lecture/[slug], /{slug}/public) 둘 다
+    허용한다. ``/public`` 과 동일하게 **게시된(is_published) 강의만** 노출한다 —
+    미게시 강의는 학생에게 보이면 안 되며(교수자 미리보기는 /professor/lecture/[id]
+    별도 경로), 미게시·미존재는 동일하게 404(ValueError) 로 처리한다.
+    """
+    lid: uuid.UUID | None
+    if isinstance(ref, uuid.UUID):
+        lid = ref
+    else:
+        try:
+            lid = uuid.UUID(str(ref))
+        except (ValueError, AttributeError, TypeError):
+            lid = None
+    if lid is not None:
+        stmt = select(Lecture).where(
+            Lecture.id == lid, Lecture.is_published == True  # noqa: E712
+        )
+    else:
+        stmt = select(Lecture).where(
+            Lecture.slug == str(ref), Lecture.is_published == True  # noqa: E712
+        )
+    lecture = (await db.execute(stmt)).scalar_one_or_none()
+    if not lecture:
+        raise ValueError("강의를 찾을 수 없습니다.")
+    return lecture
+
+
+async def get_lecture_play_timeline(
+    db: AsyncSession, lecture_ref: str | uuid.UUID
+) -> LecturePlayResponse:
+    """학생 플레이어용 "슬라이드 PNG + 구간 TTS + 타임라인" 을 조립한다.
+
+    ``lecture_ref`` 는 UUID 또는 slug (플레이어가 라우트 slug 를 그대로 넘긴다).
+    소스 3종을 slide_index(0-based) 로 합친다:
+      - VideoScript.segments  : 재생 순서·발화 텍스트·구간 길이(타임라인)
+      - SlideEmbedding         : 슬라이드 PNG (slide_number 는 1-based → idx = n-1)
+      - VideoRender(ready)     : 구간 TTS 오디오 (slide_number 는 0-based = slide_index)
+
+    image_url / audio_url 은 presign 해서 내려준다(영구 S3 URL 은 익명 GET 403).
+    만료된 강의는 segments=[] + is_expired=True.
+    """
+    lecture = await _resolve_lecture_by_ref(db, lecture_ref)
+    lecture_id = lecture.id  # 이하 조인 쿼리는 항상 UUID id 로 수행
+
+    now = datetime.now(timezone.utc)
+    # SQLite 등에서 DateTime(timezone=True) 가 naive 로 돌아올 수 있어 UTC 로 보정.
+    expires_at = lecture.expires_at
+    is_expired = False
+    if expires_at is not None:
+        exp = expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc)
+        is_expired = exp < now
+    language = getattr(lecture, "voice_lang", None) or "ko"
+    if is_expired:
+        return LecturePlayResponse(
+            lecture_id=lecture.id,
+            title=lecture.title,
+            language=language,
+            segments=[],
+            is_expired=True,
+            expires_at=lecture.expires_at,
+        )
+
+    # 1) 타임라인 — 가장 최근 Video 의 스크립트
+    video = (
+        await db.execute(
+            select(Video)
+            .options(selectinload(Video.script))
+            .where(Video.lecture_id == lecture_id)
+            .order_by(Video.created_at.desc())
+        )
+    ).scalars().first()
+    script: VideoScript | None = video.script if video else None
+    segments_src = (script.segments or []) if script else []
+    subtitle_src = (script.subtitle_segments or []) if script else []
+
+    # 2) 슬라이드 PNG (1-based slide_number → 0-based idx)
+    image_by_idx: dict[int, str | None] = {}
+    if lecture.pipeline_task_id:
+        rows = await db.execute(
+            select(SlideEmbedding.slide_number, SlideEmbedding.slide_image_url)
+            .where(SlideEmbedding.task_id == lecture.pipeline_task_id)
+        )
+        for slide_number, image_url in rows.all():
+            if isinstance(slide_number, int):
+                image_by_idx[slide_number - 1] = image_url
+
+    # 3) 구간 TTS 오디오 (ready 렌더만, slide_index 별 최신)
+    audio_by_idx: dict[int, str | None] = {}
+    renders = await db.execute(
+        select(VideoRender)
+        .where(
+            VideoRender.lecture_id == lecture_id,
+            VideoRender.status == RenderStatus.ready,
+        )
+        .order_by(VideoRender.created_at.asc())
+    )
+    for render in renders.scalars().all():
+        if render.slide_number is not None and render.audio_url:
+            audio_by_idx[render.slide_number] = render.audio_url  # 최신이 덮어씀
+
+    # 4) 자막 (slide_index 별)
+    caption_by_idx: dict[int, str | None] = {}
+    for sub in subtitle_src:
+        if isinstance(sub, dict):
+            caption_by_idx[sub.get("slide_index")] = sub.get("text")
+
+    # 5) 조립
+    out: list[PlaySegment] = []
+    for i, seg in enumerate(segments_src):
+        if not isinstance(seg, dict):
+            continue
+        slide_index = seg.get("slide_index")
+        start = seg.get("start_seconds")
+        end = seg.get("end_seconds")
+        duration = (
+            float(end) - float(start)
+            if isinstance(start, (int, float)) and isinstance(end, (int, float))
+            else None
+        )
+        out.append(
+            PlaySegment(
+                index=i,
+                slide_index=slide_index if isinstance(slide_index, int) else i,
+                image_url=presign_stored_s3_url(image_by_idx.get(slide_index)),
+                audio_url=presign_stored_s3_url(
+                    audio_by_idx.get(slide_index), expiration=86400
+                ),
+                text=seg.get("text"),
+                duration_seconds=duration,
+                caption=caption_by_idx.get(slide_index),
+            )
+        )
+
+    return LecturePlayResponse(
+        lecture_id=lecture.id,
+        title=lecture.title,
+        language=language,
+        segments=out,
+        is_expired=False,
+        expires_at=lecture.expires_at,
+    )
 
 
 # ── 생성 / 수정 ───────────────────────────────────────────────────────────────

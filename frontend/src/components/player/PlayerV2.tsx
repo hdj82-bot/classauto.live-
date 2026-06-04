@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { tokens as tokenStorage } from "@/lib/tokens";
@@ -20,45 +20,44 @@ import {
   submitInterstitialAnswer,
   type PlaybackQuiz,
 } from "./quizPlaybackApi";
+import { askQuestion, fetchPlayTimeline } from "./playbackApi";
+import type { PlaySegment, PlayTimeline } from "./playbackTypes";
 import styles from "./Player.module.css";
 
 /**
  * PlayerV2 — /lecture/[slug] 영상 시청 페이지의 다크 톤 UI.
  *
+ * [확정 결정] 본문은 단일 mp4 가 아니라 "슬라이드 PNG + 구간 TTS 오디오 +
+ * 타임라인" 을 클라이언트가 동기 재생하는 슬라이드쇼다. HeyGen 아바타는
+ * Q&A 캐시 답변(부가)에만 쓰인다.
+ *
  * 출처: docs/prototypes/06-student-flow.extracted.html SCREEN 4
  *      + docs/planning/06-student-pages.md §6-8.
  *
  * 기능:
- *  1. 상단바: 강의 주차·제목 (한자 강조) + 학생 정보 + 설정 아이콘
- *  2. 영상 stage(60%) + 컨트롤 바(재생/시간/익명 반응×4/자막/풀스크린)
- *  3. Q&A 사이드 패널(40%) — 다크 톤, 영상 화면 연속
- *  4. 인터스티셜 퀴즈 오버레이 (DEMO 트리거 + 백엔드 신호 시 자동)
+ *  1. 상단바: 강의 제목(한자 강조) + 학생 정보 + 설정 아이콘
+ *  2. 슬라이드 stage(60%): 현재 슬라이드 이미지 + 구간 오디오 동기 재생,
+ *     재생/일시정지·이전/다음 슬라이드·진행바·자막·풀스크린
+ *  3. Q&A 사이드 패널(40%): 답변 텍스트 즉시 표시 + 아바타 클립(있을 때) 부가
+ *  4. 인터스티셜 퀴즈 오버레이 (타임라인 타임스탬프 자동 출제)
  *  5. 집중 경고 3단계 오버레이 (useAttention 훅 통합)
  *  6. 첫 진입 온보딩 4슬라이드 (sessionStorage 1탭 1회)
  *
- * 영상 세션 생명주기는 v1 LectureViewerPage 와 동일 — POST /sessions
- * + attention/start, beforeunload 시 paused 처리.
+ * 데이터 레이어(./playbackApi)는 실서버 ↔ 로컬 mock 을 투명하게 분리한다 —
+ * 본 컴포넌트는 항상 fetchPlayTimeline / askQuestion 만 호출한다.
  */
-
-interface LectureData {
-  id: string;
-  title: string;
-  description: string | null;
-  video_url: string | null;
-  slug: string;
-  is_expired?: boolean;
-  // 06 prototype 시연 필드 — 백엔드 PR 후 자동 채움
-  professor_name?: string | null;
-  course_name?: string | null;
-  school_name?: string | null;
-  week_number?: number | null;
-  lesson_number?: number | null;
-}
 
 interface QAMessage {
   role: "user" | "assistant";
   text: string;
+  /** 환영 메시지 등 문자열 출처(폴백). */
   source?: string | null;
+  /** RAG 인용 슬라이드 번호들. */
+  sourceSlides?: number[];
+  /** in_scope=false 이면 범위 밖 배지 표시. */
+  inScope?: boolean;
+  /** HeyGen 아바타 클립 URL (있을 때만). */
+  avatarUrl?: string | null;
 }
 
 interface ReactionCount {
@@ -68,7 +67,12 @@ interface ReactionCount {
   aha: number;
 }
 
-/** PlaybackQuiz → InterstitialQuiz 가 쓰는 QuizQuestion 으로 변환 (보기에 A/B/C/D 부여). */
+/** 세션 생성 실패/미로그인 시 Q&A·퀴즈가 단독 구동되도록 하는 로컬 세션 id. */
+const LOCAL_SESSION_ID = "local-session";
+/** 타임라인 클록 틱 (ms). */
+const TICK_MS = 100;
+
+/** PlaybackQuiz → InterstitialQuiz 가 쓰는 QuizQuestion 으로 변환. */
 function toQuizQuestion(pb: PlaybackQuiz): QuizQuestion {
   return {
     id: pb.id,
@@ -85,6 +89,16 @@ const letterToIndex = (letter: string): string => String(letter.charCodeAt(0) - 
 const indexToLetter = (idx: string): string =>
   String.fromCharCode(65 + Math.max(0, parseInt(idx, 10) || 0));
 
+/** 출처 슬라이드 칩 텍스트: 연속이면 "1–3", 아니면 "1, 3". */
+function formatSlides(slides: number[]): string {
+  if (!slides.length) return "";
+  const sorted = [...slides].sort((a, b) => a - b);
+  const contiguous = sorted.every((n, i) => i === 0 || n === sorted[i - 1] + 1);
+  return contiguous && sorted.length > 1
+    ? `${sorted[0]}–${sorted[sorted.length - 1]}`
+    : sorted.join(", ");
+}
+
 export interface PlayerV2Props {
   slug: string;
 }
@@ -94,18 +108,21 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
   const { user } = useAuth();
   const { t } = useI18n();
 
-  const [lecture, setLecture] = useState<LectureData | null>(null);
+  const [timeline, setTimeline] = useState<PlayTimeline | null>(null);
   const [loading, setLoading] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // ─── 슬라이드쇼 재생 상태 ───
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [progressSec, setProgressSec] = useState(0);
-  const [durationSec, setDurationSec] = useState(0);
+  const [segmentTime, setSegmentTime] = useState(0); // 현재 구간 경과(초)
+  const [showCaptions, setShowCaptions] = useState(true);
 
   // Q&A
   const [qaMessages, setQaMessages] = useState<QAMessage[]>([
-    { role: "assistant", text: "" }, // placeholder welcome (replaced after t() loads)
+    { role: "assistant", text: "" }, // placeholder welcome (t() 로드 후 교체)
   ]);
   const [qaInput, setQaInput] = useState("");
   const [qaSending, setQaSending] = useState(false);
@@ -118,13 +135,12 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     aha: 3,
   });
 
-  // 인터스티셜 퀴즈 — 백엔드에서 받은 타임스탬프 퀴즈를 재생 중 자동 출제.
+  // 인터스티셜 퀴즈 — 타임스탬프 도달 시 자동 출제.
   const [playbackQuizzes, setPlaybackQuizzes] = useState<PlaybackQuiz[]>([]);
   const [activeQuiz, setActiveQuiz] = useState<PlaybackQuiz | null>(null);
   const quizzesRef = useRef<PlaybackQuiz[]>([]);
   const shownQuizRef = useRef<Set<string>>(new Set());
   const quizOpenRef = useRef(false);
-  // timeupdate 클로저가 최신 값을 읽도록 ref 동기화.
   useEffect(() => {
     quizzesRef.current = playbackQuizzes;
   }, [playbackQuizzes]);
@@ -132,65 +148,105 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     quizOpenRef.current = activeQuiz !== null;
   }, [activeQuiz]);
 
-  // 첫 진입 온보딩 (sessionStorage 기준)
+  // 첫 진입 온보딩 (sessionStorage 기준은 OnboardingFlowV2 내부)
   const [showOnboarding, setShowOnboarding] = useState(true);
 
-  // ─── 강의 fetch ───
+  const segments = useMemo<PlaySegment[]>(() => timeline?.segments ?? [], [timeline]);
+
+  // 세그먼트 시작 누적 오프셋 + 전체 길이.
+  const { offsets, totalDuration } = useMemo(() => {
+    const offs: number[] = [];
+    let acc = 0;
+    for (const s of segments) {
+      offs.push(acc);
+      acc += s.duration_seconds;
+    }
+    return { offsets: offs, totalDuration: acc };
+  }, [segments]);
+
+  const current = segments[currentIndex] ?? null;
+  const overallElapsed =
+    current != null
+      ? (offsets[currentIndex] ?? 0) + Math.min(segmentTime, current.duration_seconds)
+      : 0;
+
+  const attention = useAttention({ sessionId: sessionId || "" });
+
+  // 재생 가동 조건 — 오버레이(퀴즈·집중경고·온보딩)가 뜨면 정지.
+  const running =
+    isPlaying &&
+    activeQuiz === null &&
+    !attention.isPaused &&
+    !showOnboarding &&
+    segments.length > 0 &&
+    currentIndex < segments.length;
+  const runningRef = useRef(running);
+  useEffect(() => {
+    runningRef.current = running;
+  }, [running]);
+
+  // ─── 타임라인 fetch (계약 A) ───
   useEffect(() => {
     if (!slug) {
       router.replace("/dashboard");
       return;
     }
+    let cancelled = false;
     (async () => {
-      try {
-        const { data } = await api.get<LectureData>(`/api/lectures/${slug}/public`);
-        if (data.is_expired) {
-          router.replace("/expired");
-          return;
-        }
-        setLecture(data);
-      } catch {
-        router.replace("/dashboard");
+      const data = await fetchPlayTimeline(slug);
+      if (cancelled) return;
+      if (data.is_expired) {
+        router.replace("/expired");
+        return;
       }
+      setTimeline(data);
       setLoading(false);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [slug, router]);
 
-  // ─── 세션 생성 + 첫 환영 메시지 ───
+  // ─── 세션 생성 + attention 시작 ───
   useEffect(() => {
-    if (!lecture || !user || !durationSec) return;
+    if (!timeline || !user || !totalDuration) return;
+    let cancelled = false;
     (async () => {
       try {
         const { data } = await api.post("/api/v1/sessions", null, {
-          params: { lecture_id: lecture.id, total_sec: Math.ceil(durationSec) },
+          params: { lecture_id: timeline.lecture_id, total_sec: Math.ceil(totalDuration) },
         });
+        if (cancelled) return;
         setSessionId(data.id);
         await api.post("/api/v1/attention/start", {
           session_id: data.id,
           user_id: user.id,
-          lecture_id: lecture.id,
+          lecture_id: timeline.lecture_id,
         });
       } catch {
-        /* ignore */
+        // 백엔드 미연결(단독 구동) — 로컬 세션 id 로 Q&A·퀴즈 진행.
+        if (!cancelled) setSessionId(LOCAL_SESSION_ID);
       }
     })();
-  }, [lecture, user, durationSec]);
+    return () => {
+      cancelled = true;
+    };
+  }, [timeline, user, totalDuration]);
 
-  // ─── 인터스티셜 퀴즈 목록 fetch (타임스탬프 트리거용, 정답·해설 미포함) ───
+  // ─── 인터스티셜 퀴즈 목록 fetch ───
   useEffect(() => {
-    if (!lecture?.id) return;
+    if (!timeline?.lecture_id) return;
     let cancelled = false;
     (async () => {
-      const quizzes = await getPlaybackQuizzes(lecture.id);
+      const quizzes = await getPlaybackQuizzes(timeline.lecture_id);
       if (!cancelled) setPlaybackQuizzes(quizzes);
     })();
     return () => {
       cancelled = true;
     };
-  }, [lecture?.id]);
+  }, [timeline?.lecture_id]);
 
-  // 환영 메시지를 i18n locale 로드 후 한 번 세팅 (placeholder → 실제 텍스트).
-  // react-hooks/set-state-in-effect: rAF 로 비동기화.
+  // 환영 메시지를 i18n 로드 후 1회 세팅 (placeholder → 실제 텍스트).
   useEffect(() => {
     const handle = requestAnimationFrame(() => {
       setQaMessages((prev) =>
@@ -210,7 +266,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
 
   // ─── 언로드 시 세션 paused ───
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || sessionId === LOCAL_SESSION_ID) return;
     const pause = () => {
       const url = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
       const tok = tokenStorage.getAccess();
@@ -227,29 +283,26 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     };
   }, [sessionId]);
 
-  const attention = useAttention({ sessionId: sessionId || "" });
+  // 클록/오디오 콜백이 최신 값을 읽도록 ref 동기화.
+  const indexRef = useRef(0);
+  const segTimeRef = useRef(0);
+  const segmentsRef = useRef<PlaySegment[]>(segments);
+  useEffect(() => {
+    indexRef.current = currentIndex;
+  }, [currentIndex]);
+  useEffect(() => {
+    segTimeRef.current = segmentTime;
+  }, [segmentTime]);
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
 
-  // ─── 인터스티셜 퀴즈: 트리거 / 일시정지·재개 / 응답 제출 ───
-  const pauseForQuiz = () => {
-    const v = videoRef.current;
-    if (v) {
-      v.pause();
-      setIsPlaying(false);
-    }
-  };
-  const resumeAfterQuiz = () => {
-    const v = videoRef.current;
-    if (v && !v.ended) {
-      v.play().catch(() => {});
-      setIsPlaying(true);
-    }
-  };
-
-  /** 아직 출제되지 않은 다음 퀴즈를 연다. 열었으면 true. */
+  // ─── 인터스티셜 퀴즈: 일시정지·재개·제출 ───
+  // (progress 이펙트가 openQuiz 를 참조하므로 그 위에 선언한다)
   const openQuiz = (quiz: PlaybackQuiz) => {
     shownQuizRef.current.add(quiz.id);
     quizOpenRef.current = true;
-    pauseForQuiz();
+    setIsPlaying(false); // running=false → 클록·오디오 정지
     setActiveQuiz(quiz);
   };
   const triggerNextQuiz = (): boolean => {
@@ -259,24 +312,23 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     openQuiz(next);
     return true;
   };
-
   const handleQuizClose = () => {
     setActiveQuiz(null);
     quizOpenRef.current = false;
-    resumeAfterQuiz();
+    setIsPlaying(true); // 재개
   };
-
   const handleQuizSubmit = async (answer: string): Promise<QuizAnswerOutcome | null> => {
     const quiz = activeQuiz;
-    if (!quiz || !sessionId) return null;
+    if (!quiz || !timeline) return null;
+    const sid = sessionId ?? LOCAL_SESSION_ID;
     const isMultiple = quiz.question_type === "multiple_choice";
     const userAnswer = isMultiple ? letterToIndex(answer) : answer;
     try {
-      const res = await submitInterstitialAnswer(lecture!.id, {
-        sessionId,
+      const res = await submitInterstitialAnswer(timeline.lecture_id, {
+        sessionId: sid,
         questionId: quiz.id,
         userAnswer,
-        videoTimestampSeconds: progressSec,
+        videoTimestampSeconds: Math.floor(overallElapsed),
       });
       return {
         recorded: res.recorded,
@@ -294,13 +346,62 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     }
   };
 
-  // ─── 영상 핸들러 ───
-  const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
-    const sec = Math.floor(videoRef.current.currentTime);
-    setProgressSec(sec);
+  // ─── 타임라인 클록: running 동안 segmentTime 누적 + 구간 자동 진행 ───
+  // 진행/종료 setState 는 타이머 콜백(이펙트 본문이 아님)에서 호출한다.
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      const idx = indexRef.current;
+      const segs = segmentsRef.current;
+      const seg = segs[idx];
+      if (!seg) return;
+      const next = segTimeRef.current + TICK_MS / 1000;
+      if (next < seg.duration_seconds) {
+        setSegmentTime(next);
+      } else if (idx < segs.length - 1) {
+        setCurrentIndex(idx + 1);
+        setSegmentTime(0);
+      } else {
+        setIsPlaying(false);
+        setSegmentTime(seg.duration_seconds);
+      }
+    }, TICK_MS);
+    return () => clearInterval(id);
+  }, [running]);
+
+  // ─── 구간별 오디오 로드/동기 ───
+  useEffect(() => {
+    const a = audioRef.current;
+    const seg = segments[currentIndex];
+    if (!a || !seg) return;
+    if (seg.audio_url) {
+      if (a.src !== seg.audio_url) a.src = seg.audio_url;
+      a.currentTime = 0;
+      if (runningRef.current) a.play().catch(() => {});
+    } else {
+      a.removeAttribute("src");
+      a.load?.();
+    }
+  }, [currentIndex, segments]);
+
+  // ─── 재생/일시정지에 오디오 동기 ───
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    if (running) {
+      if (a.getAttribute("src")) a.play().catch(() => {});
+    } else {
+      a.pause();
+    }
+  }, [running]);
+
+  // ─── 진행 부수효과: 집중도 progress + 퀴즈 자동 출제 ───
+  const lastSecRef = useRef(-1);
+  useEffect(() => {
+    const sec = Math.floor(overallElapsed);
+    if (sec === lastSecRef.current) return;
+    lastSecRef.current = sec;
     attention.setProgress(sec);
-    // 타임스탬프 도달 시 자동 출제 (퀴즈가 열려있지 않고, 아직 안 푼 것만).
     if (!quizOpenRef.current) {
       const due = quizzesRef.current.find(
         (q) =>
@@ -310,33 +411,52 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
       );
       if (due) openQuiz(due);
     }
-  };
-  const handleLoadedMetadata = () => {
-    if (videoRef.current) setDurationSec(videoRef.current.duration || 0);
-  };
+    // attention.setProgress·openQuiz 는 안정 참조 — 의도적으로 deps 제외.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overallElapsed]);
+
+  // ─── 슬라이드쇼 컨트롤 ───
   const togglePlay = () => {
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) {
-      v.play().catch(() => {});
-      setIsPlaying(true);
-    } else {
-      v.pause();
-      setIsPlaying(false);
+    // 마지막 슬라이드 끝에서 다시 누르면 처음부터.
+    if (
+      !isPlaying &&
+      currentIndex === segments.length - 1 &&
+      current &&
+      segmentTime >= current.duration_seconds
+    ) {
+      setCurrentIndex(0);
+      setSegmentTime(0);
+    }
+    setIsPlaying((p) => !p);
+  };
+  const goToSegment = (index: number) => {
+    const clamped = Math.max(0, Math.min(segments.length - 1, index));
+    setCurrentIndex(clamped);
+    setSegmentTime(0);
+  };
+  const goPrev = () => goToSegment(currentIndex - 1);
+  const goNext = () => goToSegment(currentIndex + 1);
+
+  const seekToOverall = (target: number) => {
+    let acc = 0;
+    for (let i = 0; i < segments.length; i++) {
+      const d = segments[i].duration_seconds;
+      if (target < acc + d || i === segments.length - 1) {
+        setCurrentIndex(i);
+        setSegmentTime(Math.max(0, Math.min(d, target - acc)));
+        return;
+      }
+      acc += d;
     }
   };
-  const seekDelta = (delta: number) => {
-    const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + delta));
-  };
+
   const toggleFullscreen = () => {
-    const v = videoRef.current;
-    if (!v) return;
+    const el = stageRef.current;
+    if (!el) return;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     } else {
-      v.requestFullscreen?.().catch(() => {});
+      el.requestFullscreen?.().catch(() => {});
     }
   };
 
@@ -345,35 +465,34 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     setReactions((r) => ({ ...r, [key]: r[key] + 1 }));
   };
 
-  // ─── Q&A 전송 ───
+  // ─── Q&A 전송 (계약 B) ───
   const sendQuestion = async (text?: string) => {
     const question = (text ?? qaInput).trim();
-    if (!question || !sessionId) return;
+    if (!question) return;
+    const sid = sessionId ?? LOCAL_SESSION_ID;
     setQaInput("");
     setQaMessages((m) => [...m, { role: "user", text: question }]);
     setQaSending(true);
+    setIsPlaying(false); // Q&A 등장 시 일시정지 (06 §7.1)
     try {
-      const { data } = await api.post(`/api/v1/qa`, {
-        session_id: sessionId,
-        lecture_id: lecture?.id,
+      const res = await askQuestion(timeline?.lecture_id ?? slug, {
         question,
+        session_id: sid,
       });
       setQaMessages((m) => [
         ...m,
         {
           role: "assistant",
-          text: data.answer ?? t("student.playerV2.qaGenericFallback"),
-          source: data.source ?? t("student.playerV2.qaSourceFallback"),
+          text: res.answer || t("student.playerV2.qaGenericFallback"),
+          sourceSlides: res.source_slides ?? [],
+          inScope: res.in_scope,
+          avatarUrl: res.avatar?.video_url ?? null,
         },
       ]);
     } catch {
       setQaMessages((m) => [
         ...m,
-        {
-          role: "assistant",
-          text: t("student.playerV2.qaErrorAnswer"),
-          source: null,
-        },
+        { role: "assistant", text: t("student.playerV2.qaErrorAnswer"), source: null },
       ]);
     }
     setQaSending(false);
@@ -397,13 +516,11 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
       </PlayerSurfaceDark>
     );
   }
-  if (!lecture) return null;
+  if (!timeline) return null;
 
-  const titleSegments = parseCourseTitle(lecture.title);
-  const week = lecture.week_number ?? null;
+  const titleSegments = parseCourseTitle(timeline.title);
   const userInitial = (user?.name ?? user?.email ?? "?").trim().charAt(0).toUpperCase();
   const userSchoolDept = (() => {
-    // useAuth 의 AuthUser 에는 school / department 가 없어 안전하게 옵셔널.
     type Maybe = { school?: string; department?: string; year?: number | string };
     const u = (user ?? null) as (typeof user & Maybe) | null;
     const parts: string[] = [];
@@ -420,9 +537,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
         <header className={styles.bar}>
           <div className={styles.course}>
             <span className={styles.crumb}>
-              {week
-                ? t("student.playerV2.crumb", { week: String(week) })
-                : t("student.entry.lessonNumberFallback")}
+              {t("student.entry.lessonNumberFallback")}
             </span>
             <span className={styles.courseTitle}>
               {titleSegments.map((seg, i) =>
@@ -471,17 +586,18 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
 
         {/* Body */}
         <div className={styles.body}>
-          <div className={styles.stage}>
+          <div className={styles.stage} ref={stageRef}>
             <div className={styles.video}>
-              {lecture.video_url ? (
-                <video
-                  ref={videoRef}
-                  src={lecture.video_url}
-                  preload="metadata"
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                  onClick={togglePlay}
-                  aria-label={lecture.title}
+              {/* 슬라이드 이미지 (없으면 fallback placeholder) */}
+              {current?.image_url ? (
+                // 슬라이드 이미지는 임의 원격 URL/ data URI 이고 매 구간 교체되어
+                // next/image 최적화 이점이 없다 → plain img 사용.
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={currentIndex}
+                  className={styles.slideImg}
+                  src={current.image_url}
+                  alt={current.caption ?? timeline.title}
                 />
               ) : (
                 <div className={styles.placeholder}>
@@ -495,6 +611,19 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                   </span>
                 </div>
               )}
+
+              {/* 구간 오디오 (화면 비표시) */}
+              <audio ref={audioRef} preload="auto" aria-hidden="true" />
+
+              {/* 슬라이드 카운터 */}
+              <span className={styles.slideCounter} aria-hidden="true">
+                {currentIndex + 1} / {segments.length}
+              </span>
+
+              {/* 자막 */}
+              {showCaptions && current?.caption && (
+                <div className={styles.caption}>{current.caption}</div>
+              )}
             </div>
 
             {/* Bottom controls */}
@@ -502,27 +631,20 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
               <div
                 className={styles.progress}
                 role="progressbar"
-                aria-valuenow={progressSec}
+                aria-valuenow={Math.floor(overallElapsed)}
                 aria-valuemin={0}
-                aria-valuemax={durationSec || 100}
+                aria-valuemax={Math.ceil(totalDuration) || 100}
                 onClick={(e) => {
-                  const v = videoRef.current;
-                  if (!v || !durationSec) return;
+                  if (!totalDuration) return;
                   const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
                   const x = e.clientX - rect.left;
-                  v.currentTime = (x / rect.width) * durationSec;
+                  seekToOverall((x / rect.width) * totalDuration);
                 }}
               >
                 <div
-                  className={styles.progressBuffer}
-                  style={{
-                    width: `${durationSec > 0 ? Math.min(((progressSec + 20) / durationSec) * 100, 100) : 0}%`,
-                  }}
-                />
-                <div
                   className={styles.progressFill}
                   style={{
-                    width: `${durationSec > 0 ? (progressSec / durationSec) * 100 : 0}%`,
+                    width: `${totalDuration > 0 ? (overallElapsed / totalDuration) * 100 : 0}%`,
                   }}
                 />
               </div>
@@ -548,8 +670,9 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                   <button
                     type="button"
                     className={styles.ctrl}
-                    onClick={() => seekDelta(-10)}
-                    aria-label={t("student.playerV2.controlBack10")}
+                    onClick={goPrev}
+                    disabled={currentIndex <= 0}
+                    aria-label={t("student.playerV2.controlPrevSlide")}
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -559,15 +682,16 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     >
-                      <path d="M11 17l-5-5 5-5" />
-                      <path d="M6 12h8a6 6 0 1 1 0 12h-2" />
+                      <path d="M18 6l-8 6 8 6" />
+                      <line x1="6" y1="5" x2="6" y2="19" />
                     </svg>
                   </button>
                   <button
                     type="button"
                     className={styles.ctrl}
-                    onClick={() => seekDelta(10)}
-                    aria-label={t("student.playerV2.controlFwd10")}
+                    onClick={goNext}
+                    disabled={currentIndex >= segments.length - 1}
+                    aria-label={t("student.playerV2.controlNextSlide")}
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -577,12 +701,12 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     >
-                      <path d="M13 17l5-5-5-5" />
-                      <path d="M18 12h-8a6 6 0 1 0 0 12h2" />
+                      <path d="M6 6l8 6-8 6" />
+                      <line x1="18" y1="5" x2="18" y2="19" />
                     </svg>
                   </button>
                   <span className={styles.timeLabel}>
-                    {formatClock(progressSec)} / {formatClock(durationSec)}
+                    {formatClock(overallElapsed)} / {formatClock(totalDuration)}
                   </span>
                 </div>
                 <div className={styles.reacts} role="group" aria-label="익명 반응">
@@ -669,6 +793,8 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                   <button
                     type="button"
                     className={styles.ctrl}
+                    onClick={() => setShowCaptions((v) => !v)}
+                    aria-pressed={showCaptions}
                     aria-label={t("student.playerV2.controlCaptions")}
                   >
                     <svg
@@ -742,7 +868,15 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                     <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
                     <div>
                       <div className={styles.bubble}>{m.text}</div>
-                      {m.source && (
+                      {m.avatarUrl && (
+                        <AvatarClip url={m.avatarUrl} label={t("student.playerV2.qaAvatarLabel")} />
+                      )}
+                      {m.inScope === false && (
+                        <span className={styles.outScopeBadge}>
+                          {t("student.playerV2.qaOutOfScopeBadge")}
+                        </span>
+                      )}
+                      {(m.sourceSlides?.length || m.source) && (
                         <span className={styles.source}>
                           <svg
                             viewBox="0 0 24 24"
@@ -754,7 +888,11 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                           >
                             <path d="M12 22s7-6 7-12a7 7 0 1 0-14 0c0 6 7 12 7 12z" />
                           </svg>
-                          {m.source}
+                          {m.sourceSlides?.length
+                            ? t("student.playerV2.qaSourceSlides", {
+                                slides: formatSlides(m.sourceSlides),
+                              })
+                            : m.source}
                         </span>
                       )}
                     </div>
@@ -858,7 +996,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
         </div>
       </div>
 
-      {/* Interstitial quiz — 타임스탬프 자동 출제. 정답 공개는 서버(reveal_answer)가 결정. */}
+      {/* Interstitial quiz — 타임스탬프 자동 출제. 정답 공개는 서버가 결정. */}
       <InterstitialQuiz
         open={activeQuiz !== null}
         question={activeQuiz ? toQuizQuestion(activeQuiz) : null}
@@ -866,7 +1004,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
         onSubmit={handleQuizSubmit}
       />
 
-      {/* Attention warning — useAttention 의 warningLevel 이 1/2/3 일 때만 표시 */}
+      {/* Attention warning */}
       {attention.isPaused && attention.warningLevel >= 1 && attention.warningLevel <= 3 && (
         <AttentionWarningV2
           level={attention.warningLevel as 1 | 2 | 3}
@@ -876,8 +1014,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
             triggerNextQuiz();
           }}
           onRestart={() => {
-            const v = videoRef.current;
-            if (v) v.currentTime = 0;
+            goToSegment(0);
             attention.resume();
           }}
         />
@@ -894,6 +1031,31 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
   );
 }
 
+/** Q&A 답변에 부가되는 HeyGen 아바타 클립. 로드 실패 시 포스터로 폴백. */
+function AvatarClip({ url, label }: { url: string; label: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className={styles.avatarPoster} aria-label={label}>
+        <span className={styles.avatarPosterOrb}>AI</span>
+        <span>{label}</span>
+      </div>
+    );
+  }
+  return (
+    <video
+      className={styles.avatarClip}
+      src={url}
+      autoPlay
+      muted={false}
+      playsInline
+      controls
+      aria-label={label}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 function ReactBtn({
   label,
   count,
@@ -906,12 +1068,7 @@ function ReactBtn({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      className={styles.react}
-      aria-label={label}
-      onClick={onClick}
-    >
+    <button type="button" className={styles.react} aria-label={label} onClick={onClick}>
       {icon}
       <span className={styles.reactCount}>{count}</span>
     </button>

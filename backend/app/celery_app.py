@@ -20,6 +20,7 @@ celery = Celery(
         "app.tasks.render",
         "app.tasks.pipeline",
         "app.tasks.photo_avatar",
+        "app.tasks.qa_batch",
     ],
 )
 
@@ -45,6 +46,12 @@ celery.conf.beat_schedule = {
     "daily-db-backup": {
         "task": "app.tasks.backup.daily_db_backup",
         "schedule": crontab(hour=3, minute=0),  # UTC 03:00 = KST 12:00
+    },
+    # 아바타 Q&A 야간 배치 — pending 질문 클러스터링 → 상위 클러스터 렌더 (08/09 §5).
+    # 실시간 렌더 금지이므로 하루 1회만 돈다. 기본 18:00 UTC = KST 03:00.
+    "qa-avatar-nightly-batch": {
+        "task": "app.tasks.qa_batch.run_qa_avatar_batch",
+        "schedule": crontab(hour=settings.QA_AVATAR_BATCH_HOUR_UTC, minute=0),
     },
 }
 

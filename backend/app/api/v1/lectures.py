@@ -12,6 +12,7 @@ from app.models.user import User
 from app.models.video import Video
 from app.schemas.lecture import (
     LectureCreate,
+    LecturePlayResponse,
     LecturePublicResponse,
     LectureResponse,
     LectureUpdate,
@@ -23,6 +24,7 @@ from app.services.lecture import (
     assert_professor_owns_lecture,
     create_lecture,
     delete_lecture,
+    get_lecture_play_timeline,
     get_public_lecture_by_slug,
     list_course_lectures,
     list_my_lectures,
@@ -306,5 +308,29 @@ async def get_public_lecture(
     """
     try:
         return await get_public_lecture_by_slug(db, slug)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+# ── 학생 재생 타임라인 (계약 A) ───────────────────────────────────────────────
+
+@router.get(
+    "/api/lectures/{lecture_id}/play",
+    response_model=LecturePlayResponse,
+    summary="학생 재생 타임라인 (슬라이드 PNG + 구간 TTS)",
+)
+async def get_lecture_play(
+    lecture_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """학생 플레이어가 본문을 "슬라이드 PNG + 구간 TTS + 타임라인" 슬라이드쇼로
+    재생하기 위한 세그먼트 배열을 반환한다(본문에 단일 video_url 없음).
+
+    - ``lecture_id`` 는 UUID 또는 slug — 플레이어가 라우트 slug(/lecture/[slug])를
+      그대로 넘긴다. 만료 시 ``is_expired=true`` + ``segments=[]``.
+    - HeyGen 은 본문에 쓰지 않는다(08-cost-optimization Phase 1).
+    """
+    try:
+        return await get_lecture_play_timeline(db, lecture_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

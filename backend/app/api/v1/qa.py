@@ -2,6 +2,7 @@
 import asyncio
 import csv
 import io
+import logging
 import uuid
 from datetime import datetime
 
@@ -18,70 +19,141 @@ from app.models.lecture import Lecture
 from app.models.qa_log import QALog
 from app.models.user import User
 from app.services.pipeline.qa import answer_question
+from app.services.pipeline.qa_avatar import resolve_avatar_for_question
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/qa", tags=["qa"])
+# 계약 B 정식 경로(prefix 없음) — 프론트 PlayerV2(playbackApi)가 호출하는
+# POST /api/lectures/{lecture_id}/qa/ask 를 제공한다. main.py 에서 함께 include.
+lecture_qa_router = APIRouter(tags=["qa"])
 
 
 class QARequest(BaseModel):
+    """구 경로(POST /api/v1/qa) 요청 — lecture_id 를 body 에 담는다(호환 유지)."""
     session_id: uuid.UUID
     lecture_id: uuid.UUID
     question: str
 
 
-@router.post("", summary="Q&A 질문")
-async def ask_question(
-    body: QARequest,
-    user: User = Depends(require_student),
-):
+class QAAskBody(BaseModel):
+    """계약 B 요청 — lecture_id 는 경로, body 는 {question, session_id}."""
+    question: str
+    session_id: uuid.UUID
+
+
+def _process_qa(*, session_id: uuid.UUID, lecture_id: uuid.UUID, question: str, user_id: uuid.UUID) -> dict:
+    """질문 1건 처리(동기) — 텍스트 답변(RAG) 즉시 + 아바타 캐시 적중 시 부가.
+
+    계약 B: 텍스트는 무조건 즉시, 겹치는 질문(유사도 0.9↑) ready 클립만 ``avatar``
+    포함, 미적중이면 avatar=null + 클러스터 큐 적립(실시간 렌더 없음). 구·신 경로가
+    공유한다. LookupError = 파이프라인 미처리(404 매핑).
+    """
+    with SyncSessionLocal() as db:
+        lecture = db.execute(
+            select(Lecture).where(Lecture.id == lecture_id)
+        ).scalar_one_or_none()
+        if not lecture or not lecture.pipeline_task_id:
+            raise LookupError("강의 파이프라인이 아직 처리되지 않았습니다.")
+
+        # ── 1) 텍스트 답변(RAG) — 무조건 즉시 ──
+        result = answer_question(db, lecture.pipeline_task_id, str(session_id), question)
+
+        top_slide_numbers = (
+            ",".join(str(r.slide_number) for r in result.top_slides)
+            if result.top_slides else None
+        )
+        top_similarity = (
+            max(r.similarity for r in result.top_slides)
+            if result.top_slides else None
+        )
+        source_slides = (
+            [r.slide_number for r in result.top_slides]
+            if (result.in_scope and result.top_slides) else []
+        )
+        db.add(QALog(
+            session_id=session_id,
+            lecture_id=lecture_id,
+            user_id=user_id,
+            task_id=lecture.pipeline_task_id,
+            question=question,
+            answer=result.answer,
+            in_scope=result.in_scope,
+            responded=result.in_scope,
+            top_slide_numbers=top_slide_numbers,
+            top_similarity=top_similarity,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            cost_usd=result.cost_usd,
+        ))
+
+        # ── 2) 아바타 캐시 — 적중 시에만 포함, 미적중이면 적립(렌더 X) ──
+        # 어떤 실패도 텍스트 답변을 막지 않는다(계약 B: 텍스트 무조건 즉시).
+        # SAVEPOINT 로 격리 — 캐시 측 DB 오류가 QALog/최종 commit 을 오염시키지 않게.
+        avatar_payload = None
+        try:
+            with db.begin_nested():
+                instructor_id = db.execute(
+                    select(Course.instructor_id).where(Course.id == lecture.course_id)
+                ).scalar_one_or_none()
+                resolution = resolve_avatar_for_question(
+                    db,
+                    lecture_id=lecture_id,
+                    instructor_id=instructor_id,
+                    question=question,
+                    answer=result.answer,
+                    in_scope=result.in_scope,
+                )
+                avatar_payload = resolution.payload
+        except Exception:  # noqa: BLE001
+            avatar_payload = None
+            logger.exception("Q&A 아바타 캐시 처리 실패(텍스트 답변은 정상 반환)")
+
+        db.commit()
+        return {
+            "answer": result.answer,
+            "in_scope": result.in_scope,
+            "source_slides": source_slides,
+            "avatar": avatar_payload,
+            "cost_usd": result.cost_usd,
+        }
+
+
+async def _ask(session_id: uuid.UUID, lecture_id: uuid.UUID, question: str, user_id: uuid.UUID) -> dict:
+    """_process_qa 를 executor 에서 실행하고 예외를 HTTP 로 매핑(구·신 경로 공유)."""
     loop = asyncio.get_event_loop()
-
-    def _run():
-        with SyncSessionLocal() as db:
-            lecture = db.execute(
-                select(Lecture).where(Lecture.id == body.lecture_id)
-            ).scalar_one_or_none()
-            if not lecture or not lecture.pipeline_task_id:
-                raise LookupError("강의 파이프라인이 아직 처리되지 않았습니다.")
-            result = answer_question(db, lecture.pipeline_task_id, str(body.session_id), body.question)
-
-            top_slide_numbers = (
-                ",".join(str(r.slide_number) for r in result.top_slides)
-                if result.top_slides else None
-            )
-            top_similarity = (
-                max(r.similarity for r in result.top_slides)
-                if result.top_slides else None
-            )
-            db.add(QALog(
-                session_id=body.session_id,
-                lecture_id=body.lecture_id,
-                user_id=user.id,
-                task_id=lecture.pipeline_task_id,
-                question=body.question,
-                answer=result.answer,
-                in_scope=result.in_scope,
-                responded=result.in_scope,
-                top_slide_numbers=top_slide_numbers,
-                top_similarity=top_similarity,
-                input_tokens=result.input_tokens,
-                output_tokens=result.output_tokens,
-                cost_usd=result.cost_usd,
-            ))
-            db.commit()
-            return result
-
     try:
-        result = await loop.run_in_executor(None, _run)
+        return await loop.run_in_executor(
+            None,
+            lambda: _process_qa(
+                session_id=session_id, lecture_id=lecture_id, question=question, user_id=user_id
+            ),
+        )
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception:
         raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
 
-    return {
-        "answer": result.answer,
-        "in_scope": result.in_scope,
-        "cost_usd": result.cost_usd,
-    }
+
+@router.post("", summary="Q&A 질문 (구 경로 — 호환 유지)")
+async def ask_question(
+    body: QARequest,
+    user: User = Depends(require_student),
+):
+    """구 경로. 신규 클라이언트는 POST /api/lectures/{id}/qa/ask(계약 B)를 쓴다."""
+    return await _ask(body.session_id, body.lecture_id, body.question, user.id)
+
+
+@lecture_qa_router.post("/api/lectures/{lecture_id}/qa/ask", summary="Q&A 질문 (계약 B)")
+async def ask_question_for_lecture(
+    lecture_id: uuid.UUID,
+    body: QAAskBody,
+    user: User = Depends(require_student),
+):
+    """계약 B — 프론트 PlayerV2(playbackApi)가 호출. lecture_id 는 경로, body 는
+    {question, session_id}. 응답은 구 경로와 동일(answer/in_scope/source_slides/avatar).
+    """
+    return await _ask(body.session_id, lecture_id, body.question, user.id)
 
 
 # ── 교수자용 Q&A 종합 리포트 내보내기 ─────────────────────────────────────────

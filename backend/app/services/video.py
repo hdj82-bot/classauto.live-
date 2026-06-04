@@ -354,23 +354,15 @@ async def approve_video(
         )
 
     # 승인 = 렌더 시작. 슬라이드(세그먼트)별 VideoRender 행을 만들고 render_slide
-    # 태스크를 enqueue 한다. (과거엔 상태만 rendering 으로 바꾸고 아무도 렌더를
-    # 실제로 시작시키지 않아 TTS 0/N 에서 영구히 멈췄다 — render.py 의
-    # create_render_request 와 동일한 VideoRender 생성 + render_slide.delay 패턴.)
-    from app.models.lecture import Lecture  # noqa: PLC0415
-    from app.models.user import User  # noqa: PLC0415
+    # 태스크를 enqueue 한다. 본문은 HeyGen 을 쓰지 않고 TTS 만 합성한다
+    # (docs/planning/08-cost-optimization.md Phase 1 — 학생 플레이어가 슬라이드 PNG +
+    # 구간 TTS + 타임라인으로 재생). HeyGen 은 Q&A 캐시 답변 전용(창2).
     from app.models.video_render import VideoRender  # noqa: PLC0415
 
     segments = video.script.segments
-    lecture = await db.get(Lecture, video.lecture_id)
-    # 아바타 결정 순서: 강의가 고른 avatar_id → 교수자 기본 Photo Avatar 룩 →
-    # 빈 문자열(heygen.create_video 가 env HEYGEN_AVATAR_ID_* 로 폴백).
-    # 본인 룩을 기본으로 정해두면 강의별 선택 없이 모든 강의가 본인 얼굴로 생성된다.
-    avatar_id = (lecture.avatar_id if lecture else None) or ""
-    if not avatar_id:
-        professor = await db.get(User, professor_id)
-        if professor and professor.photo_avatar_default_look_id:
-            avatar_id = professor.photo_avatar_default_look_id
+    # avatar_id 는 VideoRender 의 NOT NULL 컬럼이지만 본문 렌더가 HeyGen 을
+    # 호출하지 않으므로 빈 문자열로 채운다.
+    avatar_id = ""
 
     video.status = VideoStatus.rendering
     video.script.approved_at = datetime.now(tz=timezone.utc)

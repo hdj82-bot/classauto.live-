@@ -62,6 +62,39 @@ async def test_ask_question_success(client, student, lecture):
 
 
 @pytest.mark.asyncio
+async def test_ask_question_contract_b_path(client, student, lecture):
+    """계약 B 경로: POST /api/lectures/{id}/qa/ask (lecture_id 경로, body={question,session_id})."""
+    mock_result = _build_mock_qa_result("파이썬은 인터프리터 언어입니다.", True, 0.003)
+
+    with patch("app.api.v1.qa.answer_question", return_value=mock_result), \
+         _patch_qa_sync_session():
+        resp = await client.post(
+            f"/api/lectures/{lecture.id}/qa/ask",
+            json={
+                "question": "파이썬이란 무엇인가요?",
+                "session_id": str(uuid.uuid4()),
+            },
+            headers=make_auth_header(student),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["answer"] == "파이썬은 인터프리터 언어입니다."
+    assert data["in_scope"] is True
+    assert data["avatar"] is None  # 캐시 미적중 → 텍스트만
+    assert "source_slides" in data
+
+
+@pytest.mark.asyncio
+async def test_ask_question_contract_b_professor_forbidden(client, professor, lecture):
+    resp = await client.post(
+        f"/api/lectures/{lecture.id}/qa/ask",
+        json={"question": "테스트", "session_id": str(uuid.uuid4())},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_ask_question_out_of_scope(client, student, lecture):
     mock_result = _build_mock_qa_result("강의 범위 밖의 질문입니다.", False, 0.001)
 

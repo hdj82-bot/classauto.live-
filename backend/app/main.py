@@ -25,7 +25,7 @@ from app.api.v1.render import router as render_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.api.v1.attention import router as attention_router
 from app.api.v1.subscription import router as subscription_router
-from app.api.v1.qa import router as qa_router
+from app.api.v1.qa import lecture_qa_router, router as qa_router
 from app.api.v1.translate import router as translate_router
 from app.api.v1.payment import router as payment_router
 from app.api.v1.admin import router as admin_router
@@ -92,6 +92,7 @@ app.include_router(webhooks_router)
 app.include_router(attention_router)
 app.include_router(subscription_router)
 app.include_router(qa_router)
+app.include_router(lecture_qa_router)  # 계약 B: POST /api/lectures/{id}/qa/ask (프론트 PlayerV2)
 app.include_router(translate_router)
 app.include_router(payment_router)
 app.include_router(admin_router)

@@ -113,8 +113,9 @@ export default function StudioWizardPage() {
     Record<number, SlideReviewStatus>
   >({});
   const [voiceGender, setVoiceGender] = useState<VoiceGender>("male");
-  // 영상 아바타 크기 배율 (1.0 = 기본). SettingsPanel 슬라이더 + WorkArea PiP +
-  // 렌더(HeyGen scale)에 함께 반영. 슬라이더 드래그 중 PATCH 폭주는 디바운스.
+  // Q&A 답변 영상의 아바타 크기 배율 (1.0 = 기본). 본문은 TTS-only 라 아바타가
+  // 없고(08 Phase 1), 이 값은 SettingsPanel 슬라이더 → Q&A 렌더(HeyGen scale)에
+  // 반영된다. 슬라이더 드래그 중 PATCH 폭주는 디바운스.
   const [avatarScale, setAvatarScale] = useState<number>(1.0);
   const avatarScaleSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // expires_at 은 UI 에서 제거됐지만(강의 설정 섹션 삭제) 음성/만료 저장 effect 가
@@ -136,7 +137,9 @@ export default function StudioWizardPage() {
   // ── Generation modal ────────────────────────────────────────────────────────
   const [genOpen, setGenOpen] = useState(false);
   const [genPercent, setGenPercent] = useState(0);
-  const [genStage, setGenStage] = useState<1 | 2 | 3 | 4>(1);
+  // 본문은 TTS-only (08 Phase 1: 슬라이드별 HeyGen 제거). 진행 단계는
+  // 1=스크립트 검토 완료, 2=음성(TTS) 생성 두 단계뿐 — HeyGen 합성/인코딩 없음.
+  const [genStage, setGenStage] = useState<1 | 2>(1);
   const [genDone, setGenDone] = useState(false);
   // 실제로 ready 까지 끝난 슬라이드 수 — 진행 정보 박스의 "X / N 슬라이드" 에
   // 쓴다. 원형 막대(genPercent)는 중간 단계 가중치까지 더한 값이라 따로 둔다.
@@ -688,10 +691,8 @@ export default function StudioWizardPage() {
       const id = setInterval(() => {
         pct = Math.min(100, pct + 8);
         setGenPercent(pct);
-        if (pct < 25) setGenStage(1);
-        else if (pct < 70) setGenStage(2);
-        else if (pct < 95) setGenStage(3);
-        else setGenStage(4);
+        // 2단계 모델: 초반은 스크립트 검토(1), 이후 음성(TTS) 생성(2).
+        setGenStage(pct < 20 ? 1 : 2);
         if (pct >= 100) {
           clearInterval(id);
           setGenDone(true);
@@ -739,16 +740,16 @@ export default function StudioWizardPage() {
         const completed = data.completed;
         setGenCompleted(completed);
 
-        // 슬라이드별 진행 가중치 — completed(ready)만 세면 첫 슬라이드가 완전히
-        // 끝나기 전까지 막대가 0% 에 멈춰 보인다(슬라이드당 TTS→HeyGen 합성→
-        // 다운로드가 수 분). 중간 단계에도 부분 점수를 줘서 단계별로 막대가
-        // 실제로 움직이게 한다. 백엔드 RenderStatus enum 과 1:1.
+        // 진행 가중치 — 본문 경로 render.status 는 pending → tts_processing →
+        // ready(또는 failed) 만 사용한다(08 Phase 1: 슬라이드별 HeyGen 제거,
+        // 본문=TTS-only + 클라이언트 슬라이드쇼). HeyGen 합성/업로드 단계는
+        // 본문에서 발생하지 않으므로 가중치도 "tts_processing→ready" 2단계
+        // (+pending) 기준. completed(ready)만 세면 첫 슬라이드가 끝나기 전까지
+        // 막대가 0% 에 멈춰 보이므로 tts_processing 에 0.5 부분 점수를 준다.
         const WEIGHT: Record<string, number> = {
           pending: 0,
           queued: 0,
-          tts_processing: 0.25,
-          rendering: 0.6,
-          uploading: 0.9,
+          tts_processing: 0.5,
           ready: 1,
           failed: 0,
           cancelled: 0,
@@ -761,13 +762,11 @@ export default function StudioWizardPage() {
         if (completed < total) pct = Math.min(pct, 99);
         setGenPercent(Math.max(0, Math.min(100, pct)));
 
-        // 단계 표시 — 아직 진행 중인 가장 이른 단계를 활성으로(순차적 의미 보존).
-        // 한 슬라이드라도 TTS 단계면 stage 2, 전부 통과했으면 합성(3)/인코딩(4).
-        const has = (s: string) => renders.some((r) => r.status === s);
+        // 단계 표시 — 2단계 모델. renders 가 생성됐다는 건 승인(=스크립트 확정)이
+        // 끝났다는 뜻이므로 음성(TTS) 생성 단계가 진행 중(2). 아직 renders 가
+        // 없으면 스크립트 검토 단계(1).
         if (renders.length === 0) setGenStage(1);
-        else if (has("pending") || has("queued") || has("tts_processing")) setGenStage(2);
-        else if (has("rendering")) setGenStage(3);
-        else setGenStage(4);
+        else setGenStage(2);
 
         if (total > 0 && completed === total) {
           setGenPercent(100);

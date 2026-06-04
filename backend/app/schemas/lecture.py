@@ -193,3 +193,49 @@ class LecturePublicResponse(BaseModel):
         ),
         examples=[312],
     )
+
+
+# ── 학생 재생 타임라인 (계약 A) ────────────────────────────────────────────────
+
+
+class PlaySegment(BaseModel):
+    """학생 플레이어가 슬라이드쇼로 동기 재생하는 한 세그먼트.
+
+    본문은 단일 mp4 가 아니라 "슬라이드 PNG + 구간 TTS 오디오 + 타임라인" 으로
+    재생된다(08-cost-optimization Phase 1). image_url / audio_url 은 조회 시점에
+    presigned 된 S3 URL 이며, 아직 렌더되지 않았으면 None.
+    """
+
+    index: int = Field(..., ge=0, description="세그먼트 순번 (재생 순서, 0-based).")
+    slide_index: int = Field(..., description="대응 슬라이드 인덱스 (0-based).")
+    image_url: str | None = Field(
+        default=None,
+        description="슬라이드 PNG presigned URL. null 이면 프론트가 fallback mock.",
+    )
+    audio_url: str | None = Field(
+        default=None,
+        description="구간 TTS 오디오 presigned URL(24h). 아직 합성 전이면 null.",
+    )
+    text: str | None = Field(default=None, description="발화 텍스트.")
+    duration_seconds: float | None = Field(
+        default=None,
+        description="세그먼트 길이(초). 스크립트 타임라인(end-start) 기준, 없으면 null.",
+    )
+    caption: str | None = Field(
+        default=None,
+        description="자막 텍스트(자막 언어가 음성과 다를 때만). 없으면 null.",
+    )
+
+
+class LecturePlayResponse(BaseModel):
+    """``GET /api/lectures/{lecture_id}/play`` 응답 (계약 A).
+
+    만료(expires_at 경과) 시 ``is_expired=true`` + ``segments=[]`` 로 콘텐츠를 숨긴다.
+    """
+
+    lecture_id: uuid.UUID
+    title: str
+    language: str = Field(default="ko", description="본문 음성(TTS) 언어 코드.")
+    segments: list[PlaySegment]
+    is_expired: bool
+    expires_at: datetime | None = None

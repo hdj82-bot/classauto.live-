@@ -188,6 +188,128 @@ async def test_update_lecture_avatar_id_and_name(client, professor, lecture):
     assert resp2.json()["avatar_name"] == "김교수 아바타"
 
 
+# ── GET /api/lectures/{lecture_id}/play (계약 A) ──────────────────────────────
+
+@pytest.mark.asyncio
+async def test_lecture_play_returns_timeline(client, lecture, video_pending, db):
+    """슬라이드 PNG(SlideEmbedding) + 구간 TTS(VideoRender) + 타임라인(segments)을
+    slide_index 로 합쳐 PlaySegment 배열로 내려준다 (본문 video_url 없음)."""
+    from sqlalchemy import update
+
+    from app.models.embedding import SlideEmbedding
+    from app.models.lecture import Lecture as LectureModel
+
+    task_id = "task-play-happy"
+    await db.execute(
+        update(LectureModel).where(LectureModel.id == lecture.id).values(pipeline_task_id=task_id)
+    )
+    db.add(
+        SlideEmbedding(
+            task_id=task_id,
+            slide_number=1,  # 1-based → slide_index 0
+            text_content="첫 슬라이드",
+            embedding=[0.0] * 1536,
+            slide_image_url="https://cdn.example.com/slides/lec/1.png",
+        )
+    )
+    # 구간 TTS 오디오 — slide_index 0 (= slide_number 0) 의 ready 렌더
+    db.add(
+        VideoRender(
+            id=uuid.uuid4(),
+            lecture_id=lecture.id,
+            instructor_id=uuid.uuid4(),
+            avatar_id="",
+            tts_provider="elevenlabs",
+            slide_number=0,
+            status=RenderStatus.ready,
+            audio_url="https://cdn.example.com/audio/seg0.mp3",
+        )
+    )
+    await db.flush()
+
+    resp = await client.get(f"/api/lectures/{lecture.id}/play")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["is_expired"] is False
+    assert data["lecture_id"] == str(lecture.id)
+    assert len(data["segments"]) == 2  # video_pending 의 세그먼트 2개
+
+    seg0 = data["segments"][0]
+    assert seg0["slide_index"] == 0
+    assert seg0["image_url"] == "https://cdn.example.com/slides/lec/1.png"
+    assert seg0["audio_url"] == "https://cdn.example.com/audio/seg0.mp3"
+    assert seg0["text"] == "안녕하세요, 오늘은 파이썬을 배웁니다."
+    assert seg0["duration_seconds"] == 30  # end(30) - start(0)
+
+    seg1 = data["segments"][1]
+    assert seg1["slide_index"] == 1
+    assert seg1["image_url"] is None      # 슬라이드 2 PNG 없음
+    assert seg1["audio_url"] is None      # 슬라이드 2 TTS 아직 없음
+
+    # 본문에 단일 video_url 키를 두지 않는다.
+    assert "video_url" not in data
+
+
+@pytest.mark.asyncio
+async def test_lecture_play_by_slug(client, lecture, video_pending, db):
+    """플레이어가 라우트 slug 를 그대로 넘겨도(/play) UUID 와 동일하게 동작한다."""
+    resp = await client.get(f"/api/lectures/{lecture.slug}/play")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["lecture_id"] == str(lecture.id)  # 응답은 항상 UUID
+    assert len(data["segments"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_lecture_play_expired_hides_segments(client, lecture, video_pending, db):
+    """만료된 강의는 is_expired=true + segments=[] 로 콘텐츠를 숨긴다."""
+    from datetime import datetime, timedelta, timezone
+    from sqlalchemy import update
+
+    from app.models.lecture import Lecture as LectureModel
+
+    past = datetime.now(timezone.utc) - timedelta(days=1)
+    await db.execute(
+        update(LectureModel).where(LectureModel.id == lecture.id).values(expires_at=past)
+    )
+    await db.flush()
+
+    resp = await client.get(f"/api/lectures/{lecture.id}/play")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_expired"] is True
+    assert data["segments"] == []
+
+
+@pytest.mark.asyncio
+async def test_lecture_play_not_found(client):
+    resp = await client.get(f"/api/lectures/{uuid.uuid4()}/play")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_lecture_play_unpublished_is_404(client, course, db):
+    """미게시(is_published=False) 강의는 학생 재생에서 노출되지 않는다(404)."""
+    from app.models.lecture import Lecture as LectureModel
+
+    lec = LectureModel(
+        id=uuid.uuid4(),
+        course_id=course.id,
+        title="미게시 강의",
+        slug="unpublished-lecture-xyz999",
+        order=2,
+        is_published=False,
+    )
+    db.add(lec)
+    await db.flush()
+
+    by_id = await client.get(f"/api/lectures/{lec.id}/play")
+    by_slug = await client.get(f"/api/lectures/{lec.slug}/play")
+    assert by_id.status_code == 404
+    assert by_slug.status_code == 404
+
+
 # ── GET /api/lectures/{slug}/public ──────────────────────────────────────────
 
 @pytest.mark.asyncio

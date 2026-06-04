@@ -134,39 +134,7 @@ def test_default_dimension_is_720p():
     assert settings.HEYGEN_DIMENSION_HEIGHT == 720
 
 
-# ── render_slide 통합: 예산 초과 시 retry 없이 실패 처리 ──────────────────────
-
-
-def test_render_slide_blocks_on_budget_and_skips_heygen():
-    from app.models.video_render import RenderStatus
-    from app.tasks import render as render_task
-
-    owner = uuid.uuid4()
-    render = MagicMock()
-    render.id = uuid.uuid4()
-    render.instructor_id = owner
-    render.lecture_id = uuid.uuid4()
-    render.audio_url = None
-    render.heygen_job_id = None
-    render.avatar_id = "av-1"
-    render.status = RenderStatus.pending
-
-    main_db = MagicMock()
-    main_db.query.return_value.filter.return_value.one.return_value = render
-
-    with patch.object(render_task, "SyncSessionLocal", return_value=main_db), \
-         patch("app.services.pipeline.budget.assert_heygen_budget",
-               side_effect=BudgetExceededError("HeyGen 일 예산 초과: $3.00 / $3.00")), \
-         patch("app.services.pipeline.tts.synthesize", new_callable=AsyncMock) as mock_tts, \
-         patch("app.services.pipeline.heygen.create_video", new_callable=AsyncMock) as mock_heygen, \
-         patch.object(render_task, "_archive_videos_for_lecture"):
-        outcome = render_task.render_slide.apply(
-            args=[str(render.id), "스크립트", str(owner)],
-        )
-        result = outcome.get(propagate=True)
-
-    assert result["status"] == "BUDGET_EXCEEDED"
-    # 차단은 TTS·HeyGen 호출 이전에 일어나야 한다.
-    mock_tts.assert_not_called()
-    mock_heygen.assert_not_called()
-    assert render.status == RenderStatus.failed
+# NOTE(08 Phase 1): 본문 render_slide 는 더 이상 HeyGen 예산(assert_heygen_budget)을
+# 호출하지 않으므로(본문 = TTS-only) "예산 초과 시 render_slide 차단" 통합 테스트는
+# 제거했다. HeyGen 예산 enforcement 는 Q&A 아바타 경로(창2)에서 다시 검증한다.
+# assert_heygen_budget 자체의 단위 테스트는 위쪽(test_blocks_when_*)에 남아 있다.

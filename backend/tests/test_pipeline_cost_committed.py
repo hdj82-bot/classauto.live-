@@ -135,8 +135,8 @@ def test_render_slide_records_tts_cost_before_s3_upload():
     assert outcome.failed() or outcome.state == "RETRY"
 
 
-def test_render_slide_records_heygen_cost_after_create_video():
-    """HeyGen 응답 직후 record_once_committed(heygen_submit) 가 호출되어야 한다."""
+def test_render_slide_records_only_tts_cost():
+    """본문은 TTS만 — record_once_committed 는 tts_synthesize 만 기록(heygen_submit 없음)."""
     from app.tasks import render as render_task
     from app.services.pipeline.tts import TTSResult
 
@@ -155,8 +155,7 @@ def test_render_slide_records_heygen_cost_after_create_video():
          patch(
              "app.services.pipeline.heygen.create_video",
              new_callable=AsyncMock,
-             return_value="heygen-1",
-         ), \
+         ) as mock_heygen, \
          patch(
              "app.services.pipeline.cost_log.record_once_committed",
              return_value=True,
@@ -166,11 +165,12 @@ def test_render_slide_records_heygen_cost_after_create_video():
         )
         result = outcome.get(propagate=True)
 
-    assert result["heygen_job_id"] == "heygen-1"
+    assert result["status"] == "ready"
+    mock_heygen.assert_not_called()
     operations = [
         c.kwargs.get("operation") if c.kwargs.get("operation") is not None
         else (c.args[3] if len(c.args) >= 4 else None)
         for c in mock_record_committed.call_args_list
     ]
     assert "tts_synthesize" in operations
-    assert "heygen_submit" in operations
+    assert "heygen_submit" not in operations

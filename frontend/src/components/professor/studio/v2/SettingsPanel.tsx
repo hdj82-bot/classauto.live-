@@ -20,7 +20,12 @@ import { setVoiceFavorite } from "@/components/professor/avatars/voicesApi";
  * Studio v2 — 우측 settings panel.
  *
  * docs/prototypes/05-studio-flow.extracted.html `.settings` + accordion 그대로.
- * 아코디언: 아바타 · 음성(이중 TTS) · 퀴즈/문제.
+ * 아코디언: Q&A 아바타 · 음성과 자막(본문 TTS) · 퀴즈/문제.
+ *
+ * 역할 분리 (08 Phase 1): 본문은 TTS-only + 클라이언트 슬라이드쇼라 본문에는
+ * 아바타가 없다. HeyGen 아바타는 학생 Q&A 답변 영상 전용 — 따라서 "Q&A 아바타"
+ * 아코디언(페르소나·크기)은 Q&A 답변 영상 설정이고, "음성과 자막" 아코디언
+ * (보이스·발화속도·자막)은 본문 슬라이드쇼 내레이션(TTS) 설정이다.
  * (강의 설정·Q&A 범위 섹션은 제거 — 링크 만료/집중 경고는 미사용, Q&A 는
  *  업로드 자료 제한·외부 차단이 백엔드 기본 가드레일이라 토글이 불필요했다.)
  *
@@ -53,7 +58,7 @@ export interface SettingsPanelProps {
   onChangeVoiceSpeed?: (speed: number) => void;
   // ───────────────────────────────────────────────────────────────────────────
   onChangeAvatar?: () => void;
-  /** 영상에서 아바타 크기 배율 (1.0 = 기본). 미리보기 PiP·렌더에 함께 반영. */
+  /** Q&A 답변 영상의 아바타 크기 배율 (1.0 = 기본). Q&A 렌더(HeyGen scale)에 반영. */
   avatarScale?: number;
   onChangeAvatarScale?: (scale: number) => void;
   // ── 퀴즈/문제 (인터랙티브 퀴즈 저작) ──────────────────────────────────────────
@@ -325,6 +330,11 @@ export default function SettingsPanel({
             <span style={summaryValStyle}>{avatarName}</span>
           </summary>
           <div style={aBodyStyle}>
+            <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+              이 아바타는 학생 <b style={{ fontWeight: 700 }}>Q&amp;A 답변 영상</b>에만
+              사용됩니다. 본문 강의는 슬라이드 + 음성(TTS)로 재생되어 아바타가
+              나오지 않습니다.
+            </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
               <div style={{ fontSize: 11.5, color: "var(--text-subtle)", fontWeight: 600 }}>
                 선택된 페르소나
@@ -357,12 +367,13 @@ export default function SettingsPanel({
               페르소나 변경
             </button>
 
-            {/* 영상에서 아바타가 차지하는 크기 — 미리보기 PiP·렌더에 함께 반영 */}
+            {/* Q&A 답변 영상에서 아바타가 차지하는 크기 — 렌더(HeyGen scale)에 반영.
+                본문에는 아바타가 없으므로 본문 미리보기와는 무관하다. */}
             <div style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               <div style={subSectionLabelStyle}>
                 <span style={subTagStyle("gold")}>크기</span>
-                <span>영상에서 아바타 크기</span>
+                <span>Q&amp;A 답변 영상 속 아바타 크기</span>
               </div>
               <SizeSlider
                 value={avatarScale}
@@ -396,11 +407,14 @@ export default function SettingsPanel({
             <span style={summaryValStyle}>{summaryVoiceVal}</span>
           </summary>
           <div style={aBodyStyle}>
-            {/* ── 음성 (영상에서 나올 TTS) ── */}
+            <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+              본문 강의 영상에서 슬라이드를 읽어줄 내레이션(TTS) 설정입니다.
+            </p>
+            {/* ── 음성 (본문 슬라이드쇼 내레이션 TTS) ── */}
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               <div style={subSectionLabelStyle}>
                 <span style={subTagStyle("gold")}>음성</span>
-                <span>영상에서 나올 목소리</span>
+                <span>본문 내레이션 목소리</span>
               </div>
               <VoiceSelect
                 voices={voices}
@@ -787,8 +801,8 @@ function SpeedSlider({
 
 /**
  * 아바타 크기 슬라이더. 1.0배(기본) 기준 좌(작게)·우(크게). 범위 0.5~1.5,
- * step 0.1. 값은 미리보기 PiP 크기와 강의 렌더(HeyGen character.scale)에 함께
- * 반영된다. 표기는 퍼센트(50%~150%).
+ * step 0.1. 값은 학생 Q&A 답변 영상 렌더(HeyGen character.scale)에 반영된다
+ * (본문은 TTS-only 라 아바타가 없다). 표기는 퍼센트(50%~150%).
  */
 const SIZE_MIN = 0.5;
 const SIZE_MAX = 1.5;

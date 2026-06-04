@@ -1,4 +1,10 @@
-"""HeyGen 웹훅 API (app/api/webhooks.py 흡수)."""
+"""HeyGen 웹훅 API (app/api/webhooks.py 흡수).
+
+NOTE(08 Phase 1): 본문 슬라이드 렌더는 HeyGen 을 더 이상 쓰지 않으므로(TTS-only)
+이 웹훅으로 들어오는 본문 VideoRender 완료 이벤트는 발생하지 않는다 — 핸들러는
+이 변경 이전 in-flight 렌더의 안전망으로만 남는다. Q&A 아바타 클립의 완료 확인은
+창2(qa_batch)가 자체 폴링으로 처리한다(webhooks 경유 아님).
+"""
 from __future__ import annotations
 
 import hashlib

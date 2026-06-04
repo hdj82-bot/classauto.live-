@@ -1,8 +1,15 @@
-"""단일 슬라이드 렌더링 태스크: TTS → S3 → HeyGen."""
+"""단일 슬라이드 렌더링 태스크: TTS → S3 (HeyGen 제거 — 본문은 TTS만).
+
+본문 영상은 더 이상 슬라이드별 HeyGen 아바타 영상을 굽지 않는다
+(docs/planning/08-cost-optimization.md Phase 1). 각 세그먼트는 TTS 오디오만
+합성·업로드하고, 학생 플레이어가 "슬라이드 PNG + 구간 TTS + 타임라인"
+(GET /api/lectures/{id}/play)으로 재생한다. HeyGen 은 Q&A 캐시 답변 전용(창2).
+"""
 from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 from app.celery_app import celery
 from app.db.session import SyncSessionLocal
@@ -46,6 +53,39 @@ def _audio_s3_key(render_id: str, ext: str = "mp3") -> str:
     return f"{settings.S3_PREFIX}audio/{render_id}.{ext}"
 
 
+def _finalize_video_if_all_ready(db, lecture_id: uuid.UUID) -> bool:
+    """강의의 모든 VideoRender 가 ready 면 최신 rendering Video 를 done 으로 전환.
+
+    본문 완료는 슬라이드별 HeyGen 웹훅이 아니라 마지막 TTS 렌더가 끝나는 시점에
+    이 헬퍼로 판정한다. 동시에 끝난 두 태스크가 모두 done 으로 만들어도 멱등.
+    반환: 이번 호출로 Video 를 done 으로 전환했으면 True(완료 알림 트리거용).
+    """
+    from app.models.video import Video, VideoStatus
+
+    pending = (
+        db.query(VideoRender)
+        .filter(
+            VideoRender.lecture_id == lecture_id,
+            VideoRender.status.notin_([RenderStatus.ready, RenderStatus.cancelled]),
+        )
+        .count()
+    )
+    if pending:
+        return False
+
+    videos = (
+        db.query(Video)
+        .filter(Video.lecture_id == lecture_id, Video.status == VideoStatus.rendering)
+        .all()
+    )
+    for video in videos:
+        video.status = VideoStatus.done
+    if videos:
+        db.commit()
+        return True
+    return False
+
+
 @celery.task(bind=True, max_retries=2, default_retry_delay=30)
 def render_slide(
     self,
@@ -53,17 +93,15 @@ def render_slide(
     script_text: str,
     caller_user_id: str | None = None,
 ) -> dict:
-    """TTS 합성 → S3 업로드 → HeyGen 비디오 생성 요청.
+    """TTS 합성 → S3 업로드. (HeyGen 호출 없음 — 본문은 TTS만.)
 
     Critical 7: 호출자(caller_user_id) 가 VideoRender.instructor_id 와 다르면 즉시 종료.
-    Critical 8: 각 단계는 산출물 존재 여부로 idempotent — 재시도/중복 enqueue 시 skip.
+    Critical 8: audio_url 과 S3 객체가 모두 있으면 TTS 호출 skip — 재시도/중복 enqueue 시.
     """
     import asyncio
     from app.models.lecture import Lecture, VoiceGender
     from app.models.user import User
     from app.services.pipeline.tts import synthesize
-    from app.services.pipeline.heygen import create_video
-    from app.services.pipeline.budget import assert_heygen_budget, BudgetExceededError
     from app.services.cost_tracker import estimate_tts_cost_usd
 
     db = SyncSessionLocal()
@@ -80,7 +118,6 @@ def render_slide(
             else (str(lecture.voice_gender) if lecture and lecture.voice_gender else "male")
         )
         # 교수자가 고른 보이스·속도. NULL/누락이면 기본(성별 보이스 / 1.3배속).
-        # voice_speed 컬럼이 없는 구버전 row 대비 getattr 로 안전 접근.
         voice_id = (lecture.voice_id or None) if lecture else None
         # 교수자가 고른 보이스가 본인 목소리(IVC 클론)면 cloned 경로로 합성한다
         # (v3 대신 multilingual_v2 + 클론 튜닝 — avatars/voices 미리듣기와 동일 규칙).
@@ -96,10 +133,6 @@ def render_slide(
         voice_speed = (
             getattr(lecture, "voice_speed", None) if lecture else None
         ) or 1.3
-        # 영상 아바타 크기 배율. NULL/누락(구버전 row)/0 은 기본(1.0)로 폴백.
-        avatar_scale = (
-            getattr(lecture, "avatar_scale", None) if lecture else None
-        ) or 1.0
 
         # ── Critical 7: 호출자 소유권 검증 ──
         if caller_user_id is not None:
@@ -112,19 +145,10 @@ def render_slide(
                 # retry 하지 않고 종료 — Celery 가 결과를 성공으로 기록(반복 enqueue 방지)
                 return {"render_id": render_id, "status": "REJECTED_OWNERSHIP_MISMATCH"}
 
-        # ── Critical 8: 이미 HeyGen 까지 완료된 경우 전체 skip ──
-        if render.heygen_job_id:
-            logger.info(
-                "render_slide idempotent skip — 이미 HeyGen 제출됨: "
-                "render_id=%s, heygen_job_id=%s",
-                render_id, render.heygen_job_id,
-            )
-            return {"render_id": render_id, "heygen_job_id": render.heygen_job_id, "skipped": True}
-
-        # ── 예산 서킷 브레이커 ──
-        # 누적 HeyGen 비용이 일/월 한도를 넘으면 TTS·HeyGen 호출 전에 즉시 차단해
-        # 비용 낭비를 막는다. mock 모드는 budget 모듈이 자체적으로 통과시킨다.
-        assert_heygen_budget(db)
+        # ── Critical 8: 이미 ready 면 전체 skip ──
+        if render.status == RenderStatus.ready and render.audio_url:
+            logger.info("render_slide idempotent skip — 이미 ready: render_id=%s", render_id)
+            return {"render_id": render_id, "status": "ready", "skipped": True}
 
         # 단계 진입 시점에만 상태 갱신 — 이미 진행 단계 이후면 덮어쓰지 않음
         if render.status in (RenderStatus.pending,):
@@ -149,8 +173,8 @@ def render_slide(
             )
 
             # H: TTS API 성공 직후 별도 트랜잭션으로 비용을 즉시 commit.
-            # 이후 S3 업로드(또는 HeyGen 단계)가 실패해 메인 트랜잭션이 rollback 돼도
-            # 이미 발생한 provider 비용은 회계에 반드시 남아야 한다.
+            # 이후 S3 업로드가 실패해 메인 트랜잭션이 rollback 돼도 이미 발생한
+            # provider 비용은 회계에 반드시 남아야 한다.
             tts_cost = estimate_tts_cost_usd(tts_result.provider, len(script_text))
             cost_log.record_once_committed(
                 SyncSessionLocal,
@@ -164,77 +188,41 @@ def render_slide(
             audio_url = s3_svc.upload_audio_bytes(tts_result.audio_bytes, str(render.id))
             render.audio_url = audio_url
             render.tts_provider = tts_result.provider
-            db.commit()
         else:
             logger.info(
                 "TTS idempotent skip — audio_url 및 S3 객체 존재: render_id=%s, key=%s",
                 render_id, s3_audio_key,
             )
 
-        # ── Critical 8: HeyGen 단계 idempotency ──
-        if render.heygen_job_id:
-            logger.info(
-                "HeyGen idempotent skip — heygen_job_id 이미 존재: render_id=%s",
-                render_id,
-            )
-            return {"render_id": render_id, "heygen_job_id": render.heygen_job_id, "skipped": True}
-
-        if render.status != RenderStatus.rendering:
-            render.status = RenderStatus.rendering
-            db.commit()
-
-        # HeyGen 이 audio_url 을 직접 다운로드하므로 익명 접근이 가능해야 한다.
-        # 운영 버킷(classauto-live-media)은 thumbnails/* 외 prefix 에 public-read 를
-        # 주지 않아, upload_audio_bytes 가 돌려준 영구 URL(audio/*)은 익명 GET 시
-        # 403 → HeyGen 이 제출은 받아들이지만(=video_id 발급) 다운로드 단계에서
-        # 실패해 video 가 Error 로 끝난다. presigned(서명·시간제한) URL 로 바꿔
-        # 전달한다. DB(render.audio_url)에는 영구 URL 을 그대로 둔다(idempotency·
-        # file_exists 는 S3 key 로 판단하므로 영향 없음). 만료는 렌더 타임아웃
-        # (RENDER_TIMEOUT_HOURS=24h)을 덮도록 24h.
-        heygen_audio_url = s3_svc.presign_stored_s3_url(audio_url, expiration=86400)
-
-        heygen_job_id = loop.run_until_complete(
-            create_video(
-                audio_url=heygen_audio_url,
-                avatar_id=render.avatar_id,
-                gender=voice_gender,
-                callback_id=str(render.id),
-                avatar_scale=avatar_scale,
-            )
-        )
-
-        # H: HeyGen 제출 성공 직후 비용을 별도 트랜잭션으로 즉시 commit —
-        # heygen_job_id 를 메인 세션에 쓰는 것이 후속 예외로 rollback 되어도 비용은 남는다.
-        cost_log.record_once_committed(
-            SyncSessionLocal,
-            render.id,
-            service="heygen",
-            operation="heygen_submit",
-            cost_usd=0.0,
-        )
-
-        render.heygen_job_id = heygen_job_id
+        # 본문은 HeyGen 을 호출하지 않는다 — TTS 완료 = 렌더 완료(ready).
+        render.status = RenderStatus.ready
+        render.completed_at = datetime.now(tz=timezone.utc)
         db.commit()
 
-        logger.info("렌더 파이프라인 시작 완료: render_id=%s, heygen_job_id=%s", render_id, heygen_job_id)
-        return {"render_id": render_id, "heygen_job_id": heygen_job_id}
-
-    except BudgetExceededError as exc:
-        # 예산 초과는 재시도해도 해소되지 않으므로 retry 없이 즉시 실패 처리.
-        db.rollback()
-        lecture_id = None
+        # 강의의 모든 슬라이드 TTS 가 끝났으면 Video 를 done 으로 전환하고 1회 알림.
         try:
-            render = db.query(VideoRender).filter(VideoRender.id == uuid.UUID(render_id)).one()
-            render.status = RenderStatus.failed
-            render.error_message = f"예산 한도 초과로 렌더 차단: {exc}"
-            lecture_id = render.lecture_id
-            db.commit()
-        except Exception:
+            flipped = _finalize_video_if_all_ready(db, render.lecture_id)
+        except Exception as exc:
             db.rollback()
-        if lecture_id:
-            _archive_videos_for_lecture(lecture_id)
-        logger.error("렌더 예산 차단: render_id=%s, error=%s", render_id, exc)
-        return {"render_id": render_id, "status": "BUDGET_EXCEEDED"}
+            flipped = False
+            logger.warning(
+                "Video done 전환 실패(무시): lecture_id=%s, error=%s", render.lecture_id, exc
+            )
+        if flipped:
+            try:
+                from app.services.pipeline import notification
+                loop.run_until_complete(
+                    notification.notify_instructor(
+                        render.instructor_id, render.lecture_id, "READY", None
+                    )
+                )
+            except Exception as exc:
+                logger.warning(
+                    "완료 알림 전송 실패(무시): lecture_id=%s, error=%s", render.lecture_id, exc
+                )
+
+        logger.info("본문 TTS 렌더 완료: render_id=%s", render_id)
+        return {"render_id": render_id, "status": "ready", "audio_url": audio_url}
 
     except Exception as exc:
         db.rollback()
@@ -252,7 +240,7 @@ def render_slide(
             if lecture_id:
                 _archive_videos_for_lecture(lecture_id)
         logger.error(
-            "렌더 실패: render_id=%s, retries=%d/%d, error=%s",
+            "본문 TTS 렌더 실패: render_id=%s, retries=%d/%d, error=%s",
             render_id, self.request.retries, self.max_retries, exc,
         )
         raise self.retry(exc=exc)

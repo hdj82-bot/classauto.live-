@@ -21,7 +21,13 @@ RENDER_TIMEOUT_HOURS = 24
 
 @celery.task
 def poll_pending_renders() -> dict:
-    """RENDERING 상태인 VideoRender를 HeyGen API로 폴링."""
+    """RENDERING 상태인 VideoRender를 HeyGen API로 폴링.
+
+    NOTE(08 Phase 1): 본문 슬라이드 렌더는 더 이상 HeyGen 을 쓰지 않으므로
+    (TTS-only) ``rendering`` 상태로 진입하지 않는다 — 이 태스크는 이 변경 이전에
+    in-flight 였던 레거시 렌더만 정리한다. Q&A 아바타 클립의 완료 확인은 창2의
+    qa_batch 가 자체 폴링으로 처리한다(webhooks/polling 경유 아님).
+    """
     db = SyncSessionLocal()
     loop = asyncio.new_event_loop()
     try:
