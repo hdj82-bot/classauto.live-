@@ -188,8 +188,9 @@ def test_batch_pending_to_ready_in_mock(sync_db, monkeypatch):
     monkeypatch.setattr(settings, "QA_AVATAR_MIN_CLUSTER_SIZE", 1)
 
     prof, _c, lec = _seed_lecture(sync_db)
-    a1 = _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))
-    a2 = _pending(sync_db, lec, prof, "환율 뜻", _vec(0.99, 0.01))  # a1 과 같은 클러스터
+    # 두 질문은 같은 클러스터로 묶임(반환 행은 쓰지 않고 DB 적립만 필요).
+    _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))
+    _pending(sync_db, lec, prof, "환율 뜻", _vec(0.99, 0.01))
     sync_db.commit()
 
     loop = asyncio.new_event_loop()
