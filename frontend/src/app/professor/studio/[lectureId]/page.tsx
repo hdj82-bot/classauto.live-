@@ -196,10 +196,17 @@ export default function StudioWizardPage() {
           }
         }
         try {
-          const { data } = await api.get<{ id: string }>(
+          const { data } = await api.get<{ id: string; status?: string }>(
             `/api/lectures/${lectureId}/video`,
           );
-          if (!cancelled) setVideoId(data.id);
+          if (!cancelled) {
+            setVideoId(data.id);
+            // 이미 승인(생성 시작/완료)된 강의는 재승인 불가(approve 는 pending_review
+            // 에서만 → 아니면 409). approved 로 표시해 재approve 를 막고 진행/완료를 폴링.
+            if (data.status === "rendering" || data.status === "done") {
+              setApproved(true);
+            }
+          }
         } catch {
           /* 파이프라인이 video 를 만들기 전 — 폴링이 처리 */
         }
@@ -238,10 +245,15 @@ export default function StudioWizardPage() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const { data } = await api.get<{ id: string }>(
+        const { data } = await api.get<{ id: string; status?: string }>(
           `/api/lectures/${lectureId}/video`,
         );
-        if (!cancelled) setVideoId(data.id);
+        if (!cancelled) {
+          setVideoId(data.id);
+          if (data.status === "rendering" || data.status === "done") {
+            setApproved(true);
+          }
+        }
       } catch {
         /* still waiting */
       }
@@ -701,6 +713,14 @@ export default function StudioWizardPage() {
       return;
     }
 
+    // 이미 승인(생성 시작/완료)된 강의는 다시 approve 하지 않는다 — approve 는
+    // pending_review 에서만 가능(아니면 409 "rendering/done 상태에선 승인 불가").
+    // 진행 현황 모달만 연다(approved 동안 렌더 폴링이 진행/완료를 채운다).
+    if (approved) {
+      setGenOpen(true);
+      return;
+    }
+
     try {
       setGenOpen(true);
       setGenPercent(0);
@@ -721,11 +741,17 @@ export default function StudioWizardPage() {
 
       await api.post(`/api/videos/${videoId}/approve`);
       setApproved(true);
-    } catch {
-      toast(t("step2.saveError"), "error");
-      setGenOpen(false);
+    } catch (err) {
+      // 409 = 이미 승인됨(동시 클릭·상태 불일치). 에러 대신 현황 모달 유지.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        setApproved(true);
+      } else {
+        toast(t("step2.saveError"), "error");
+        setGenOpen(false);
+      }
     }
-  }, [videoId, lecture, lectureId, voiceGender, expiresAt, toast, t]);
+  }, [videoId, lecture, lectureId, voiceGender, expiresAt, approved, toast, t]);
 
   // 렌더 진행 폴링 (approved 인 동안)
   useEffect(() => {
@@ -1004,6 +1030,7 @@ export default function StudioWizardPage() {
           canPrev={activeIndex > 0}
           onPrev={handlePrev}
           onGenerate={handleGenerate}
+          ctaLabel={approved ? "생성 현황 보기" : undefined}
         />
       </div>
 
