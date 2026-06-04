@@ -532,6 +532,9 @@ async def test_preview_surfaces_heygen_limit_message(client, professor, db):
         "app.services.pipeline.heygen.delete_talking_photo",
         new=AsyncMock(return_value=True),
     ), patch(
+        "app.services.pipeline.heygen.list_talking_photos",
+        new=AsyncMock(return_value=[]),  # 지울 게 없으면 정리 후에도 실패 → 안내
+    ), patch(
         "app.services.pipeline.heygen.upload_talking_photo",
         new=AsyncMock(side_effect=err),
     ):
@@ -543,6 +546,72 @@ async def test_preview_surfaces_heygen_limit_message(client, professor, db):
 
     assert resp.status_code == 502
     assert "한도" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_preview_self_heals_on_limit_by_deleting_oldest(client, professor, db):
+    # 한도 초과면 오래된 Talking Photo 를 지우고 재시도해 자가 회복한다(대시보드에
+    # 안 보이는 고아 Talking Photo 정리). 두 번째 등록은 성공한다.
+    from app.models.photo_avatar import PhotoAvatarLook
+    from app.services.pipeline.heygen import HeyGenError
+
+    db.add(
+        PhotoAvatarLook(
+            user_id=professor.id,
+            heygen_look_id="look-y",
+            image_url="https://b.s3/look-y.png",
+            preview_image_url="https://b.s3/look-y.png",
+            status="ready",
+        )
+    )
+    professor.photo_avatar_default_look_id = "look-y"
+    await db.flush()
+
+    limit_err = HeyGenError(
+        'HeyGen Talking Photo 업로드 오류 [400]: {"code":401028,'
+        '"message":"You have exceeded your limit of 3 photo avatars."}'
+    )
+    upload = AsyncMock(side_effect=[limit_err, "tp_fresh"])  # 1차 한도, 2차 성공
+    delete = AsyncMock(return_value=True)
+    listing = AsyncMock(
+        return_value=[
+            {"id": "orphan_new", "created_at": 200},
+            {"id": "orphan_old", "created_at": 100},
+        ]
+    )
+    tts_result = MagicMock(audio_bytes=b"audio")
+    with patch(
+        "app.services.pipeline.s3.download_file", return_value=b"img-bytes"
+    ), patch(
+        "app.services.pipeline.heygen.delete_talking_photo", new=delete
+    ), patch(
+        "app.services.pipeline.heygen.list_talking_photos", new=listing
+    ), patch(
+        "app.services.pipeline.heygen.upload_talking_photo", new=upload
+    ), patch(
+        "app.services.pipeline.tts.synthesize",
+        new=AsyncMock(return_value=tts_result),
+    ), patch(
+        "app.services.pipeline.s3.upload_audio_bytes", return_value="https://b.s3/a.mp3"
+    ), patch(
+        "app.services.pipeline.s3.presign_stored_s3_url",
+        side_effect=lambda u, *a, **k: u,
+    ), patch(
+        "app.services.pipeline.heygen.create_video",
+        new=AsyncMock(return_value="vid9"),
+    ):
+        resp = await client.post(
+            "/api/avatars/me/preview",
+            headers=make_auth_header(professor),
+            json={"voice_id": "v1"},
+        )
+
+    assert resp.status_code == 200
+    assert upload.await_count == 2  # 한도 → 정리 → 재시도
+    # 오래된 것(orphan_old)부터 지운다.
+    delete.assert_any_await("orphan_old")
+    await db.refresh(professor)
+    assert professor.photo_avatar_id == "tp_fresh"
 
 
 @pytest.mark.asyncio
