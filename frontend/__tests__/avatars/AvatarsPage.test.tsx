@@ -82,8 +82,9 @@ describe("AvatarsPage", () => {
       screen.getByTestId("sample-voice-option-tts-ko-male-jihun"),
     ).toBeTruthy();
 
-    // 강의 컨텍스트가 없으면 제작 버튼은 없고 안내만 노출.
-    expect(screen.queryByTestId("avatars-apply")).toBeNull();
+    // 빌더 바는 항상 노출되지만, 강의 컨텍스트가 없으면 제작 버튼은 비활성.
+    const createBtn = screen.getByTestId("avatars-apply") as HTMLButtonElement;
+    expect(createBtn.disabled).toBe(true);
   });
 
   it("maps backend wire shape ({avatars,total} + avatar_id/name) to library cards", async () => {

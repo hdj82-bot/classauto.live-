@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PageContainer, PageHeader, PrimaryButton } from "@/components/professor/shell";
+import { PageContainer, PageHeader } from "@/components/professor/shell";
 import { useToast } from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useAvatarsI18n } from "@/components/professor/avatars/useAvatarsI18n";
@@ -12,6 +12,7 @@ import AvatarViewerModal from "@/components/professor/avatars/AvatarViewerModal"
 import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import SampleVoicePicker from "@/components/professor/avatars/SampleVoicePicker";
+import AvatarBuilderBar from "@/components/professor/avatars/AvatarBuilderBar";
 import AvatarScriptTest from "@/components/professor/avatars/AvatarScriptTest";
 import { selectLook } from "@/components/professor/avatars/onboarding/photoAvatarApi";
 import {
@@ -301,6 +302,16 @@ export default function AvatarsPage() {
     [handleSelect],
   );
 
+  // "아바타 제작에 사용" — 최근 선택 룩을 제작용 룩으로 확정한다(상단 "룩" 박스에 표시).
+  // 강의에 바로 적용하지 않는다 — 음성과 함께 "룩과 목소리 아바타 제작"에서 적용한다.
+  const handleUseForBuild = useCallback(
+    (id: string) => {
+      handleSelect(id);
+      toast(t("useForBuildDone"), "success");
+    },
+    [handleSelect, toast, t],
+  );
+
   // 룩 이름 저장(연필) — 낙관적으로 룩 목록의 name 을 갱신하고 서버에 반영한다.
   const handleRenameLook = useCallback(
     async (lookId: string, name: string) => {
@@ -478,16 +489,14 @@ export default function AvatarsPage() {
           title={t("title")}
           subtitle={t("subtitle")}
           actions={
-            lectureId ? (
-              <PrimaryButton
-                variant="primary"
-                onClick={handleApply}
-                disabled={!selectedId || applying}
-                data-testid="avatars-apply"
-              >
-                {applying ? t("creating") : t("createAvatar")}
-              </PrimaryButton>
-            ) : undefined
+            <AvatarBuilderBar
+              look={selectedAvatar}
+              voiceName={selectedVoiceName}
+              onCreate={handleApply}
+              creating={applying}
+              canApply={!!lectureId}
+              t={t}
+            />
           }
         />
 
@@ -523,9 +532,7 @@ export default function AvatarsPage() {
           selectedId={selectedId}
           onOpen={handleOpen}
           onRenameLook={handleRenameLook}
-          onApply={() => doApply(recentId)}
-          canApply={!!lectureId}
-          applying={applying}
+          onUseForBuild={() => recentId && handleUseForBuild(recentId)}
           renameEnabled={renameEnabled}
           onRename={handleRename}
           onDelete={handleLibraryDelete}

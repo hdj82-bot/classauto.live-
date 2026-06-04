@@ -59,6 +59,13 @@
 
     "createAvatar": "Create avatar (look + voice)",
     "creating": "Creating...",
+    "builderLookLabel": "Look",
+    "builderLookEmpty": "No look yet",
+    "builderVoiceLabel": "Voice",
+    "builderVoiceEmpty": "No voice yet",
+    "builderCreateHint": "Pick a look with 'Use for avatar' in the library.",
+    "useForBuild": "Use for avatar",
+    "useForBuildDone": "Set as the look for your avatar. Pick a voice, then finish with 'Create avatar (look + voice)'.",
 
     "useForAvatar": "Use this voice for the avatar",
     "usingForAvatar": "✓ In use for the avatar · click to cancel",

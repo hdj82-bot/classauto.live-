@@ -35,9 +35,7 @@ describe("AvatarLibrary 컴포넌트", () => {
         selectedId={null}
         onOpen={vi.fn()}
         onRenameLook={vi.fn()}
-        onApply={vi.fn()}
-        canApply={false}
-        applying={false}
+        onUseForBuild={vi.fn()}
         renameEnabled={false}
         onRename={vi.fn()}
         t={t}
@@ -46,8 +44,8 @@ describe("AvatarLibrary 컴포넌트", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("최근 선택 박스를 크게 보여 주고, 적용 가능하면 적용 버튼을 노출한다", () => {
-    const onApply = vi.fn();
+  it("최근 선택 박스를 크게 보여 주고, '아바타 제작에 사용' 버튼을 노출한다", () => {
+    const onUseForBuild = vi.fn();
     render(
       <AvatarLibrary
         recent={avatar("look-1", { name: "네이비 정장" })}
@@ -55,9 +53,7 @@ describe("AvatarLibrary 컴포넌트", () => {
         selectedId="look-1"
         onOpen={vi.fn()}
         onRenameLook={vi.fn()}
-        onApply={onApply}
-        canApply
-        applying={false}
+        onUseForBuild={onUseForBuild}
         renameEnabled={false}
         onRename={vi.fn()}
         t={t}
@@ -65,12 +61,13 @@ describe("AvatarLibrary 컴포넌트", () => {
     );
     const box = screen.getByTestId("recent-avatar-box");
     expect(within(box).getByText("네이비 정장")).toBeTruthy();
-    const applyBtn = screen.getByTestId("recent-apply");
-    fireEvent.click(applyBtn);
-    expect(onApply).toHaveBeenCalledTimes(1);
+    // 강의 적용이 아니라 "아바타 제작에 사용"으로 룩만 확정한다(강의 컨텍스트 무관).
+    const useBtn = screen.getByTestId("recent-use-build");
+    fireEvent.click(useBtn);
+    expect(onUseForBuild).toHaveBeenCalledTimes(1);
   });
 
-  it("강의 컨텍스트가 없으면 적용 버튼 대신 안내를 보여 준다", () => {
+  it("강의 컨텍스트와 무관하게 '아바타 제작에 사용' 버튼을 노출한다", () => {
     render(
       <AvatarLibrary
         recent={avatar("look-1")}
@@ -78,15 +75,13 @@ describe("AvatarLibrary 컴포넌트", () => {
         selectedId={null}
         onOpen={vi.fn()}
         onRenameLook={vi.fn()}
-        onApply={vi.fn()}
-        canApply={false}
-        applying={false}
+        onUseForBuild={vi.fn()}
         renameEnabled={false}
         onRename={vi.fn()}
         t={t}
       />,
     );
-    expect(screen.queryByTestId("recent-apply")).toBeNull();
+    expect(screen.getByTestId("recent-use-build")).toBeTruthy();
   });
 
   it("라이브러리 카드를 클릭하면 큰 보기(onOpen)가 해당 룩으로 열린다", () => {
@@ -98,9 +93,7 @@ describe("AvatarLibrary 컴포넌트", () => {
         selectedId={null}
         onOpen={onOpen}
         onRenameLook={vi.fn()}
-        onApply={vi.fn()}
-        canApply={false}
-        applying={false}
+        onUseForBuild={vi.fn()}
         renameEnabled={false}
         onRename={vi.fn()}
         t={t}
@@ -123,9 +116,7 @@ describe("AvatarLibrary 컴포넌트", () => {
         selectedId="look-1"
         onOpen={onOpen}
         onRenameLook={onRenameLook}
-        onApply={vi.fn()}
-        canApply={false}
-        applying={false}
+        onUseForBuild={vi.fn()}
         renameEnabled={false}
         onRename={vi.fn()}
         t={t}
@@ -243,7 +234,7 @@ describe("AvatarsPage — 라이브러리·최근 선택", () => {
     );
   });
 
-  it("최근 박스의 '이 강의에 적용'이 재생성 없이 룩을 강의에 적용한다", async () => {
+  it("'아바타 제작에 사용'은 강의에 바로 적용하지 않고 룩 박스에 확정만 한다", async () => {
     mockBackendWithLook();
     apiPatch.mockResolvedValue({ data: {} });
     apiPost.mockResolvedValue({ data: { avatar_id: "look-1" } });
@@ -251,17 +242,20 @@ describe("AvatarsPage — 라이브러리·최근 선택", () => {
 
     renderPage(<AvatarsPage />);
 
-    const applyBtn = await screen.findByTestId("recent-apply");
-    fireEvent.click(applyBtn);
+    const useBtn = await screen.findByTestId("recent-use-build");
+    fireEvent.click(useBtn);
 
+    // 상단 빌더 "룩" 박스에 확정된 룩이 표시된다(이름 미지정 룩 → "내 룩").
     await waitFor(() =>
-      expect(apiPatch).toHaveBeenCalledWith("/api/lectures/lec-1", {
-        avatar_id: "look-1",
-      }),
+      expect(
+        within(screen.getByTestId("builder-look-box")).getByText("내 룩"),
+      ).toBeTruthy(),
     );
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("/professor/studio/lec-1"),
-    );
+    // 강의에 바로 PATCH·이동하지 않는다(아바타 = 룩 + 음성, 제작 단계에서 적용).
+    expect(apiPatch).not.toHaveBeenCalledWith("/api/lectures/lec-1", {
+      avatar_id: "look-1",
+    });
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("라이브러리에서 룩을 고르면 최근 선택이 서버에 영속화된다", async () => {
