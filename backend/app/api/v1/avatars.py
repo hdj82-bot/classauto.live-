@@ -393,6 +393,7 @@ async def upload_profile_photo(
         user.photo_avatar_preview_url = None
         user.photo_avatar_preview_video_id = None
         user.photo_avatar_preview_voice_id = None
+        user.photo_avatar_preview_text = None
         result_status = "ready"
         message = "본인 아바타가 등록되었습니다."
     except HeyGenError as e:
@@ -442,12 +443,18 @@ async def create_avatar_preview(
         )
 
     voice_id = payload.voice_id
+    # 렌더할 대본 — 빌더 스크립트 테스트가 임의 문장을 보내면 그 문장을, 아니면
+    # 기본 샘플을 읽는다. NULL 캐시(과거 데이터)는 기본 문장으로 렌더된 것으로 본다.
+    render_text = (payload.text or "").strip() or _PREVIEW_TEXT
+    cached_text = user.photo_avatar_preview_text or _PREVIEW_TEXT
+    text_matches = cached_text == render_text
 
-    # 캐시 적중: 강제 아님 + 완성본 있음 + 같은 음성(또는 음성 미지정).
+    # 캐시 적중: 강제 아님 + 완성본 있음 + 같은 음성(또는 음성 미지정) + 같은 대본.
     if (
         not payload.force
         and user.photo_avatar_preview_url
         and (voice_id is None or voice_id == user.photo_avatar_preview_voice_id)
+        and text_matches
     ):
         return AvatarPreviewResponse(
             status="ready",
@@ -469,7 +476,7 @@ async def create_avatar_preview(
     # +클론 튜닝 세팅으로 합성한다(클론 fidelity 안정화).
     is_cloned = bool(voice_id and user.cloned_voice_id and voice_id == user.cloned_voice_id)
     try:
-        result = await tts.synthesize(_PREVIEW_TEXT, voice_id=voice_id, cloned=is_cloned)
+        result = await tts.synthesize(render_text, voice_id=voice_id, cloned=is_cloned)
         stored_audio_url = s3_svc.upload_audio_bytes(
             result.audio_bytes, f"avatar-preview-{user.id}"
         )
@@ -488,6 +495,7 @@ async def create_avatar_preview(
 
     user.photo_avatar_preview_video_id = video_id
     user.photo_avatar_preview_voice_id = voice_id
+    user.photo_avatar_preview_text = render_text
     user.photo_avatar_preview_url = None  # 새 렌더 시작 — 이전 캐시 무효화.
     await db.commit()
 
@@ -1115,6 +1123,7 @@ async def select_look(
     user.photo_avatar_preview_url = None
     user.photo_avatar_preview_video_id = None
     user.photo_avatar_preview_voice_id = None
+    user.photo_avatar_preview_text = None
     user.photo_avatar_default_look_id = look_id
     await db.commit()
     return LookSelectResponse(

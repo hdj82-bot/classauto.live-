@@ -52,6 +52,14 @@ class AvatarPreviewRequest(BaseModel):
         default=False,
         description="true 면 캐시를 무시하고 다시 렌더한다(다른 음성으로 재생성 등).",
     )
+    text: str | None = Field(
+        default=None,
+        max_length=2000,
+        description=(
+            "아바타가 말할 대본. null 이면 기본 샘플 문장. '룩과 목소리 아바타 "
+            "제작' 빌더의 스크립트 테스트에서 임의 문장을 보낼 때 쓴다."
+        ),
+    )
 
 
 class AvatarPreviewResponse(BaseModel):

@@ -341,6 +341,74 @@ async def test_preview_cache_hit_skips_render(client, professor, db):
 
 
 @pytest.mark.asyncio
+async def test_preview_new_text_rerenders_despite_cache(client, professor, db):
+    # 같은 음성이라도 대본(text)이 다르면 캐시를 건너뛰고 그 대본으로 다시 렌더한다
+    # ("룩과 목소리 아바타 제작" 스크립트 테스트). 렌더된 대본은 캐시 키로 저장된다.
+    professor.photo_avatar_id = "tp_self"
+    professor.photo_avatar_preview_url = "https://cdn.example/v.mp4"
+    professor.photo_avatar_preview_voice_id = "el_voice_1"
+    professor.photo_avatar_preview_text = "이전 대본"
+    await db.flush()
+
+    tts_result = MagicMock(audio_bytes=b"audio")
+    with patch(
+        "app.services.pipeline.tts.synthesize",
+        new=AsyncMock(return_value=tts_result),
+    ) as synth, patch(
+        "app.services.pipeline.s3.upload_audio_bytes",
+        return_value="https://b.s3/a.mp3",
+    ), patch(
+        "app.services.pipeline.s3.presign_stored_s3_url",
+        side_effect=lambda u, *a, **k: u,
+    ), patch(
+        "app.services.pipeline.heygen.create_video",
+        new=AsyncMock(return_value="vid_new"),
+    ) as create_video:
+        resp = await client.post(
+            "/api/avatars/me/preview",
+            headers=make_auth_header(professor),
+            json={"voice_id": "el_voice_1", "text": "오늘은 새로운 주제입니다."},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "processing"
+    create_video.assert_awaited_once()
+    # 새 대본으로 TTS 합성됐는지 + 캐시 키로 저장됐는지 확인.
+    synth.assert_awaited_once()
+    assert synth.await_args.args[0] == "오늘은 새로운 주제입니다."
+    await db.refresh(professor)
+    assert professor.photo_avatar_preview_text == "오늘은 새로운 주제입니다."
+    assert professor.photo_avatar_preview_video_id == "vid_new"
+
+
+@pytest.mark.asyncio
+async def test_preview_same_text_cache_hit(client, professor, db):
+    # 같은 음성·같은 대본이면 캐시 적중 → 재렌더 없음.
+    professor.photo_avatar_id = "tp_self"
+    professor.photo_avatar_preview_url = "https://cdn.example/v.mp4"
+    professor.photo_avatar_preview_voice_id = "el_voice_1"
+    professor.photo_avatar_preview_text = "같은 대본"
+    await db.flush()
+
+    with patch(
+        "app.services.pipeline.s3.presign_stored_s3_url",
+        side_effect=lambda u, *a, **k: u,
+    ), patch(
+        "app.services.pipeline.heygen.create_video",
+        new=AsyncMock(return_value="should_not_run"),
+    ) as create_video:
+        resp = await client.post(
+            "/api/avatars/me/preview",
+            headers=make_auth_header(professor),
+            json={"voice_id": "el_voice_1", "text": "같은 대본"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ready"
+    create_video.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_preview_not_started(client, professor, db):
     professor.photo_avatar_id = "tp_self"
     await db.flush()

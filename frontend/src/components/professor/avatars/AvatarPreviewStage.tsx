@@ -26,6 +26,8 @@ interface AvatarPreviewStageProps {
   voicesLoading: boolean;
   /** prefers-reduced-motion — true 면 자동재생하지 않고 재생 버튼을 노출. */
   reducedMotion: boolean;
+  /** 현재 선택된 음성이 바뀔 때 부모에 알린다(상단 "음성" 박스·아바타 제작용). */
+  onVoiceChange?: (voiceId: string | null) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -42,6 +44,7 @@ export default function AvatarPreviewStage({
   voices,
   voicesLoading,
   reducedMotion,
+  onVoiceChange,
   t,
 }: AvatarPreviewStageProps) {
   const voice = useVoicePreview();
@@ -73,6 +76,11 @@ export default function AvatarPreviewStage({
   useEffect(() => {
     voiceIdRef.current = voiceId;
   }, [voiceId]);
+
+  // 선택 음성이 바뀌면 부모에 알린다(상단 "음성" 박스 + 아바타 제작에 쓸 음성).
+  useEffect(() => {
+    onVoiceChange?.(voiceId);
+  }, [voiceId, onVoiceChange]);
   const voicesRef = useRef(voices);
   useEffect(() => {
     voicesRef.current = voices;

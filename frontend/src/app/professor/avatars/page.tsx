@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PageContainer, PageHeader, PrimaryButton } from "@/components/professor/shell";
+import { PageContainer, PageHeader } from "@/components/professor/shell";
 import { useToast } from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useAvatarsI18n } from "@/components/professor/avatars/useAvatarsI18n";
@@ -10,6 +10,8 @@ import { useReducedMotion } from "@/components/professor/avatars/useReducedMotio
 import AvatarCard from "@/components/professor/avatars/AvatarCard";
 import AvatarPreviewStage from "@/components/professor/avatars/AvatarPreviewStage";
 import AvatarLibrary from "@/components/professor/avatars/AvatarLibrary";
+import AvatarBuilderBar from "@/components/professor/avatars/AvatarBuilderBar";
+import AvatarBuildStudio from "@/components/professor/avatars/AvatarBuildStudio";
 import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import {
@@ -26,13 +28,14 @@ import {
   uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
 import type { MyLook, ScriptLanguage } from "@/components/professor/avatars/avatarsApi";
+import { selectLook } from "@/components/professor/avatars/onboarding/photoAvatarApi";
 import { listVoiceOptions, previewVoice } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
   VoiceClone,
   VoiceScriptResult,
 } from "@/components/professor/avatars/avatarsTypes";
-import type { VoiceOption } from "@/components/professor/avatars/voicePresets";
+import { getVoiceById, type VoiceOption } from "@/components/professor/avatars/voicePresets";
 
 /**
  * /professor/avatars — 강의 아바타 고르기 (HeyGen 스타일 대수술).
@@ -65,6 +68,15 @@ export default function AvatarsPage() {
   const [deferred, setDeferred] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
+
+  // "룩과 목소리 아바타 제작" 빌더 상태 — 아바타 = 룩 + 음성.
+  //  buildLookId: 라이브러리에서 "아바타 제작에 사용"으로 확정한 룩.
+  //  buildVoiceId: 아래 음성 패널에서 최종 선택한 음성.
+  //  builderOpen / renderNonce: 제작 버튼을 누르면 작업대를 열고 렌더를 트리거한다.
+  const [buildLookId, setBuildLookId] = useState<string | null>(null);
+  const [buildVoiceId, setBuildVoiceId] = useState<string | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [renderNonce, setRenderNonce] = useState(0);
 
   // 저장된 본인 룩(라이브러리) + 가장 최근 선택(서버 영속) — 재방문 시 재생성 없이
   // 바로 고르도록 복원한다.
@@ -256,6 +268,22 @@ export default function AvatarsPage() {
     [resolveAvatar, recentId],
   );
 
+  // 빌더에 확정된 룩·음성 — 상단 박스와 작업대가 공유한다.
+  const buildLook = useMemo(
+    () => resolveAvatar(buildLookId),
+    [resolveAvatar, buildLookId],
+  );
+  const buildVoice = useMemo(
+    () => getVoiceById(voices, buildVoiceId),
+    [voices, buildVoiceId],
+  );
+
+  // 본인 룩(MyLook) 인지 — me/preview 렌더 대상(기본 룩으로 지정해야 함).
+  const isMyLook = useCallback(
+    (id: string) => looks.some((l) => l.id === id),
+    [looks],
+  );
+
   // 아바타/룩 선택 — 재생성 없이 즉시. 최근 선택을 서버에 영속화한다(실패는 무시).
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
@@ -263,28 +291,48 @@ export default function AvatarsPage() {
     void setRecentAvatar(id).catch(() => {});
   }, []);
 
-  // 지정한 아바타/룩을 현재 강의에 적용(재생성 없음). 헤더·최근 박스가 공유한다.
-  const doApply = useCallback(
-    async (id: string | null) => {
-      if (!lectureId || !id) return;
-      setApplying(true);
-      try {
-        await applyAvatarToLecture(lectureId, id);
-        toast(t("applySuccess"), "success");
-        router.push(`/professor/studio/${lectureId}`);
-      } catch {
-        toast(t("applyError"), "error");
-      } finally {
-        setApplying(false);
+  // "아바타 제작에 사용" — 라이브러리에서 고른 룩을 제작용 룩으로 확정한다.
+  // (강의에 바로 적용하지 않는다 — 음성과 함께 상단 "룩과 목소리 아바타 제작"에서
+  // 최종 제작·적용한다.) 본인 룩이면 기본 룩으로 지정해 me/preview 가 그 룩을
+  // 렌더하도록 한다(실패는 토스트로만 알림).
+  const handleUseForBuild = useCallback(
+    async (id: string) => {
+      setBuildLookId(id);
+      setSelectedId(id); // 아래 미리보기·음성 패널도 이 룩으로 맞춘다.
+      setBuilderOpen(false); // 룩이 바뀌었으니 작업대는 다시 제작 버튼으로 연다.
+      toast(t("useForBuildDone"), "success");
+      if (isMyLook(id)) {
+        try {
+          await selectLook(id);
+        } catch {
+          /* 기본 룩 지정 실패는 무시 — 제작 시 안내된다. */
+        }
       }
     },
-    [lectureId, router, toast, t],
+    [isMyLook, toast, t],
   );
 
-  const handleApply = useCallback(
-    () => doApply(selectedId),
-    [doApply, selectedId],
-  );
+  // "룩과 목소리 아바타 제작" — 작업대를 열고 현재 스크립트로 렌더를 트리거한다.
+  const handleCreateAvatar = useCallback(() => {
+    if (!buildLookId || !buildVoiceId) return;
+    setBuilderOpen(true);
+    setRenderNonce((n) => n + 1);
+  }, [buildLookId, buildVoiceId]);
+
+  // 제작한 아바타(룩+음성)를 현재 강의에 적용하고 편집기로 복귀.
+  const handleApplyBuildToLecture = useCallback(async () => {
+    if (!lectureId || !buildLookId) return;
+    setApplying(true);
+    try {
+      await applyAvatarToLecture(lectureId, buildLookId, buildVoiceId);
+      toast(t("applySuccess"), "success");
+      router.push(`/professor/studio/${lectureId}`);
+    } catch {
+      toast(t("applyError"), "error");
+    } finally {
+      setApplying(false);
+    }
+  }, [lectureId, buildLookId, buildVoiceId, router, toast, t]);
 
   const handleRename = useCallback(
     async (avatarId: string, name: string) => {
@@ -371,16 +419,12 @@ export default function AvatarsPage() {
           title={t("title")}
           subtitle={t("subtitle")}
           actions={
-            lectureId ? (
-              <PrimaryButton
-                variant="primary"
-                onClick={handleApply}
-                disabled={!selectedId || applying}
-                data-testid="avatars-apply"
-              >
-                {applying ? t("applying") : t("applyToLecture")}
-              </PrimaryButton>
-            ) : undefined
+            <AvatarBuilderBar
+              look={buildLook}
+              voice={buildVoice}
+              onCreate={handleCreateAvatar}
+              t={t}
+            />
           }
         />
 
@@ -415,11 +459,23 @@ export default function AvatarsPage() {
           items={libraryItems}
           selectedId={selectedId}
           onSelect={handleSelect}
-          onApply={() => doApply(recentId)}
-          canApply={!!lectureId}
-          applying={applying}
+          onUseForBuild={() => recentId && handleUseForBuild(recentId)}
           renameEnabled={renameEnabled}
           onRename={handleRename}
+          t={t}
+        />
+
+        {/* 룩 + 음성으로 아바타 제작 — 제작 버튼을 누르면 열려 말하는 아바타를
+            만들고 스크립트로 확인한 뒤 강의에 적용한다. */}
+        <AvatarBuildStudio
+          look={buildLook}
+          voice={buildVoice}
+          active={builderOpen}
+          renderNonce={renderNonce}
+          lectureId={lectureId}
+          applying={applying}
+          onApplyToLecture={handleApplyBuildToLecture}
+          reducedMotion={reducedMotion}
           t={t}
         />
 
@@ -448,6 +504,7 @@ export default function AvatarsPage() {
           voices={voices}
           voicesLoading={voicesLoading}
           reducedMotion={reducedMotion}
+          onVoiceChange={setBuildVoiceId}
           t={t}
         />
 

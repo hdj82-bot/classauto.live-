@@ -26,8 +26,11 @@ export interface CustomAvatarPreviewState {
   videoUrl: string | null;
   voiceId: string | null;
   message: string | null;
-  /** voiceId 음성으로 렌더 시작(또는 캐시 반환). force=true 면 재생성. */
-  generate: (voiceId?: string | null, force?: boolean) => void;
+  /**
+   * voiceId 음성으로 렌더 시작(또는 캐시 반환). force=true 면 재생성.
+   * text 를 주면 아바타가 그 대본을 말한다(빌더 스크립트 테스트).
+   */
+  generate: (voiceId?: string | null, force?: boolean, text?: string | null) => void;
 }
 
 export function useCustomAvatarPreview(
@@ -88,11 +91,11 @@ export function useCustomAvatarPreview(
   }, [enabled, apply, startPolling, clearPoll]);
 
   const generate = useCallback(
-    (vId?: string | null, force = false) => {
+    (vId?: string | null, force = false, text?: string | null) => {
       setStatus("processing");
       setMessage(null);
       (async () => {
-        const r = await startAvatarPreview(vId, force);
+        const r = await startAvatarPreview(vId, force, text);
         apply(r);
         if (r.status === "processing") startPolling();
       })();

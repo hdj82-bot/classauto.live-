@@ -12,11 +12,12 @@ interface AvatarLibraryProps {
   selectedId: string | null;
   /** 카드 클릭 → 즉시 선택(재생성 없음). 부모가 최근 선택으로 영속화한다. */
   onSelect: (id: string) => void;
-  /** "최근 선택한 아바타" 를 현재 강의에 적용(기존 applyAvatarToLecture 재사용). */
-  onApply: () => void;
-  /** 강의 컨텍스트(?lecture=)가 있어 적용이 가능한지. */
-  canApply: boolean;
-  applying: boolean;
+  /**
+   * "최근 선택한 아바타" 를 아바타 제작에 쓸 룩으로 확정한다.
+   * (강의에 바로 적용하지 않는다 — 아바타 = 룩 + 음성이므로 음성과 함께
+   * 상단 "룩과 목소리 아바타 제작"에서 최종 제작·적용한다.)
+   */
+  onUseForBuild: () => void;
   /** 강의 컨텍스트에서 카드 인라인 이름 변경 허용 여부. */
   renameEnabled: boolean;
   onRename: (avatarId: string, name: string) => void;
@@ -38,9 +39,7 @@ export default function AvatarLibrary({
   items,
   selectedId,
   onSelect,
-  onApply,
-  canApply,
-  applying,
+  onUseForBuild,
   renameEnabled,
   onRename,
   t,
@@ -84,26 +83,17 @@ export default function AvatarLibrary({
             <span style={recentNameStyle} title={recent.name}>
               {recent.name}
             </span>
-            <p style={recentNoteStyle}>{t("recentApplyNote")}</p>
+            <p style={recentNoteStyle}>{t("useForBuildNote")}</p>
 
             <div style={{ marginTop: "auto", paddingTop: 12 }}>
-              {canApply ? (
-                <button
-                  type="button"
-                  onClick={onApply}
-                  disabled={applying}
-                  data-testid="recent-apply"
-                  style={{
-                    ...applyBtnStyle,
-                    opacity: applying ? 0.55 : 1,
-                    cursor: applying ? "wait" : "pointer",
-                  }}
-                >
-                  {applying ? t("applying") : t("applyToLecture")}
-                </button>
-              ) : (
-                <p style={recentHintStyle}>{t("applyHintNoLecture")}</p>
-              )}
+              <button
+                type="button"
+                onClick={onUseForBuild}
+                data-testid="recent-use-build"
+                style={applyBtnStyle}
+              >
+                {t("useForBuild")}
+              </button>
             </div>
           </div>
         </div>
@@ -215,13 +205,6 @@ const recentNoteStyle: CSSProperties = {
   color: "var(--text-muted)",
 };
 
-const recentHintStyle: CSSProperties = {
-  margin: 0,
-  fontSize: 12,
-  lineHeight: 1.5,
-  color: "var(--text-subtle)",
-};
-
 const applyBtnStyle: CSSProperties = {
   padding: "10px 18px",
   fontSize: 13,
@@ -231,6 +214,7 @@ const applyBtnStyle: CSSProperties = {
   background: "linear-gradient(135deg, #FFB627, #E89E0E)",
   color: "#0A0A0A",
   fontFamily: "inherit",
+  cursor: "pointer",
 };
 
 const gridStyle: CSSProperties = {

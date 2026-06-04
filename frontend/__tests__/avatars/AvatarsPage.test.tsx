@@ -78,8 +78,9 @@ describe("AvatarsPage", () => {
     expect(screen.getByTestId("avatar-card-heygen-male-01")).toBeTruthy();
     expect(screen.getByTestId("avatar-card-heygen-female-01")).toBeTruthy();
 
-    // 강의 컨텍스트가 없으면 적용 버튼은 없고 안내만 노출.
-    expect(screen.queryByTestId("avatars-apply")).toBeNull();
+    // 상단 빌더 바의 "룩과 목소리 아바타 제작" 버튼은 룩·음성 선택 전엔 비활성.
+    const createBtn = screen.getByTestId("builder-create") as HTMLButtonElement;
+    expect(createBtn.disabled).toBe(true);
   });
 
   it("maps backend wire shape ({avatars,total} + avatar_id/name) to cards", async () => {
@@ -281,9 +282,10 @@ describe("AvatarsPage", () => {
     expect(values).toEqual(["ko", "en", "zh", "ja"]);
   });
 
-  it("applies the selected avatar to the lecture and returns to studio", async () => {
+  it("룩+음성을 제작해 강의에 적용하고 편집기로 복귀한다", async () => {
     mockDeferredBackend();
     apiPatch.mockResolvedValue({ data: {} });
+    apiPost.mockResolvedValue({ data: { ok: true } });
     search = new URLSearchParams("lecture=lec-1");
 
     renderPage(<AvatarsPage />);
@@ -292,21 +294,29 @@ describe("AvatarsPage", () => {
       expect(screen.getByTestId("avatar-card-heygen-male-01")).toBeTruthy(),
     );
 
-    // 적용 버튼은 선택 전에는 비활성.
-    const applyBtn = screen.getByTestId("avatars-apply") as HTMLButtonElement;
-    expect(applyBtn.disabled).toBe(true);
-
-    // 아바타 선택 → 적용 버튼 활성화.
+    // ① 아바타(룩) 선택 → 최근 박스에서 "아바타 제작에 사용"으로 제작용 룩 확정.
     const card = screen.getByTestId("avatar-card-heygen-male-01");
     fireEvent.click(within(card).getByRole("button"));
-    await waitFor(() => expect(applyBtn.disabled).toBe(false));
+    const useBtn = await screen.findByTestId("recent-use-build");
+    fireEvent.click(useBtn);
 
+    // ② 룩 박스 채워짐 + 음성은 미리보기 무대가 자동 선택 → 제작 버튼 활성화.
+    const createBtn = (await screen.findByTestId(
+      "builder-create",
+    )) as HTMLButtonElement;
+    await waitFor(() => expect(createBtn.disabled).toBe(false));
+
+    // ③ 제작 → 표준 아바타 작업대가 열리고 "강의에 적용" 노출.
+    fireEvent.click(createBtn);
+    const applyBtn = await screen.findByTestId("build-apply");
     fireEvent.click(applyBtn);
 
+    // 룩(avatar_id) + 음성(voice_id)이 함께 강의에 저장된다.
     await waitFor(() =>
-      expect(apiPatch).toHaveBeenCalledWith("/api/lectures/lec-1", {
-        avatar_id: "heygen-male-01",
-      }),
+      expect(apiPatch).toHaveBeenCalledWith(
+        "/api/lectures/lec-1",
+        expect.objectContaining({ avatar_id: "heygen-male-01" }),
+      ),
     );
     await waitFor(() =>
       expect(push).toHaveBeenCalledWith("/professor/studio/lec-1"),
