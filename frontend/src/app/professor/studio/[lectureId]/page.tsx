@@ -794,7 +794,8 @@ export default function StudioWizardPage() {
 
   const handleViewVideo = useCallback(() => {
     setGenOpen(false);
-    router.push(`/professor/lecture/${lectureId}`);
+    // 생성 완료 → 공유·게시 화면(학생 링크·QR·게시 토글·학생 미리보기).
+    router.push(`/professor/lecture/${lectureId}/share`);
   }, [router, lectureId]);
 
   // ── 퀴즈/문제 핸들러 ─────────────────────────────────────────────────────────
