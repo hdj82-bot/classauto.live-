@@ -17,6 +17,8 @@ export interface ActionBarProps {
   onPrev: () => void;
   onGenerate: () => void;
   generating?: boolean;
+  /** 기본 "전체 생성 시작". 이미 생성된 강의면 "생성 현황 보기" 등으로 교체. */
+  ctaLabel?: string;
 }
 
 const barStyle: CSSProperties = {
@@ -55,6 +57,7 @@ export default function ActionBar({
   onPrev,
   onGenerate,
   generating = false,
+  ctaLabel,
 }: ActionBarProps) {
   return (
     <div style={barStyle}>
@@ -100,7 +103,7 @@ export default function ActionBar({
             </svg>
           }
         >
-          {generating ? "생성 중…" : "전체 생성 시작"}
+          {generating ? "생성 중…" : (ctaLabel ?? "전체 생성 시작")}
         </PrimaryButton>
       </div>
     </div>
