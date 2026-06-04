@@ -287,7 +287,9 @@ async def delete_talking_photo(talking_photo_id: str) -> bool:
     if settings.HEYGEN_MOCK:
         logger.warning("[HEYGEN_MOCK] delete_talking_photo 생략: %s", talking_photo_id)
         return True
-    url = f"{settings.HEYGEN_BASE_URL}/v2/photo_avatar/{talking_photo_id}"
+    # Talking Photo 전용 삭제 엔드포인트(공식 OpenAPI). v2/photo_avatar/{id} 는
+    # v2 Photo Avatar(룩 그룹) 용이라 v1 업로드 talking_photo_id 에는 동작하지 않는다.
+    url = f"{settings.HEYGEN_BASE_URL}/v2/talking_photo/{talking_photo_id}"
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.delete(url, headers=_headers())
@@ -304,6 +306,32 @@ async def delete_talking_photo(talking_photo_id: str) -> bool:
         return False
     logger.info("HeyGen Talking Photo 삭제: %s", talking_photo_id)
     return True
+
+
+async def list_talking_photos() -> list[dict[str, Any]]:
+    """계정의 Talking Photo(Photo Avatar) 목록 — 한도 정리(회수) 대상 조회용.
+
+    HeyGen 공식 ``GET /v1/talking_photo.list``. 응답 형태가 버전에 따라
+    ``data`` 가 리스트이거나 ``{talking_photos:[...]}`` / ``{list:[...]}`` 일 수
+    있어 방어적으로 파싱한다. 각 항목은 ``id`` 또는 ``talking_photo_id`` 와
+    (있으면) 생성시각 필드를 가진다. 실패는 HeyGenError 로 래핑.
+    """
+    if settings.HEYGEN_MOCK:
+        return []
+    url = f"{settings.HEYGEN_BASE_URL}/v1/talking_photo.list"
+    resp = await _request_with_retry("GET", url, timeout=15.0)
+    if resp.status_code != 200:
+        raise HeyGenError(
+            f"HeyGen Talking Photo 목록 오류 [{resp.status_code}]: {resp.text[:200]}"
+        )
+    data = resp.json().get("data", {})
+    if isinstance(data, list):
+        items = data
+    elif isinstance(data, dict):
+        items = data.get("talking_photos") or data.get("list") or data.get("talking_photo_list") or []
+    else:
+        items = []
+    return [i for i in items if isinstance(i, dict)]
 
 
 # ── 비디오 삭제 ──────────────────────────────────────────────────────────────

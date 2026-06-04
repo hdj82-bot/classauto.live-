@@ -101,6 +101,74 @@ def _ensure_talking_photo_payload(
     return out, "image/jpeg"
 
 
+def _talking_photo_created_ts(tp: dict) -> float:
+    """Talking Photo 목록 항목의 생성시각(없으면 0). 오래된 것부터 정리하기 위함."""
+    for k in ("created_at", "created_ts", "create_time", "created", "updated_at"):
+        v = tp.get(k)
+        if isinstance(v, (int, float)):
+            return float(v)
+    return 0.0
+
+
+async def _register_talking_photo_with_cleanup(
+    img_bytes: bytes, content_type: str, keep_id: str | None = None
+) -> str:
+    """Talking Photo 를 등록하되, HeyGen Photo Avatar 한도 초과 시 자가 회복한다.
+
+    계정(공유 HeyGen 키)의 Photo Avatar 한도(흔히 3개)에 걸리면(code 401028),
+    ``/v1/talking_photo.list`` 로 기존 Talking Photo 를 조회해 **오래된 것부터
+    삭제**하고 등록을 재시도한다 — 대시보드에서 안 보이는(API 로만 만든) 고아
+    Talking Photo 가 슬롯을 점유한 상태를 사람 개입 없이 푼다. ``keep_id`` 가
+    주어지면 그것은 건너뛴다(현재 사용 중인 것 보호).
+
+    주의(베타): 현재는 교수자들이 단일 HeyGen 계정을 공유하므로, 정리는 계정 전체의
+    오래된 Talking Photo 를 지운다. 다사용자 동시 운영에는 HeyGen 플랜 상향이 필요하다.
+    """
+    from app.services.pipeline.heygen import (
+        HeyGenError,
+        delete_talking_photo,
+        list_talking_photos,
+        upload_talking_photo,
+    )
+
+    def _is_limit(err: Exception) -> bool:
+        s = str(err)
+        return "exceeded your limit" in s or "401028" in s
+
+    try:
+        return await upload_talking_photo(img_bytes, content_type=content_type)
+    except HeyGenError as e:
+        if not _is_limit(e):
+            raise
+
+    # 한도 초과 — 오래된 Talking Photo 를 하나씩 지우며 재시도(자가 회복).
+    logger.warning("photo-avatar: Photo Avatar 한도 초과 — 오래된 Talking Photo 정리 후 재시도")
+    try:
+        photos = await list_talking_photos()
+    except HeyGenError as le:
+        logger.warning("photo-avatar: Talking Photo 목록 조회 실패 — %s", le)
+        photos = []
+    photos.sort(key=_talking_photo_created_ts)  # 오래된 것부터
+
+    last_err: Exception | None = None
+    for tp in photos:
+        tpid = tp.get("id") or tp.get("talking_photo_id")
+        if not tpid or tpid == keep_id:
+            continue
+        await delete_talking_photo(tpid)  # best-effort
+        try:
+            return await upload_talking_photo(img_bytes, content_type=content_type)
+        except HeyGenError as e2:
+            last_err = e2
+            if not _is_limit(e2):
+                raise
+            # 아직 한도면 다음(더 최신) 항목을 지우고 재시도.
+            continue
+    raise last_err or HeyGenError(
+        "HeyGen Talking Photo 한도 정리 후에도 등록에 실패했습니다."
+    )
+
+
 async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
     """현재 기본 룩에 대응하는 Talking Photo 를 보장한다(lazy 등록·재사용·회수).
 
@@ -157,11 +225,7 @@ async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
 
     from urllib.parse import urlparse
 
-    from app.services.pipeline.heygen import (
-        HeyGenError,
-        delete_talking_photo,
-        upload_talking_photo,
-    )
+    from app.services.pipeline.heygen import HeyGenError, delete_talking_photo
 
     key = urlparse(row.image_url).path.lstrip("/")
     ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
@@ -188,18 +252,20 @@ async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
 
     safe_bytes, safe_ctype = _ensure_talking_photo_payload(img_bytes, ctype)
     try:
-        talking_photo_id = await upload_talking_photo(safe_bytes, content_type=safe_ctype)
+        talking_photo_id = await _register_talking_photo_with_cleanup(
+            safe_bytes, safe_ctype, keep_id=None
+        )
     except HeyGenError as e:
         logger.warning(
             "photo-avatar-ensure: HeyGen Talking Photo 등록 실패 — user=%s, look=%s, error=%s",
             user.id, look_id, e,
         )
-        # 한도 초과(401028)면 사용자에게 정확히 안내한다.
+        # 정리 후에도 한도 초과면 사용자에게 정확히 안내한다.
         hint = ""
         if "exceeded your limit" in str(e) or "401028" in str(e):
             hint = (
-                " — HeyGen 계정의 Photo Avatar 한도에 도달했습니다. HeyGen 대시보드에서 "
-                "쓰지 않는 Photo Avatar 를 삭제하거나 플랜을 업그레이드해 주세요."
+                " — HeyGen 계정의 Photo Avatar 한도(플랜 제한)에 도달했습니다. "
+                "잠시 후 다시 시도하거나 HeyGen 플랜을 업그레이드해 주세요."
             )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
