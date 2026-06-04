@@ -232,58 +232,8 @@ describe("AvatarsPage", () => {
     expect(values).toEqual(["ko", "en", "zh", "ja"]);
   });
 
-  it("creates the Q&A avatar (selected look) for the lecture and returns to studio", async () => {
-    // 라이브러리에 본인 룩(is_custom) 1개. 룩을 골라 "룩과 목소리 아바타 제작".
-    apiGet.mockImplementation(async (url: string) => {
-      if (url === "/api/avatars") {
-        return {
-          data: {
-            avatars: [
-              {
-                avatar_id: "look_1",
-                avatar_name: "내 룩",
-                is_custom: true,
-                preview_image_url: "https://x/look.png",
-                preview_video_url: null,
-              },
-            ],
-            total: 1,
-          },
-        };
-      }
-      throw new Error(`unhandled GET ${url}`);
-    });
-    apiPatch.mockResolvedValue({ data: {} });
-    apiPost.mockResolvedValue({ data: {} });
-    search = new URLSearchParams("lecture=lec-1");
-
-    renderPage(<AvatarsPage />);
-
-    // 라이브러리 그리드에 본인 룩 카드가 노출된다.
-    const card = await screen.findByTestId("avatar-card-look_1");
-
-    // 제작 버튼은 선택 전에는 비활성.
-    const applyBtn = screen.getByTestId("avatars-apply") as HTMLButtonElement;
-    expect(applyBtn.disabled).toBe(true);
-
-    // 룩 선택 → 제작 버튼 활성화 (카드 선택 버튼은 testid div 안의 유일 버튼).
-    fireEvent.click(within(card).getByRole("button"));
-    await waitFor(() => expect(applyBtn.disabled).toBe(false));
-
-    fireEvent.click(applyBtn);
-
-    // 음성을 따로 고르지 않았으면 voice_id 는 건드리지 않고 룩만 적용한다.
-    await waitFor(() =>
-      expect(apiPatch).toHaveBeenCalledWith("/api/lectures/lec-1", {
-        avatar_id: "look_1",
-      }),
-    );
-    await waitFor(() =>
-      expect(push).toHaveBeenCalledWith("/professor/studio/lec-1"),
-    );
-  });
-
-  it("applies the chosen sample voice (voice_id) together with the look", async () => {
+  // 본인 룩 1개 + 샘플 보이스 1개 + 강의 컨텍스트 백엔드. me/preview 는 ready 로.
+  function mockBuilderBackend() {
     apiGet.mockImplementation(async (url: string) => {
       if (url === "/api/avatars") {
         return {
@@ -314,24 +264,54 @@ describe("AvatarsPage", () => {
       throw new Error(`unhandled GET ${url}`);
     });
     apiPatch.mockResolvedValue({ data: {} });
-    apiPost.mockResolvedValue({ data: {} });
+    apiPost.mockImplementation(async (url: string) => {
+      if (url === "/api/avatars/me/preview") {
+        return {
+          data: { status: "ready", video_url: "https://x/talk.mp4", voice_id: "v_adam" },
+        };
+      }
+      return { data: {} };
+    });
     search = new URLSearchParams("lecture=lec-1");
+  }
 
+  it("제작 버튼은 룩+음성을 모두 골라야 활성화되고, 누르면 작업대가 열린다", async () => {
+    mockBuilderBackend();
     renderPage(<AvatarsPage />);
 
-    // 룩 선택.
+    const card = await screen.findByTestId("avatar-card-look_1");
+    const createBtn = screen.getByTestId("avatars-apply") as HTMLButtonElement;
+    expect(createBtn.disabled).toBe(true);
+
+    // 룩만 골라선 비활성(음성 필요).
+    fireEvent.click(within(card).getByRole("button"));
+    expect(createBtn.disabled).toBe(true);
+
+    // 음성까지 고르면 활성화.
+    fireEvent.click(await screen.findByTestId("sample-voice-use-v_adam"));
+    await waitFor(() => expect(createBtn.disabled).toBe(false));
+
+    // 제작 → 강의에 바로 적용하지 않고 작업대(렌더)를 연다.
+    fireEvent.click(createBtn);
+    expect(await screen.findByTestId("build-apply")).toBeTruthy();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("작업대에서 렌더 후 '강의에 적용'이 룩+음성을 함께 저장하고 studio 로 복귀한다", async () => {
+    mockBuilderBackend();
+    renderPage(<AvatarsPage />);
+
     const card = await screen.findByTestId("avatar-card-look_1");
     fireEvent.click(within(card).getByRole("button"));
+    fireEvent.click(await screen.findByTestId("sample-voice-use-v_adam"));
 
-    // 샘플 보이스 "이 음성을 아바타 제작에 사용" 버튼 클릭.
-    const useBtn = await screen.findByTestId("sample-voice-use-v_adam");
-    fireEvent.click(useBtn);
-
-    const applyBtn = screen.getByTestId("avatars-apply") as HTMLButtonElement;
+    // 제작 → 작업대 열림 + me/preview 렌더(ready).
+    fireEvent.click(screen.getByTestId("avatars-apply"));
+    const applyBtn = (await screen.findByTestId("build-apply")) as HTMLButtonElement;
     await waitFor(() => expect(applyBtn.disabled).toBe(false));
-    fireEvent.click(applyBtn);
 
-    // 룩(avatar_id) + 음성(voice_id) 두 번 PATCH.
+    // 강의에 적용 → 룩(avatar_id) + 음성(voice_id) PATCH + studio 복귀.
+    fireEvent.click(applyBtn);
     await waitFor(() =>
       expect(apiPatch).toHaveBeenCalledWith("/api/lectures/lec-1", {
         avatar_id: "look_1",
@@ -341,6 +321,9 @@ describe("AvatarsPage", () => {
       expect(apiPatch).toHaveBeenCalledWith("/api/lectures/lec-1", {
         voice_id: "v_adam",
       }),
+    );
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith("/professor/studio/lec-1"),
     );
   });
 

@@ -63,7 +63,7 @@
     "builderLookEmpty": "No look yet",
     "builderVoiceLabel": "Voice",
     "builderVoiceEmpty": "No voice yet",
-    "builderCreateHint": "Pick a look with 'Use for avatar' in the library.",
+    "builderCreateHint": "Pick both a look and a voice ('Use for avatar' in the library, 'Use this voice for the avatar' below).",
     "useForBuild": "Use for avatar",
     "useForBuildDone": "Set as the look for your avatar. Pick a voice, then finish with 'Create avatar (look + voice)'.",
 
@@ -86,6 +86,11 @@
     "libraryDescription": "Avatars and looks you've created. Pick one to select and apply instantly — no re-generation.",
     "lookUntitled": "My look",
 
+    "buildStudioTitle": "Build avatar — performance check",
+    "buildStudioDescription": "Builds a talking avatar from your chosen look and voice right here. Test it with a script in the chat below, and when you're happy press 'Apply this avatar to the lecture'. Once applied, this avatar answers student questions (from pre-rendered cached replies).",
+    "buildChangeHint": "To change the look or voice, re-select above and press 'Build avatar with look & voice' again.",
+    "buildApply": "Apply this avatar to the lecture",
+    "buildApplyNeedsRender": "Build and check the avatar first.",
     "scriptTestTitle": "Preview your avatar — script test",
     "scriptTestDescription": "Check how your Q&A avatar (chosen look + voice) actually speaks by entering any sentence. When you're happy, apply it to the lecture with 'Build avatar with look & voice' at the top right.",
     "scriptTestChatTitle": "Enter a script",

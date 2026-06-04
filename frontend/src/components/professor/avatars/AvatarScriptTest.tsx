@@ -1,16 +1,31 @@
 "use client";
 
-import { useCallback, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { Avatar } from "./avatarsTypes";
 import { useScriptTestPreview } from "./useScriptTestPreview";
 
 interface AvatarScriptTestProps {
-  /** 현재 선택된 룩(아바타). 본인(사진) 아바타일 때만 스크립트 테스트가 가능하다. */
+  /** 현재 선택된 룩(아바타). 본인(사진) 아바타일 때만 인라인 렌더가 가능하다. */
   look: Avatar | null;
   /** "아바타 제작에 사용"으로 고른 음성 id. null = 미선택. */
   voiceId: string | null;
   /** 선택 음성 표시 이름(없으면 기본 보이스). */
   voiceName?: string | null;
+  /** "룩과 목소리 아바타 제작"을 눌러 작업대가 열렸는지. false 면 렌더하지 않는다. */
+  active: boolean;
+  /** 제작 버튼을 누를 때마다 증가 — 변경되면 현재 스크립트로 렌더를 시작한다. */
+  renderNonce: number;
+  /** 강의 컨텍스트(?lecture=) — 있으면 "강의에 적용" 노출. */
+  lectureId: string | null;
+  applying: boolean;
+  /** "이 아바타를 강의에 적용" — 룩+음성을 강의에 저장하고 편집기로 복귀. */
+  onApplyToLecture: () => void;
   /**
    * 렌더 직전 준비 훅 — 선택한 룩을 me/preview 렌더 대상(기본 룩)으로 맞춘다.
    * 본인 룩(MyLook)이면 기본 룩으로 지정(select)한다. 완료될 때까지 await 한다.
@@ -21,25 +36,31 @@ interface AvatarScriptTestProps {
 }
 
 /**
- * "아바타 미리 확인 — 스크립트 테스트" 카드.
+ * "아바타 제작 — 성능 확인" 작업대.
  *
- * 룩 + 음성으로 만든 Q&A 아바타가 실제로 어떻게 말하는지, 임의 스크립트를 넣어
- * HeyGen 렌더로 확인한다(`me/preview` 가 본인 Talking Photo 로 그 대본을 말하게 한다).
- * 같은 (음성·대본) 조합은 백엔드 캐시로 즉시(비용 0). 룩·음성을 바꿔 다시 확인하고,
- * 만족하면 우측 상단 "룩과 목소리 아바타 제작"으로 강의에 적용한다.
+ * 우측 상단 "룩과 목소리 아바타 제작"을 누르면 열려, 선택한 룩 + 음성으로 말하는
+ * 아바타를 HeyGen 으로 그 자리에서 만든다(`me/preview`). 옆 채팅에 스크립트를 넣어
+ * 성능을 확인하고(같은 음성·대본은 캐시로 즉시·비용 0), 만족하면 "이 아바타를
+ * 강의에 적용"으로 강의의 Q&A 아바타(avatar_id+voice_id)로 저장한다 — 이후 학생
+ * 질문은 야간 배치가 미리 렌더한 답변 클립(캐시)으로 즉시 재생된다(#336).
  *
- * 본인 룩(`is_custom`)이 선택됐고 음성이 골라졌을 때만 노출된다. 표준 HeyGen
- * 아바타는 큰 보기(뷰어) 모달의 기본 미리보기 영상으로 확인한다(여긴 렌더 불가).
+ * 본인 룩(`is_custom`) + 음성이 모두 골라졌고 작업대가 열렸을 때만 렌더한다. 표준
+ * HeyGen 아바타는 인라인 렌더 대상이 아니므로(Talking Photo 없음) 노출하지 않는다.
  */
 export default function AvatarScriptTest({
   look,
   voiceId,
   voiceName,
+  active,
+  renderNonce,
+  lectureId,
+  applying,
+  onApplyToLecture,
   onPrepareRender,
   reducedMotion,
   t,
 }: AvatarScriptTestProps) {
-  const enabled = !!look?.is_custom && !!voiceId;
+  const enabled = active && !!look?.is_custom && !!voiceId;
   const preview = useScriptTestPreview(enabled);
   const [script, setScript] = useState(() => t("scriptTestDefault"));
 
@@ -53,6 +74,15 @@ export default function AvatarScriptTest({
     [script, voiceId, preview, onPrepareRender, t],
   );
 
+  // 제작 버튼(renderNonce)을 누르면 현재 스크립트로 렌더를 시작한다.
+  // nonce-동등 검사로, script 변경 등으로 effect 가 재실행돼도 중복 렌더하지 않는다.
+  const lastNonceRef = useRef(0);
+  useEffect(() => {
+    if (!enabled || renderNonce === lastNonceRef.current) return;
+    lastNonceRef.current = renderNonce;
+    void speak(false);
+  }, [renderNonce, enabled, speak]);
+
   if (!enabled || !look) return null;
 
   const processing = preview.status === "processing";
@@ -62,8 +92,8 @@ export default function AvatarScriptTest({
   return (
     <section data-testid="avatar-script-test" style={cardStyle}>
       <div style={{ marginBottom: 14 }}>
-        <h2 style={headingStyle}>{t("scriptTestTitle")}</h2>
-        <p style={descStyle}>{t("scriptTestDescription")}</p>
+        <h2 style={headingStyle}>{t("buildStudioTitle")}</h2>
+        <p style={descStyle}>{t("buildStudioDescription")}</p>
       </div>
 
       <div style={gridStyle}>
@@ -149,7 +179,29 @@ export default function AvatarScriptTest({
               {preview.message || t("scriptTestFailed")}
             </p>
           )}
-          <p style={changeHintStyle}>{t("scriptTestApplyHint")}</p>
+          <p style={changeHintStyle}>{t("buildChangeHint")}</p>
+
+          {/* 성능을 확인했으면 이 아바타를 강의의 Q&A 아바타로 적용한다. */}
+          <div style={{ marginTop: "auto", paddingTop: 16 }}>
+            {lectureId ? (
+              <button
+                type="button"
+                onClick={onApplyToLecture}
+                disabled={applying || !ready}
+                data-testid="build-apply"
+                style={{
+                  ...applyBtn,
+                  opacity: applying || !ready ? 0.5 : 1,
+                  cursor: applying || !ready ? "not-allowed" : "pointer",
+                }}
+                title={!ready ? t("buildApplyNeedsRender") : undefined}
+              >
+                {applying ? t("applying") : t("buildApply")}
+              </button>
+            ) : (
+              <p style={changeHintStyle}>{t("applyHintNoLecture")}</p>
+            )}
+          </div>
         </div>
       </div>
     </section>
@@ -298,4 +350,16 @@ const changeHintStyle: CSSProperties = {
   fontSize: 11.5,
   lineHeight: 1.5,
   color: "var(--text-faint)",
+};
+
+const applyBtn: CSSProperties = {
+  width: "100%",
+  padding: "12px 18px",
+  fontSize: 14,
+  fontWeight: 700,
+  borderRadius: 12,
+  border: "1px solid transparent",
+  background: "linear-gradient(135deg, #FFB627, #E89E0E)",
+  color: "#0A0A0A",
+  fontFamily: "inherit",
 };
