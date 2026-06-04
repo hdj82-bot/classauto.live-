@@ -210,6 +210,74 @@ def test_batch_pending_to_ready_in_mock(sync_db, monkeypatch):
     assert {r.s3_video_url for r in rows} == {reps[0].s3_video_url}
 
 
+def test_batch_uses_talking_photo_for_self_avatar(sync_db, monkeypatch):
+    """본인 제작 아바타(photo_avatar_id 보유)는 avatar_id 가 아니라 talking_photo_id 로 렌더."""
+    from app.tasks import qa_batch
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", True)
+    monkeypatch.setattr(settings, "QA_AVATAR_TOP_CLUSTERS", 3)
+    monkeypatch.setattr(settings, "QA_AVATAR_MIN_CLUSTER_SIZE", 1)
+    monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 6)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    prof.photo_avatar_id = "tp-self-123"  # 본인 아바타 등록됨, 강의는 아바타 미지정.
+    sync_db.flush()
+    _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))
+    sync_db.commit()
+
+    captured: dict = {}
+
+    async def _fake_create_video(**kwargs):
+        captured.update(kwargs)
+        return "mock_job_self"
+
+    monkeypatch.setattr("app.services.pipeline.heygen.create_video", _fake_create_video)
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch.process_qa_avatar_batch(sync_db, loop)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 1
+    assert captured.get("talking_photo_id") == "tp-self-123"
+    assert "avatar_id" not in captured
+
+
+def test_batch_uses_avatar_id_for_standard_avatar(sync_db, monkeypatch):
+    """강의에 표준 HeyGen 아바타를 지정하면(본인 룩 아님) avatar_id 경로를 쓴다."""
+    from app.tasks import qa_batch
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", True)
+    monkeypatch.setattr(settings, "QA_AVATAR_TOP_CLUSTERS", 3)
+    monkeypatch.setattr(settings, "QA_AVATAR_MIN_CLUSTER_SIZE", 1)
+    monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 6)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    prof.photo_avatar_id = "tp-self-123"          # 본인 아바타도 있지만
+    lec.avatar_id = "heygen-standard-xyz"          # 강의는 표준 아바타를 명시 지정
+    sync_db.flush()
+    _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))
+    sync_db.commit()
+
+    captured: dict = {}
+
+    async def _fake_create_video(**kwargs):
+        captured.update(kwargs)
+        return "mock_job_std"
+
+    monkeypatch.setattr("app.services.pipeline.heygen.create_video", _fake_create_video)
+
+    loop = asyncio.new_event_loop()
+    try:
+        qa_batch.process_qa_avatar_batch(sync_db, loop)
+    finally:
+        loop.close()
+
+    assert captured.get("avatar_id") == "heygen-standard-xyz"
+    assert "talking_photo_id" not in captured
+
+
 def test_batch_respects_monthly_render_cap(sync_db, monkeypatch):
     from app.tasks import qa_batch
 
