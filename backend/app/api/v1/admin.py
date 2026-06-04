@@ -308,3 +308,47 @@ async def get_system_status(
         system["celery_queue_length"] = None
 
     return system
+
+
+# ── GET /api/v1/admin/heygen-health ──────────────────────────────────────────
+
+
+@router.get("/heygen-health")
+async def get_heygen_health(_admin: User = Depends(require_admin)):
+    """HeyGen 연결 진단 — 키 설정 여부 + 실제 API 호출(잔여 크레딧)로 연결 확인.
+
+    "아바타가 안 만들어진다" 류 문제를 빠르게 좁히기 위한 관리자 진단:
+    - ``api_key_set``: HEYGEN_API_KEY 가 설정돼 있는지.
+    - ``mock``: HEYGEN_MOCK(실제 호출 생략 모드)인지.
+    - ``ok`` / ``remaining_quota``: get_remaining_quota 호출 성공 + 잔여 크레딧.
+    - ``error``: 실패 사유(401=키 오류, 그 외=HeyGen 측 오류/통신 실패).
+    크레딧은 사용량 정보라 관리자(require_admin)만 조회한다.
+    """
+    from app.core.config import settings
+
+    result: dict = {
+        "api_key_set": bool(settings.HEYGEN_API_KEY),
+        "mock": settings.HEYGEN_MOCK,
+        "base_url": settings.HEYGEN_BASE_URL,
+        "daily_budget_usd": settings.HEYGEN_DAILY_BUDGET_USD,
+        "monthly_budget_usd": settings.HEYGEN_MONTHLY_BUDGET_USD,
+        "ok": False,
+        "remaining_quota": None,
+        "error": None,
+    }
+    if settings.HEYGEN_MOCK:
+        result["error"] = "HEYGEN_MOCK 이 켜져 있어 실제 HeyGen 호출을 생략합니다."
+        return result
+    if not settings.HEYGEN_API_KEY:
+        result["error"] = "HEYGEN_API_KEY 가 설정되지 않았습니다."
+        return result
+
+    from app.services.pipeline.heygen import HeyGenError, get_remaining_quota
+
+    try:
+        quota = await get_remaining_quota()
+        result["ok"] = True
+        result["remaining_quota"] = quota.get("remaining_quota")
+    except HeyGenError as e:
+        result["error"] = str(e)
+    return result

@@ -342,17 +342,24 @@ export default function AvatarsPage() {
   const ownVoiceSelected = !!ownVoiceId && selectedVoiceId === ownVoiceId;
 
   // 샘플 보이스 토글 — 같은 음성을 다시 누르면 해제. 본인 목소리 선택은 자동 해제된다
-  // (단일 selectedVoiceId 라 다른 값으로 덮어써짐).
-  const handleToggleSampleVoice = useCallback((id: string) => {
-    setSelectedVoiceId((prev) => (prev === id ? null : id));
-  }, []);
+  // (단일 selectedVoiceId 라 다른 값으로 덮어써짐). 선택(켤) 때 룩과 동일한 배너 안내.
+  const handleToggleSampleVoice = useCallback(
+    (id: string) => {
+      const next = selectedVoiceId === id ? null : id;
+      setSelectedVoiceId(next);
+      if (next) toast(t("voiceUseForBuildDone"), "success");
+    },
+    [selectedVoiceId, toast, t],
+  );
 
   // "내 목소리" 토글 — 켜면 selectedVoiceId = 본인 음성, 다시 누르면 해제(null).
   // 샘플이 켜져 있었으면 본인 음성으로 덮어써져 자동 해제된다.
   const handleToggleOwnVoice = useCallback(() => {
     if (!ownVoiceId) return;
-    setSelectedVoiceId((prev) => (prev === ownVoiceId ? null : ownVoiceId));
-  }, [ownVoiceId]);
+    const next = selectedVoiceId === ownVoiceId ? null : ownVoiceId;
+    setSelectedVoiceId(next);
+    if (next) toast(t("voiceUseForBuildDone"), "success");
+  }, [ownVoiceId, selectedVoiceId, toast, t]);
 
   // 지정한 룩(아바타) + 선택한 목소리를 현재 강의에 함께 적용해 Q&A 아바타를
   // "제작"한다(재생성 없음 — 렌더 시 HeyGen 이 룩+음성 결합). 헤더·최근 박스가 공유.
