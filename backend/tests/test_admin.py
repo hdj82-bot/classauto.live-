@@ -465,3 +465,89 @@ async def test_get_system_status_student_forbidden(client, student):
 async def test_get_system_status_unauthorized(client):
     resp = await client.get("/api/v1/admin/system")
     assert resp.status_code in (401, 403)
+
+
+# ── GET /api/v1/admin/heygen-health ──────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_heygen_health_no_key(client, admin, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", False)
+    monkeypatch.setattr(settings, "HEYGEN_API_KEY", "")
+    resp = await client.get(
+        "/api/v1/admin/heygen-health", headers=make_auth_header(admin)
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["api_key_set"] is False
+    assert data["ok"] is False
+    assert "HEYGEN_API_KEY" in (data["error"] or "")
+
+
+@pytest.mark.asyncio
+async def test_heygen_health_mock_mode(client, admin, monkeypatch):
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", True)
+    monkeypatch.setattr(settings, "HEYGEN_API_KEY", "k")
+    resp = await client.get(
+        "/api/v1/admin/heygen-health", headers=make_auth_header(admin)
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["mock"] is True
+    assert data["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_heygen_health_ok(client, admin, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", False)
+    monkeypatch.setattr(settings, "HEYGEN_API_KEY", "k")
+    with patch(
+        "app.services.pipeline.heygen.get_remaining_quota",
+        new=AsyncMock(return_value={"remaining_quota": 1234, "details": {}}),
+    ):
+        resp = await client.get(
+            "/api/v1/admin/heygen-health", headers=make_auth_header(admin)
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["remaining_quota"] == 1234
+    assert data["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_heygen_health_api_error_surfaces(client, admin, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from app.core.config import settings
+    from app.services.pipeline.heygen import HeyGenError
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", False)
+    monkeypatch.setattr(settings, "HEYGEN_API_KEY", "bad")
+    with patch(
+        "app.services.pipeline.heygen.get_remaining_quota",
+        new=AsyncMock(side_effect=HeyGenError("HeyGen 크레딧 조회 오류 [401]: invalid api key")),
+    ):
+        resp = await client.get(
+            "/api/v1/admin/heygen-health", headers=make_auth_header(admin)
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is False
+    assert "401" in (data["error"] or "")
+
+
+@pytest.mark.asyncio
+async def test_heygen_health_professor_forbidden(client, professor):
+    resp = await client.get(
+        "/api/v1/admin/heygen-health", headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 403
