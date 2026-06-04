@@ -549,7 +549,7 @@ export default function GenerationModal({
                   </svg>
                 }
               >
-                영상 확인하기
+                공유하기
               </PrimaryButton>
             </div>
           ) : (

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import QRCode from "qrcode";
 import { useStudioI18n } from "./useStudioI18n";
 
 interface ShareLinksProps {
@@ -10,13 +11,13 @@ interface ShareLinksProps {
 }
 
 /**
- * 공유 채널 5종 — 이메일 / 카톡 / X / URL 복사 / QR.
+ * 공유 채널 + QR 코드.
  *
- * QR 다운로드는 외부 의존성 (qrcode 등) 또는 백엔드 PNG 생성 endpoint 가
- * 필요하다 — 본 PR 에선 "곧 지원됩니다" 안내. BACKEND_ASKS.STUDIO §3 참조.
+ * - 채널 4종: 이메일 / 카톡 / X / URL 복사.
+ * - QR: 학생 링크를 QR 로 렌더(qrcode → PNG dataURL), PNG 다운로드 + 공유
+ *   (Web Share API, 파일 공유 미지원 환경은 링크 공유/복사로 폴백).
  *
- * 카톡 공유는 SDK 도입 없이 단순 link 로 한정. 카톡 SDK 도입 시
- * `Kakao.Share.sendDefault` 로 교체.
+ * 카톡 공유는 SDK 도입 없이 단순 link 로 한정.
  */
 export default function ShareLinks({
   url,
@@ -25,6 +26,22 @@ export default function ShareLinks({
 }: ShareLinksProps) {
   const { t } = useStudioI18n();
   const [copied, setCopied] = useState<"url" | "code" | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  // 학생 링크 → QR PNG dataURL. url 이 바뀌면 재생성.
+  useEffect(() => {
+    let cancelled = false;
+    QRCode.toDataURL(url, { width: 480, margin: 2, errorCorrectionLevel: "M" })
+      .then((d) => {
+        if (!cancelled) setQrDataUrl(d);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
 
   const copy = async (text: string, kind: "url" | "code") => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
@@ -35,6 +52,45 @@ export default function ShareLinks({
     } catch {
       // 클립보드 실패는 조용히 무시 — 사용자는 link 를 직접 selectAll 가능.
     }
+  };
+
+  const qrFileName = `${(lectureTitle || "lecture").replace(/[\\/:*?"<>|]+/g, "_")}-QR.png`;
+
+  const downloadQr = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement("a");
+    a.href = qrDataUrl;
+    a.download = qrFileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+
+  const shareQr = async () => {
+    if (typeof navigator === "undefined") return;
+    // 1순위: QR 이미지 파일을 직접 공유(모바일 카톡/메시지 등).
+    try {
+      if (qrDataUrl && typeof fetch !== "undefined") {
+        const blob = await (await fetch(qrDataUrl)).blob();
+        const file = new File([blob], qrFileName, { type: "image/png" });
+        const navAny = navigator as Navigator & {
+          canShare?: (data?: ShareData) => boolean;
+        };
+        if (navAny.canShare?.({ files: [file] }) && navigator.share) {
+          await navigator.share({ files: [file], title: lectureTitle, text: url });
+          return;
+        }
+      }
+      // 2순위: 링크만 공유.
+      if (navigator.share) {
+        await navigator.share({ title: lectureTitle, text: lectureTitle, url });
+        return;
+      }
+    } catch {
+      // 사용자가 공유 취소했거나 미지원 — 링크 복사로 폴백.
+    }
+    // 3순위: 링크 복사.
+    await copy(url, "url");
   };
 
   const encoded = encodeURIComponent(url);
@@ -87,18 +143,57 @@ export default function ShareLinks({
               {copied === "code" ? t("step5.linkCopied") : t("step5.linkCopy")}
             </button>
           </div>
-          <p className="text-[11px] text-gray-400 mt-1">
-            {t("step5.codeHelp")}
-          </p>
+          <p className="text-[11px] text-gray-400 mt-1">{t("step5.codeHelp")}</p>
         </div>
       )}
 
-      {/* 공유 채널 5종 */}
+      {/* QR 코드 — 학생 링크. 다운로드/공유 가능. */}
+      <div>
+        <h4 className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+          {t("step5.qrLabel")}
+        </h4>
+        <div className="flex items-center gap-4">
+          {qrDataUrl ? (
+            // 학생 링크 QR (PNG dataURL) — 원격 최적화 불필요해 plain img.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={qrDataUrl}
+              alt={t("step5.qrLabel")}
+              width={120}
+              height={120}
+              className="rounded-lg border border-gray-200 bg-white p-2"
+            />
+          ) : (
+            <div className="w-[120px] h-[120px] rounded-lg border border-gray-200 bg-gray-50 animate-pulse" />
+          )}
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={downloadQr}
+              disabled={!qrDataUrl}
+              className="text-xs text-center bg-gray-900 text-white rounded-xl px-4 py-2.5 hover:bg-gray-800 transition disabled:opacity-50"
+            >
+              {t("step5.qrDownload")}
+            </button>
+            <button
+              type="button"
+              onClick={shareQr}
+              disabled={!qrDataUrl}
+              className="text-xs text-center border border-gray-300 rounded-xl px-4 py-2.5 hover:bg-gray-50 transition disabled:opacity-50"
+            >
+              {t("step5.qrShare")}
+            </button>
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-400 mt-2">{t("step5.qrHelp")}</p>
+      </div>
+
+      {/* 공유 채널 */}
       <div>
         <h4 className="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
           {t("step5.shareSection")}
         </h4>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <a
             href={`mailto:?subject=${titleEncoded}&body=${encoded}`}
             className="text-xs text-center border border-gray-200 hover:border-gray-300 rounded-xl px-3 py-2.5 transition"
@@ -128,16 +223,7 @@ export default function ShareLinks({
           >
             {t("step5.shareUrl")}
           </button>
-          <button
-            type="button"
-            disabled
-            title={t("step5.qrPending")}
-            className="text-xs text-center border border-gray-200 rounded-xl px-3 py-2.5 text-gray-300 cursor-not-allowed"
-          >
-            {t("step5.shareQr")}
-          </button>
         </div>
-        <p className="text-[11px] text-gray-400 mt-2">{t("step5.qrPending")}</p>
       </div>
     </div>
   );

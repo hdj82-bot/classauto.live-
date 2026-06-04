@@ -212,6 +212,22 @@ export default function ScriptEditorPage() {
           <>
             <button
               type="button"
+              onClick={() => router.push(`/professor/lecture/${id}/share`)}
+              style={{
+                padding: "8px 14px",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#fff",
+                background: "var(--gold-on-light, #B88308)",
+                border: "none",
+                borderRadius: 10,
+                cursor: "pointer",
+              }}
+            >
+              공유 · 게시
+            </button>
+            <button
+              type="button"
               onClick={handleReset}
               style={{
                 padding: "8px 14px",
