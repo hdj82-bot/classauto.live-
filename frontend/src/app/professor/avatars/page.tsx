@@ -12,6 +12,8 @@ import AvatarViewerModal from "@/components/professor/avatars/AvatarViewerModal"
 import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import SampleVoicePicker from "@/components/professor/avatars/SampleVoicePicker";
+import AvatarScriptTest from "@/components/professor/avatars/AvatarScriptTest";
+import { selectLook } from "@/components/professor/avatars/onboarding/photoAvatarApi";
 import {
   applyAvatarToLecture,
   applyVoiceToLecture,
@@ -256,6 +258,32 @@ export default function AvatarsPage() {
     () => resolveAvatar(viewerId),
     [resolveAvatar, viewerId],
   );
+
+  // 스크립트 테스트 대상 — 현재 선택한 룩 + 음성. 본인(사진) 아바타일 때만 렌더 가능.
+  const selectedAvatar = useMemo(
+    () => resolveAvatar(selectedId),
+    [resolveAvatar, selectedId],
+  );
+  const selectedVoiceName = useMemo(
+    () => voices.find((v) => v.id === selectedVoiceId)?.name ?? null,
+    [voices, selectedVoiceId],
+  );
+
+  // 스크립트 테스트 렌더 직전 — 선택한 본인 룩(MyLook)을 기본 룩으로 지정해
+  // me/preview 가 그 룩을 렌더하도록 맞춘다. 이미 기본이거나 본인 룩이 아니면 no-op.
+  const handlePrepareRender = useCallback(async () => {
+    if (!selectedId) return;
+    const look = looks.find((l) => l.id === selectedId);
+    if (!look || look.is_default) return;
+    try {
+      await selectLook(selectedId);
+      setLooks((prev) =>
+        prev.map((l) => ({ ...l, is_default: l.id === selectedId })),
+      );
+    } catch {
+      /* 기본 룩 지정 실패는 무시 — 렌더가 기존 기본 룩으로 진행된다. */
+    }
+  }, [selectedId, looks]);
 
   // 아바타/룩 선택 — 재생성 없이 즉시. 최근 선택을 서버에 영속화한다(실패는 무시).
   const handleSelect = useCallback((id: string) => {
@@ -535,6 +563,17 @@ export default function AvatarsPage() {
           selectedId={selectedVoiceId}
           onSelect={handleToggleSampleVoice}
           ownVoiceId={ownVoiceId}
+          t={t}
+        />
+
+        {/* 아바타 미리 확인 — 룩 + 음성으로 만든 Q&A 아바타가 스크립트를 잘 처리하는지
+            확인한다. 본인(사진) 아바타 룩 + 음성이 모두 선택됐을 때만 노출된다. */}
+        <AvatarScriptTest
+          look={selectedAvatar}
+          voiceId={selectedVoiceId}
+          voiceName={selectedVoiceName}
+          onPrepareRender={handlePrepareRender}
+          reducedMotion={reducedMotion}
           t={t}
         />
 

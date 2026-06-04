@@ -239,15 +239,18 @@ export async function getAvatarPreview(): Promise<AvatarPreview> {
 /**
  * POST /api/avatars/me/preview — 렌더 시작(또는 캐시 반환).
  * voiceId 를 주면 그 음성으로 렌더한다. force=true 면 캐시 무시하고 재생성.
+ * text 를 주면 아바타가 그 대본을 말한다(스크립트 테스트). 없으면 기본 샘플.
  */
 export async function startAvatarPreview(
   voiceId?: string | null,
   force = false,
+  text?: string | null,
 ): Promise<AvatarPreview> {
   try {
     const { data } = await api.post<AvatarPreview>("/api/avatars/me/preview", {
       voice_id: voiceId ?? null,
       force,
+      text: text ?? null,
     });
     return data;
   } catch (err) {
