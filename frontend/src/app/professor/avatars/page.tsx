@@ -81,6 +81,11 @@ export default function AvatarsPage() {
   // 공유해 상호 배타가 된다(둘 다 동시 활성 불가). 선택했을 때만 "제작" 시 PATCH.
   const [selectedVoiceId, setSelectedVoiceId] = useState<string | null>(null);
 
+  // "룩과 목소리 아바타 제작" 작업대 — 누르면 열려 그 자리에서 아바타를 렌더한다.
+  //  builderOpen: 작업대 노출 여부. renderNonce: 제작 버튼을 누를 때마다 증가해 렌더 트리거.
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [renderNonce, setRenderNonce] = useState(0);
+
   // 저장된 본인 룩(라이브러리) + 가장 최근 선택(서버 영속) — 재방문 시 재생성 없이
   // 바로 고르도록 복원한다.
   const [looks, setLooks] = useState<MyLook[]>([]);
@@ -307,6 +312,7 @@ export default function AvatarsPage() {
   const handleUseForBuild = useCallback(
     (id: string) => {
       handleSelect(id);
+      setBuilderOpen(false); // 룩이 바뀌었으니 작업대는 다시 "제작"으로 연다.
       toast(t("useForBuildDone"), "success");
     },
     [handleSelect, toast, t],
@@ -373,6 +379,19 @@ export default function AvatarsPage() {
     () => doApply(selectedId),
     [doApply, selectedId],
   );
+
+  // "룩과 목소리 아바타 제작" — 본인(사진) 아바타는 아래 작업대를 열어 그 자리에서
+  // 렌더·성능 확인 후 적용한다. 표준 HeyGen 아바타는 인라인 렌더 대상이 아니므로
+  // (Talking Photo 없음) 바로 강의에 적용한다.
+  const handleOpenBuilder = useCallback(() => {
+    if (!selectedId || !selectedVoiceId) return;
+    if (selectedAvatar?.is_custom) {
+      setBuilderOpen(true);
+      setRenderNonce((n) => n + 1);
+    } else {
+      handleApply();
+    }
+  }, [selectedId, selectedVoiceId, selectedAvatar, handleApply]);
 
   // 라이브러리 항목 삭제 — ⋮ 메뉴. 가벼운 confirm 후 낙관적으로 제거하고 서버에서
   // 삭제한다. 삭제한 항목이 현재 선택/최근이었다면 그 상태도 비운다.
@@ -492,9 +511,8 @@ export default function AvatarsPage() {
             <AvatarBuilderBar
               look={selectedAvatar}
               voiceName={selectedVoiceName}
-              onCreate={handleApply}
+              onCreate={handleOpenBuilder}
               creating={applying}
-              canApply={!!lectureId}
               t={t}
             />
           }
@@ -573,12 +591,17 @@ export default function AvatarsPage() {
           t={t}
         />
 
-        {/* 아바타 미리 확인 — 룩 + 음성으로 만든 Q&A 아바타가 스크립트를 잘 처리하는지
-            확인한다. 본인(사진) 아바타 룩 + 음성이 모두 선택됐을 때만 노출된다. */}
+        {/* 아바타 제작 작업대 — "룩과 목소리 아바타 제작"을 누르면 열려 그 자리에서
+            아바타를 렌더하고, 스크립트로 성능을 확인한 뒤 강의에 적용한다. */}
         <AvatarScriptTest
           look={selectedAvatar}
           voiceId={selectedVoiceId}
           voiceName={selectedVoiceName}
+          active={builderOpen}
+          renderNonce={renderNonce}
+          lectureId={lectureId}
+          applying={applying}
+          onApplyToLecture={handleApply}
           onPrepareRender={handlePrepareRender}
           reducedMotion={reducedMotion}
           t={t}

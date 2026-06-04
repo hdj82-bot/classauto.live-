@@ -8,11 +8,12 @@ interface AvatarBuilderBarProps {
   look: Avatar | null;
   /** 본인 목소리/샘플 보이스 중 "아바타 제작에 사용"으로 고른 음성 이름. */
   voiceName: string | null;
-  /** "룩과 목소리 아바타 제작" — 룩 + 음성을 현재 강의에 적용(기존 createAvatar). */
+  /**
+   * "룩과 목소리 아바타 제작" — 아래 작업대를 열어 그 자리에서 아바타 영상을
+   * 렌더하고 성능을 확인한다(강의 적용은 작업대 안에서).
+   */
   onCreate: () => void;
   creating: boolean;
-  /** 강의 컨텍스트(?lecture=)가 있어 제작(적용)이 가능한지. */
-  canApply: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -21,17 +22,18 @@ interface AvatarBuilderBarProps {
  *
  * 아바타 = 룩 + 음성. 라이브러리에서 "아바타 제작에 사용"으로 룩을, 아래 음성
  * 패널에서 "이 음성을 아바타 제작에 사용"으로 음성을 고르면 두 박스가 채워진다.
- * 제작 버튼은 두 선택을 현재 강의에 함께 적용한다(렌더 시 HeyGen 이 룩+음성 결합).
+ * 제작 버튼을 누르면 아래 작업대가 열려 그 자리에서 말하는 아바타를 만들고
+ * 성능을 확인한 뒤 강의에 적용한다(강의 컨텍스트는 적용 단계에서만 필요).
  */
 export default function AvatarBuilderBar({
   look,
   voiceName,
   onCreate,
   creating,
-  canApply,
   t,
 }: AvatarBuilderBarProps) {
-  const disabled = !look || !canApply || creating;
+  // 렌더는 강의 없이도 가능 — 룩 + 음성이 모두 골라지면 활성화.
+  const disabled = !look || !voiceName || creating;
 
   return (
     <div data-testid="avatar-builder-bar" style={barStyle}>
@@ -80,7 +82,7 @@ export default function AvatarBuilderBar({
         )}
       </div>
 
-      {/* 제작 버튼 — 기존 createAvatar(룩+음성을 강의에 적용). */}
+      {/* 제작 버튼 — 아래 작업대를 열어 그 자리에서 아바타를 렌더·확인한다. */}
       <button
         type="button"
         onClick={onCreate}
@@ -91,7 +93,7 @@ export default function AvatarBuilderBar({
           opacity: disabled ? 0.5 : 1,
           cursor: disabled ? "not-allowed" : "pointer",
         }}
-        title={!look ? t("builderCreateHint") : undefined}
+        title={disabled && !creating ? t("builderCreateHint") : undefined}
       >
         {creating ? t("creating") : t("createAvatar")}
       </button>

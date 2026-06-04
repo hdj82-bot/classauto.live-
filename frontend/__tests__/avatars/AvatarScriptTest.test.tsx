@@ -25,65 +25,94 @@ const customLook = (over: Partial<Avatar> = {}): Avatar => ({
   ...over,
 });
 
+// 새 작업대 props 기본값(active/renderNonce/적용 관련).
+const base = {
+  voiceId: "v1" as string | null,
+  voiceName: "내 목소리",
+  active: true,
+  renderNonce: 0,
+  lectureId: "lec-1" as string | null,
+  applying: false,
+  onApplyToLecture: vi.fn(),
+  reducedMotion: true,
+  t,
+};
+
 beforeEach(() => {
   apiGet.mockReset();
   apiPost.mockReset();
+  base.onApplyToLecture = vi.fn();
 });
 
-describe("AvatarScriptTest", () => {
-  it("음성이 없으면 아무것도 렌더하지 않는다", () => {
+describe("AvatarScriptTest (아바타 제작 작업대)", () => {
+  it("작업대가 닫혀 있으면(active=false) 아무것도 렌더하지 않는다", () => {
     const { container } = render(
-      <AvatarScriptTest look={customLook()} voiceId={null} reducedMotion t={t} />,
+      <AvatarScriptTest {...base} look={customLook()} active={false} />,
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("음성이 없으면 렌더하지 않는다", () => {
+    const { container } = render(
+      <AvatarScriptTest {...base} look={customLook()} voiceId={null} />,
     );
     expect(container.firstChild).toBeNull();
   });
 
   it("표준(비-custom) 아바타면 렌더하지 않는다", () => {
     const { container } = render(
-      <AvatarScriptTest
-        look={customLook({ is_custom: false })}
-        voiceId="v1"
-        reducedMotion
-        t={t}
-      />,
+      <AvatarScriptTest {...base} look={customLook({ is_custom: false })} />,
     );
     expect(container.firstChild).toBeNull();
   });
 
-  it("본인 룩 + 음성이면 '말하기' 시 준비 훅 호출 후 대본·음성으로 렌더한다", async () => {
+  it("제작(renderNonce 증가) 시 준비 훅 호출 후 대본·음성으로 렌더한다", async () => {
     const onPrepareRender = vi.fn().mockResolvedValue(undefined);
     apiPost.mockResolvedValue({
       data: { status: "ready", video_url: "https://x/talk.mp4", voice_id: "v1" },
     });
 
+    // renderNonce=1 로 마운트 → 작업대가 열리며 자동 렌더.
     render(
       <AvatarScriptTest
+        {...base}
         look={customLook()}
-        voiceId="v1"
-        voiceName="내 목소리"
+        renderNonce={1}
         onPrepareRender={onPrepareRender}
-        reducedMotion
-        t={t}
       />,
     );
 
-    fireEvent.click(screen.getByTestId("script-test-speak"));
-
-    // 렌더 직전 준비(기본 룩 지정) 훅이 먼저 호출된다.
     await waitFor(() => expect(onPrepareRender).toHaveBeenCalledTimes(1));
-    // me/preview 에 선택 음성 + 비어있지 않은 대본을 보낸다.
     await waitFor(() => expect(apiPost).toHaveBeenCalledTimes(1));
     const [url, body] = apiPost.mock.calls[0];
     expect(url).toBe("/api/avatars/me/preview");
     expect((body as { voice_id: string }).voice_id).toBe("v1");
-    expect(typeof (body as { text: string }).text).toBe("string");
     expect((body as { text: string }).text.length).toBeGreaterThan(0);
 
-    // 완료되면 말하는 영상이 노출된다.
     await waitFor(() =>
       expect(
         document.querySelector('video[src="https://x/talk.mp4"]'),
       ).toBeTruthy(),
     );
+  });
+
+  it("렌더 완료 전엔 '강의에 적용'이 비활성, 완료 후 누르면 onApplyToLecture 호출", async () => {
+    apiPost.mockResolvedValue({
+      data: { status: "ready", video_url: "https://x/talk.mp4", voice_id: "v1" },
+    });
+    render(
+      <AvatarScriptTest {...base} look={customLook()} renderNonce={1} />,
+    );
+
+    const applyBtn = (await screen.findByTestId("build-apply")) as HTMLButtonElement;
+    // 렌더가 끝나(ready) 영상이 뜨면 활성화된다.
+    await waitFor(() =>
+      expect(
+        document.querySelector('video[src="https://x/talk.mp4"]'),
+      ).toBeTruthy(),
+    );
+    await waitFor(() => expect(applyBtn.disabled).toBe(false));
+    fireEvent.click(applyBtn);
+    expect(base.onApplyToLecture).toHaveBeenCalledTimes(1);
   });
 });
