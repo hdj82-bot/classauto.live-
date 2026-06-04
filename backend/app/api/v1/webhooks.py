@@ -140,6 +140,16 @@ async def heygen_webhook(
 
             db.commit()
 
+            # 강의의 모든 본문 렌더가 끝났으면 Video 를 done 으로 전환(rendering 고착 방지).
+            try:
+                from app.services.video_status import finalize_video_if_all_ready
+                finalize_video_if_all_ready(db, render.lecture_id)
+            except Exception as exc:
+                logger.warning(
+                    "Video done 전환 실패 (무시): lecture_id=%s, error=%s",
+                    render.lecture_id, exc,
+                )
+
             try:
                 await notification.notify_instructor(
                     render.instructor_id, render.lecture_id, "READY", render.s3_video_url

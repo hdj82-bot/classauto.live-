@@ -32,6 +32,7 @@ def poll_pending_renders() -> dict:
 
         completed = 0
         failed = 0
+        completed_lecture_ids: set = set()
         timeout_cutoff = datetime.now(timezone.utc) - timedelta(hours=RENDER_TIMEOUT_HOURS)
 
         for render in renders:
@@ -94,6 +95,7 @@ def poll_pending_renders() -> dict:
                         logger.warning("알림 전송 실패 (무시): render_id=%s, error=%s", render.id, exc)
 
                     completed += 1
+                    completed_lecture_ids.add(render.lecture_id)
 
                 elif status_data["status"] == "failed":
                     render.status = RenderStatus.failed
@@ -115,6 +117,17 @@ def poll_pending_renders() -> dict:
                 logger.error("폴링 실패: render_id=%s, error=%s", render.id, exc)
 
         db.commit()
+
+        # 완료된 강의의 모든 본문 렌더가 끝났으면 Video 를 done 으로 전환(고착 방지).
+        if completed_lecture_ids:
+            from app.services.video_status import finalize_video_if_all_ready
+            for lec_id in completed_lecture_ids:
+                try:
+                    finalize_video_if_all_ready(db, lec_id)
+                except Exception as exc:  # noqa: BLE001
+                    db.rollback()
+                    logger.warning("Video done 전환 실패 (무시): lecture_id=%s, error=%s", lec_id, exc)
+
         return {"checked": len(renders), "completed": completed, "failed": failed}
     finally:
         loop.close()
