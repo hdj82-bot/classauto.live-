@@ -79,6 +79,18 @@
     "libraryDescription": "Avatars and looks you've created. Pick one to select and apply instantly — no re-generation.",
     "lookUntitled": "My look",
 
+    "scriptTestTitle": "Preview your avatar — script test",
+    "scriptTestDescription": "Check how your Q&A avatar (chosen look + voice) actually speaks by entering any sentence. When you're happy, apply it to the lecture with 'Build avatar with look & voice' at the top right.",
+    "scriptTestChatTitle": "Enter a script",
+    "scriptTestChatNote": "Type what the avatar should say and press 'Speak this script' to render it speaking in your look and voice (same text + voice replays instantly, no re-render).",
+    "scriptTestDefault": "Hello, I'm the professor for this course. Today we'll work through the core concepts step by step.",
+    "scriptTestPlaceholder": "Enter the script for the avatar to speak.",
+    "scriptTestSpeak": "Speak this script",
+    "scriptTestRespeak": "Re-render",
+    "scriptTestRendering": "Rendering your talking avatar...",
+    "scriptTestFailed": "Failed to render the avatar video. Please try again shortly.",
+    "scriptTestApplyHint": "Changed the look or voice? Press 'Speak this script' again to check. When you're happy, apply it with 'Build avatar with look & voice' at the top right.",
+
     "menuOpen": "Open menu",
     "cardDelete": "Delete",
     "cardDeleteConfirm": "Remove this item from your library? This can't be undone.",

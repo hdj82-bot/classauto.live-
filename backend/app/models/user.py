@@ -37,9 +37,14 @@ class User(Base):
     # photo_avatar_preview_video_id: 렌더 진행 중인 HeyGen video_id (폴링 키).
     # photo_avatar_preview_voice_id: 그 미리보기를 렌더할 때 쓴 ElevenLabs voice_id
     #   (다른 음성으로 다시 만들기 판정용).
+    # photo_avatar_preview_text: 그 미리보기를 렌더할 때 읽힌 대본(스크립트). 아바타
+    #   페이지 "스크립트 테스트"가 임의 문장을 렌더하므로, 같은 (음성·대본) 조합은
+    #   캐시 적중시키고 대본이 바뀌면 다시 렌더하도록 키로 쓴다. NULL = 기본 샘플
+    #   문장(_PREVIEW_TEXT)으로 렌더된 캐시(과거 데이터 호환).
     photo_avatar_preview_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     photo_avatar_preview_video_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     photo_avatar_preview_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    photo_avatar_preview_text: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     # 교수자가 본인 음성 샘플(mp3 등)로 만든 ElevenLabs Cloned Voice (IVC).
     # cloned_voice_id: ElevenLabs voice_id. 채워지면 GET /api/voices 계정 보이스로
     #   자동 노출돼 음성 패널·미리보기·강의 렌더에 본인 목소리로 쓸 수 있다. NULL =
