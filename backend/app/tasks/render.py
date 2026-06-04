@@ -191,6 +191,17 @@ def render_slide(
                 render.status = RenderStatus.ready
                 render.completed_at = datetime.now(timezone.utc)
                 db.commit()
+            # 강의의 모든 슬라이드 TTS 가 끝났으면 Video 를 done 으로 전환한다.
+            # (이게 없으면 Video 가 영구 rendering 에 갇혀 재-approve 시 409.)
+            try:
+                from app.services.video_status import finalize_video_if_all_ready
+                finalize_video_if_all_ready(db, render.lecture_id)
+            except Exception as exc:  # noqa: BLE001 — 전환 실패가 렌더 성공을 막지 않게.
+                db.rollback()
+                logger.warning(
+                    "Video done 전환 실패(무시): lecture_id=%s, error=%s",
+                    render.lecture_id, exc,
+                )
             logger.info(
                 "render_slide 슬라이드쇼 완료(HeyGen 생략) — render_id=%s, slide=%s",
                 render_id, render.slide_number,
