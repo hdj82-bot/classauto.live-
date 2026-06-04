@@ -60,6 +60,8 @@ interface QAMessage {
   role: "user" | "assistant";
   text: string;
   source?: string | null;
+  /** 캐시 적중 시 함께 내려오는 HeyGen 아바타 답변 클립 URL (없으면 텍스트만). */
+  avatarUrl?: string | null;
 }
 
 interface ReactionCount {
@@ -357,6 +359,8 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
           role: "assistant",
           text: data.answer ?? t("student.playerV2.qaGenericFallback"),
           source: data.source ?? t("student.playerV2.qaSourceFallback"),
+          // 겹치는 질문이라 사전 렌더된 아바타 클립이 있으면 함께 재생(부가).
+          avatarUrl: data.avatar?.video_url ?? null,
         },
       ]);
     } catch {
@@ -753,6 +757,24 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                     <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
                     <div>
                       <div className={styles.bubble}>{m.text}</div>
+                      {m.avatarUrl && (
+                        // 캐시 적중 시 부가되는 아바타 답변 클립. 텍스트가 본답이고
+                        // 영상은 전달 보조 — 로드 실패해도 텍스트 답변은 그대로 남는다.
+                        <video
+                          src={m.avatarUrl}
+                          autoPlay
+                          playsInline
+                          controls
+                          aria-label="AI 아바타 답변"
+                          style={{
+                            marginTop: 8,
+                            width: "100%",
+                            maxWidth: 220,
+                            borderRadius: 10,
+                            display: "block",
+                          }}
+                        />
+                      )}
                       {m.source && (
                         <span className={styles.source}>
                           <svg

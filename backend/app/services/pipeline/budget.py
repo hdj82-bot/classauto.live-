@@ -19,6 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.qa_answer_cache import QAAnswerCache
 from app.models.video_render import RenderCostLog
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,10 @@ _HEYGEN_SERVICE = "heygen"
 
 class BudgetExceededError(Exception):
     """HeyGen 일/월 예산 한도 초과 — create_video 차단."""
+
+
+class QARenderQuotaError(BudgetExceededError):
+    """교수자 월 Q&A 아바타 렌더 한도 초과 — 야간 배치 렌더 차단."""
 
 
 def heygen_spend_usd(db: Session, since: datetime) -> float:
@@ -78,3 +83,64 @@ def assert_heygen_budget(db: Session, *, now: datetime | None = None) -> None:
             raise BudgetExceededError(
                 f"HeyGen 월 예산 초과: ${spent:.2f} / ${monthly_limit:.2f}"
             )
+
+
+# ── Q&A 아바타 렌더 한도 (docs/planning/09 §5: 교수자당 월 2영상 × 3렌더 = 6) ──
+
+
+def _month_start(now: datetime | None = None) -> datetime:
+    now = now or datetime.now(timezone.utc)
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def qa_renders_used_this_month(
+    db: Session, instructor_id, *, now: datetime | None = None
+) -> int:
+    """이번 달 해당 교수자의 Q&A 아바타 렌더 수.
+
+    렌더 1건 = 대표 행(heygen_job_id 보유). 형제 행(heygen_job_id NULL)·실패 후
+    재시도와 무관하게 "실제로 HeyGen 에 제출된 렌더"만 센다. failed 도 한도에
+    포함해(이미 제출·과금됐을 수 있음) 재시도 폭주를 막는다.
+    """
+    month_start = _month_start(now)
+    total = db.execute(
+        select(func.count(QAAnswerCache.id)).where(
+            QAAnswerCache.instructor_id == instructor_id,
+            QAAnswerCache.heygen_job_id.isnot(None),
+            QAAnswerCache.created_at >= month_start,
+        )
+    ).scalar()
+    return int(total or 0)
+
+
+def qa_render_quota_remaining(
+    db: Session, instructor_id, *, now: datetime | None = None
+) -> int:
+    """이번 달 남은 Q&A 렌더 슬롯 수(0 이상). 한도 0/음수면 0(렌더 비활성)."""
+    cap = settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR
+    if not cap or cap <= 0:
+        return 0
+    used = qa_renders_used_this_month(db, instructor_id, now=now)
+    return max(0, cap - used)
+
+
+def assert_qa_render_budget(
+    db: Session, instructor_id, *, now: datetime | None = None
+) -> None:
+    """Q&A 아바타 렌더 직전 검사 — 교수자 월 한도 + 전역 HeyGen 예산($).
+
+    - 교수자 월 렌더 한도(09 §5: 6) 소진 시 ``QARenderQuotaError``.
+    - 전역 일/월 $ 서킷 브레이커(``assert_heygen_budget``) 재사용 — mock 은 통과.
+    렌더 한도는 mock 에서도 적용(렌더 "수" 통제이므로). $ 브레이커만 mock 면제.
+    """
+    if qa_render_quota_remaining(db, instructor_id, now=now) <= 0:
+        cap = settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR
+        used = qa_renders_used_this_month(db, instructor_id, now=now)
+        logger.warning(
+            "[BUDGET] Q&A 렌더 월 한도 초과로 차단: instructor=%s used=%d cap=%d",
+            instructor_id, used, cap,
+        )
+        raise QARenderQuotaError(
+            f"Q&A 아바타 렌더 월 한도 초과: {used}/{cap}"
+        )
+    assert_heygen_budget(db, now=now)

@@ -171,3 +171,35 @@ def test_render_slide_blocks_on_budget_and_skips_heygen():
     mock_tts.assert_not_called()
     mock_heygen.assert_not_called()
     assert render.status == RenderStatus.failed
+
+
+# ── Q&A 아바타 렌더 한도 (assert_qa_render_budget) ─────────────────────────────
+
+
+def _qa_db_with_used(used: int):
+    """qa_renders_used_this_month 의 COUNT(*) 가 used 를 반환하도록 mock."""
+    db = MagicMock()
+    db.execute.return_value.scalar.return_value = used
+    return db
+
+
+def test_qa_render_quota_remaining_counts_down():
+    used = 2
+    remaining = budget.qa_render_quota_remaining(_qa_db_with_used(used), uuid.uuid4())
+    assert remaining == max(0, settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR - used)
+
+
+def test_assert_qa_render_budget_blocks_when_quota_exhausted():
+    from app.services.pipeline.budget import QARenderQuotaError, assert_qa_render_budget
+
+    db = _qa_db_with_used(settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR)  # 한도 소진
+    with pytest.raises(QARenderQuotaError):
+        assert_qa_render_budget(db, uuid.uuid4())
+
+
+def test_assert_qa_render_budget_passes_under_quota_in_mock():
+    from app.services.pipeline.budget import assert_qa_render_budget
+
+    db = _qa_db_with_used(0)  # 한도 충분
+    with patch.object(settings, "HEYGEN_MOCK", True):
+        assert_qa_render_budget(db, uuid.uuid4())  # 예외 없이 통과해야 함
