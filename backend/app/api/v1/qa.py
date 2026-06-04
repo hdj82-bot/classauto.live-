@@ -2,6 +2,7 @@
 import asyncio
 import csv
 import io
+import logging
 import uuid
 from datetime import datetime
 
@@ -19,6 +20,9 @@ from app.models.qa_log import QALog
 from app.models.session import LearningSession
 from app.models.user import User
 from app.services.pipeline.qa import answer_question
+from app.services.pipeline.qa_avatar import resolve_avatar_for_question
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/qa", tags=["qa"])
 
@@ -81,11 +85,34 @@ async def ask_question(
                 output_tokens=result.output_tokens,
                 cost_usd=result.cost_usd,
             ))
+
+            # 아바타 캐시 — 겹치는(유사도 0.9↑) 질문에 사전 렌더된 클립이 ready 면
+            # avatar 로 함께 내려준다. 미적중이면 클러스터 큐에 적립(렌더는 야간 배치 —
+            # 실시간 렌더 없음). 어떤 실패도 텍스트 답변을 막지 않도록 SAVEPOINT 로 격리.
+            avatar_payload = None
+            try:
+                with db.begin_nested():
+                    instructor_id = db.execute(
+                        select(Course.instructor_id).where(Course.id == lecture.course_id)
+                    ).scalar_one_or_none()
+                    resolution = resolve_avatar_for_question(
+                        db,
+                        lecture_id=body.lecture_id,
+                        instructor_id=instructor_id,
+                        question=body.question,
+                        answer=result.answer,
+                        in_scope=result.in_scope,
+                    )
+                    avatar_payload = resolution.payload
+            except Exception:  # noqa: BLE001
+                avatar_payload = None
+                logger.exception("Q&A 아바타 캐시 처리 실패(텍스트 답변은 정상 반환)")
+
             db.commit()
-            return result
+            return result, avatar_payload
 
     try:
-        result = await loop.run_in_executor(None, _run)
+        result, avatar_payload = await loop.run_in_executor(None, _run)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except PermissionError as exc:
@@ -96,6 +123,7 @@ async def ask_question(
     return {
         "answer": result.answer,
         "in_scope": result.in_scope,
+        "avatar": avatar_payload,
         "cost_usd": result.cost_usd,
     }
 

@@ -121,6 +121,24 @@ class Settings(BaseSettings):
     HEYGEN_DAILY_BUDGET_USD: float = 3.0
     HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
 
+    # ── 아바타 Q&A 캐시 (docs/planning/08 §5, 09 §5) ─────────────
+    # 실시간 HeyGen 렌더 금지(지연). 질문은 항상 즉시 RAG 텍스트로 답하고, 겹치는
+    # 질문만 야간 배치로 사전 렌더한 아바타 클립을 캐시에서 즉시 제공한다.
+    # 캐시 적중 임계값 — 08 §5.4: 0.9 시작, 베타에서 오답 재생 빈도로 보정.
+    QA_AVATAR_SIMILARITY_THRESHOLD: float = 0.9
+    # 야간 배치 클러스터링에서 같은 질문으로 묶는 코사인 임계값(적중 임계값과 동일 기준).
+    QA_AVATAR_CLUSTER_THRESHOLD: float = 0.9
+    # 배치 1회가 렌더할 상위 클러스터 수 — 영상당 3렌더(09 §5).
+    QA_AVATAR_TOP_CLUSTERS: int = 3
+    # 교수자당 월 렌더 한도 — 2영상 × 영상당 3렌더 = 6 (09 §5).
+    QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR: int = 6
+    # 클러스터가 렌더 대상이 되기 위한 최소 누적 질문 수(1회성 잡음 질문 렌더 방지).
+    QA_AVATAR_MIN_CLUSTER_SIZE: int = 1
+    # 아바타 답변 길이 상한(글자) — 변동비(렌더 길이) 상한 고정(08 §5.4 30초 클램프 근사).
+    QA_AVATAR_MAX_ANSWER_CHARS: int = 400
+    # 야간 배치 실행 시각(UTC 시). 기본 18시(UTC) = KST 03:00 — 일일 백업(03 UTC) 이후.
+    QA_AVATAR_BATCH_HOUR_UTC: int = 18
+
     # ── 강의 본문 렌더 방식 (docs/planning/08-cost-optimization.md) ──────────────
     # "slideshow"(기본) = 본문을 HeyGen 영상으로 굽지 않고, 슬라이드 이미지 + 구간
     # TTS 음성 + 타임라인(VideoScript.segments)을 클라이언트가 동기 재생한다. 슬라이드
