@@ -102,23 +102,32 @@ def _ensure_talking_photo_payload(
 
 
 async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
-    """``user.photo_avatar_id`` 가 비어 있으면 default look 으로부터 lazy 등록.
+    """현재 기본 룩에 대응하는 Talking Photo 를 보장한다(lazy 등록·재사용·회수).
 
     2026-06-01 결정: select 단계에서 HeyGen 을 호출하지 않고("최후에만 헤이젠"),
-    preview / 강의 렌더 진입 시점에 이 헬퍼가 한 번 등록한다(idempotent).
+    preview / 강의 렌더 진입 시점에 이 헬퍼가 등록한다.
 
-    반환:
-    - ``photo_avatar_id`` 가 이미 있으면 그대로 반환.
-    - default_look_id 가 없거나 룩이 ready 가 아니면 ``None`` (상위에서 안내).
-    - 등록 성공 시 ``user.photo_avatar_id`` 를 set 하고 commit 후 talking_photo_id 반환.
-    - S3 / HeyGen 단계 실패는 단계별 로그 + ``HTTPException`` 으로 상위로 전파.
+    2026-06-04 보강: HeyGen 계정의 Photo Avatar 한도(흔히 3개, code 401028)에 걸리지
+    않도록 —
+    - ``photo_avatar_look_id`` 로 "현재 등록된 talking photo 가 어느 룩의 것인지"를
+      추적해, 같은 룩이면 **재등록하지 않고 재사용**한다(룩 전환·재렌더마다 새로
+      만들던 누적 등록 버그 제거).
+    - 룩이 바뀌어 새로 만들어야 할 때는, 만들기 전에 **이전 talking photo 를 먼저
+      삭제해 슬롯을 회수**한다(best-effort).
+
+    반환: 보장된 talking_photo_id. 기본 룩이 없거나 룩이 ready 가 아니면 기존
+    ``photo_avatar_id``(없으면 None). S3/HeyGen 실패는 ``HTTPException`` 으로 전파.
     """
-    if user.photo_avatar_id:
-        return user.photo_avatar_id
-
     look_id = user.photo_avatar_default_look_id
+
+    # 현재 등록된 talking photo 가 현재 기본 룩의 것이면 그대로 재사용(중복 등록 방지).
+    # 기본 룩 미지정(레거시)인데 photo_avatar_id 가 있으면 그것을 그대로 쓴다.
+    if user.photo_avatar_id and (
+        not look_id or user.photo_avatar_look_id == look_id
+    ):
+        return user.photo_avatar_id
     if not look_id:
-        return None
+        return user.photo_avatar_id
 
     # default look 조회 — gpt 내부 UUID 또는 레거시 heygen_look_id 둘 다 시도.
     row = None
@@ -143,11 +152,16 @@ async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
             )
         ).scalar_one_or_none()
     if row is None or row.status != LookStatus.ready.value or not row.image_url:
-        return None
+        # 새 룩을 만들 수 없으면 기존 talking photo 라도 유지(있으면).
+        return user.photo_avatar_id
 
     from urllib.parse import urlparse
 
-    from app.services.pipeline.heygen import HeyGenError, upload_talking_photo
+    from app.services.pipeline.heygen import (
+        HeyGenError,
+        delete_talking_photo,
+        upload_talking_photo,
+    )
 
     key = urlparse(row.image_url).path.lstrip("/")
     ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
@@ -163,6 +177,15 @@ async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
             detail=f"룩 이미지를 불러오지 못했습니다(S3): {e}",
         ) from e
 
+    # 룩이 바뀌어 새로 만들기 전에, 이전 talking photo 를 먼저 지워 HeyGen Photo
+    # Avatar 한도 슬롯을 회수한다(best-effort — 실패해도 계속 진행).
+    old_id = user.photo_avatar_id
+    if old_id:
+        try:
+            await delete_talking_photo(old_id)
+        except Exception:  # noqa: BLE001 — 회수는 best-effort
+            logger.warning("photo-avatar-ensure: 이전 talking photo 삭제 실패(무시): %s", old_id)
+
     safe_bytes, safe_ctype = _ensure_talking_photo_payload(img_bytes, ctype)
     try:
         talking_photo_id = await upload_talking_photo(safe_bytes, content_type=safe_ctype)
@@ -171,12 +194,25 @@ async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
             "photo-avatar-ensure: HeyGen Talking Photo 등록 실패 — user=%s, look=%s, error=%s",
             user.id, look_id, e,
         )
+        # 한도 초과(401028)면 사용자에게 정확히 안내한다.
+        hint = ""
+        if "exceeded your limit" in str(e) or "401028" in str(e):
+            hint = (
+                " — HeyGen 계정의 Photo Avatar 한도에 도달했습니다. HeyGen 대시보드에서 "
+                "쓰지 않는 Photo Avatar 를 삭제하거나 플랜을 업그레이드해 주세요."
+            )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"본인 아바타 등록에 실패했습니다(HeyGen): {e}",
+            detail=f"본인 아바타 등록에 실패했습니다(HeyGen): {e}{hint}",
         ) from e
 
     user.photo_avatar_id = talking_photo_id
+    user.photo_avatar_look_id = look_id
+    # 새 얼굴 → 이전 미리보기 캐시는 옛 룩이라 무효.
+    user.photo_avatar_preview_url = None
+    user.photo_avatar_preview_video_id = None
+    user.photo_avatar_preview_voice_id = None
+    user.photo_avatar_preview_text = None
     await db.commit()
     logger.info(
         "photo-avatar-ensure: 등록 성공 — user=%s, look=%s, talking_photo_id=%s",
@@ -389,6 +425,9 @@ async def upload_profile_photo(
     try:
         photo_avatar_id = await upload_talking_photo(content, content_type=ctype)
         user.photo_avatar_id = photo_avatar_id
+        # 직접 업로드한 사진 기반 — 특정 룩의 것이 아니므로 look 매핑은 비운다
+        # (_ensure_photo_avatar_id 의 룩-재사용 판정이 이 값을 본다).
+        user.photo_avatar_look_id = None
         # 새 아바타로 교체됨 → 이전 사진으로 만든 "움직이는 미리보기" 캐시는
         # 옛 얼굴이라 더 이상 유효하지 않으므로 비운다(다음 조회 시 재생성 유도).
         user.photo_avatar_preview_url = None
@@ -1121,9 +1160,10 @@ async def select_look(
             detail="이 룩에는 이미지가 없습니다.",
         )
 
-    # 다른 룩으로 바뀌면 이전 talking_photo_id 와 미리보기 캐시는 무효
-    # (다음 사용 시점에 default 로부터 lazy 재등록되도록).
-    user.photo_avatar_id = None
+    # 기본 룩만 바꾼다. 이전 talking_photo_id 는 여기서 비우지 않는다 — 다음 렌더
+    # 시점에 _ensure_photo_avatar_id 가 (룩이 실제로 바뀌었으면) 이전 것을 HeyGen 에서
+    # 삭제해 슬롯을 회수한 뒤 새로 만든다. 같은 룩이면 재사용한다(Photo Avatar 한도
+    # 누적 초과 방지, 2026-06-04). 미리보기 캐시(옛 얼굴)는 무효화한다.
     user.photo_avatar_preview_url = None
     user.photo_avatar_preview_video_id = None
     user.photo_avatar_preview_voice_id = None

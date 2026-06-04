@@ -32,6 +32,11 @@ class User(Base):
     # 영상을 만들 때 heygen.create_video 의 talking_photo_id 로 쓴다. NULL =
     # 아직 본인 아바타 미등록 또는 생성 대기/실패.
     photo_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 현재 photo_avatar_id(talking photo)가 어느 룩(photo_avatar_default_look_id)으로
+    #   만들어졌는지. 같은 룩이면 재등록하지 않고 재사용하고, 룩이 바뀌면 이전
+    #   talking photo 를 HeyGen 에서 삭제(슬롯 회수)한 뒤 새로 만든다 — HeyGen Photo
+    #   Avatar 한도(흔히 3개) 누적 초과 방지(2026-06-04).
+    photo_avatar_look_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 본인 아바타 "움직이는 미리보기" — Talking Photo 로 1회 렌더한 짧은 샘플 영상.
     # photo_avatar_preview_url: 완성된 영상의 영구 S3 https URL (있으면 캐시 적중).
     # photo_avatar_preview_video_id: 렌더 진행 중인 HeyGen video_id (폴링 키).

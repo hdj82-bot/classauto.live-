@@ -571,9 +571,11 @@ async def test_select_gpt_look_does_not_call_heygen(client, professor, db):
     # 핵심 회귀 가드 — select 가 HeyGen / S3 를 더 이상 건드리지 않는다.
     up.assert_not_awaited()
     s3_dl.assert_not_called()
-    # default 만 저장되고, 이전 talking_photo_id 와 미리보기 캐시는 무효 처리.
+    # default 저장 + 미리보기 캐시(옛 얼굴) 무효. 이전 talking_photo_id 는 여기서
+    # 비우지 않고 유지한다 — 다음 렌더 시 _ensure 가 슬롯 회수(삭제) 후 재등록한다
+    # (2026-06-04, HeyGen Photo Avatar 한도 누적 초과 방지).
     assert professor.photo_avatar_default_look_id == look_id
-    assert professor.photo_avatar_id is None
+    assert professor.photo_avatar_id == "tp_old"
     assert professor.photo_avatar_preview_url is None
     assert professor.photo_avatar_preview_video_id is None
 

@@ -274,6 +274,38 @@ async def upload_talking_photo(
     return talking_photo_id
 
 
+async def delete_talking_photo(talking_photo_id: str) -> bool:
+    """HeyGen Photo Avatar(Talking Photo) 삭제 (best-effort) — 슬롯 회수용.
+
+    HeyGen 계정의 Photo Avatar 한도(플랜별, 흔히 3개)를 넘지 않도록, 새 룩의
+    Talking Photo 를 만들기 전에 이전 것을 지운다(code 401028 "exceeded your limit of
+    3 photo avatars" 방지). 실패해도(엔드포인트 차이·이미 삭제됨·통신 오류) 호출자는
+    계속 진행하므로 예외 대신 bool 을 반환한다.
+    """
+    if not talking_photo_id:
+        return False
+    if settings.HEYGEN_MOCK:
+        logger.warning("[HEYGEN_MOCK] delete_talking_photo 생략: %s", talking_photo_id)
+        return True
+    url = f"{settings.HEYGEN_BASE_URL}/v2/photo_avatar/{talking_photo_id}"
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.delete(url, headers=_headers())
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "HeyGen Talking Photo 삭제 통신 오류: %s — %s", talking_photo_id, exc
+        )
+        return False
+    if resp.status_code not in (200, 204):
+        logger.warning(
+            "HeyGen Talking Photo 삭제 실패 [%d]: %s — %s",
+            resp.status_code, talking_photo_id, resp.text[:200],
+        )
+        return False
+    logger.info("HeyGen Talking Photo 삭제: %s", talking_photo_id)
+    return True
+
+
 # ── 비디오 삭제 ──────────────────────────────────────────────────────────────
 
 
