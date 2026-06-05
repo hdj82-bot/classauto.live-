@@ -106,16 +106,20 @@ export default function AvatarScriptTest({
 
   const processing = preview.status === "processing";
 
-  // 진행률(의사) — HeyGen 이 실제 %를 주지 않으므로 경과 시간으로 추정해 안심 신호를
-  // 준다. 95% 에서 멈춰(완료 전 100% 오인 방지) 완료 시 영상으로 대체된다.
+  // 진행률(의사) — HeyGen 이 실제 %를 주지 않으므로 경과 초(elapsed)로 추정해 안심
+  // 신호를 준다. 95% 에서 멈춰(완료 전 100% 오인 방지) 완료 시 영상으로 대체된다.
+  // 제약: effect 본문 동기 setState 금지(react-hooks/set-state-in-effect) + 렌더 중
+  // Date.now() 같은 불순 호출 금지(react-hooks/purity). → 0 리셋은 rAF 로 한 프레임
+  // 미뤄 비동기화하고, 증가는 1초 interval 콜백에서만 한다(둘 다 effect 본문 밖).
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (!processing) {
-      setElapsed(0);
-      return;
-    }
+    if (!processing) return;
+    const raf = requestAnimationFrame(() => setElapsed(0));
     const id = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(id);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(id);
+    };
   }, [processing]);
   const percent = Math.min(
     95,

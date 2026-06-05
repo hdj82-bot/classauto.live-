@@ -657,12 +657,45 @@ async def test_ensure_photo_avatar_id_returns_none_without_default(professor, db
 # ── _ensure_talking_photo_payload (HeyGen 업로드 안전망) ───────────────────
 
 
-def test_ensure_talking_photo_payload_resizes_large_png():
-    """큰 PNG 룩 이미지가 HeyGen 거부 위험 사이즈일 때 다운스케일 + JPEG 재인코딩.
+def test_ensure_talking_photo_payload_keeps_look_resolution():
+    """룩 이미지(1536x1024 PNG)는 다운스케일 없이 풀해상도 그대로 JPEG 재인코딩.
 
-    2026-06-01 회귀 가드 — 룩 이미지(1536x1024 PNG)는 4MB 를 넘을 수 있어
-    HeyGen Talking Photo 업로드 단계에서 거부됐다는 사용자 보고.
+    2026-06-05 회귀 가드 — 원본 룩은 선명한데 아바타 렌더가 흐리다는 사용자 보고로
+    Talking Photo 입력 상한을 1280→1920 으로 올렸다. 1536 룩은 이제 축소되지 않고
+    원본 해상도가 유지돼 HeyGen 이 더 선명한 소스로 렌더한다. PNG 는 HeyGen 한도
+    (4MB) 안쪽 JPEG 로만 정규화한다.
     """
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.api.v1.avatars import (
+        _TALKING_PHOTO_MAX_BYTES,
+        _ensure_talking_photo_payload,
+    )
+
+    img = Image.new("RGB", (1536, 1024), color=(120, 130, 140))
+    # 완만한 그라데이션 — 사진 유사(노이즈 아님). PNG → JPEG 정규화 검증용.
+    pixels = img.load()
+    for x in range(1536):
+        for y in range(0, 1024, 4):
+            pixels[x, y] = (x % 255, y % 255, (x + y) % 255)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    src = buf.getvalue()
+
+    out_bytes, out_ctype = _ensure_talking_photo_payload(src, "image/png")
+    # PNG 입력은 항상 JPEG 로 정규화된다(크기 무관).
+    assert out_ctype == "image/jpeg"
+    out_img = Image.open(BytesIO(out_bytes))
+    # 1536 ≤ 1920 → 다운스케일 없이 원본 해상도 유지(선명도 보존).
+    assert out_img.size == (1536, 1024)
+    # HeyGen 업로드 한도 안쪽.
+    assert len(out_bytes) <= _TALKING_PHOTO_MAX_BYTES
+
+
+def test_ensure_talking_photo_payload_downscales_oversize():
+    """1920 보다 큰 직접 업로드 사진만 긴 변 1920 으로 축소(HeyGen 한도 준수)."""
     from io import BytesIO
 
     from PIL import Image
@@ -672,25 +705,16 @@ def test_ensure_talking_photo_payload_resizes_large_png():
         _ensure_talking_photo_payload,
     )
 
-    # 1536x1024 RGB 더미 — JPEG 보다 큰 PNG 출력을 위해 노이즈 패턴.
-    img = Image.new("RGB", (1536, 1024), color=(120, 130, 140))
-    # 약간의 패턴을 깔아 PNG 압축 효율을 떨어뜨려 사이즈를 키운다.
-    pixels = img.load()
-    for x in range(0, 1536, 2):
-        for y in range(0, 1024, 2):
-            pixels[x, y] = ((x * 7) % 255, (y * 11) % 255, ((x + y) * 13) % 255)
+    img = Image.new("RGB", (2400, 1600), color=(90, 110, 130))
     buf = BytesIO()
     img.save(buf, format="PNG")
     src = buf.getvalue()
 
     out_bytes, out_ctype = _ensure_talking_photo_payload(src, "image/png")
-    # PNG 입력은 항상 JPEG 로 정규화된다(크기 무관).
     assert out_ctype == "image/jpeg"
-    # 긴 변이 가이드 이내로 축소된다.
     out_img = Image.open(BytesIO(out_bytes))
-    assert max(out_img.size) <= _TALKING_PHOTO_MAX_SIDE
-    # 결과 사이즈는 원본 PNG 보다 작아야 한다(다운스케일 + JPEG 압축).
-    assert len(out_bytes) < len(src)
+    assert max(out_img.size) == _TALKING_PHOTO_MAX_SIDE  # 긴 변 2400 → 1920
+    assert out_img.size == (1920, 1280)  # 비율 보존
 
 
 def test_ensure_talking_photo_payload_keeps_small_jpeg_untouched():

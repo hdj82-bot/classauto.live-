@@ -110,12 +110,10 @@ class Settings(BaseSettings):
     # 영상 1초당 USD 단가 — API 종량제 실측 기준 약 $1/min = $0.0167/sec.
     # 0 으로 두면 비용 기록은 duration 만 남기고 cost_usd=0 (회계 비활성).
     HEYGEN_COST_USD_PER_SECOND: float = 0.0167
-    # 렌더 해상도. 1080p 기본 — 본문은 슬라이드쇼(HeyGen 미사용)라 HeyGen 은 프리뷰·
-    # Q&A 답변 클립 등 소수의 짧은 영상에만 쓰여 1080p 상향의 추가 비용이 작고,
-    # 720p 의 체감 화질 저하(사용자 보고 2026-06-05)를 해소한다. 비용 우선이면
-    # 환경변수로 1280×720 으로 되돌릴 수 있다.
-    HEYGEN_DIMENSION_WIDTH: int = 1920
-    HEYGEN_DIMENSION_HEIGHT: int = 1080
+    # 렌더 해상도. 720p 가 기본(비용·플랜 안정). 아바타 화질은 해상도보다
+    # Talking Photo 입력 이미지 다운스케일이 더 큰 영향(아래 PHOTO_AVATAR 참조).
+    HEYGEN_DIMENSION_WIDTH: int = 1280
+    HEYGEN_DIMENSION_HEIGHT: int = 720
     # mock 모드: 켜면 실제 HeyGen API 를 호출하지 않아 크레딧이 ₩0 (로컬/테스트용).
     HEYGEN_MOCK: bool = False
     # mock 완료 처리 시 사용할 placeholder 영상 URL (비우면 mock 렌더는 완료되지 않음).
