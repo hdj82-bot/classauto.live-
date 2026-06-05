@@ -169,6 +169,8 @@ def test_resolve_hit_returns_avatar_and_increments(sync_db, monkeypatch):
     assert res.payload["cache_id"] == str(ready.id)
     sync_db.refresh(ready)
     assert ready.hit_count == 1
+    # 투명성(09 §5.2) — 캐시 클립이 맞춰진 원 질문을 payload 로 함께 내려준다.
+    assert res.payload["matched_question"] == "환율이란?"
     # 적중은 새 pending 을 만들지 않는다.
     assert sync_db.query(QAAnswerCache).filter(
         QAAnswerCache.status == qa_avatar.STATUS_PENDING
@@ -308,6 +310,52 @@ def test_batch_respects_monthly_render_cap(sync_db, monkeypatch):
         QAAnswerCache.status == qa_avatar.STATUS_PENDING
     ).count()
     assert ready == 2 and pending == 2
+
+
+def test_batch_caps_renders_per_lecture_across_nights(sync_db, monkeypatch):
+    """영상당 렌더 한도(09 §5: 영상당 3렌더)는 여러 밤 배치 누적분까지 합산해 강제된다.
+
+    교수자 월 한도(6)는 넉넉하지만, 한 영상이 밤마다 클러스터를 쌓아 3을 넘기지
+    못하게 한다. 6개 비유사 질문(=6 클러스터) 중 1차 배치는 3개만 렌더하고, 남은
+    3개가 pending 으로 남아도 2차 배치는 그 영상에 0개만 추가한다.
+    """
+    from app.tasks import qa_batch
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", True)
+    monkeypatch.setattr(settings, "QA_AVATAR_TOP_CLUSTERS", 3)
+    monkeypatch.setattr(settings, "QA_AVATAR_MIN_CLUSTER_SIZE", 1)
+    monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 6)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    # 서로 비유사한 6개 질문 → 6개 단독 클러스터(같은 영상).
+    for i in range(6):
+        head = [0.0] * 6
+        head[i] = 1.0
+        _pending(sync_db, lec, prof, f"q{i}", _vec(*head))
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        first = qa_batch.process_qa_avatar_batch(sync_db, loop)
+        # 1차에서 3개 렌더·완료 → 남은 3개는 그대로 pending.
+        assert first["submitted"] == 3
+        # 2차 배치 — 영상 한도(3) 소진이라 추가 제출 0.
+        second = qa_batch.process_qa_avatar_batch(sync_db, loop)
+    finally:
+        loop.close()
+
+    assert second["submitted"] == 0
+    # 이 영상에 실제 제출된 렌더(heygen_job_id 보유)는 정확히 3건.
+    rendered = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.lecture_id == lec.id,
+        QAAnswerCache.heygen_job_id.isnot(None),
+    ).count()
+    assert rendered == 3
+    # 한도 때문에 렌더되지 못한 질문은 pending 으로 남아 다음 달/한도 회복을 기다린다.
+    pending = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.status == qa_avatar.STATUS_PENDING
+    ).count()
+    assert pending == 3
 
 
 def test_qa_render_budget_quota(sync_db):

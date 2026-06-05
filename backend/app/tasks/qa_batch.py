@@ -340,6 +340,28 @@ def _poll_inflight(loop, db) -> tuple[int, int]:
 # ── 배치 본체 ─────────────────────────────────────────────────────────────────
 
 
+def _lecture_renders_used_this_month(db, lecture_id) -> int:
+    """이번 달 해당 강의(영상)에 이미 제출된 Q&A 아바타 렌더 수.
+
+    09 §5: "아바타 Q&A 영상당 렌더 = 영상 전체에서 3렌더". 교수자 월 한도(6)와 별개로
+    한 영상이 여러 밤의 배치에 걸쳐 3렌더를 초과하지 않도록 영상 단위로도 막는다.
+    교수자 한도(budget.qa_renders_used_this_month)와 동일 기준 — 대표 행(heygen_job_id
+    보유)만 세고, 실패도 포함(이미 제출·과금됐을 수 있음)해 재시도 폭주를 막는다.
+    """
+    from sqlalchemy import func, select
+
+    from app.services.pipeline.budget import _month_start
+
+    total = db.execute(
+        select(func.count(QAAnswerCache.id)).where(
+            QAAnswerCache.lecture_id == lecture_id,
+            QAAnswerCache.heygen_job_id.isnot(None),
+            QAAnswerCache.created_at >= _month_start(),
+        )
+    ).scalar()
+    return int(total or 0)
+
+
 def _submit_pending(loop, db) -> int:
     """pending 질문을 강의별 클러스터링 → 상위 N 렌더 제출. 제출 건수 반환."""
     pending = db.query(QAAnswerCache).filter(
@@ -368,6 +390,18 @@ def _submit_pending(loop, db) -> int:
         for lecture_id, lrows in by_lecture.items():
             if remaining <= 0:
                 break
+            # 영상 단위 한도(09 §5: 영상당 3렌더) — 여러 밤 배치 누적분까지 합산해,
+            # 인기 영상 하나가 교수자 월 한도(6)를 독식하며 "영상당 3"을 넘지 않게 한다.
+            lecture_remaining = max(
+                0,
+                settings.QA_AVATAR_TOP_CLUSTERS - _lecture_renders_used_this_month(db, lecture_id),
+            )
+            if lecture_remaining <= 0:
+                logger.info(
+                    "Q&A 배치: 영상 월 렌더 한도(영상당 %d) 소진 — 건너뜀: lecture=%s",
+                    settings.QA_AVATAR_TOP_CLUSTERS, lecture_id,
+                )
+                continue
             clusters = qa_avatar.cluster_pending(lrows)
             eligible = [
                 c for c in clusters
@@ -375,7 +409,7 @@ def _submit_pending(loop, db) -> int:
                 and qa_avatar._to_list(c.representative().question_embedding)
             ]
             eligible.sort(key=lambda c: c.size, reverse=True)
-            chosen = eligible[: min(settings.QA_AVATAR_TOP_CLUSTERS, remaining)]
+            chosen = eligible[: min(settings.QA_AVATAR_TOP_CLUSTERS, remaining, lecture_remaining)]
             for cluster in chosen:
                 try:
                     assert_qa_render_budget(db, instructor_id)

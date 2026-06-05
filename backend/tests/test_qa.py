@@ -197,3 +197,58 @@ async def test_ask_question_missing_fields(client, student):
         headers=make_auth_header(student),
     )
     assert resp.status_code == 422
+
+
+# ── 1차 가드레일: 입력 길이 제약 (docs/planning/02 §3.1 — 텍스트 ≤ 500자) ──────
+
+
+@pytest.mark.asyncio
+async def test_ask_question_rejects_overlong_question(client, student, lecture):
+    """501자 질문은 RAG·Claude 호출 전에 422 로 거부(서버 사이드 가드레일)."""
+    with patch("app.api.v1.qa.answer_question") as ans:
+        resp = await client.post(
+            "/api/v1/qa",
+            json={
+                "session_id": str(uuid.uuid4()),
+                "lecture_id": str(lecture.id),
+                "question": "가" * 501,
+            },
+            headers=make_auth_header(student),
+        )
+    assert resp.status_code == 422
+    ans.assert_not_called()  # 길이 초과는 비용 발생 경로에 도달하지 않아야 한다.
+
+
+@pytest.mark.asyncio
+async def test_ask_question_rejects_empty_question(client, student, lecture):
+    """공백/빈 질문도 422 — min_length=1."""
+    with patch("app.api.v1.qa.answer_question") as ans:
+        resp = await client.post(
+            "/api/v1/qa",
+            json={
+                "session_id": str(uuid.uuid4()),
+                "lecture_id": str(lecture.id),
+                "question": "",
+            },
+            headers=make_auth_header(student),
+        )
+    assert resp.status_code == 422
+    ans.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ask_question_allows_500_char_boundary(client, student, lecture):
+    """정확히 500자는 통과(경계값) — 한도 안의 정상 질문은 막지 않는다."""
+    mock_result = _build_mock_qa_result("정상 답변입니다.", True, 0.002)
+    with patch("app.api.v1.qa.answer_question", return_value=mock_result), \
+         _patch_qa_sync_session(session_user_id=student.id, session_lecture_id=lecture.id):
+        resp = await client.post(
+            "/api/v1/qa",
+            json={
+                "session_id": str(uuid.uuid4()),
+                "lecture_id": str(lecture.id),
+                "question": "가" * 500,
+            },
+            headers=make_auth_header(student),
+        )
+    assert resp.status_code == 200

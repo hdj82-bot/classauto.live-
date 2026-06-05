@@ -1357,6 +1357,8 @@
       "qaMic": "Ask by voice",
       "qaSuggestLabel": "Suggestions",
       "qaSourceFallback": "Lecture materials",
+      "qaSimilarAnswer": "This is an answer to a similar question",
+      "qaSimilarAnswerOf": "This is an answer to a similar question: “{question}”",
       "qaGenericFallback": "Let me find the related material and answer.",
       "qaWelcome": "Hi! Ask anything about the lecture.",
       "qaErrorAnswer": "Couldn't generate an answer. Please try again shortly.",
