@@ -33,6 +33,7 @@ from app.api.v1.folders import router as folders_router
 from app.api.v1.avatars import router as avatars_router
 from app.api.v1.voices import router as voices_router
 from app.api.v1.quiz import router as quiz_router
+from app.api.v1.insights import router as insights_router
 
 
 @asynccontextmanager
@@ -106,6 +107,7 @@ app.include_router(folders_router)
 app.include_router(avatars_router)
 app.include_router(voices_router)
 app.include_router(quiz_router)
+app.include_router(insights_router)
 
 
 @app.get("/metrics", include_in_schema=False)

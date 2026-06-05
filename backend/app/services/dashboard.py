@@ -1,9 +1,9 @@
 """교수자 대시보드 서비스 (NestJS DashboardService 포팅)."""
 import math
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -13,6 +13,11 @@ from app.models.cost_log import CostLog
 from app.models.lecture import Lecture
 from app.models.qa_log import QALog
 from app.models.session import LearningSession
+from app.services.insights.models import (
+    SlideEngagement,
+    WatchEvent,
+    WatchEventType,
+)
 
 
 async def get_attendance(
@@ -209,7 +214,173 @@ async def get_engagement(db: AsyncSession, lecture_id: uuid.UUID) -> dict:
             "totalNoResponseEvents": total_no_response,
         },
         "students": students,
+        # 재생 구간 히트맵 raw (G1) — 프론트 분석 페이지가 body.slides 를 감지하면
+        # WatchHeatmap 컴포넌트를 자동 활성화한다(types.ts WatchHeatmapData).
+        "slides": await aggregate_watch_slides(db, lecture_id),
     }
+
+
+# ── 재생 구간 히트맵 (watch_events 집계, G1) ──────────────────────────────────
+#
+# docs/planning/10-research-data-model.md §3.1·§3.2, 11-analytics-dashboard.md §F.
+# 베타 규모(교수 5~15·학생 수백)에선 원시 이벤트를 파이썬에서 1패스 집계해도
+# 무리 없다(get_attendance/get_engagement 와 동일 전략). 스케일 시 slide_engagement
+# 롤업으로 옮긴다.
+
+
+def _summarize_watch_events(events: list[WatchEvent]) -> list[dict]:
+    """watch_events 리스트 → 슬라이드별 {index, replays, drops, dwellSec, completionPct}.
+
+    정의(베타·해석 가능성 우선):
+    - replays  = 명시적 rewatch 이벤트 수 + max(0, 슬라이드 진입 수 − 진입 세션 수)
+                 (같은 학생이 한 슬라이드를 다시 진입 = 재시청)
+    - drops    = max(0, 진입 수 − 완료 수)  (진입했으나 완료 못 한 횟수 = 이탈)
+    - dwellSec = 클라이언트가 meta.dwell_seconds 로 보낸 체류 합(없으면 0)
+    - completionPct = 완료/진입 × 100
+    """
+    # slide_index → 누적 카운터
+    agg: dict[int, dict] = {}
+    # (slide_index) → 진입한 distinct session 집합
+    enter_sessions: dict[int, set] = {}
+
+    for ev in events:
+        idx = ev.slide_index
+        if idx is None:
+            continue
+        a = agg.setdefault(
+            idx,
+            {"enters": 0, "completes": 0, "rewatches": 0, "dwell": 0.0},
+        )
+        if ev.event_type == WatchEventType.segment_enter:
+            a["enters"] += 1
+            enter_sessions.setdefault(idx, set()).add(ev.session_id)
+        elif ev.event_type == WatchEventType.segment_complete:
+            a["completes"] += 1
+        elif ev.event_type == WatchEventType.rewatch:
+            a["rewatches"] += 1
+        # 클라이언트가 체류시간을 함께 보낸 경우(어느 이벤트든) 합산.
+        if ev.meta and isinstance(ev.meta, dict):
+            dwell = ev.meta.get("dwell_seconds")
+            if isinstance(dwell, (int, float)) and dwell > 0:
+                a["dwell"] += float(dwell)
+
+    slides: list[dict] = []
+    for idx in sorted(agg.keys()):
+        a = agg[idx]
+        distinct = len(enter_sessions.get(idx, set()))
+        replays = a["rewatches"] + max(0, a["enters"] - distinct)
+        drops = max(0, a["enters"] - a["completes"])
+        completion = round(a["completes"] / a["enters"] * 100, 2) if a["enters"] else 0.0
+        slides.append({
+            "index": idx,
+            "replays": replays,
+            "drops": drops,
+            "durationSec": round(a["dwell"], 1),
+            "completionPct": completion,
+        })
+    return slides
+
+
+async def aggregate_watch_slides(db: AsyncSession, lecture_id: uuid.UUID) -> list[dict]:
+    """강의의 watch_events 를 슬라이드별로 집계한 raw 리스트 반환."""
+    result = await db.execute(
+        select(WatchEvent).where(WatchEvent.lecture_id == lecture_id)
+    )
+    return _summarize_watch_events(list(result.scalars().all()))
+
+
+async def get_watch_heatmap(db: AsyncSession, lecture_id: uuid.UUID) -> dict:
+    """재생 구간 히트맵 — 프론트 WatchHeatmapData 모양({lecture_id, slides})."""
+    return {
+        "lecture_id": str(lecture_id),
+        "slides": await aggregate_watch_slides(db, lecture_id),
+    }
+
+
+async def ingest_watch_events(
+    db: AsyncSession,
+    *,
+    session: LearningSession,
+    events: list[dict],
+) -> int:
+    """슬라이드쇼 플레이어가 배치 전송한 재생 이벤트를 append.
+
+    세션 소유권(user_id·lecture_id)은 호출자(라우터)가 검증한 ``session`` 에서
+    가져오므로 클라이언트가 보낸 값으로 위조할 수 없다. 알 수 없는 event_type 은
+    건너뛴다(전방호환). 반환값 = 적재된 이벤트 수.
+    """
+    inserted = 0
+    for raw in events:
+        type_str = str(raw.get("event_type", "")).strip()
+        try:
+            event_type = WatchEventType(type_str)
+        except ValueError:
+            continue  # 미지의 타입은 무시(클라이언트 버전 스큐 허용)
+        slide_index = raw.get("slide_index")
+        client_ts_raw = raw.get("client_ts")
+        client_ts: datetime | None = None
+        if isinstance(client_ts_raw, str) and client_ts_raw:
+            try:
+                client_ts = datetime.fromisoformat(client_ts_raw.replace("Z", "+00:00"))
+            except ValueError:
+                client_ts = None
+        meta = raw.get("meta")
+        db.add(
+            WatchEvent(
+                session_id=session.id,
+                user_id=session.user_id,
+                lecture_id=session.lecture_id,
+                event_type=event_type,
+                slide_index=int(slide_index) if slide_index is not None else None,
+                position_seconds=float(raw.get("position_seconds", 0) or 0),
+                from_position_seconds=(
+                    float(raw["from_position_seconds"])
+                    if raw.get("from_position_seconds") is not None
+                    else None
+                ),
+                playback_rate=(
+                    float(raw["playback_rate"])
+                    if raw.get("playback_rate") is not None
+                    else None
+                ),
+                client_ts=client_ts,
+                meta=meta if isinstance(meta, dict) else None,
+            )
+        )
+        inserted += 1
+    await db.commit()
+    return inserted
+
+
+async def rollup_slide_engagement(db: AsyncSession, lecture_id: uuid.UUID) -> list[dict]:
+    """watch_events → slide_engagement 강의 전체 집계행(session_id=NULL) 재계산.
+
+    멱등 upsert(기존 강의 전체행 삭제 후 재삽입). 보고서 생성 시 호출해 재현 가능한
+    스냅샷을 남긴다(class_briefings.source_window 와 함께 재현성 확보, 11 §5).
+    학생별 행(session_id 有)은 베타 단계에서 생성하지 않는다(전체행만).
+    """
+    slides = await aggregate_watch_slides(db, lecture_id)
+    # 기존 강의 전체 집계행만 삭제(학생별 행은 건드리지 않음).
+    await db.execute(
+        delete(SlideEngagement).where(
+            SlideEngagement.lecture_id == lecture_id,
+            SlideEngagement.session_id.is_(None),
+        )
+    )
+    for s in slides:
+        db.add(
+            SlideEngagement(
+                lecture_id=lecture_id,
+                slide_index=s["index"],
+                session_id=None,
+                dwell_seconds=s["durationSec"],
+                rewatch_count=s["replays"],
+                drop_count=s["drops"],
+                avg_completion_pct=s["completionPct"],
+            )
+        )
+    await db.commit()
+    return slides
 
 
 async def get_qa_logs(

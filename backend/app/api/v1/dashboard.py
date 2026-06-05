@@ -3,17 +3,23 @@ import csv
 import io
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_professor
+from app.api.deps import require_professor, require_student
 from app.db.session import get_db
+from app.models.session import LearningSession
 from app.models.user import User
 from app.services import dashboard as dashboard_svc
 from app.services.lecture import assert_professor_owns_lecture, list_my_lectures
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
+
+# 한 번의 배치 전송에서 받을 재생 이벤트 상한 — 단건 POST 폭주/거대 페이로드 방지
+# (10번 §3.1 "10초/20건마다 배치"). 초과분은 클라이언트가 다음 배치로 분할.
+_MAX_WATCH_EVENTS_PER_BATCH = 200
 
 
 @router.get("/summary", summary="대시보드 요약 (내 전체 강의 배치)")
@@ -86,6 +92,57 @@ async def get_qa_logs(
 ):
     await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await dashboard_svc.get_qa_logs(db, lecture_id, page, limit)
+
+
+@router.post("/watch-events", summary="재생 이벤트 배치 적재 (학습자)")
+async def ingest_watch_events(
+    payload: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_student),
+):
+    """슬라이드쇼 플레이어가 보낸 재생 이벤트 배치를 적재한다 (G1, 10번 §3.1).
+
+    body: ``{"session_id": "<uuid>", "events": [{event_type, slide_index, ...}]}``.
+    세션 소유권을 검증(본인 세션만) → user_id·lecture_id 는 서버가 세션에서 채운다.
+    클라이언트가 보낸 user/lecture 값은 신뢰하지 않는다. 재생 히트맵·완주 분석의
+    1차 자료이며 소급 수집 불가(09 §3)하므로 학기 시작 전 반드시 연결돼야 한다.
+    """
+    session_id_raw = payload.get("session_id")
+    events = payload.get("events")
+    if not session_id_raw or not isinstance(events, list):
+        raise HTTPException(status_code=422, detail="session_id 와 events[] 가 필요합니다.")
+    if len(events) > _MAX_WATCH_EVENTS_PER_BATCH:
+        raise HTTPException(
+            status_code=413,
+            detail=f"한 배치 최대 {_MAX_WATCH_EVENTS_PER_BATCH}건까지 허용됩니다.",
+        )
+    try:
+        session_id = uuid.UUID(str(session_id_raw))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="유효하지 않은 session_id 입니다.")
+
+    result = await db.execute(
+        select(LearningSession).where(
+            LearningSession.id == session_id,
+            LearningSession.user_id == user.id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다.")
+
+    inserted = await dashboard_svc.ingest_watch_events(db, session=session, events=events)
+    return {"ingested": inserted}
+
+
+@router.get("/{lecture_id}/watch-heatmap", summary="재생 구간 히트맵 (슬라이드별 재시청·이탈)")
+async def get_watch_heatmap(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await dashboard_svc.get_watch_heatmap(db, lecture_id)
 
 
 @router.get("/{lecture_id}/cost", summary="비용 미터")

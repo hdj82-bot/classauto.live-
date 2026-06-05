@@ -1,0 +1,75 @@
+{
+  "insightsHub": {
+    "back": "← 분석 리포트로",
+    "title": "{title} 대면수업 솔루션 보고서",
+    "subtitle": "상호작용 데이터를 분석해 차주 대면 수업의 초점을 제안합니다.",
+    "loading": "보고서 생성 중...",
+    "loadError": "보고서를 불러오지 못했습니다.",
+    "retry": "다시 시도",
+    "refresh": "다시 생성",
+    "refreshing": "생성 중...",
+    "aiBadge": "AI 합성",
+    "ruleBadge": "규칙 기반",
+    "generatedAt": "{ts} 생성",
+    "modelHint": "강의×주 1회 경량 합성 (비용 가드레일 적용)",
+    "evidence": {
+      "title": "현황 지표",
+      "completionRate": "완주율",
+      "accuracy": "평균 정답률",
+      "qa": "질문 수",
+      "warnings": "딴짓 경고",
+      "students": "학습자 {count}명"
+    },
+    "summary": {
+      "title": "학습 데이터 요약",
+      "empty": "요약할 데이터가 아직 없습니다."
+    },
+    "weakConcepts": {
+      "title": "상위 취약 개념",
+      "subtitle": "근거 데이터와 함께 — 차주 수업 초점 후보",
+      "empty": "임계값을 넘는 취약 개념이 없습니다.",
+      "severity": "심각도",
+      "accuracy": "정답률 {value}%",
+      "responses": "응답 {count}건",
+      "drops": "이탈 {count}회",
+      "replays": "재시청 {count}회",
+      "completion": "완료율 {value}%",
+      "rejectionRate": "거부율 {value}%",
+      "kindQuiz": "퀴즈 오답",
+      "kindWatch": "재시청·이탈",
+      "kindQa": "범위 밖 질문"
+    },
+    "recommendations": {
+      "title": "차주 대면수업 권장",
+      "subtitle": "데이터 근거에 기반한 행동 제안",
+      "empty": "권장 항목이 없습니다.",
+      "rationale": "근거",
+      "activity": "활동",
+      "targetSlides": "대상 슬라이드",
+      "targetStudents": "대상 학습자 {count}명",
+      "type": {
+        "review": "복습",
+        "reorder": "재구성",
+        "supplement": "보강",
+        "activity": "활동",
+        "contact": "개별 연락"
+      }
+    },
+    "classVsIndividual": {
+      "title": "학급 전체 vs 개별 신호",
+      "classTitle": "학급 전체 신호",
+      "individualTitle": "개별 학습자 신호",
+      "classEmpty": "학급 단위 신호가 없습니다.",
+      "individualEmpty": "개별 신호가 포착된 학습자가 없습니다.",
+      "suggestion": "제안"
+    },
+    "export": {
+      "label": "보고서 CSV",
+      "loading": "내보내는 중...",
+      "success": "보고서 CSV가 다운로드되었습니다.",
+      "error": "CSV 내보내기에 실패했습니다.",
+      "ariaLabel": "대면수업 솔루션 보고서 CSV 다운로드"
+    },
+    "linkLabel": "솔루션 보고서"
+  }
+}
