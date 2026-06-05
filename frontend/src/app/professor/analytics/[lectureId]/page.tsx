@@ -15,6 +15,7 @@ import {
   QaTrend,
   useAnalyticsI18n,
 } from "@/components/professor/analytics";
+import { useInsightsI18n } from "@/components/professor/analytics/insights";
 import {
   PageContainer,
   PageHeader,
@@ -65,6 +66,8 @@ export default function LectureAnalyticsPage() {
   const lectureId = params.lectureId;
   const { locale } = useI18n();
   const { t } = useAnalyticsI18n();
+  // 보고서 링크 라벨만 insights 패치에서 (analytics 패치는 본 창 소유 아님).
+  const { t: tReport } = useInsightsI18n();
 
   const [lecture, setLecture] = useState<LectureMeta | null>(null);
   const [attendance, setAttendance] = useState<AttendanceData | null>(null);
@@ -198,7 +201,24 @@ export default function LectureAnalyticsPage() {
         }
         title={t("lectureTitle", { title: lecture?.title ?? lectureId })}
         subtitle={t("lectureSubtitle")}
-        actions={<CsvExportButton lectureId={lectureId} />}
+        actions={
+          <div className="flex items-center gap-2">
+            {/* 대면수업 솔루션 보고서(인사이트) — RQ2 핵심 합성 화면으로 이동 */}
+            <Link
+              href={`/professor/analytics/${lectureId}/report`}
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold"
+              style={{
+                background: "linear-gradient(135deg, #FFB627, #E89E0E)",
+                color: "#0A0A0A",
+                textDecoration: "none",
+                boxShadow: "0 4px 14px rgba(255, 182, 39, 0.34)",
+              }}
+            >
+              {tReport("linkLabel")}
+            </Link>
+            <CsvExportButton lectureId={lectureId} />
+          </div>
+        }
       />
       <div className="space-y-6">
 

@@ -1,0 +1,75 @@
+{
+  "insightsHub": {
+    "back": "← Back to analytics",
+    "title": "{title} — In-class Solution Report",
+    "subtitle": "Analyzes interaction data to propose next week's in-class focus.",
+    "loading": "Generating report...",
+    "loadError": "Failed to load the report.",
+    "retry": "Retry",
+    "refresh": "Regenerate",
+    "refreshing": "Generating...",
+    "aiBadge": "AI-synthesized",
+    "ruleBadge": "Rule-based",
+    "generatedAt": "Generated {ts}",
+    "modelHint": "Lightweight synthesis once per lecture×week (cost guardrails applied)",
+    "evidence": {
+      "title": "Key metrics",
+      "completionRate": "Completion",
+      "accuracy": "Avg. accuracy",
+      "qa": "Questions",
+      "warnings": "Distraction alerts",
+      "students": "{count} learners"
+    },
+    "summary": {
+      "title": "Learning data summary",
+      "empty": "No data to summarize yet."
+    },
+    "weakConcepts": {
+      "title": "Top weak concepts",
+      "subtitle": "With supporting evidence — candidates for in-class focus",
+      "empty": "No weak concepts above threshold.",
+      "severity": "Severity",
+      "accuracy": "{value}% correct",
+      "responses": "{count} responses",
+      "drops": "{count} drop-offs",
+      "replays": "{count} replays",
+      "completion": "{value}% completion",
+      "rejectionRate": "{value}% rejected",
+      "kindQuiz": "Quiz errors",
+      "kindWatch": "Replay / drop-off",
+      "kindQa": "Out-of-scope questions"
+    },
+    "recommendations": {
+      "title": "Next-week in-class recommendations",
+      "subtitle": "Data-grounded action suggestions",
+      "empty": "No recommendations.",
+      "rationale": "Rationale",
+      "activity": "Activity",
+      "targetSlides": "Target slides",
+      "targetStudents": "{count} target learners",
+      "type": {
+        "review": "Review",
+        "reorder": "Reorder",
+        "supplement": "Supplement",
+        "activity": "Activity",
+        "contact": "Outreach"
+      }
+    },
+    "classVsIndividual": {
+      "title": "Class-wide vs individual signals",
+      "classTitle": "Class-wide signals",
+      "individualTitle": "Individual learner signals",
+      "classEmpty": "No class-level signals.",
+      "individualEmpty": "No learners with flagged signals.",
+      "suggestion": "Suggestion"
+    },
+    "export": {
+      "label": "Report CSV",
+      "loading": "Exporting...",
+      "success": "Report CSV downloaded.",
+      "error": "Failed to export CSV.",
+      "ariaLabel": "Download in-class solution report CSV"
+    },
+    "linkLabel": "Solution report"
+  }
+}
