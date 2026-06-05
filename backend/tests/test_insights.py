@@ -11,11 +11,9 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.assessment_result import AssessmentResult
-from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.session import LearningSession, SessionStatus
 from app.services.insights import briefing as briefing_svc
-from app.services.insights.models import WatchEvent
 from tests.conftest import make_auth_header
 
 
