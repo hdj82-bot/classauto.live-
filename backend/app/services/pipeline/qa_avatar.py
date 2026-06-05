@@ -189,6 +189,10 @@ def resolve_avatar_for_question(
                     "status": "ready",
                     "video_url": hit.s3_video_url,
                     "cache_id": str(hit.id),
+                    # 투명성(09 §5.2) — 캐시 클립은 "이 학생의 질문"이 아니라 "비슷한
+                    # 과거 질문"에 맞춰 렌더된 것이므로, 그 원 질문을 함께 내려보내
+                    # 프론트가 "비슷한 질문에 대한 답변입니다: …"로 표기하게 한다.
+                    "matched_question": hit.question_text,
                 },
                 cache_hit=True,
             )

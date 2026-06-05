@@ -62,6 +62,11 @@ interface QAMessage {
   source?: string | null;
   /** 캐시 적중 시 함께 내려오는 HeyGen 아바타 답변 클립 URL (없으면 텍스트만). */
   avatarUrl?: string | null;
+  /**
+   * 캐시 아바타 클립이 맞춰진 "원 질문"(09 §5.2 투명성). 캐시 클립은 이 학생의
+   * 질문이 아니라 비슷한 과거 질문에 렌더된 것이므로, 클립 위에 그 사실을 표기한다.
+   */
+  matchedQuestion?: string | null;
 }
 
 interface ReactionCount {
@@ -361,6 +366,8 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
           source: data.source ?? t("student.playerV2.qaSourceFallback"),
           // 겹치는 질문이라 사전 렌더된 아바타 클립이 있으면 함께 재생(부가).
           avatarUrl: data.avatar?.video_url ?? null,
+          // 투명성(09 §5.2) — 캐시 클립이 맞춰진 원 질문.
+          matchedQuestion: data.avatar?.matched_question ?? null,
         },
       ]);
     } catch {
@@ -757,6 +764,22 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                     <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
                     <div>
                       <div className={styles.bubble}>{m.text}</div>
+                      {m.avatarUrl && (
+                        // 투명성(09 §5.2) — 캐시 클립은 비슷한 과거 질문에 렌더된 것.
+                        // "권위 있는 답"은 위 텍스트(이 학생 질문에 맞춘 RAG)이고 아바타는
+                        // 전달 보조임을 명시한다.
+                        <span
+                          className={styles.source}
+                          style={{ marginTop: 8, display: "flex" }}
+                          data-testid="qa-avatar-disclaimer"
+                        >
+                          {m.matchedQuestion
+                            ? t("student.playerV2.qaSimilarAnswerOf", {
+                                question: m.matchedQuestion,
+                              })
+                            : t("student.playerV2.qaSimilarAnswer")}
+                        </span>
+                      )}
                       {m.avatarUrl && (
                         // 캐시 적중 시 부가되는 아바타 답변 클립. 텍스트가 본답이고
                         // 영상은 전달 보조 — 로드 실패해도 텍스트 답변은 그대로 남는다.

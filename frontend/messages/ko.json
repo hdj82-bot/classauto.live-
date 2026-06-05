@@ -1357,6 +1357,8 @@
       "qaMic": "음성으로 질문하기",
       "qaSuggestLabel": "추천 질문",
       "qaSourceFallback": "강의 자료",
+      "qaSimilarAnswer": "비슷한 질문에 대한 답변입니다",
+      "qaSimilarAnswerOf": "비슷한 질문에 대한 답변입니다: “{question}”",
       "qaGenericFallback": "강의 자료에서 관련 내용을 찾아 답변드릴게요.",
       "qaWelcome": "안녕하세요! 궁금한 부분을 자유롭게 물어보세요.",
       "qaErrorAnswer": "답변 생성에 실패했습니다. 잠시 후 다시 시도해주세요.",

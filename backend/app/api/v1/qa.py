@@ -8,7 +8,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,7 +30,10 @@ router = APIRouter(prefix="/api/v1/qa", tags=["qa"])
 class QARequest(BaseModel):
     session_id: uuid.UUID
     lecture_id: uuid.UUID
-    question: str
+    # 1차 가드레일 — 입력 제약(docs/planning/02 §3.1: 텍스트 ≤ 500자). 서버 사이드에서
+    # 강제해 "보고서 붙여넣기"식 남용을 RAG·Claude 호출 전에 차단한다(비용 0). 초과/공백
+    # 질문은 422 로 거부 — 프론트 글자수 카운터(500/500)와 동일 한도.
+    question: str = Field(..., min_length=1, max_length=500)
 
 
 @router.post("", summary="Q&A 질문")
