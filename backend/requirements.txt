@@ -36,7 +36,7 @@ anthropic>=0.102.0,<1.0.0
 # 소스와 핀을 일치시킨다(1.x 회귀 설치 방지). images.edit·embeddings.create·AsyncOpenAI·
 # BadRequestError 시그니처는 1.x→2.x 무변경(워크트리 전체 테스트 846 passed, 2.41.0 검증
 # — docs/verification/00-index.md). 상한은 3.0 미만 유지. (공유 의존성 — 병렬 브랜치 merge 시 주의)
-openai>=2.38.0,<3.0.0
+openai>=2.41.0,<3.0.0
 
 # Pipeline
 python-pptx>=1.0.2,<2.0.0
