@@ -549,6 +549,25 @@ export default function AvatarsPage() {
           </p>
         )}
 
+        {/* 아바타 제작 작업대 — "룩과 목소리 아바타 제작"을 누르면 열려 그 자리에서
+            아바타를 렌더하고(가로 16:9 영상 위 + 스크립트·적용 아래), 성능을 확인한 뒤
+            강의에 적용한다. 페이지 최상단(헤더 바로 아래)에 둬, 제작 클릭 즉시 보이도록
+            한다(2026-06-05 사용자 피드백: 이전엔 페이지 맨 아래에서 열려 안 보였음).
+            builderOpen=false 면 컴포넌트가 스스로 null 을 반환해 아무것도 차지하지 않는다. */}
+        <AvatarScriptTest
+          look={selectedAvatar}
+          voiceId={selectedVoiceId}
+          voiceName={selectedVoiceName}
+          active={builderOpen}
+          renderNonce={renderNonce}
+          lectureId={lectureId}
+          applying={applying}
+          onApplyToLecture={handleApply}
+          onPrepareRender={handlePrepareRender}
+          reducedMotion={reducedMotion}
+          t={t}
+        />
+
         {/* 최근 선택한 아바타 + 저장된 아바타·룩 라이브러리 — 재생성 없이 즉시 선택/적용.
             만든 아바타·룩이 없으면 컴포넌트가 스스로 아무것도 렌더하지 않는다. */}
         <AvatarLibrary
@@ -595,22 +614,6 @@ export default function AvatarsPage() {
           selectedId={selectedVoiceId}
           onSelect={handleToggleSampleVoice}
           ownVoiceId={ownVoiceId}
-          t={t}
-        />
-
-        {/* 아바타 제작 작업대 — "룩과 목소리 아바타 제작"을 누르면 열려 그 자리에서
-            아바타를 렌더하고, 스크립트로 성능을 확인한 뒤 강의에 적용한다. */}
-        <AvatarScriptTest
-          look={selectedAvatar}
-          voiceId={selectedVoiceId}
-          voiceName={selectedVoiceName}
-          active={builderOpen}
-          renderNonce={renderNonce}
-          lectureId={lectureId}
-          applying={applying}
-          onApplyToLecture={handleApply}
-          onPrepareRender={handlePrepareRender}
-          reducedMotion={reducedMotion}
           t={t}
         />
 

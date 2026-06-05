@@ -95,6 +95,11 @@ function extForMime(mime: string): string {
  * ``isTypeSupported`` 가 true 라 해도 일부 브라우저는 생성 시 throw 하므로,
  * try/catch 로 다음 후보로 넘어간다(녹음이 "에러 뜨고 안 됨"의 핵심 원인).
  */
+// 클론(IVC) 입력 샘플 품질 ↑ — opus 기본 비트레이트는 가변·저비트일 수 있어
+// 128kbps 로 고정해 또렷한 샘플을 만든다(ElevenLabs 클론 정확도↑). 인코딩 옵션이라
+// 장치 제약(OverconstrainedError)을 유발하지 않아 호환성 위험이 없다.
+const RECORD_AUDIO_BPS = 128_000;
+
 function createRecorder(
   stream: MediaStream,
 ): { recorder: MediaRecorder; mime: string } | null {
@@ -102,9 +107,9 @@ function createRecorder(
   for (const m of MIME_CANDIDATES) {
     if (m && canTest && !MediaRecorder.isTypeSupported(m)) continue;
     try {
-      const recorder = m
-        ? new MediaRecorder(stream, { mimeType: m })
-        : new MediaRecorder(stream);
+      const opts: MediaRecorderOptions = { audioBitsPerSecond: RECORD_AUDIO_BPS };
+      if (m) opts.mimeType = m;
+      const recorder = new MediaRecorder(stream, opts);
       return { recorder, mime: recorder.mimeType || m };
     } catch {
       /* 다음 후보 시도 */

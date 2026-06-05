@@ -101,6 +101,7 @@
     "scriptTestSpeak": "Speak this script",
     "scriptTestRespeak": "Re-render",
     "scriptTestRendering": "Rendering your talking avatar...",
+    "scriptTestRenderingHint": "This usually takes 30–90 seconds. Please keep this open.",
     "scriptTestFailed": "Failed to render the avatar video. Please try again shortly.",
     "scriptTestApplyHint": "Changed the look or voice? Press 'Speak this script' again to check. When you're happy, apply it with 'Build avatar with look & voice' at the top right.",
 
