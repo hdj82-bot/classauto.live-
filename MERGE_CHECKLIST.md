@@ -1,5 +1,18 @@
 # feat/infra → main 머지 준비 체크리스트
 
+> 🗄️ **ARCHIVED (2026-06-05).** 이 문서는 **2026-03-26 초기 인프라 머지(`feat/infra` → `main`)** 한 건을
+> 위한 일회성 체크리스트입니다. 그 머지는 오래 전에 완료됐고, 그 뒤로 프로덕션 배포·도메인 연결·CI/CD·
+> 3주간의 기능 웨이브(PR #199~#345)까지 진행되어 **프로덕션이 라이브**입니다. 아래 내용(테스트 37개,
+> 엔드포인트 20개, 마이그레이션 0001~0005 등)은 **당시 스냅샷**이며 현재 코드베이스와 일치하지 않습니다
+> (예: 마이그레이션은 0039+, 백엔드 테스트는 846+). **역사 기록으로만** 보존합니다.
+>
+> 현재 기준 문서:
+> - 배포 현황: [DEPLOYMENT_PROGRESS.md](DEPLOYMENT_PROGRESS.md)
+> - 운영 절차(모니터링·알림·백업): [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)
+> - 머지/배포 게이트: [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) §1~§2 (develop 채널 SOP)
+
+---
+
 > 작성일: 2026-03-26
 > 대상 브랜치: `feat/infra` → `main`
 

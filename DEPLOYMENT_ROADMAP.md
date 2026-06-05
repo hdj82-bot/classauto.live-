@@ -1,5 +1,12 @@
 # classauto.live 배포 로드맵
 
+> ✅ **상태(2026-06-05): 전 Phase 완료 — 프로덕션 라이브.** `https://api.classauto.live/health/deep`
+> 5/5 ok. 이 로드맵은 이제 **최초 배포를 재현하기 위한 셋업 가이드(역사·참조용)**입니다. 아래 체크박스
+> `[ ]` 들은 **당시 미완료 표시가 아니라 절차 항목**이며, 실제 환경에서는 모두 수행 완료됐습니다.
+> 현재 운영 기준은 [DEPLOYMENT_PROGRESS.md](DEPLOYMENT_PROGRESS.md)(현황) ·
+> [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)(상시 운영·모니터링·백업) ·
+> [docs/RAILWAY_DEPLOY.md](docs/RAILWAY_DEPLOY.md)(토폴로지 source of truth) 를 따릅니다.
+
 > 목표: Vercel(프론트) + Railway(백엔드/Celery/Redis) + Supabase(DB/Auth/Storage)로 프로덕션 배포
 > 예상 소요: 4~8시간 (외부 API 키가 모두 준비되어 있다는 전제)
 > 예상 월 비용: $0~5 (1단계 무료 티어)
