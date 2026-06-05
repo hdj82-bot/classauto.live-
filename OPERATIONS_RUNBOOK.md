@@ -1,11 +1,14 @@
 # 운영 런북 (Operations Runbook) — Phase 6
 
-> 이 문서는 **CI/CD·배포·롤백 운영 절차**를 다룹니다.
-> - 배포 환경/단계 현황: [DEPLOYMENT_PROGRESS.md](DEPLOYMENT_PROGRESS.md)
+> 이 문서는 **CI/CD·배포·롤백·상시 운영(모니터링/알림/백업) 절차**를 다룹니다.
+> - 배포 환경/단계 현황: [DEPLOYMENT_PROGRESS.md](DEPLOYMENT_PROGRESS.md) (프로덕션 라이브 — 2026-06-05)
 > - 배포 단계별 셋업 가이드: [DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) (특히 `Phase 6 — CI/CD & 운영 정착`)
-> - 근거: `.github/workflows/ci.yml`, `.github/workflows/backup.yml`, `scripts/deploy.sh`, `backend/Dockerfile{,.prod}`, `frontend/Dockerfile{,.prod}` (2026-05-16 main 기준)
+> - 근거: `.github/workflows/ci.yml`, `.github/workflows/backup.yml`, `scripts/deploy.sh`, `backend/Dockerfile{,.prod}`, `frontend/Dockerfile{,.prod}`, `docs/RAILWAY_DEPLOY.md` (2026-06-05 main 기준)
 >
 > 모든 절차는 위 실제 파일 내용에 근거합니다. 추측·미확인 절차는 포함하지 않습니다.
+>
+> 구성: **§1~§7 = 자체 호스팅(VPS) 경로** 중심 / **§8 = 현재 라이브 관리형 스택(Railway·Vercel·Supabase)의
+> 상시 모니터링·알림·외부 API soft-limit·백업**. 현재 운영 기준은 §8 을 우선 본다.
 
 ---
 
@@ -182,15 +185,20 @@ docker compose -f docker-compose.prod.yml run --rm backend alembic downgrade -1
 
 ---
 
-## 5. Phase 5 스모크 체크리스트 (링크 참조)
+## 5. 스모크/회귀 체크리스트 (링크 참조)
 
-운영 배포 전/직후 반드시 수행하는 end-to-end 파이프라인 검증은 **여기서 중복 기술하지 않고** 단일 출처를 따른다:
+배포 직후·메이저 의존성 bump 후 수행하는 end-to-end 파이프라인 점검은 **여기서 중복 기술하지 않고** 단일 출처를 따른다:
 
-➡️ **[DEPLOYMENT_PROGRESS.md](DEPLOYMENT_PROGRESS.md) §"다음 세션 작업 — Phase 5 스모크 테스트"** (강좌 생성 → PPT 업로드→Celery 큐잉 → 스크립트 생성 → 학생 시청 흐름 + "시작 전 가벼운 확인" / "막힘 신호").
+➡️ **[DEPLOYMENT_PROGRESS.md](DEPLOYMENT_PROGRESS.md) §"(역사·재현 절차) Phase 5 스모크 테스트 시나리오"** (강좌 생성 → PPT 업로드→Celery 큐잉 → 스크립트 생성 → 학생 시청 흐름 + "시작 전 가벼운 확인" / "막힘 신호").
 
 보조 체크리스트: [DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) `Phase 5 — 스모크 테스트`(5.1 인증 / 5.2 핵심 API / 5.3 학생 경로 / 5.4 헬스·메트릭).
 
-> **운영상 최우선 사실**(DEPLOYMENT_PROGRESS.md 상태 메모): PPT → Celery → Claude → HeyGen **end-to-end 검증은 아직 1회도 수행되지 않음 = 단일 최우선 블로커**. 본 런북의 배포 게이트(§1)를 켜기 전에, 그리고 의존성 메이저 bump(예: anthropic SDK) 머지 전에 **베이스라인 스모크 1회**를 먼저 수행한다 (DEPLOYMENT_PROGRESS.md `스모크 테스트 사전 점검` 의 ①→②→③ 순서).
+> 🗓️ **2026-06-05 정정**: 이전 판의 "PPT→Celery→Claude→HeyGen end-to-end 가 1회도 수행 안 됨 = 단일
+> 최우선 블로커" 서술은 **무효**다. 프로덕션이 라이브가 되며 코어 루프가 운영에서 반복 검증됐다
+> (DEPLOYMENT_PROGRESS.md `2026-06-05 현재 상태`). 따라서 이 스모크는 "블로커 해소"가 아니라
+> **배포·메이저 의존성 bump 후 회귀 점검**으로 수행한다. 위험 의존성 bump 는 §2 `develop` 채널 +
+> Trivy + Dockerfile parity 를 먼저 통과시킨 뒤 main 으로 올린다(예: openai/uvicorn bump 검증은
+> [docs/verification/00-index.md](docs/verification/00-index.md) §V1).
 
 ---
 
@@ -208,5 +216,105 @@ docker compose -f docker-compose.prod.yml run --rm backend alembic downgrade -1
 2. `develop` 리허설 완료(베이스 이미지/도커 변경이 포함된 경우 §2 필수).
 3. 게이트(§1): `DEPLOY_ENABLED=true` + 시크릿 5종 + (권장) production Required reviewers.
 4. 배포 트리거는 §1.3 의 태그 또는 workflow_dispatch 만.
-5. 직후 §5 스모크 + `/health`(DEPLOYMENT_PROGRESS.md `현재 인프라 상태` 의 5/5 ok 형태) 확인.
-6. 이상 시 §4.2 `./scripts/deploy.sh rollback` → 필요 시 §4.4 스키마 동반 롤백.
+5. 직후 §5 스모크 + `/health/deep`(DEPLOYMENT_PROGRESS.md `현재 인프라 상태` 의 5/5 ok 형태) 확인.
+6. 이상 시 §4.2 `./scripts/deploy.sh rollback`(VPS) 또는 §4.5 관리형 Promote/Redeploy → 필요 시 §4.4 스키마 동반 롤백.
+
+---
+
+## 8. 운영 모니터링·알림·백업 (관리형 스택 — Railway/Vercel/Supabase)
+
+> §1~§7 은 자체 호스팅(VPS + `scripts/deploy.sh` + GHCR) 경로 중심이다. **현재 프로덕션은
+> 관리형 스택**(Railway 백엔드·Vercel 프론트·Supabase DB, DEPLOYMENT_PROGRESS.md `현재 인프라 상태`)이며,
+> 이 절은 그 스택의 **상시 운영 모니터링·알림·백업**을 코드화/절차화한다.
+>
+> ⚠️ 아래 **대부분은 외부 SaaS 대시보드의 수동 설정**(교수님 권한 필요)이다. 콘솔 UI 는 변할 수 있으니
+> "어떤 신호를 어디에 연결하는가"의 의도를 기준으로 읽고, 메뉴 명칭은 근사치로 본다.
+
+### 8.1 외부 업타임 모니터 → `/health/deep` (`celery != ok` 알림) — **최우선**
+
+**왜**: 컨테이너/플랫폼의 기본 healthcheck 는 `/health`(경량 liveness, #224)만 본다. 이건 **프로세스가
+살아있는지**만 확인하고 **Celery 워커가 죽었는지는 못 잡는다**. 워커가 죽으면 룩 생성·영상 렌더·Q&A 야간
+배치가 **에러 없이 조용히 영구 적체**한다([docs/RAILWAY_DEPLOY.md](docs/RAILWAY_DEPLOY.md) §1·§4). 그래서
+외부 업타임 모니터는 반드시 **`/health/deep`** 를 폴링하고 응답 본문의 `checks.celery` 를 검사해야 한다.
+
+**연결 절차(외부 모니터 — UptimeRobot/Better Stack/Pingdom 등 무료 티어 가능):**
+1. 모니터 종류: **HTTP(S) keyword 모니터**.
+2. URL: `https://api.classauto.live/health/deep`
+3. 간격: 1~5분.
+4. **정상 조건**: 응답이 HTTP 200 **이고** 본문에 `"celery":"ok"` 문자열이 포함.
+   - keyword 모니터를 `"celery":"ok"` **부재 시 다운**으로 설정(= `no_workers`/`error` 면 알림).
+   - 가능하면 `"status":"ok"` 도 함께 본다(5/5 종합).
+5. 알림 채널: 이메일(`hdj82@kyonggi.ac.kr`) + (선택) Slack/SMS. 다운 1회 즉시 + 복구 시 알림.
+6. **2차(선택)**: `https://classauto.live` (프론트, Vercel)도 별도 keyword 모니터로 — 빌드 사고·도메인 만료 조기 감지.
+
+> 빠른 수동 점검: `curl -s https://api.classauto.live/health/deep` → `checks` 5종 전부 `ok` 인지.
+> `celery` 가 `no_workers`/`error` 면 Railway → `celery-worker` 서비스 로그 확인 후 Redeploy(§4.5).
+
+### 8.2 Sentry (에러) 알림
+
+- 백엔드 `sentry-sdk[fastapi]`, 프론트 `NEXT_PUBLIC_SENTRY_DSN`(설정 시). 민감정보는 `core/sentry.py`
+  `_SENSITIVE_KEYS` + `core/logging.py` KV 마스킹으로 학번·실명·OAuth ID 가 평문 전송되지 않게 차단됨(#160).
+- **Sentry → Alerts** 에서 권장 룰(교수님 수동):
+  - **새 이슈(first seen)** → 즉시 이메일.
+  - **이슈 급증**(예: 1시간 내 동일 이슈 N건↑) → 알림 — 파이프라인/외부 API 연쇄 실패 조기 포착.
+  - 환경 필터 `environment:production` 으로 한정(개발 노이즈 제외).
+- DSN 미설정이면 Sentry 는 no-op(부팅은 정상). 베타 운영에서는 최소 백엔드 DSN 을 권장.
+
+### 8.3 Railway (백엔드/워커) 알림
+
+- **Project → Settings → Notifications**: 배포 실패·크래시·서비스 다운 시 이메일/웹훅(교수님 수동).
+- **반드시 확인할 서비스 3종**: `backend`(web), `celery-worker`, `celery-beat`. 특히 **worker 는 healthcheck
+  대상이 아니므로**(의도적, [docs/RAILWAY_DEPLOY.md](docs/RAILWAY_DEPLOY.md) §1) 다운을 플랫폼이 자동 통지하지
+  않는다 → §8.1 의 `/health/deep` 외부 모니터가 워커 사망의 **실질적 1차 감지선**이다.
+- **Usage**: 월 크레딧 소진 추세 — `Usage` 페이지 즐겨찾기([DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) §6.4).
+
+### 8.4 Vercel (프론트) 알림
+
+- **Project → Settings → Notifications**: **빌드/배포 실패 시 이메일**(교수님 수동) — 프론트가 빌드 실패로
+  이전 버전에 머무는 사고 조기 감지.
+- 도메인/SSL 만료 알림도 켠다(apex `classauto.live` + `www` 308).
+
+### 8.5 외부 API soft-limit · 비용 가드
+
+**앱 내부 가드(이미 코드에 존재 — 근거):**
+- HeyGen **예산 서킷 브레이커**·중복 렌더 차단·mock·단가 정정(#272·#274) — 영상 렌더 폭주/이중 청구 방지.
+- 전 생성 경량 모델(Haiku) 기본화(#222)·스크립트 prompt caching(#202) — Claude 비용 절감.
+- 본문 클라이언트 슬라이드쇼화(#326)로 슬라이드별 HeyGen 렌더 제거 — 렌더 단가의 구조적 절감.
+
+**각 콘솔의 soft-limit(교수님 수동 — 폭주 시 과금 상한):**
+| 제공자 | 콘솔 설정 |
+|---|---|
+| Anthropic (Claude) | console.anthropic.com → Billing/Limits → **monthly spend limit** + 사용량 알림 |
+| OpenAI (임베딩·gpt-image) | platform.openai.com → Limits → **monthly budget / usage alert** |
+| HeyGen (영상 렌더) | 플랜 크레딧 한도 확인 — 앱의 예산 서킷 브레이커(#274)와 **이중 안전망** |
+| ElevenLabs (TTS) | 구독 등급 문자수 한도 모니터 |
+
+> 운영 원칙: **콘솔 하드 상한(과금 사고 방지) + 앱 서킷 브레이커(품질·UX) 를 둘 다** 둔다. 한쪽만으로는
+> 부족하다 — 콘솔 상한은 사용자에게 갑작스런 503 을 줄 수 있고, 앱 가드는 콘솔 청구를 막지 못한다.
+
+### 8.6 Supabase 백업 (무료 티어 한계 · 주 1회 `pg_dump` 대안)
+
+**한계(반드시 인지)**: Supabase **Free 티어는 PITR(시점 복구) 미지원**이고 자동 백업 보관도 짧다(7일 일일
+백업은 Pro 이상, [DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) §7). 또한 GitHub Actions `backup.yml` 은
+`vars.DEPLOY_ENABLED == 'true'`(= VPS 모드) 일 때만 도므로, **관리형 Supabase 스택에서는 기본적으로 돌지 않는다.**
+→ 관리형 스택에서는 아래 **수동/반자동 주 1회 `pg_dump`** 가 현실적 안전망이다.
+
+**주 1회 수동 `pg_dump`(권장 — 무료 티어용):**
+```bash
+# Supabase → Project Settings → Database → Connection string (Direct, psycopg/플레인)
+# 비밀번호 포함 URL 은 셸 히스토리에 남지 않게 주의(환경변수로 주입).
+PGURL="postgresql://postgres.<ref>:<password>@<host>:5432/postgres"
+STAMP="$(date -u +%Y%m%d)"
+pg_dump --no-owner --no-privileges --format=plain "$PGURL" | gzip -9 > "ifl-${STAMP}.sql.gz"
+# 안전한 외부 저장(예: S3/로컬 보관). 복원: gunzip -c ifl-YYYYMMDD.sql.gz | psql "$PGURL"
+```
+- `--no-owner --no-privileges`: 다른 환경 role/permission 차이로 복원이 깨지지 않게(= `backup.yml` 과 동일 플래그).
+- pg 클라이언트 버전은 서버와 맞춘다(현재 **pg16** — backend 이미지와 동일).
+
+**반자동 옵션(원하면)**: `backup.yml` 워크플로를 그대로 재사용하되 **`DATABASE_URL_BACKUP` 를 Supabase
+Direct URL 로** 두고, 별도 cron 워크플로(또는 `vars.DEPLOY_ENABLED` 게이트 분리)로 주 1회 트리거. 산출물은
+동일하게 `s3://<버킷>/ifl-backup/<날짜>/`. 다만 이는 앱 빌드 잡과 무관한 운영 워크플로 변경이므로 별도 PR 로.
+
+**확장 트리거**: DB 가 Free 한도(500MB)의 ~80% 에 도달하면 Supabase **Pro($25/월, 8GB + 7일 PITR)** 전환을
+검토([DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) §7). 그 시점부터는 PITR 가 1차 안전망이 되어 수동 `pg_dump`
+부담이 줄어든다.

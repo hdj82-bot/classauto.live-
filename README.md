@@ -115,6 +115,12 @@ docker compose exec backend python -m scripts.seed
 
 ## 프로덕션 배포 (Vercel + Railway + Supabase)
 
+> ✅ **프로덕션 라이브 (2026-06-05)** — `https://classauto.live` / `https://api.classauto.live`.
+> `…/health/deep` 5/5 ok(`service·db·redis·s3·celery`). 인프라·도메인·마이그레이션 자동화 완료.
+> 아래는 **최초 배포 재현 가이드**이며, 현재 운영 절차(상시 모니터링·알림·외부 API soft-limit·백업)는
+> [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) **§8**, 토폴로지 source of truth 는
+> [docs/RAILWAY_DEPLOY.md](docs/RAILWAY_DEPLOY.md), 배포 현황은 [DEPLOYMENT_PROGRESS.md](DEPLOYMENT_PROGRESS.md) 를 본다.
+
 > 초기 단계 종량제 구성. 무료 티어로 시작해 사용량 증가에 따라 단계적 확장.
 > Lightsail/EC2 같은 고정 비용 VPS는 트래픽이 충분히 누적되기 전까지 사용하지 않음.
 >
@@ -174,6 +180,7 @@ docker compose exec backend python -m scripts.seed
 - Supabase는 자동 일일 백업 (Pro 플랜 7일 보관, Free는 PITR 미지원)
 - 수동 백업: `pg_dump $DATABASE_URL > backup.sql`
 - 복원: `psql $DATABASE_URL < backup.sql`
+- **운영 절차 상세**(무료 티어 한계 · 주 1회 `pg_dump` 대안 · 반자동 워크플로): [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) **§8.6**
 
 ---
 
