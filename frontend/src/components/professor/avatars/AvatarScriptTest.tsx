@@ -35,17 +35,23 @@ interface AvatarScriptTestProps {
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
+// 진행률(의사) 추정 기준 — 실제 HeyGen 렌더는 보통 30~90초. %는 안심 신호용.
+const ESTIMATED_RENDER_SECONDS = 75;
+
 /**
  * "아바타 제작 — 성능 확인" 작업대.
  *
  * 우측 상단 "룩과 목소리 아바타 제작"을 누르면 열려, 선택한 룩 + 음성으로 말하는
- * 아바타를 HeyGen 으로 그 자리에서 만든다(`me/preview`). 옆 채팅에 스크립트를 넣어
+ * 아바타를 HeyGen 으로 그 자리에서 만든다(`me/preview`). 아래 채팅에 스크립트를 넣어
  * 성능을 확인하고(같은 음성·대본은 캐시로 즉시·비용 0), 만족하면 "이 아바타를
- * 강의에 적용"으로 강의의 Q&A 아바타(avatar_id+voice_id)로 저장한다 — 이후 학생
- * 질문은 야간 배치가 미리 렌더한 답변 클립(캐시)으로 즉시 재생된다(#336).
+ * 강의에 적용"으로 강의의 Q&A 아바타(avatar_id+voice_id)로 저장한다.
  *
- * 본인 룩(`is_custom`) + 음성이 모두 골라졌고 작업대가 열렸을 때만 렌더한다. 표준
- * HeyGen 아바타는 인라인 렌더 대상이 아니므로(Talking Photo 없음) 노출하지 않는다.
+ * 레이아웃(2026-06-05 사용자 피드백): 가로 16:9 영상을 **위에 크게**, 스크립트 입력과
+ * "강의에 적용"은 **그 아래**에 둔다(이전 세로 크롭 + 좌우 2단으로 영상이 좁던 문제
+ * 해소). 제작 중에는 진행률 바·%·경과 시간을 표시하고(무반응 체감 제거), 작업대가
+ * 열리면 화면에 보이도록 스크롤한다(이전엔 페이지 맨 아래에서 열려 안 보였음).
+ *
+ * 본인 룩(`is_custom`) + 음성이 모두 골라졌고 작업대가 열렸을 때만 렌더한다.
  */
 export default function AvatarScriptTest({
   look,
@@ -63,6 +69,7 @@ export default function AvatarScriptTest({
   const enabled = active && !!look?.is_custom && !!voiceId;
   const preview = useScriptTestPreview(enabled);
   const [script, setScript] = useState(() => t("scriptTestDefault"));
+  const sectionRef = useRef<HTMLElement | null>(null);
 
   const speak = useCallback(
     async (force: boolean) => {
@@ -83,125 +90,165 @@ export default function AvatarScriptTest({
     void speak(false);
   }, [renderNonce, enabled, speak]);
 
-  if (!enabled || !look) return null;
+  // 작업대가 열리면(제작 클릭) 화면에 보이도록 스크롤 — 페이지 하단에서 열려
+  // "아무 반응 없음"으로 보이던 문제를 해소한다.
+  useEffect(() => {
+    if (!enabled || !active) return;
+    const el = sectionRef.current;
+    // jsdom 등 scrollIntoView 미구현 환경 가드(테스트 안전).
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({
+        behavior: reducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    }
+  }, [enabled, active, renderNonce, reducedMotion]);
 
   const processing = preview.status === "processing";
+
+  // 진행률(의사) — HeyGen 이 실제 %를 주지 않으므로 경과 초(elapsed)로 추정해 안심
+  // 신호를 준다. 95% 에서 멈춰(완료 전 100% 오인 방지) 완료 시 영상으로 대체된다.
+  // 제약: effect 본문 동기 setState 금지(react-hooks/set-state-in-effect) + 렌더 중
+  // Date.now() 같은 불순 호출 금지(react-hooks/purity). → 0 리셋은 rAF 로 한 프레임
+  // 미뤄 비동기화하고, 증가는 1초 interval 콜백에서만 한다(둘 다 effect 본문 밖).
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!processing) return;
+    const raf = requestAnimationFrame(() => setElapsed(0));
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(id);
+    };
+  }, [processing]);
+  const percent = Math.min(
+    95,
+    Math.round((elapsed / ESTIMATED_RENDER_SECONDS) * 100),
+  );
+
+  if (!enabled || !look) return null;
+
   const ready = preview.status === "ready" && !!preview.videoUrl;
   const failed = preview.status === "failed";
 
   return (
-    <section data-testid="avatar-script-test" style={cardStyle}>
+    <section ref={sectionRef} data-testid="avatar-script-test" style={cardStyle}>
       <div style={{ marginBottom: 14 }}>
         <h2 style={headingStyle}>{t("buildStudioTitle")}</h2>
         <p style={descStyle}>{t("buildStudioDescription")}</p>
       </div>
 
-      <div style={gridStyle}>
-        {/* 좌: 말하는 아바타 영상 */}
-        <div style={{ minWidth: 0 }}>
-          <div style={stageStyle}>
-            {ready ? (
-              <video
-                key={preview.videoUrl ?? look.id}
-                src={preview.videoUrl ?? undefined}
-                poster={look.preview_image_url ?? undefined}
-                controls
-                autoPlay={!reducedMotion}
-                playsInline
-                preload="metadata"
-                aria-label={look.name}
-                style={mediaFillStyle}
-              />
-            ) : look.preview_image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={look.preview_image_url} alt={look.name} style={mediaFillStyle} />
-            ) : (
-              <span aria-hidden="true" style={initialStyle}>
-                {look.name.slice(0, 1)}
-              </span>
-            )}
+      {/* 위: 말하는 아바타 영상 — 가로 16:9 크게 */}
+      <div>
+        <div style={stageStyle}>
+          {ready ? (
+            <video
+              key={preview.videoUrl ?? look.id}
+              src={preview.videoUrl ?? undefined}
+              poster={look.preview_image_url ?? undefined}
+              controls
+              autoPlay={!reducedMotion}
+              playsInline
+              preload="metadata"
+              aria-label={look.name}
+              style={mediaFillStyle}
+            />
+          ) : look.preview_image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={look.preview_image_url} alt={look.name} style={mediaFillStyle} />
+          ) : (
+            <span aria-hidden="true" style={initialStyle}>
+              {look.name.slice(0, 1)}
+            </span>
+          )}
 
-            {processing && (
-              <div data-testid="script-test-rendering" style={overlayStyle}>
-                {t("scriptTestRendering")}
+          {processing && (
+            <div data-testid="script-test-rendering" style={overlayStyle}>
+              <div style={overlayTitleStyle}>{t("scriptTestRendering")}</div>
+              <div style={progressTrackStyle}>
+                <div style={{ ...progressBarStyle, width: `${percent}%` }} />
               </div>
-            )}
-          </div>
-          <p style={captionStyle}>
-            {look.name}
-            {voiceName ? ` · ${voiceName}` : ""}
-          </p>
+              <div style={progressLabelStyle}>
+                {percent}% · {elapsed}s
+              </div>
+              <div style={progressHintStyle}>{t("scriptTestRenderingHint")}</div>
+            </div>
+          )}
         </div>
+        <p style={captionStyle}>
+          {look.name}
+          {voiceName ? ` · ${voiceName}` : ""}
+        </p>
+      </div>
 
-        {/* 우: 스크립트 입력(채팅) */}
-        <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
-          <h3 style={chatHeadingStyle}>{t("scriptTestChatTitle")}</h3>
-          <p style={chatNoteStyle}>{t("scriptTestChatNote")}</p>
+      {/* 아래: 스크립트 입력(채팅) + 강의 적용 */}
+      <div style={belowStyle}>
+        <h3 style={chatHeadingStyle}>{t("scriptTestChatTitle")}</h3>
+        <p style={chatNoteStyle}>{t("scriptTestChatNote")}</p>
 
-          <textarea
-            value={script}
-            onChange={(e) => setScript(e.target.value)}
-            maxLength={2000}
-            rows={5}
-            data-testid="script-test-input"
-            placeholder={t("scriptTestPlaceholder")}
-            style={textareaStyle}
-          />
-          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        <textarea
+          value={script}
+          onChange={(e) => setScript(e.target.value)}
+          maxLength={2000}
+          rows={4}
+          data-testid="script-test-input"
+          placeholder={t("scriptTestPlaceholder")}
+          style={textareaStyle}
+        />
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={() => speak(false)}
+            disabled={processing}
+            data-testid="script-test-speak"
+            style={{
+              ...primaryBtn,
+              opacity: processing ? 0.55 : 1,
+              cursor: processing ? "wait" : "pointer",
+            }}
+          >
+            {processing ? `${t("scriptTestRendering")} ${percent}%` : `▶ ${t("scriptTestSpeak")}`}
+          </button>
+          {ready && (
             <button
               type="button"
-              onClick={() => speak(false)}
+              onClick={() => speak(true)}
               disabled={processing}
-              data-testid="script-test-speak"
-              style={{
-                ...primaryBtn,
-                opacity: processing ? 0.55 : 1,
-                cursor: processing ? "wait" : "pointer",
-              }}
+              data-testid="script-test-respeak"
+              style={ghostBtn}
             >
-              {processing ? t("scriptTestRendering") : `▶ ${t("scriptTestSpeak")}`}
+              {t("scriptTestRespeak")}
             </button>
-            {ready && (
-              <button
-                type="button"
-                onClick={() => speak(true)}
-                disabled={processing}
-                data-testid="script-test-respeak"
-                style={ghostBtn}
-              >
-                {t("scriptTestRespeak")}
-              </button>
-            )}
-          </div>
-
-          {failed && (
-            <p role="alert" style={errorHintStyle}>
-              {preview.message || t("scriptTestFailed")}
-            </p>
           )}
-          <p style={changeHintStyle}>{t("buildChangeHint")}</p>
+        </div>
 
-          {/* 성능을 확인했으면 이 아바타를 강의의 Q&A 아바타로 적용한다. */}
-          <div style={{ marginTop: "auto", paddingTop: 16 }}>
-            {lectureId ? (
-              <button
-                type="button"
-                onClick={onApplyToLecture}
-                disabled={applying || !ready}
-                data-testid="build-apply"
-                style={{
-                  ...applyBtn,
-                  opacity: applying || !ready ? 0.5 : 1,
-                  cursor: applying || !ready ? "not-allowed" : "pointer",
-                }}
-                title={!ready ? t("buildApplyNeedsRender") : undefined}
-              >
-                {applying ? t("applying") : t("buildApply")}
-              </button>
-            ) : (
-              <p style={changeHintStyle}>{t("applyHintNoLecture")}</p>
-            )}
-          </div>
+        {failed && (
+          <p role="alert" style={errorHintStyle}>
+            {preview.message || t("scriptTestFailed")}
+          </p>
+        )}
+        <p style={changeHintStyle}>{t("buildChangeHint")}</p>
+
+        {/* 성능을 확인했으면 이 아바타를 강의의 Q&A 아바타로 적용한다. */}
+        <div style={{ marginTop: 16 }}>
+          {lectureId ? (
+            <button
+              type="button"
+              onClick={onApplyToLecture}
+              disabled={applying || !ready}
+              data-testid="build-apply"
+              style={{
+                ...applyBtn,
+                opacity: applying || !ready ? 0.5 : 1,
+                cursor: applying || !ready ? "not-allowed" : "pointer",
+              }}
+              title={!ready ? t("buildApplyNeedsRender") : undefined}
+            >
+              {applying ? t("applying") : t("buildApply")}
+            </button>
+          ) : (
+            <p style={changeHintStyle}>{t("applyHintNoLecture")}</p>
+          )}
         </div>
       </div>
     </section>
@@ -230,19 +277,13 @@ const descStyle: CSSProperties = {
   color: "var(--text-muted)",
 };
 
-const gridStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))",
-  gap: 18,
-  alignItems: "stretch",
-};
-
+// 가로 16:9 영상 — 위쪽에 크게. 세로 크롭(이전 3/4)으로 좁아 보이던 문제 해소.
 const stageStyle: CSSProperties = {
   position: "relative",
   width: "100%",
-  maxWidth: 340,
+  maxWidth: 760,
   margin: "0 auto",
-  aspectRatio: "3 / 4",
+  aspectRatio: "16 / 9",
   borderRadius: 12,
   overflow: "hidden",
   background: "var(--bg-subtle)",
@@ -269,15 +310,52 @@ const initialStyle: CSSProperties = {
 const overlayStyle: CSSProperties = {
   position: "absolute",
   inset: 0,
-  display: "grid",
-  placeItems: "center",
-  padding: 20,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 4,
+  padding: 24,
   textAlign: "center",
-  fontSize: 12.5,
-  fontWeight: 600,
   color: "#fff",
-  background: "rgba(10,10,10,0.5)",
+  background: "rgba(10,10,10,0.55)",
   backdropFilter: "blur(2px)",
+};
+
+const overlayTitleStyle: CSSProperties = {
+  fontSize: 13.5,
+  fontWeight: 700,
+};
+
+const progressTrackStyle: CSSProperties = {
+  width: "70%",
+  maxWidth: 300,
+  height: 6,
+  marginTop: 12,
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.25)",
+  overflow: "hidden",
+};
+
+const progressBarStyle: CSSProperties = {
+  height: "100%",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #FFB627, #E89E0E)",
+  transition: "width 0.4s ease-out",
+};
+
+const progressLabelStyle: CSSProperties = {
+  marginTop: 8,
+  fontSize: 13,
+  fontWeight: 700,
+  fontVariantNumeric: "tabular-nums",
+};
+
+const progressHintStyle: CSSProperties = {
+  marginTop: 4,
+  fontSize: 11.5,
+  lineHeight: 1.5,
+  opacity: 0.85,
 };
 
 const captionStyle: CSSProperties = {
@@ -286,6 +364,14 @@ const captionStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 600,
   color: "var(--text)",
+};
+
+// 아래 영역 — 영상과 같은 폭(760)으로 가운데 정렬해 읽기 좋게.
+const belowStyle: CSSProperties = {
+  maxWidth: 760,
+  margin: "18px auto 0",
+  display: "flex",
+  flexDirection: "column",
 };
 
 const chatHeadingStyle: CSSProperties = {
@@ -354,6 +440,7 @@ const changeHintStyle: CSSProperties = {
 
 const applyBtn: CSSProperties = {
   width: "100%",
+  maxWidth: 420,
   padding: "12px 18px",
   fontSize: 14,
   fontWeight: 700,

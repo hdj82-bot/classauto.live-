@@ -215,6 +215,11 @@ async def synthesize(
 _V3_MAX_CHARS = 5000  # eleven_v3 단일 요청 글자 한도
 
 
+def _is_v3_model(model_id: str | None) -> bool:
+    """모델 id 가 eleven_v3 인지(클론 경로의 v3/v2 분기용)."""
+    return (model_id or "").strip().lower() == "eleven_v3"
+
+
 def _v3_voice_settings() -> dict[str, Any]:
     """eleven_v3 용 voice_settings. v3 는 stability(Creative0.0/Natural0.5/
     Robust1.0) 만 의미가 있다(나머지 키는 elevenlabs_client 에서 정리됨). 속도는
@@ -255,20 +260,42 @@ async def _elevenlabs_primary(
       분리로 발음 보존 — 회귀 방지). ``speed_provider="elevenlabs"``.
     - ``ELEVENLABS_MODEL_ID_ZH`` 가 비었거나 5000자 초과면 v2 경로를 쓴다.
     """
-    # ── 클론(IVC) 전용 경로: 항상 v2 + 클론 튜닝 세팅 ──────────────────────────
+    # ── 클론(IVC) 전용 경로 ───────────────────────────────────────────────────
+    # 1순위: ELEVENLABS_MODEL_ID_CLONE 이 v3 면 v3 단일 호출(코드스위칭·자연스러운
+    #         운율). v3 는 speed 미지원이라 atempo 로 처리 → speed_provider="elevenlabs_v3".
+    # 2순위(폴백): multilingual_v2 + 클론 튜닝 세팅(원본 목소리 닮음 우선) + 언어
+    #         구간 분리. v3 실패 시 또는 CLONE 모델이 v2 일 때.
     if cloned:
         clone_model = (
             settings.ELEVENLABS_MODEL_ID_CLONE or settings.ELEVENLABS_MODEL_ID
         ).strip()
+        if _is_v3_model(clone_model) and len(text) <= _V3_MAX_CHARS:
+            try:
+                audio = await elevenlabs_client.synthesize(
+                    text,
+                    voice_id=voice_id,
+                    gender=gender,
+                    model_id=clone_model,
+                    voice_settings=_v3_voice_settings(),
+                )
+                logger.info(
+                    "클론(IVC) v3 합성 성공: model=%s, chars=%d", clone_model, len(text),
+                )
+                return audio, "elevenlabs_v3"
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "클론 v3 합성 실패 → multilingual_v2(+클론 튜닝) 폴백: %s", exc,
+                )
+        v2_model = (settings.ELEVENLABS_MODEL_ID or "eleven_multilingual_v2").strip()
         clone_settings = _clone_voice_settings()
         logger.info(
-            "클론(IVC) 합성: model=%s, similarity_boost=%.2f, stability=%.2f, chars=%d",
-            clone_model, clone_settings["similarity_boost"],
+            "클론(IVC) v2 합성: model=%s, similarity_boost=%.2f, stability=%.2f, chars=%d",
+            v2_model, clone_settings["similarity_boost"],
             clone_settings["stability"], len(text),
         )
         audio = await _elevenlabs_synthesize_segmented(
             text, voice_id=voice_id, gender=gender, speed=speed,
-            model_id=clone_model, voice_settings=clone_settings,
+            model_id=v2_model, voice_settings=clone_settings,
         )
         return audio, "elevenlabs"
 

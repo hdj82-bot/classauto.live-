@@ -49,7 +49,14 @@ _MAX_PROFILE_PHOTO = 20 * 1024 * 1024  # 20MB
 # 흔히 3-5MB 가 나와 HeyGen 제한(공식 명시는 없으나 실측 4-5MB 부근에서 거부)에
 # 닿을 수 있어, select 단계에서 안전망으로 다운스케일 + JPEG 재인코딩한다.
 _TALKING_PHOTO_MAX_BYTES = 4 * 1024 * 1024  # 4MB — HeyGen 안전 마진
-_TALKING_PHOTO_MAX_SIDE = 1280  # 긴 변 픽셀 — 인물 talking-head 충분
+# 긴 변 픽셀 상한. gpt-image-2 룩은 1536x1024 이므로 1920 이면 다운스케일이
+# 일어나지 않아 원본 해상도를 그대로 HeyGen 에 넘긴다(아바타 렌더 선명도↑ —
+# 2026-06-05 사용자 보고: 원본 룩은 선명한데 아바타가 흐림). 그보다 큰 업로드
+# (직접 올린 고해상도 사진)만 1920 으로 줄여 4MB 제한을 지킨다.
+_TALKING_PHOTO_MAX_SIDE = 1920
+# JPEG 재인코딩 품질. 90→95 로 올려 HeyGen 입력 이미지의 압축 손실을 줄인다
+# (95 는 시각적으로 거의 무손실이며 1536px 인물 사진이라 파일도 4MB 안쪽).
+_TALKING_PHOTO_JPEG_QUALITY = 95
 
 
 def _ensure_talking_photo_payload(
@@ -58,7 +65,9 @@ def _ensure_talking_photo_payload(
     """HeyGen Talking Photo 업로드용으로 이미지를 안전 사이즈로 정규화.
 
     gpt-image-2 1536x1024 PNG 가 큰 경우 HeyGen 이 거부할 수 있어, 긴 변
-    ``_TALKING_PHOTO_MAX_SIDE`` 이내로 다운스케일하고 JPEG(품질 90)로 재인코딩한다.
+    ``_TALKING_PHOTO_MAX_SIDE``(1920) 이내로만 다운스케일하고 JPEG(품질 95)로
+    재인코딩한다. 1536x1024 룩은 1920 이내라 다운스케일 없이 원본 해상도가 유지돼
+    HeyGen 이 더 선명한 소스로 talking-head 를 렌더한다.
     원본이 이미 작고 4MB 이하면 그대로 통과(불필요한 압축 손실 회피).
 
     Pillow 의존 — requirements 에 이미 포함됨.
@@ -92,7 +101,7 @@ def _ensure_talking_photo_payload(
         img = img.resize(new_size, Image.LANCZOS)
 
     buf = BytesIO()
-    img.save(buf, format="JPEG", quality=90, optimize=True)
+    img.save(buf, format="JPEG", quality=_TALKING_PHOTO_JPEG_QUALITY, optimize=True)
     out = buf.getvalue()
     logger.info(
         "talking_photo 정규화: %dB(%s) → %dB(JPEG, %dx%d)",

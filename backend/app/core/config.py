@@ -110,7 +110,8 @@ class Settings(BaseSettings):
     # 영상 1초당 USD 단가 — API 종량제 실측 기준 약 $1/min = $0.0167/sec.
     # 0 으로 두면 비용 기록은 duration 만 남기고 cost_usd=0 (회계 비활성).
     HEYGEN_COST_USD_PER_SECOND: float = 0.0167
-    # 렌더 해상도. 720p 가 테스트·베타 기본. 베타 후 1920×1080 으로 상향 가능.
+    # 렌더 해상도. 720p 가 기본(비용·플랜 안정). 아바타 화질은 해상도보다
+    # Talking Photo 입력 이미지 다운스케일이 더 큰 영향(아래 PHOTO_AVATAR 참조).
     HEYGEN_DIMENSION_WIDTH: int = 1280
     HEYGEN_DIMENSION_HEIGHT: int = 720
     # mock 모드: 켜면 실제 HeyGen API 를 호출하지 않아 크레딧이 ₩0 (로컬/테스트용).
@@ -208,15 +209,15 @@ class Settings(BaseSettings):
     # 위 ELEVENLABS_MODEL_ID(multilingual_v2) 경로로 폴백한다(escape hatch).
     ELEVENLABS_MODEL_ID_ZH: str = "eleven_v3"
     # ── 클론(IVC) 음성 합성 전용 ─────────────────────────────────
-    # 교수자 본인 목소리(Instant Voice Cloning)는 eleven_v3 가 아니라
-    # multilingual_v2 로 합성한다. 이유(ElevenLabs 공식 문서 근거):
-    #  · v3 는 voice_settings 중 stability(Creative0.0/Natural0.5/Robust1.0) 만
-    #    의미가 있고 similarity_boost·style·use_speaker_boost·speed 는 사실상
-    #    무시한다 → 클론 fidelity 를 높이는 similarity_boost 튜닝이 불가능.
-    #  · multilingual_v2 는 위 세팅을 모두 지원해 클론 재현(원본 목소리 닮음)을
-    #    안정적으로 끌어올릴 수 있다.
-    # 운영에서 모델·세팅을 코드 배포 없이 교체할 수 있도록 환경변수로 노출한다.
-    ELEVENLABS_MODEL_ID_CLONE: str = "eleven_multilingual_v2"
+    # 교수자 본인 목소리(Instant Voice Cloning)도 eleven_v3 로 합성한다(2026-06-05
+    # 사용자 결정: multilingual_v2 의 "책 읽는 듯 밋밋한 톤" 해소 위해 v3 의 자연스러운
+    # 운율을 우선). v3 는 voice_settings 중 stability(Creative0.0/Natural0.5/Robust1.0)
+    # 만 의미가 있어 similarity_boost 등 클론 튜닝키는 무시되지만, 운율·표현력이
+    # multilingual_v2 보다 자연스럽다. tts._elevenlabs_primary 의 클론 경로가 v3 단일
+    # 호출(코드스위칭)을 먼저 시도하고, v3 실패 시 multilingual_v2 + 클론 튜닝 세팅으로
+    # graceful 폴백한다(본인 목소리 닮음이 더 중요하면 이 값을 multilingual_v2 로
+    # 되돌려 v2 경로만 쓰면 된다).
+    ELEVENLABS_MODEL_ID_CLONE: str = "eleven_v3"
     ELEVENLABS_CLONE_STABILITY: float = 0.45
     ELEVENLABS_CLONE_SIMILARITY_BOOST: float = 0.85
     ELEVENLABS_CLONE_STYLE: float = 0.0
