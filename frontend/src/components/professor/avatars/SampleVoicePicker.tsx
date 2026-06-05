@@ -250,7 +250,7 @@ export default function SampleVoicePicker({
             list.length === 0 ? null : (
               <div key={g} style={{ marginBottom: 14 }}>
                 <span style={groupLabelStyle}>{genderLabel(g)}</span>
-                <div style={{ display: "grid", gap: 8 }}>{list.map(renderRow)}</div>
+                <div style={voiceGridStyle}>{list.map(renderRow)}</div>
               </div>
             ),
           )}
@@ -319,6 +319,15 @@ const listStyle: CSSProperties = {
   maxHeight: 420,
   overflowY: "auto",
   paddingRight: 4,
+};
+
+// 음성 카드를 좁은 타일로 만들어 한 행에 여러 개가 들어가도록 한다(반응형 다단).
+// 컨테이너 폭에 맞춰 최소 200px 타일을 auto-fill — 넓으면 3~4열, 좁으면 1~2열로 접힌다.
+const voiceGridStyle: CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+  gap: 8,
+  alignItems: "start",
 };
 
 const groupLabelStyle: CSSProperties = {
@@ -401,15 +410,15 @@ function previewBtnStyle(playing: boolean, enabled: boolean): CSSProperties {
 function avatarUseBtnStyle(active: boolean): CSSProperties {
   return {
     width: "100%",
-    padding: "8px 12px",
-    fontSize: 12.5,
+    padding: "7px 10px",
+    fontSize: 12,
     fontWeight: 700,
+    lineHeight: 1.3,
     borderRadius: 9,
     cursor: "pointer",
     fontFamily: "inherit",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
+    // 좁은 타일에서 라벨이 잘리지 않도록 ellipsis 대신 줄바꿈 허용(최대 2줄).
+    textAlign: "center",
     border: `1px solid ${active ? "transparent" : "var(--gold-on-light)"}`,
     background: active ? "linear-gradient(135deg, #FFB627, #E89E0E)" : "var(--bg-card)",
     color: active ? "#0A0A0A" : "var(--gold-on-light)",
