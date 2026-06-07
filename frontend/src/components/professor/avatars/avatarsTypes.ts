@@ -75,3 +75,44 @@ export interface VoiceScriptResult {
   text: string;
   mock: boolean;
 }
+
+/**
+ * 저장된 아바타 미리보기 영상의 렌더 상태.
+ *  - none       : 아직 미리보기 영상을 만들지 않음(룩 썸네일 폴백)
+ *  - processing : HeyGen 렌더 진행 중(스피너/배지)
+ *  - ready      : preview_video_url 로 루프 영상 재생 가능
+ *  - failed     : 렌더 실패(다시 만들기 가능)
+ */
+export type SavedAvatarPreviewStatus = "none" | "processing" | "ready" | "failed";
+
+/**
+ * "내 아바타(룩 + 음성 조합) 갤러리" 한 항목.
+ *
+ * 백엔드 wire(snake) 와 거의 동일한 shape 로, ``avatarsApi.toSavedAvatar`` 가
+ * 누락 필드에 기본값(avatar_scale=1.0, preview_status="none", voice_id=null)을
+ * 채워 정규화한다(기존 ``toAvatar`` 패턴). 미디어 URL 은 ``Avatar`` 와 동일하게
+ * snake_case(preview_video_url)를 유지해 카드의 video src 로 그대로 통용된다.
+ *
+ * 백엔드 계약 (창2 와 합의):
+ *  - GET    /api/avatars/me/saved              → SavedAvatar[] (bare array)
+ *  - POST   /api/avatars/me/saved              → SavedAvatar
+ *  - PATCH  /api/avatars/me/saved/{id}         → SavedAvatar
+ *  - DELETE /api/avatars/me/saved/{id}         → { ok: true }
+ *  - POST   /api/avatars/me/saved/{id}/preview → SavedAvatar
+ *  - POST   /api/avatars/me/saved/{id}/apply   → { ok: true }
+ */
+export interface SavedAvatar {
+  id: string;
+  name: string;
+  /** 렌더용 룩(avatar_id 로 통용). 룩 썸네일 폴백을 이 id 로 해석한다. */
+  look_id: string;
+  /** 결합 음성. null = 기본 보이스(성별 기준). */
+  voice_id: string | null;
+  /** 아바타 표시 배율(기본 1.0). */
+  avatar_scale: number;
+  /** ready 일 때만 존재 — 카드 루프 영상 src. */
+  preview_video_url: string | null;
+  preview_status: SavedAvatarPreviewStatus;
+  /** ISO8601 생성 시각(최신순 정렬용). */
+  created_at: string;
+}

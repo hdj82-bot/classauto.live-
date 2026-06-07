@@ -5,6 +5,8 @@ import type {
   AvatarListResult,
   CustomAvatarStatus,
   ProfilePhotoResponse,
+  SavedAvatar,
+  SavedAvatarPreviewStatus,
   VoiceClone,
   VoiceScriptResult,
 } from "./avatarsTypes";
@@ -563,6 +565,203 @@ export async function setRecentAvatar(avatarId: string): Promise<void> {
     await api.post("/api/avatars/me/recent", { avatar_id: avatarId });
   } catch (err) {
     if (isDeferredError(err)) return;
+    throw err;
+  }
+}
+
+// ── 내 아바타(룩 + 음성 조합) 갤러리 (/api/avatars/me/saved) ───────────────────
+//
+// 교수자가 "룩 + 음성" 조합을 이름 붙여 저장해 두고, 강의마다 재생성 없이 바로
+// 적용하는 라이브러리. 각 항목은 선택적으로 "움직이는 미리보기 영상"(HeyGen 렌더)
+// 을 가질 수 있다(Phase 2). 백엔드 미배포(404/405)면 다른 래퍼와 동일하게
+// 목록은 빈 배열, 변형(생성/수정/삭제/렌더/적용)은 시뮬레이션 성공으로 폴백한다.
+
+/** 백엔드 SavedAvatar wire(snake). 누락 가능 필드는 ``?`` 로 받아 기본값을 채운다. */
+interface SavedAvatarWire {
+  id: string;
+  name: string;
+  look_id: string;
+  voice_id?: string | null;
+  avatar_scale?: number | null;
+  preview_video_url?: string | null;
+  preview_status?: SavedAvatarPreviewStatus | null;
+  created_at: string;
+}
+
+/** wire(snake) → domain 정규화 (toAvatar 패턴). 누락 필드에 기본값을 채운다. */
+function toSavedAvatar(w: SavedAvatarWire): SavedAvatar {
+  return {
+    id: w.id,
+    name: w.name,
+    look_id: w.look_id,
+    voice_id: w.voice_id ?? null,
+    avatar_scale: typeof w.avatar_scale === "number" ? w.avatar_scale : 1.0,
+    preview_video_url: w.preview_video_url ?? null,
+    preview_status: w.preview_status ?? "none",
+    created_at: w.created_at,
+  };
+}
+
+/** GET /api/avatars/me/saved — 저장된 아바타 목록(bare array). deferred 면 []. */
+export async function listSavedAvatars(): Promise<SavedAvatar[]> {
+  try {
+    const { data } = await api.get<SavedAvatarWire[]>("/api/avatars/me/saved");
+    return (data ?? []).map(toSavedAvatar);
+  } catch (err) {
+    if (isDeferredError(err)) return [];
+    throw err;
+  }
+}
+
+/** createSavedAvatar 입력. */
+export interface CreateSavedAvatarPayload {
+  name: string;
+  look_id: string;
+  voice_id?: string | null;
+  avatar_scale?: number;
+  /**
+   * 방금 스크립트 테스트에서 렌더한 미리보기 영상. **계약된 POST body 에는 넣지
+   * 않는다**(서버는 자체 렌더로 미리보기를 만든다). deferred(미배포) 시뮬레이션에서
+   * 만 사용해, 백엔드 없이도 방금 만든 영상을 곧장 ready 카드로 보여 준다.
+   */
+  preview_video_url?: string | null;
+}
+
+/**
+ * POST /api/avatars/me/saved — 룩 + 음성 조합을 저장한다.
+ * deferred 면 입력 + (있으면) 방금 렌더한 영상으로 시뮬레이션 객체를 반환한다.
+ */
+export async function createSavedAvatar(
+  payload: CreateSavedAvatarPayload,
+): Promise<SavedAvatar> {
+  // 계약된 body 만 전송한다(preview_video_url 은 제외 — 위 주석 참조).
+  const body = {
+    name: payload.name,
+    look_id: payload.look_id,
+    voice_id: payload.voice_id ?? null,
+    avatar_scale: payload.avatar_scale ?? 1.0,
+  };
+  try {
+    const { data } = await api.post<SavedAvatarWire>(
+      "/api/avatars/me/saved",
+      body,
+    );
+    return toSavedAvatar(data);
+  } catch (err) {
+    if (isDeferredError(err)) {
+      const hasVideo = !!payload.preview_video_url;
+      return {
+        id: `saved-${Date.now()}`,
+        name: payload.name,
+        look_id: payload.look_id,
+        voice_id: payload.voice_id ?? null,
+        avatar_scale: payload.avatar_scale ?? 1.0,
+        preview_video_url: payload.preview_video_url ?? null,
+        preview_status: hasVideo ? "ready" : "none",
+        created_at: new Date().toISOString(),
+      };
+    }
+    throw err;
+  }
+}
+
+/** updateSavedAvatar 패치 — 이름/음성만 변경 가능(계약). */
+export interface SavedAvatarPatch {
+  name?: string;
+  voice_id?: string | null;
+}
+
+/**
+ * PATCH /api/avatars/me/saved/{id} — 이름/음성 변경.
+ * deferred 면 패치를 반영한 시뮬레이션 객체를 반환한다. 호출자(page)는 낙관적
+ * state 를 유지하므로(반환 객체로 전체 덮어쓰지 않음) 누락 필드는 무해하다.
+ */
+export async function updateSavedAvatar(
+  id: string,
+  patch: SavedAvatarPatch,
+): Promise<SavedAvatar> {
+  try {
+    const { data } = await api.patch<SavedAvatarWire>(
+      `/api/avatars/me/saved/${encodeURIComponent(id)}`,
+      patch,
+    );
+    return toSavedAvatar(data);
+  } catch (err) {
+    if (isDeferredError(err)) {
+      return {
+        id,
+        name: patch.name ?? "",
+        look_id: "",
+        voice_id: patch.voice_id ?? null,
+        avatar_scale: 1.0,
+        preview_video_url: null,
+        preview_status: "none",
+        created_at: new Date().toISOString(),
+      };
+    }
+    throw err;
+  }
+}
+
+/** DELETE /api/avatars/me/saved/{id}. deferred/이미 없음(404)은 멱등 성공. */
+export async function deleteSavedAvatar(id: string): Promise<{ ok: boolean }> {
+  try {
+    const { data } = await api.delete<{ ok: boolean }>(
+      `/api/avatars/me/saved/${encodeURIComponent(id)}`,
+    );
+    return { ok: data?.ok ?? true };
+  } catch (err) {
+    if (isDeferredError(err)) return { ok: true };
+    throw err;
+  }
+}
+
+/**
+ * POST /api/avatars/me/saved/{id}/preview — 미리보기 영상 렌더 트리거(또는 캐시).
+ * text 를 주면 그 대본을 말한다. 반환 SavedAvatar 의 preview_status 가 보통
+ * "processing" 이며, 호출자는 목록 폴링으로 ready 로 갱신한다.
+ * deferred 면 백엔드 없이 렌더할 수 없으므로 "processing" 시뮬레이션을 돌려준다.
+ */
+export async function renderSavedAvatarPreview(
+  id: string,
+  text?: string | null,
+): Promise<SavedAvatar> {
+  try {
+    const { data } = await api.post<SavedAvatarWire>(
+      `/api/avatars/me/saved/${encodeURIComponent(id)}/preview`,
+      { text: text ?? null },
+    );
+    return toSavedAvatar(data);
+  } catch (err) {
+    if (isDeferredError(err)) {
+      return {
+        id,
+        name: "",
+        look_id: "",
+        voice_id: null,
+        avatar_scale: 1.0,
+        preview_video_url: null,
+        preview_status: "processing",
+        created_at: new Date().toISOString(),
+      };
+    }
+    throw err;
+  }
+}
+
+/** POST /api/avatars/me/saved/{id}/apply { lecture_id }. deferred 면 시뮬레이션 성공. */
+export async function applySavedAvatar(
+  id: string,
+  lectureId: string,
+): Promise<{ ok: boolean }> {
+  try {
+    const { data } = await api.post<{ ok: boolean }>(
+      `/api/avatars/me/saved/${encodeURIComponent(id)}/apply`,
+      { lecture_id: lectureId },
+    );
+    return { ok: data?.ok ?? true };
+  } catch (err) {
+    if (isDeferredError(err)) return { ok: true };
     throw err;
   }
 }

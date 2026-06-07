@@ -191,6 +191,30 @@
     "studioPhotoFormat": "20MB or smaller · JPEG or PNG",
     "studioPhotoTooLarge": "The photo must be 20MB or smaller.",
 
-    "backToStudio": "Back to the editor"
+    "backToStudio": "Back to the editor",
+
+    "savedTitle": "My avatar gallery",
+    "savedDescription": "Your saved avatars — each a look paired with a voice. Apply one to any lecture instantly, no re-generation (zero cost). Build a preview clip and the card plays your avatar actually speaking.",
+    "savedEmpty": "No saved avatars yet. Check a look and voice in 'Build avatar — performance check' above, then press 'Save this avatar' to collect them here.",
+    "savedDefaultVoice": "Default voice",
+    "savedApplyHintNoLecture": "Enter from the lecture editor to apply this avatar to a lecture directly.",
+
+    "saveThisAvatar": "Save this avatar",
+    "savingAvatar": "Saving...",
+    "saveAvatarSuccess": "Saved to your avatar gallery.",
+    "saveAvatarError": "Could not save the avatar. Please try again shortly.",
+
+    "renameAvatar": "Rename",
+    "deleteAvatar": "Delete",
+    "deleteConfirm": "Remove this avatar from your gallery? This can't be undone.",
+    "deleteAvatarSuccess": "Removed from your gallery.",
+    "deleteAvatarError": "Could not delete. Please try again shortly.",
+
+    "previewProcessing": "Building preview clip...",
+    "previewReady": "Preview",
+    "previewCreate": "Build preview clip",
+    "previewRetry": "Rebuild preview clip",
+    "previewFailed": "Failed to build the preview clip. Please try again.",
+    "previewError": "Could not start building the preview clip. Please try again shortly."
   }
 }
