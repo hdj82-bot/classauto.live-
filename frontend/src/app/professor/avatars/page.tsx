@@ -8,6 +8,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useAvatarsI18n } from "@/components/professor/avatars/useAvatarsI18n";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
 import AvatarLibrary from "@/components/professor/avatars/AvatarLibrary";
+import SavedAvatarGallery from "@/components/professor/avatars/SavedAvatarGallery";
 import AvatarViewerModal from "@/components/professor/avatars/AvatarViewerModal";
 import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
@@ -17,24 +18,31 @@ import AvatarScriptTest from "@/components/professor/avatars/AvatarScriptTest";
 import { selectLook } from "@/components/professor/avatars/onboarding/photoAvatarApi";
 import {
   applyAvatarToLecture,
+  applySavedAvatar,
   applyVoiceToLecture,
+  createSavedAvatar,
   deleteMyLook,
   deleteMyVoice,
+  deleteSavedAvatar,
   getLectureTitle,
   getMyVoice,
   getRecentAvatarId,
   listAvatars,
   listMyLooks,
+  listSavedAvatars,
   renameAvatarForLecture,
   renameMyLook,
+  renderSavedAvatarPreview,
   requestVoiceScript,
   setRecentAvatar,
+  updateSavedAvatar,
   uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
 import type { MyLook, ScriptLanguage } from "@/components/professor/avatars/avatarsApi";
 import { listVoiceOptions, previewVoice } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
+  SavedAvatar,
   VoiceClone,
   VoiceScriptResult,
 } from "@/components/professor/avatars/avatarsTypes";
@@ -90,6 +98,11 @@ export default function AvatarsPage() {
   // 바로 고르도록 복원한다.
   const [looks, setLooks] = useState<MyLook[]>([]);
   const [recentId, setRecentId] = useState<string | null>(null);
+
+  // 내 아바타(룩 + 음성 조합) 갤러리 — 저장/적용/삭제/이름변경 + 미리보기 영상.
+  const [savedAvatars, setSavedAvatars] = useState<SavedAvatar[]>([]);
+  const [applyingSavedId, setApplyingSavedId] = useState<string | null>(null);
+  const [savingAvatar, setSavingAvatar] = useState(false);
 
   // 녹음 대본 주제로 쓸 현재 강의 제목(없으면 null → 일반 학술 대본).
   const [lectureTitle, setLectureTitle] = useState<string | null>(null);
@@ -167,6 +180,60 @@ export default function AvatarsPage() {
       cancelled = true;
     };
   }, []);
+
+  // 저장된 내 아바타(룩 + 음성 조합) 갤러리 — 미배포/실패 시 빈 목록 유지.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await listSavedAvatars();
+        if (!cancelled) setSavedAvatars(list);
+      } catch {
+        /* 미배포/실패 시 빈 목록 유지 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // 처리 중(렌더) 미리보기가 하나라도 있으면 목록을 폴링해 ready 로 갱신한다.
+  // 의존성은 "처리 중 id 집합" 키 — 집합이 그대로면 effect 가 재실행되지 않아
+  // 인터벌이 새로 만들어지지 않는다(폴링 1개 유지). ready/failed 로 바뀌면 키가
+  // 변해 재실행되고, 더 처리 중인 게 없으면 정리만 하고 끝난다. 목록은 id 로
+  // 병합해 낙관적 항목(deferred 저장분)을 덮어쓰지 않는다.
+  const processingKey = savedAvatars
+    .filter((a) => a.preview_status === "processing")
+    .map((a) => a.id)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (!processingKey) return;
+    let attempts = 0;
+    let cancelled = false;
+    const id = setInterval(() => {
+      if (attempts >= 30) {
+        clearInterval(id);
+        return;
+      }
+      attempts += 1;
+      void (async () => {
+        try {
+          const list = await listSavedAvatars();
+          if (cancelled || list.length === 0) return;
+          setSavedAvatars((prev) =>
+            prev.map((a) => list.find((l) => l.id === a.id) ?? a),
+          );
+        } catch {
+          /* 폴링 실패는 다음 주기에 재시도 */
+        }
+      })();
+    }, 4000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [processingKey]);
 
   // 강의 제목 조회 — 녹음 대본 주제용. 실패/미배포면 null 유지.
   useEffect(() => {
@@ -387,6 +454,157 @@ export default function AvatarsPage() {
     [doApply, selectedId],
   );
 
+  // ── 내 아바타(룩 + 음성 조합) 갤러리 핸들러 ─────────────────────────────────
+
+  // look_id → 룩 썸네일(저장된 룩 우선, 표준 아바타 차선). 없으면 이니셜 폴백.
+  const resolveLookImage = useCallback(
+    (lookId: string): string | null =>
+      looks.find((l) => l.id === lookId)?.preview_image_url ??
+      avatars.find((a) => a.id === lookId)?.preview_image_url ??
+      null,
+    [looks, avatars],
+  );
+
+  // voice_id → 표시 이름. 본인 클론이면 그 이름(없으면 "내 목소리"), 아니면 카탈로그.
+  const resolveSavedVoiceName = useCallback(
+    (voiceId: string | null): string | null => {
+      if (!voiceId) return null;
+      if (ownVoiceId && voiceId === ownVoiceId)
+        return voiceClone.name ?? t("voiceMyBadge");
+      return voices.find((v) => v.id === voiceId)?.name ?? null;
+    },
+    [ownVoiceId, voiceClone.name, voices, t],
+  );
+
+  // "이 아바타 저장"(스크립트 테스트) — 현재 룩 + 선택 음성 조합을 갤러리에 저장.
+  // 방금 렌더한 영상(previewVideoUrl)이 있으면 함께 넘겨 카드에서 바로 재생되게 한다.
+  const handleSaveAvatar = useCallback(
+    async (previewVideoUrl: string | null) => {
+      const look = selectedAvatar;
+      if (!look) return;
+      setSavingAvatar(true);
+      try {
+        const created = await createSavedAvatar({
+          name: look.name,
+          look_id: look.id,
+          voice_id: selectedVoiceId,
+          preview_video_url: previewVideoUrl,
+        });
+        // 낙관적으로 맨 앞에 추가(같은 id 중복 방지). deferred 면 시뮬레이션 객체.
+        setSavedAvatars((prev) => [
+          created,
+          ...prev.filter((a) => a.id !== created.id),
+        ]);
+        toast(t("saveAvatarSuccess"), "success");
+      } catch {
+        toast(t("saveAvatarError"), "error");
+      } finally {
+        setSavingAvatar(false);
+      }
+    },
+    [selectedAvatar, selectedVoiceId, toast, t],
+  );
+
+  // 저장된 아바타를 현재 강의에 적용(룩 + 음성 한 번에) 후 studio 로 복귀.
+  const handleApplySaved = useCallback(
+    async (id: string) => {
+      if (!lectureId) return;
+      setApplyingSavedId(id);
+      try {
+        await applySavedAvatar(id, lectureId);
+        toast(t("applySuccess"), "success");
+        router.push(`/professor/studio/${lectureId}`);
+      } catch {
+        toast(t("applyError"), "error");
+      } finally {
+        setApplyingSavedId(null);
+      }
+    },
+    [lectureId, router, toast, t],
+  );
+
+  // 삭제(낙관적). 실패 시 서버 기준으로 목록을 다시 맞춘다.
+  const handleDeleteSaved = useCallback(
+    async (id: string) => {
+      if (
+        typeof window !== "undefined" &&
+        !window.confirm(t("deleteConfirm"))
+      ) {
+        return;
+      }
+      setSavedAvatars((cur) => cur.filter((a) => a.id !== id));
+      try {
+        await deleteSavedAvatar(id);
+        toast(t("deleteAvatarSuccess"), "success");
+      } catch {
+        toast(t("deleteAvatarError"), "error");
+        try {
+          setSavedAvatars(await listSavedAvatars());
+        } catch {
+          /* 재조회 실패는 무시 */
+        }
+      }
+    },
+    [toast, t],
+  );
+
+  // 이름 변경(낙관적). 실패 시 서버 기준으로 되돌린다.
+  const handleRenameSaved = useCallback(
+    async (id: string, name: string) => {
+      const next = name.trim();
+      if (!next) return;
+      setSavedAvatars((cur) =>
+        cur.map((a) => (a.id === id ? { ...a, name: next } : a)),
+      );
+      try {
+        await updateSavedAvatar(id, { name: next });
+        toast(t("renameSuccess"), "success");
+      } catch {
+        toast(t("renameError"), "error");
+        try {
+          setSavedAvatars(await listSavedAvatars());
+        } catch {
+          /* 재조회 실패는 무시 */
+        }
+      }
+    },
+    [toast, t],
+  );
+
+  // 미리보기 영상 렌더 트리거 — 즉시 processing 표시 후 응답 상태 반영(폴링은 effect).
+  const handlePreviewSaved = useCallback(
+    async (id: string) => {
+      setSavedAvatars((cur) =>
+        cur.map((a) =>
+          a.id === id ? { ...a, preview_status: "processing" } : a,
+        ),
+      );
+      try {
+        const res = await renderSavedAvatarPreview(id);
+        setSavedAvatars((cur) =>
+          cur.map((a) =>
+            a.id === id
+              ? {
+                  ...a,
+                  preview_status: res.preview_status,
+                  preview_video_url:
+                    res.preview_video_url ?? a.preview_video_url,
+                }
+              : a,
+          ),
+        );
+      } catch {
+        setSavedAvatars((cur) =>
+          cur.map((a) =>
+            a.id === id ? { ...a, preview_status: "failed" } : a,
+          ),
+        );
+        toast(t("previewError"), "error");
+      }
+    },
+    [toast, t],
+  );
+
   // "룩과 목소리 아바타 제작" — 본인(사진) 아바타는 아래 작업대를 열어 그 자리에서
   // 렌더·성능 확인 후 적용한다. 표준 HeyGen 아바타는 인라인 렌더 대상이 아니므로
   // (Talking Photo 없음) 바로 강의에 적용한다.
@@ -564,6 +782,25 @@ export default function AvatarsPage() {
           applying={applying}
           onApplyToLecture={handleApply}
           onPrepareRender={handlePrepareRender}
+          onSaveAvatar={handleSaveAvatar}
+          saving={savingAvatar}
+          reducedMotion={reducedMotion}
+          t={t}
+        />
+
+        {/* 내 아바타(룩 + 음성 조합) 갤러리 — 저장한 조합을 재생성 없이 바로 강의에
+            적용한다. 미리보기 영상이 ready 면 카드에서 무음 루프로 재생된다(Phase 2).
+            기존 "저장된 아바타·룩 라이브러리" 위에 둔다. */}
+        <SavedAvatarGallery
+          items={savedAvatars}
+          resolveLookImage={resolveLookImage}
+          resolveVoiceName={resolveSavedVoiceName}
+          canApply={!!lectureId}
+          applyingId={applyingSavedId}
+          onApply={handleApplySaved}
+          onRename={handleRenameSaved}
+          onDelete={handleDeleteSaved}
+          onPreview={handlePreviewSaved}
           reducedMotion={reducedMotion}
           t={t}
         />

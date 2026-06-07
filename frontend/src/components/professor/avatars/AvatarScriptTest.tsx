@@ -31,6 +31,14 @@ interface AvatarScriptTestProps {
    * 본인 룩(MyLook)이면 기본 룩으로 지정(select)한다. 완료될 때까지 await 한다.
    */
   onPrepareRender?: () => Promise<void>;
+  /**
+   * "이 아바타 저장" — 현재 룩 + 음성 조합을 갤러리에 저장한다. 방금 렌더한
+   * 미리보기 영상이 ready 면 함께 넘겨 갤러리 카드에서 바로 재생되게 한다.
+   * 제공되지 않으면 저장 버튼을 숨긴다.
+   */
+  onSaveAvatar?: (previewVideoUrl: string | null) => void;
+  /** 저장 진행 중(버튼 비활성·라벨). */
+  saving?: boolean;
   reducedMotion: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
@@ -63,6 +71,8 @@ export default function AvatarScriptTest({
   applying,
   onApplyToLecture,
   onPrepareRender,
+  onSaveAvatar,
+  saving,
   reducedMotion,
   t,
 }: AvatarScriptTestProps) {
@@ -218,6 +228,22 @@ export default function AvatarScriptTest({
               style={ghostBtn}
             >
               {t("scriptTestRespeak")}
+            </button>
+          )}
+          {/* 룩 + 음성 조합을 갤러리에 저장 — ready 영상이 있으면 함께 넘긴다. */}
+          {onSaveAvatar && (
+            <button
+              type="button"
+              onClick={() => onSaveAvatar(ready ? preview.videoUrl : null)}
+              disabled={!!saving || processing}
+              data-testid="script-test-save"
+              style={{
+                ...ghostBtn,
+                opacity: saving || processing ? 0.55 : 1,
+                cursor: saving ? "wait" : processing ? "not-allowed" : "pointer",
+              }}
+            >
+              {saving ? t("savingAvatar") : t("saveThisAvatar")}
             </button>
           )}
         </div>
