@@ -155,6 +155,9 @@ class Settings(BaseSettings):
     # 라이브러리(saved_to_library)에 보관 가능한 확정 룩 수의 상한. 후보(20)와 별개로
     # 사용자가 '확정/저장'한 것만 들어가며, 선택 피로를 막기 위해 10 으로 둔다.
     PHOTO_AVATAR_LIBRARY_MAX: int = 10
+    # '내 아바타'(룩+음성 조합) 라이브러리에 저장 가능한 조합 수 상한. 미리보기
+    # 렌더가 HeyGen 비용을 유발하므로 선택 피로·비용 양쪽을 고려해 12 로 둔다.
+    PHOTO_AVATAR_SAVED_MAX: int = 12
     # 룩이 이 시간(분) 넘게 generating 에 머물면 reaper 가 failed 로 정리한다.
     # 워커 장애로 정체된 룩이 누적 cap 을 영구 점유해 생성 버튼이 사라지는 것을
     # 막는다(app.tasks.photo_avatar.reap_stuck_looks). 정상 생성 소요(수 분)보다
