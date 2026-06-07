@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -177,7 +177,7 @@ async def test_get_saved_404_for_unknown(client, professor):
 
 @pytest.mark.asyncio
 async def test_apply_sets_lecture_fields(client, professor, db, lecture):
-    look = await _make_look(db, professor, heygen_look_id="hg_look_1", image_url=None)
+    await _make_look(db, professor, heygen_look_id="hg_look_1", image_url=None)
     row = SavedAvatar(
         id=uuid.uuid4(),
         user_id=professor.id,
@@ -231,7 +231,7 @@ async def test_apply_rejects_other_users_lecture(client, professor, db):
     )
     db.add(other_lecture)
 
-    look = await _make_look(db, professor, heygen_look_id="hg_look_1", image_url=None)
+    await _make_look(db, professor, heygen_look_id="hg_look_1", image_url=None)
     row = SavedAvatar(
         id=uuid.uuid4(), user_id=professor.id, name="x", look_id="hg_look_1"
     )
@@ -252,7 +252,7 @@ async def test_apply_rejects_other_users_lecture(client, professor, db):
 @pytest.mark.asyncio
 async def test_preview_render_then_poll_to_ready(client, professor, db):
     # 레거시 heygen 룩 → S3/talking-photo 등록 없이 avatar_id 로 바로 렌더.
-    look = await _make_look(db, professor, heygen_look_id="hg_look_1", image_url=None)
+    await _make_look(db, professor, heygen_look_id="hg_look_1", image_url=None)
     row = SavedAvatar(
         id=uuid.uuid4(),
         user_id=professor.id,
@@ -300,7 +300,7 @@ async def test_preview_render_then_poll_to_ready(client, professor, db):
 
 @pytest.mark.asyncio
 async def test_preview_cache_hit_skips_render(client, professor, db):
-    look = await _make_look(db, professor, heygen_look_id="hg_look_1", image_url=None)
+    await _make_look(db, professor, heygen_look_id="hg_look_1", image_url=None)
     row = SavedAvatar(
         id=uuid.uuid4(),
         user_id=professor.id,
