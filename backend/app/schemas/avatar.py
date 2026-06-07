@@ -305,3 +305,87 @@ class RecentAvatarResponse(BaseModel):
     avatar_id: str | None = Field(
         default=None, description="가장 최근 선택한 아바타/룩 id (없으면 null)."
     )
+
+
+# ── 내 아바타 (룩 + 음성 조합 라이브러리) ──────────────────────────────────────
+#
+# 룩만 저장하던 라이브러리(LookItem)의 상위 개념. 교수자가 고른 룩 + 음성을 한
+# 묶음으로 저장해, 재방문 시 재선택·재렌더 없이 바로 강의에 적용한다. 말하는
+# 미리보기 영상은 조합 단위로 보관(덮어쓰기 없음)해 갤러리에서 재생한다.
+
+
+class SavedAvatarItem(BaseModel):
+    """저장된 '룩 + 음성' 조합 아바타 1개 (갤러리 카드)."""
+
+    id: str = Field(..., description="saved_avatar 행 id(uuid 문자열).")
+    name: str = Field(..., description="교수자가 붙인 표시 이름.")
+    look_id: str = Field(
+        ..., description="렌더용 룩 식별자(룩 내부 uuid 또는 heygen_look_id)."
+    )
+    voice_id: str | None = Field(
+        default=None, description="음성 id. null = 성별 기준 기본 보이스."
+    )
+    avatar_scale: float = Field(
+        default=1.0, description="프레임 내 아바타 크기 배율(1.0 = 기본)."
+    )
+    preview_video_url: str | None = Field(
+        default=None,
+        description="이 조합 전용 말하는 미리보기 영상(presigned). 없으면 null.",
+    )
+    preview_status: Literal["none", "processing", "ready", "failed"] = Field(
+        default="none",
+        description=(
+            "'none' = 미리보기 없음, 'processing' = 렌더 중, 'ready' = 영상 준비됨, "
+            "'failed' = 렌더 실패."
+        ),
+    )
+    created_at: datetime | None = Field(
+        default=None, description="저장 시각(ISO8601, UTC)."
+    )
+
+
+class SavedAvatarCreate(BaseModel):
+    """``POST /api/avatars/me/saved`` — 룩+음성 조합 저장."""
+
+    name: str = Field(..., min_length=1, max_length=80, description="표시 이름.")
+    look_id: str = Field(
+        ..., min_length=1, max_length=255, description="저장할 룩 식별자."
+    )
+    voice_id: str | None = Field(
+        default=None, max_length=255, description="음성 id(선택). null = 기본 보이스."
+    )
+    avatar_scale: float = Field(
+        default=1.0, ge=0.3, le=2.0, description="아바타 크기 배율 [0.3, 2.0]."
+    )
+
+
+class SavedAvatarUpdate(BaseModel):
+    """``PATCH /api/avatars/me/saved/{id}`` — 이름/음성 부분 변경.
+
+    pydantic ``model_fields_set`` 으로 '미전송' 과 'null 전송' 을 구분한다 —
+    voice_id 를 명시적으로 null 로 보내면 기본 보이스로 해제한다.
+    """
+
+    name: str | None = Field(
+        default=None, max_length=80, description="새 표시 이름(공백이면 무시)."
+    )
+    voice_id: str | None = Field(
+        default=None, max_length=255, description="새 음성 id. null = 기본 보이스로 해제."
+    )
+
+
+class SavedAvatarPreviewRequest(BaseModel):
+    """``POST /api/avatars/me/saved/{id}/preview`` — 말하는 미리보기 렌더 시작."""
+
+    text: str | None = Field(
+        default=None, max_length=2000, description="아바타가 말할 대본. null = 기본 샘플."
+    )
+    force: bool = Field(
+        default=False, description="true 면 캐시를 무시하고 다시 렌더한다."
+    )
+
+
+class SavedAvatarApply(BaseModel):
+    """``POST /api/avatars/me/saved/{id}/apply`` — 강의에 적용."""
+
+    lecture_id: str = Field(..., description="이 아바타(룩+음성)를 적용할 강의 id.")

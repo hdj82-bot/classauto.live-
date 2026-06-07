@@ -15,7 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_professor
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.course import Course
+from app.models.lecture import Lecture
 from app.models.photo_avatar import LookStatus, PhotoAvatarLook
+from app.models.saved_avatar import SavedAvatar
 from app.models.user import User
 from app.schemas.avatar import (
     AvatarMeta,
@@ -31,6 +34,11 @@ from app.schemas.avatar import (
     ProfilePhotoResponse,
     RecentAvatarRequest,
     RecentAvatarResponse,
+    SavedAvatarApply,
+    SavedAvatarCreate,
+    SavedAvatarItem,
+    SavedAvatarPreviewRequest,
+    SavedAvatarUpdate,
     VoiceCloneResponse,
     VoiceScriptRequest,
     VoiceScriptResponse,
@@ -1483,3 +1491,420 @@ async def set_recent_avatar(
     user.recent_avatar_id = avatar_id
     await db.commit()
     return RecentAvatarResponse(avatar_id=avatar_id)
+
+
+# ── 내 아바타 (룩 + 음성 조합 라이브러리) ──────────────────────────────────────
+#
+# 룩만 저장하던 라이브러리(GET /api/avatars/me/looks)의 상위 개념. 교수자가 고른
+# 룩 + 음성을 한 묶음으로 저장(saved_avatars)해, 재방문 시 재선택·재렌더 없이 바로
+# 강의에 적용한다. 말하는 미리보기 영상은 user 단일 캐시가 아니라 조합 단위로 보관해
+# 덮어쓰기 없이 갤러리에서 재생한다.
+
+
+def _saved_preview_status(row: SavedAvatar) -> str:
+    """saved_avatar 행의 미리보기 상태를 산출(저장값으로만 판정)."""
+    if row.preview_video_url:
+        return "ready"
+    if row.preview_video_id:
+        return "processing"
+    return "none"
+
+
+def _saved_avatar_item(row: SavedAvatar) -> SavedAvatarItem:
+    """SavedAvatar 행 → 응답 스키마(미리보기 URL 은 presigned)."""
+    return SavedAvatarItem(
+        id=str(row.id),
+        name=row.name,
+        look_id=row.look_id,
+        voice_id=row.voice_id,
+        avatar_scale=row.avatar_scale,
+        preview_video_url=s3_svc.presign_stored_s3_url(row.preview_video_url),
+        preview_status=_saved_preview_status(row),
+        created_at=row.created_at,
+    )
+
+
+async def _resolve_look(
+    user: User, db: AsyncSession, look_id: str
+) -> PhotoAvatarLook | None:
+    """룩 식별자(내부 uuid 또는 heygen_look_id)로 본인 룩 행을 찾는다.
+
+    select_look/save/delete 와 동일한 식별 규칙(gpt=uuid, 레거시=heygen_look_id).
+    """
+    row = None
+    try:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.id == uuid.UUID(look_id),
+                )
+            )
+        ).scalar_one_or_none()
+    except ValueError:
+        row = None
+    if row is None:
+        row = (
+            await db.execute(
+                select(PhotoAvatarLook).where(
+                    PhotoAvatarLook.user_id == user.id,
+                    PhotoAvatarLook.heygen_look_id == look_id,
+                )
+            )
+        ).scalar_one_or_none()
+    return row
+
+
+async def _get_saved(user: User, db: AsyncSession, saved_id: str) -> SavedAvatar:
+    """본인 소유의 saved_avatar 행을 가져온다(없으면 404)."""
+    try:
+        sid = uuid.UUID(saved_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 아바타를 찾을 수 없습니다."
+        ) from e
+    row = (
+        await db.execute(
+            select(SavedAvatar).where(
+                SavedAvatar.user_id == user.id, SavedAvatar.id == sid
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 아바타를 찾을 수 없습니다."
+        )
+    return row
+
+
+async def _renderable_character_for_look(
+    look: PhotoAvatarLook, keep_id: str | None
+) -> tuple[str | None, str | None]:
+    """룩을 HeyGen create_video 의 character 로 변환해 (avatar_id, talking_photo_id) 반환.
+
+    - 레거시 heygen 룩(``heygen_look_id`` 있음): avatar_id 로 그대로 렌더.
+    - gpt 룩(``image_url`` 있음): 이미지를 Talking Photo 로 등록해 talking_photo_id 로 렌더.
+      ``keep_id`` 는 한도 정리 시 보호할 기존 talking photo(현재 사용 중인 본인 아바타).
+    """
+    if look.heygen_look_id:
+        return look.heygen_look_id, None
+    if not look.image_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이 룩에는 렌더할 이미지가 없습니다.",
+        )
+
+    from urllib.parse import urlparse
+
+    from app.services.pipeline.heygen import HeyGenError
+
+    key = urlparse(look.image_url).path.lstrip("/")
+    ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
+    try:
+        img_bytes = s3_svc.download_file(key)
+    except Exception as e:  # noqa: BLE001 — S3 다운로드 실패
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"룩 이미지를 불러오지 못했습니다(S3): {e}",
+        ) from e
+
+    safe_bytes, safe_ctype = _ensure_talking_photo_payload(img_bytes, ctype)
+    try:
+        tp_id = await _register_talking_photo_with_cleanup(
+            safe_bytes, safe_ctype, keep_id=keep_id
+        )
+    except HeyGenError as e:
+        hint = ""
+        if "exceeded your limit" in str(e) or "401028" in str(e):
+            hint = (
+                " — HeyGen 계정의 Photo Avatar 한도에 도달했습니다. 잠시 후 다시 "
+                "시도하거나 HeyGen 플랜을 업그레이드해 주세요."
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"미리보기용 아바타 등록에 실패했습니다(HeyGen): {e}{hint}",
+        ) from e
+    return None, tp_id
+
+
+async def _refresh_saved_preview(row: SavedAvatar, db: AsyncSession) -> None:
+    """진행 중(preview_video_id 있음) 미리보기를 폴링해 완료 시 S3 로 옮겨 캐시한다.
+
+    get_avatar_preview 와 동일 패턴 — HeyGen URL 은 만료되므로 영구 S3 로 이전한다.
+    실패/일시 오류는 상태만 정리하고 조용히 넘긴다(목록 조회를 막지 않는다).
+    """
+    from app.services.pipeline.heygen import HeyGenError, get_video_status
+
+    try:
+        st = await get_video_status(row.preview_video_id)
+    except HeyGenError:
+        return  # 일시 조회 실패 — 다음 폴링까지 processing 유지.
+
+    heygen_status = st.get("status")
+    heygen_url = st.get("video_url")
+    if heygen_status == "completed" and heygen_url:
+        try:
+            s3_url, _ = await s3_svc.upload_from_url(
+                heygen_url, f"saved-avatar-{row.id}"
+            )
+        except Exception:  # noqa: BLE001 — 이전 실패 시 HeyGen URL 임시 사용.
+            s3_url = heygen_url
+        row.preview_video_url = s3_url
+        row.preview_video_id = None
+        await db.commit()
+    elif heygen_status in ("failed", "error"):
+        row.preview_video_id = None
+        await db.commit()
+
+
+@router.get(
+    "/api/avatars/me/saved",
+    response_model=list[SavedAvatarItem],
+    summary="내 아바타(룩+음성 조합) 목록",
+)
+async def list_saved_avatars(
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """저장된 '룩+음성' 조합 아바타를 최신순으로 반환한다(맨 배열).
+
+    진행 중인 미리보기가 있으면 HeyGen 상태를 폴링해 완료 시 S3 로 옮겨 캐시한다.
+    """
+    rows = (
+        await db.execute(
+            select(SavedAvatar)
+            .where(SavedAvatar.user_id == user.id)
+            .order_by(SavedAvatar.created_at.desc())
+        )
+    ).scalars().all()
+    for row in rows:
+        if row.preview_video_id and not row.preview_video_url:
+            await _refresh_saved_preview(row, db)
+    return [_saved_avatar_item(r) for r in rows]
+
+
+@router.post(
+    "/api/avatars/me/saved",
+    response_model=SavedAvatarItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="룩+음성 조합 아바타 저장",
+)
+async def create_saved_avatar(
+    payload: SavedAvatarCreate,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """선택한 룩 + 음성을 '내 아바타' 1개로 저장한다(재렌더 없음).
+
+    룩은 본인 소유 + ready 여야 한다. 저장 수는 ``PHOTO_AVATAR_SAVED_MAX`` 로 상한.
+    """
+    look = await _resolve_look(user, db, payload.look_id)
+    if look is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 룩을 찾을 수 없습니다."
+        )
+    if look.status != LookStatus.ready.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="아직 준비되지 않은 룩입니다."
+        )
+
+    saved_count = (
+        await db.execute(
+            select(func.count())
+            .select_from(SavedAvatar)
+            .where(SavedAvatar.user_id == user.id)
+        )
+    ).scalar() or 0
+    if saved_count >= settings.PHOTO_AVATAR_SAVED_MAX:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"내 아바타는 최대 {settings.PHOTO_AVATAR_SAVED_MAX}개까지 저장할 수 "
+                "있습니다. 기존 항목을 정리한 뒤 다시 시도해 주세요."
+            ),
+        )
+
+    row = SavedAvatar(
+        user_id=user.id,
+        name=payload.name.strip()[:80],
+        look_id=payload.look_id,
+        voice_id=payload.voice_id,
+        avatar_scale=payload.avatar_scale,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return _saved_avatar_item(row)
+
+
+@router.patch(
+    "/api/avatars/me/saved/{saved_id}",
+    response_model=SavedAvatarItem,
+    summary="내 아바타 수정(이름/음성)",
+)
+async def update_saved_avatar(
+    saved_id: str,
+    payload: SavedAvatarUpdate,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """저장된 아바타의 표시 이름·음성을 부분 수정한다.
+
+    voice_id 가 바뀌면 기존 미리보기 캐시(옛 음성)는 무효화한다. 전송된 필드만
+    수정한다(model_fields_set 으로 '미전송' 과 'null 전송' 구분).
+    """
+    row = await _get_saved(user, db, saved_id)
+    fields = payload.model_fields_set
+    if "name" in fields and payload.name is not None:
+        nm = payload.name.strip()
+        if nm:
+            row.name = nm[:80]
+    if "voice_id" in fields and row.voice_id != payload.voice_id:
+        row.voice_id = payload.voice_id
+        # 음성이 바뀌었으니 옛 음성으로 만든 미리보기는 무효.
+        row.preview_video_url = None
+        row.preview_video_id = None
+        row.preview_voice_id = None
+        row.preview_text = None
+    await db.commit()
+    await db.refresh(row)
+    return _saved_avatar_item(row)
+
+
+@router.delete(
+    "/api/avatars/me/saved/{saved_id}",
+    response_model=dict,
+    summary="내 아바타 삭제",
+)
+async def delete_saved_avatar(
+    saved_id: str,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """저장된 아바타 1개를 삭제한다(룩·음성 원본은 보존, 조합 카드만 제거)."""
+    row = await _get_saved(user, db, saved_id)
+    await db.delete(row)
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post(
+    "/api/avatars/me/saved/{saved_id}/preview",
+    response_model=SavedAvatarItem,
+    summary="내 아바타 말하는 미리보기 렌더",
+)
+async def render_saved_avatar_preview(
+    saved_id: str,
+    payload: SavedAvatarPreviewRequest | None = Body(default=None),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """저장된 조합(룩+음성)으로 짧은 말하는 영상을 1회 렌더해 이 행에 캐시한다.
+
+    같은 음성·대본의 완성본이 있으면 즉시 반환(HeyGen 비용 절감). 상태 갱신·완료
+    수령은 ``GET /api/avatars/me/saved`` 폴링이 담당한다.
+    """
+    payload = payload or SavedAvatarPreviewRequest()
+    row = await _get_saved(user, db, saved_id)
+    look = await _resolve_look(user, db, row.look_id)
+    if look is None or look.status != LookStatus.ready.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이 아바타의 룩을 사용할 수 없습니다.",
+        )
+
+    render_text = (payload.text or "").strip() or _PREVIEW_TEXT
+    cached_text = row.preview_text or _PREVIEW_TEXT
+
+    # 캐시 적중: 강제 아님 + 완성본 + 같은 음성 + 같은 대본.
+    if (
+        not payload.force
+        and row.preview_video_url
+        and row.preview_voice_id == row.voice_id
+        and cached_text == render_text
+    ):
+        return _saved_avatar_item(row)
+    # 이미 렌더 중 + 강제 아님 → 새로 시작하지 않는다.
+    if not payload.force and row.preview_video_id:
+        return _saved_avatar_item(row)
+
+    from app.services.pipeline import tts
+    from app.services.pipeline.heygen import HeyGenError, create_video
+
+    avatar_id, talking_photo_id = await _renderable_character_for_look(
+        look, keep_id=user.photo_avatar_id
+    )
+    is_cloned = bool(
+        row.voice_id and user.cloned_voice_id and row.voice_id == user.cloned_voice_id
+    )
+    try:
+        result = await tts.synthesize(
+            render_text, voice_id=row.voice_id, cloned=is_cloned
+        )
+        stored_audio_url = s3_svc.upload_audio_bytes(
+            result.audio_bytes, f"saved-avatar-{row.id}"
+        )
+        audio_url = s3_svc.presign_stored_s3_url(stored_audio_url) or stored_audio_url
+        video_id = await create_video(
+            audio_url=audio_url,
+            avatar_id=avatar_id,
+            talking_photo_id=talking_photo_id,
+            avatar_scale=row.avatar_scale,
+            callback_id=f"saved-avatar:{row.id}",
+        )
+    except (HeyGenError, tts.TTSError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"미리보기 생성에 실패했습니다: {e}",
+        ) from e
+
+    row.preview_video_id = video_id
+    row.preview_voice_id = row.voice_id
+    row.preview_text = render_text
+    row.preview_video_url = None  # 새 렌더 시작 — 이전 캐시 무효화.
+    await db.commit()
+    await db.refresh(row)
+    return _saved_avatar_item(row)
+
+
+@router.post(
+    "/api/avatars/me/saved/{saved_id}/apply",
+    response_model=dict,
+    summary="내 아바타를 강의에 적용",
+)
+async def apply_saved_avatar(
+    saved_id: str,
+    payload: SavedAvatarApply,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """저장된 조합(룩+음성)을 지정한 강의에 한 번에 적용한다.
+
+    lecture.avatar_id(=look_id) + voice_id + avatar_name + avatar_scale 를 설정한다.
+    강의는 본인(course.instructor_id) 소유여야 한다.
+    """
+    row = await _get_saved(user, db, saved_id)
+    try:
+        lid = uuid.UUID(payload.lecture_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="강의를 찾을 수 없습니다."
+        ) from e
+    lecture = (
+        await db.execute(
+            select(Lecture)
+            .join(Course, Lecture.course_id == Course.id)
+            .where(Lecture.id == lid, Course.instructor_id == user.id)
+        )
+    ).scalar_one_or_none()
+    if lecture is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="강의를 찾을 수 없습니다."
+        )
+
+    lecture.avatar_id = row.look_id
+    lecture.avatar_name = row.name
+    lecture.avatar_scale = row.avatar_scale
+    lecture.voice_id = row.voice_id
+    await db.commit()
+    return {"ok": True}
