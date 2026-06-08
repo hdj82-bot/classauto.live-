@@ -72,13 +72,51 @@ def _claude_seed_call(client, user_content: str):
     )
 
 
+def _script_context_for_task(db: Session, task_id: str) -> str:
+    """task_id 의 강의 → 생성된 스크립트(발화 텍스트)를 RAG 컨텍스트 문자열로 합친다.
+
+    슬라이드 임베딩이 비었을 때의 폴백. VideoScript.segments([{slide_index, text}])의
+    발화 텍스트를 슬라이드 순으로 이어 붙인다. 강의/영상/스크립트가 없으면 "".
+    """
+    from app.models.lecture import Lecture
+    from app.models.video import Video
+
+    lecture = (
+        db.query(Lecture).filter(Lecture.pipeline_task_id == task_id).first()
+    )
+    if lecture is None:
+        return ""
+    video = db.query(Video).filter(Video.lecture_id == lecture.id).first()
+    if video is None or video.script is None:
+        return ""
+
+    segments = video.script.segments or []
+    parts: list[str] = []
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        text_val = (seg.get("text") or "").strip()
+        if not text_val:
+            continue
+        idx = seg.get("slide_index")
+        label = f"### 슬라이드 {idx + 1}" if isinstance(idx, int) else "###"
+        parts.append(f"{label}\n{text_val}")
+    return "\n\n".join(parts).strip()
+
+
 def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str, bool]:
     """교수자 사전 질문 1건에 대한 답변을 PPT(강의 자료) 기반으로 생성.
 
     반환 ``(answer, in_scope)``:
-    - 강의 슬라이드가 하나도 검색되지 않으면(임베딩 미생성 등) ``("", False)``.
-    - 그 외에는 가장 가까운 슬라이드로 답변을 생성해 ``(생성된 답변, True)``.
+    - 슬라이드 임베딩도 없고 생성된 스크립트도 없으면 ``("", False)``.
+    - 그 외에는 강의 자료로 답변을 생성해 ``(생성된 답변, True)``.
       Claude 오류/빈 응답이면 ``("", True)``.
+
+    강의 자료(컨텍스트) 우선순위:
+    1) 슬라이드 임베딩 검색 결과(있으면 가장 가까운 슬라이드).
+    2) 없으면 **생성된 스크립트(발화 텍스트) 전체** 로 폴백. 임베딩(step2)은 스크립트
+       생성(step3)보다 먼저 돌아 스크립트가 RAG 에 안 들어가고, PPT 텍스트가 빈약하면
+       검색이 비기 때문 — 교수자가 만든 스크립트가 사실상 강의 내용이므로 이를 쓴다.
 
     ★ 학생 Q&A(answer_question)와 달리 ``is_in_scope`` 유사도 게이트(0.7)를 적용하지
     않는다. 사전 질문은 교수자가 직접 고른 본 강의 질문이라(신뢰된 저작), 0.7 게이트로는
@@ -89,10 +127,14 @@ def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str,
     괄호 병기 금지 등 표기 규칙은 SEED_ANSWER_SYSTEM_PROMPT 가 강제한다.
     """
     results = search_similar_slides(db, task_id, question, top_k=3)
-    if not results:
-        return "", False
+    if results:
+        context = _build_context(results)
+    else:
+        # 슬라이드 임베딩이 비었다(PPT 텍스트 빈약/미생성) → 생성된 스크립트로 폴백.
+        context = _script_context_for_task(db, task_id)
+        if not context:
+            return "", False
 
-    context = _build_context(results)
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
     try:
         response = _claude_seed_call(

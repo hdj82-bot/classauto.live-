@@ -32,14 +32,40 @@ def test_seed_system_prompt_forbids_chinese_parenthesis():
     assert "大学生" in p  # 예시로 규칙을 못박았는지
 
 
-def test_generate_seed_answer_no_slides(monkeypatch):
-    # 슬라이드/임베딩이 전혀 없을 때만 생성 불가(in_scope=False).
+def test_generate_seed_answer_no_slides_no_scripts(monkeypatch):
+    # 슬라이드 임베딩도 없고 스크립트 폴백도 비면 생성 불가(in_scope=False).
     monkeypatch.setattr(qa_mod, "search_similar_slides", lambda db, t, q, top_k=3: [])
+    monkeypatch.setattr(qa_mod, "_script_context_for_task", lambda db, t: "")
     monkeypatch.setattr(qa_mod, "_claude_seed_call", lambda *a, **k: pytest.fail("Claude 호출됨"))
 
     answer, in_scope = qa_mod.generate_seed_answer(None, "task-1", "질문")
     assert answer == ""
     assert in_scope is False
+
+
+def test_generate_seed_answer_falls_back_to_scripts(monkeypatch):
+    # ★ 핵심: 슬라이드 임베딩이 비어도 생성된 스크립트가 있으면 그걸로 답변 생성.
+    monkeypatch.setattr(qa_mod, "search_similar_slides", lambda db, t, q, top_k=3: [])
+    monkeypatch.setattr(
+        qa_mod, "_script_context_for_task", lambda db, t: "### 슬라이드 1\n어순 차이 설명..."
+    )
+    monkeypatch.setattr("anthropic.Anthropic", lambda **k: object())
+    fake = types.SimpleNamespace(
+        content=[types.SimpleNamespace(type="text", text="한국어와 중국어는 어순이 다릅니다.")]
+    )
+    captured = {}
+
+    def _call(client, content):
+        captured["content"] = content
+        return fake
+
+    monkeypatch.setattr(qa_mod, "_claude_seed_call", _call)
+
+    answer, in_scope = qa_mod.generate_seed_answer(None, "task-1", "어순 차이는 왜 생기나요?")
+    assert in_scope is True
+    assert answer == "한국어와 중국어는 어순이 다릅니다."
+    # 스크립트 컨텍스트가 프롬프트에 실렸는지.
+    assert "어순 차이 설명" in captured["content"]
 
 
 def test_generate_seed_answer_low_similarity_still_generates(monkeypatch):
