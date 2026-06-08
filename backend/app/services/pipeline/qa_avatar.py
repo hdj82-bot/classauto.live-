@@ -32,6 +32,13 @@ STATUS_RENDERING = "rendering"
 STATUS_READY = "ready"
 STATUS_FAILED = "failed"
 
+# 행 출처 — origin 컬럼 값.
+ORIGIN_STUDENT = "student"          # 학생 미적중 질문 적립(야간 배치 클러스터 큐).
+ORIGIN_SEED = "instructor_seed"     # 교수자 사전 등록 예상 질문(생성 시 즉시 렌더).
+
+# 교수자가 영상당 등록할 수 있는 사전 질문 최대 개수(= 영상당 렌더 한도와 동일).
+SEED_QUESTIONS_MAX = settings.QA_AVATAR_TOP_CLUSTERS
+
 
 # ── 임베딩 ────────────────────────────────────────────────────────────────────
 
@@ -141,10 +148,98 @@ def accrue_pending(
         answer_text=answer,
         question_embedding=embedding,
         status=STATUS_PENDING,
+        origin=ORIGIN_STUDENT,
     )
     db.add(row)
     db.flush()
     return row
+
+
+# ── 교수자 사전 질문(instructor_seed) ─────────────────────────────────────────
+#
+# 첫 영상처럼 학생 질문 축적이 없을 때, 교수자가 영상당 ≤3개의 예상 질문을 미리
+# 등록한다. 등록만 하면 status=pending·origin=instructor_seed 행으로 쌓이고, 영상
+# 생성(approve) 시 즉시 렌더(tasks/qa_batch.py)되어 첫 학생 질문부터 아바타 답변이
+# 나온다. 매칭/재생은 기존 resolve_avatar_for_question(유사도 0.9↑)이 그대로 처리.
+
+
+def _normalize_seed_questions(questions: list[str]) -> list[str]:
+    """공백 제거 → 빈 문자열 제외 → 입력 순서 유지 중복 제거 → 최대 ``SEED_QUESTIONS_MAX``."""
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for q in questions:
+        t = (q or "").strip()
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        cleaned.append(t)
+    return cleaned[:SEED_QUESTIONS_MAX]
+
+
+def list_seed_questions(db: Session, lecture_id) -> list[QAAnswerCache]:
+    """해당 강의의 교수자 사전 질문(instructor_seed) 행을 결정적 순서로 반환.
+
+    created_at 만으로는 정렬이 흔들린다 — Postgres ``now()`` 는 트랜잭션 단위라 같은
+    PUT 으로 함께 insert 된 행들의 created_at 이 모두 동일하기 때문. ``id`` 를 보조
+    정렬키로 둬 재조회 시에도 안정적인 순서를 보장한다(입력 순서와 일치하지는 않음).
+    """
+    return (
+        db.execute(
+            select(QAAnswerCache)
+            .where(
+                QAAnswerCache.lecture_id == lecture_id,
+                QAAnswerCache.origin == ORIGIN_SEED,
+            )
+            .order_by(QAAnswerCache.created_at.asc(), QAAnswerCache.id.asc())
+        )
+        .scalars()
+        .all()
+    )
+
+
+def upsert_seed_questions(
+    db: Session,
+    lecture_id,
+    instructor_id,
+    questions: list[str],
+) -> list[QAAnswerCache]:
+    """교수자 사전 질문 집합을 ``questions`` 로 맞춘다(차집합 동기화). 현재 집합을 반환.
+
+    - 정규화(공백/빈값/중복 제거, 최대 ``SEED_QUESTIONS_MAX``) 후:
+      · 유지되는 질문과 텍스트가 같은 기존 instructor_seed 행은 그대로 보존
+        (이미 렌더된 status/클립을 재렌더 없이 유지 — 비용 절약).
+      · 목록에서 빠진 instructor_seed 행은 삭제.
+      · 새 질문은 origin=instructor_seed, status=pending, answer/embedding=None 으로 추가.
+    - 학생 적립 행(origin=student)은 절대 건드리지 않는다.
+    """
+    wanted = _normalize_seed_questions(questions)
+    existing = list_seed_questions(db, lecture_id)
+    by_text = {row.question_text: row for row in existing}
+
+    # 빠진 질문 삭제.
+    wanted_set = set(wanted)
+    for row in existing:
+        if row.question_text not in wanted_set:
+            db.delete(row)
+
+    # 새 질문 추가(기존은 보존).
+    for q in wanted:
+        if q in by_text:
+            continue
+        db.add(
+            QAAnswerCache(
+                lecture_id=lecture_id,
+                instructor_id=instructor_id,
+                question_text=q,
+                answer_text=None,
+                question_embedding=None,
+                status=STATUS_PENDING,
+                origin=ORIGIN_SEED,
+            )
+        )
+
+    db.flush()
+    return list_seed_questions(db, lecture_id)
 
 
 # ── API(계약 B) 진입점 ────────────────────────────────────────────────────────
