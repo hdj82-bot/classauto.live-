@@ -163,16 +163,23 @@ def accrue_pending(
 # 나온다. 매칭/재생은 기존 resolve_avatar_for_question(유사도 0.9↑)이 그대로 처리.
 
 
-def _normalize_seed_questions(questions: list[str]) -> list[str]:
-    """공백 제거 → 빈 문자열 제외 → 입력 순서 유지 중복 제거 → 최대 ``SEED_QUESTIONS_MAX``."""
+def _normalize_seed_questions(
+    items: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """(질문, 답변) 목록 정규화: 질문 trim·빈 질문 제외·질문 기준 중복 제거 → 최대 N.
+
+    답변도 trim 한다(빈 답변은 ""로 두고, 렌더 시 RAG 폴백 신호로 쓴다). 입력 순서를
+    유지하며, 같은 질문이 중복되면 첫 항목만 남긴다.
+    """
     seen: set[str] = set()
-    cleaned: list[str] = []
-    for q in questions:
-        t = (q or "").strip()
-        if not t or t in seen:
+    cleaned: list[tuple[str, str]] = []
+    for q, a in items:
+        qt = (q or "").strip()
+        at = (a or "").strip()
+        if not qt or qt in seen:
             continue
-        seen.add(t)
-        cleaned.append(t)
+        seen.add(qt)
+        cleaned.append((qt, at))
     return cleaned[:SEED_QUESTIONS_MAX]
 
 
@@ -197,41 +204,60 @@ def list_seed_questions(db: Session, lecture_id) -> list[QAAnswerCache]:
     )
 
 
+def _reset_for_rerender(row: QAAnswerCache, answer: str | None) -> None:
+    """답변이 바뀐 행을 재렌더 대기 상태로 되돌린다(기존 클립·잡 폐기)."""
+    row.answer_text = answer
+    row.status = STATUS_PENDING
+    row.s3_video_url = None
+    row.heygen_job_id = None
+    row.duration_seconds = None
+    row.error_message = None
+    row.cluster_key = None
+
+
 def upsert_seed_questions(
     db: Session,
     lecture_id,
     instructor_id,
-    questions: list[str],
+    items: list[tuple[str, str]],
 ) -> list[QAAnswerCache]:
-    """교수자 사전 질문 집합을 ``questions`` 로 맞춘다(차집합 동기화). 현재 집합을 반환.
+    """교수자 사전 질문(+답변) 집합을 ``items`` 로 맞춘다(차집합 동기화). 현재 집합 반환.
 
-    - 정규화(공백/빈값/중복 제거, 최대 ``SEED_QUESTIONS_MAX``) 후:
-      · 유지되는 질문과 텍스트가 같은 기존 instructor_seed 행은 그대로 보존
-        (이미 렌더된 status/클립을 재렌더 없이 유지 — 비용 절약).
-      · 목록에서 빠진 instructor_seed 행은 삭제.
-      · 새 질문은 origin=instructor_seed, status=pending, answer/embedding=None 으로 추가.
+    각 항목은 (질문, 답변) 튜플이다. 답변이 비면(``""``) 영상 생성 시 RAG 로 자동
+    생성하므로 ``answer_text=None`` 으로 저장한다.
+
+    - 정규화(질문 trim·빈 질문/중복 제거, 최대 ``SEED_QUESTIONS_MAX``) 후:
+      · 같은 질문의 기존 행: 답변이 동일하면 그대로 보존(재렌더 없음 — 비용 절약),
+        답변이 바뀌었으면 답변을 갱신하고 status=pending 으로 되돌려(클립·잡 폐기)
+        다음 영상 생성 때 새 답변으로 다시 렌더한다.
+      · 목록에서 빠진 행은 삭제.
+      · 새 질문은 origin=instructor_seed, status=pending, embedding=None 으로 추가.
     - 학생 적립 행(origin=student)은 절대 건드리지 않는다.
     """
-    wanted = _normalize_seed_questions(questions)
+    wanted = _normalize_seed_questions(items)
     existing = list_seed_questions(db, lecture_id)
     by_text = {row.question_text: row for row in existing}
 
     # 빠진 질문 삭제.
-    wanted_set = set(wanted)
+    wanted_questions = {q for q, _ in wanted}
     for row in existing:
-        if row.question_text not in wanted_set:
+        if row.question_text not in wanted_questions:
             db.delete(row)
 
-    # 새 질문 추가(기존은 보존).
-    for q in wanted:
-        if q in by_text:
+    for q, a in wanted:
+        answer = a or None  # 빈 답변 → None(렌더 시 RAG 폴백)
+        row = by_text.get(q)
+        if row is not None:
+            # 답변이 바뀌었을 때만 재렌더(텍스트 비교 — None/"" 동등 처리).
+            if (row.answer_text or None) != answer:
+                _reset_for_rerender(row, answer)
             continue
         db.add(
             QAAnswerCache(
                 lecture_id=lecture_id,
                 instructor_id=instructor_id,
                 question_text=q,
-                answer_text=None,
+                answer_text=answer,
                 question_embedding=None,
                 status=STATUS_PENDING,
                 origin=ORIGIN_SEED,

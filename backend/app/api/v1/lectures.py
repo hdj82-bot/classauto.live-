@@ -204,13 +204,21 @@ async def get_lecture_video(
 
 
 def _seed_questions_response(sdb, instructor_id, rows) -> SeedQuestionsResponse:
-    """현재 사전 질문 행 + 이번 달 렌더 한도/사용량을 응답으로 투영."""
+    """현재 사전 질문 행 + 이번 달 렌더 한도/사용량을 응답으로 투영.
+
+    answer 는 교수자가 입력한 사전 대답(없으면 ""=RAG 자동 생성 예정).
+    preview_url 은 ready 인 행의 클립 presigned URL(점검용 재생).
+    """
     items = [
         SeedQuestionItem(
             id=str(r.id),
             question=r.question_text,
+            answer=r.answer_text or "",
             status=r.status,
             has_clip=bool(r.s3_video_url),
+            preview_url=(
+                presign_stored_s3_url(r.s3_video_url) if r.s3_video_url else None
+            ),
         )
         for r in rows
     ]
@@ -259,20 +267,21 @@ async def put_seed_questions(
     db: AsyncSession = Depends(get_db),
     professor: User = Depends(require_professor),
 ):
-    """사전 질문 집합을 ``questions`` 로 맞춘다(차집합 동기화). 4개 이상이면 422.
+    """사전 질문(+답변) 집합을 ``questions`` 로 맞춘다(차집합 동기화). 4개 이상이면 422.
 
-    같은 텍스트 기존 행은 보존(렌더된 클립 유지), 빠진 행은 삭제, 새 행은
-    pending 으로 추가된다. 비소유 강의는 404.
+    같은 질문 기존 행은 보존(답변 동일 시 렌더된 클립 유지), 답변이 바뀐 행은 재렌더
+    대기로 되돌림, 빠진 행은 삭제, 새 행은 pending 으로 추가. 답변을 비우면 영상 생성
+    시 RAG 로 자동 생성된다. 비소유 강의는 404.
     """
     await assert_professor_owns_lecture(db, lecture_id, professor.id)
     instructor_id = professor.id
-    questions = body.questions
+    items = [(q.question, q.answer) for q in body.questions]
     loop = asyncio.get_event_loop()
 
     def _work():
         with SyncSessionLocal() as sdb:
             rows = qa_avatar.upsert_seed_questions(
-                sdb, lecture_id, instructor_id, questions
+                sdb, lecture_id, instructor_id, items
             )
             sdb.commit()
             return _seed_questions_response(sdb, instructor_id, rows)

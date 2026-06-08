@@ -157,6 +157,41 @@ def test_seed_render_roundtrip_to_ready(sync_db, mock_render, monkeypatch):
     assert all(r.s3_video_url for r in rows)
 
 
+# ── 1-b. 교수자 사전 대답이 있으면 RAG 를 건너뛰고 그 답변으로 렌더 ────────────
+
+
+def test_seed_render_uses_instructor_answer_without_rag(sync_db, mock_render, monkeypatch):
+    from app.tasks import qa_batch
+
+    # answer_question 이 호출되면 테스트 실패 — 교수자 답변이 있으면 RAG 미호출이어야 함.
+    import app.services.pipeline.qa as qa_mod
+
+    def _boom(*_a, **_k):
+        raise AssertionError("교수자 답변이 있는데 RAG(answer_question)가 호출됨")
+
+    monkeypatch.setattr(qa_mod, "answer_question", _boom)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    row = QAAnswerCache(
+        lecture_id=lec.id, instructor_id=prof.id,
+        question_text="이 강의의 핵심 개념은?", answer_text="교수자가 직접 쓴 답변.",
+        question_embedding=None, status=qa_avatar.STATUS_PENDING,
+        origin=qa_avatar.ORIGIN_SEED,
+    )
+    sync_db.add(row)
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        rendered = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+        assert rendered == {"submitted": 1, "failed": 0}
+        refreshed = sync_db.query(QAAnswerCache).one()
+        assert refreshed.status == qa_avatar.STATUS_RENDERING
+        assert refreshed.answer_text == "교수자가 직접 쓴 답변."  # RAG 로 덮어쓰지 않음
+    finally:
+        loop.close()
+
+
 # ── 2. 범위 밖 질문은 렌더하지 않고 failed ─────────────────────────────────────
 
 

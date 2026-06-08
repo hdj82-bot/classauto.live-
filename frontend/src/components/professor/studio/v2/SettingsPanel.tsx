@@ -66,11 +66,16 @@ export interface SettingsPanelProps {
   /** "문제 만들기/수정" — 소크라테스 대화 모달 오픈. */
   onOpenSocratic?: (index: number) => void;
   // ── 예상 질문 (Q&A 사전 답변) ────────────────────────────────────────────────
-  /** 등록된 사전 질문들 (최대 3). 비면 빈 배열. 교수자는 질문만 입력한다. */
+  /** 등록된 사전 질문들 (최대 3). 비면 빈 배열. 질문 + (선택) 사전 대답을 입력한다. */
   seedQuestions?: SeedQuestionDraft[];
   onAddSeedQuestion?: () => void;
   onRemoveSeedQuestion?: (index: number) => void;
-  onChangeSeedQuestion?: (index: number, question: string) => void;
+  onChangeSeedQuestion?: (
+    index: number,
+    patch: { question?: string; answer?: string },
+  ) => void;
+  /** ready 클립 점검(미리보기 재생) — preview_url 을 받아 부모가 모달로 연다. */
+  onPreviewSeed?: (url: string) => void;
 }
 
 const settingsStyle: CSSProperties = {
@@ -302,6 +307,7 @@ export default function SettingsPanel({
   onAddSeedQuestion,
   onRemoveSeedQuestion,
   onChangeSeedQuestion,
+  onPreviewSeed,
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
@@ -313,12 +319,23 @@ export default function SettingsPanel({
     quizPoints.length === 0
       ? "없음"
       : `${quizPoints.length}개${authoredCount > 0 ? ` · ${authoredCount} 작성됨` : ""}`;
-  // 예상 질문 아코디언 요약: 질문 수 + 아바타 클립이 준비된 수(ready).
+  // 예상 질문 아코디언 요약 + 렌더 진척률.
+  // 진척 % = (ready+failed)/저장된 항목 — HeyGen 은 영상 단위 완료(이진)라 항목 수
+  // 기준으로 집계한다. failed 도 "처리 끝남"으로 본다(영원히 0%에 머무는 것 방지).
+  const seedSaved = seedQuestions.filter((q) => !!q.status);
   const seedReadyCount = seedQuestions.filter((q) => q.status === "ready").length;
+  const seedRendering = seedQuestions.some((q) => q.status === "rendering");
+  const seedDone = seedQuestions.filter(
+    (q) => q.status === "ready" || q.status === "failed",
+  ).length;
+  const seedProgressPct =
+    seedSaved.length > 0 ? Math.round((seedDone / seedSaved.length) * 100) : 0;
   const summarySeedVal =
     seedQuestions.length === 0
       ? "없음"
-      : `${seedQuestions.length}개${seedReadyCount > 0 ? ` · ${seedReadyCount} 준비됨` : ""}`;
+      : seedRendering
+        ? `${seedQuestions.length}개 · 생성 중 ${seedProgressPct}%`
+        : `${seedQuestions.length}개${seedReadyCount > 0 ? ` · ${seedReadyCount} 준비됨` : ""}`;
 
   return (
     <aside style={settingsStyle} aria-label="강의 설정">
@@ -581,18 +598,40 @@ export default function SettingsPanel({
           </summary>
           <div style={aBodyStyle}>
             <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
-              학생이 자주 물을 법한 질문을 적어 두세요. 영상 생성 시 그 질문의 답변을 강의
-              자료 기반으로 자동 생성해 아바타 클립으로 미리 만들어 둡니다. 학생이 비슷한
-              질문을 하면 첫 질문부터 아바타가 바로 답합니다. 강의당 최대 3개.
+              학생이 자주 물을 법한 질문과 사전 대답을 적어 두세요. 답변을 비우면 영상 생성 시
+              강의 자료 기반으로 자동 생성합니다. 영상 생성 시 아바타 클립으로 미리 만들어,
+              학생이 비슷한 질문을 하면 첫 질문부터 아바타가 바로 답합니다. 강의당 최대 3개.
             </p>
+
+            {/* 렌더 진척 — HeyGen 작업 중일 때 % 바. (영상 생성 후 폴링으로 갱신) */}
+            {seedSaved.length > 0 && (seedRendering || (seedDone > 0 && seedDone < seedSaved.length)) && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-subtle)" }}>
+                  <span>아바타 클립 생성 {seedRendering ? "중" : "대기"}</span>
+                  <span style={{ fontWeight: 700 }}>{seedProgressPct}%</span>
+                </div>
+                <div style={{ height: 6, borderRadius: 999, background: "var(--line)", overflow: "hidden" }}>
+                  <div
+                    style={{
+                      width: `${seedProgressPct}%`,
+                      height: "100%",
+                      borderRadius: 999,
+                      background: "linear-gradient(90deg, #FFB627, #E89E0E)",
+                      transition: "width 240ms var(--ease-out, ease)",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
 
             {seedQuestions.map((sq, i) => (
               <SeedQuestionCard
                 key={sq.id ?? `new-${i}`}
                 item={sq}
                 index={i}
-                onChange={(question) => onChangeSeedQuestion?.(i, question)}
+                onChange={(patch) => onChangeSeedQuestion?.(i, patch)}
                 onRemove={() => onRemoveSeedQuestion?.(i)}
+                onPreview={onPreviewSeed}
               />
             ))}
 
@@ -803,7 +842,7 @@ function QuizPointCard({
   );
 }
 
-/** 사전 질문 렌더 상태 → 배지 표기(라벨·색). 답변은 시스템이 생성하므로 상태만 표시. */
+/** 사전 질문 렌더 상태 → 배지 표기(라벨·색). */
 const SEED_STATUS_BADGE: Record<SeedQuestionStatus, { label: string; fg: string; bg: string }> = {
   pending: { label: "대기", fg: "var(--text-subtle)", bg: "var(--bg-card)" },
   rendering: { label: "생성 중", fg: "var(--gold-on-light, #B88308)", bg: "var(--gold-soft)" },
@@ -811,19 +850,23 @@ const SEED_STATUS_BADGE: Record<SeedQuestionStatus, { label: string; fg: string;
   failed: { label: "실패", fg: "#B42318", bg: "rgba(180,35,24,0.10)" },
 };
 
-/** 예상 질문 1개 카드 — 질문만 입력(답변은 영상 생성 시 RAG 로 자동 생성). */
+/** 예상 질문 1개 카드 — 질문 + (선택) 사전 대답 입력. ready 면 미리보기 재생. */
 function SeedQuestionCard({
   item,
   index,
   onChange,
   onRemove,
+  onPreview,
 }: {
   item: SeedQuestionDraft;
   index: number;
-  onChange: (question: string) => void;
+  onChange: (patch: { question?: string; answer?: string }) => void;
   onRemove: () => void;
+  onPreview?: (url: string) => void;
 }) {
   const badge = item.status ? SEED_STATUS_BADGE[item.status] : null;
+  const canPreview =
+    item.status === "ready" && !!item.preview_url && !!onPreview;
 
   return (
     <div
@@ -881,20 +924,68 @@ function SeedQuestionCard({
         </div>
       </div>
 
-      {/* 질문 (교수자는 질문만 입력 — 답변은 영상 생성 시 강의 자료로 자동 생성) */}
+      {/* 질문 */}
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
           학생 질문
         </label>
         <textarea
           value={item.question}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange({ question: e.target.value })}
           placeholder="예: 이번 장의 핵심 개념을 한 문장으로 정리하면?"
           rows={2}
           aria-label={`예상 질문 ${index + 1} 질문`}
           style={textareaStyle}
         />
       </div>
+
+      {/* 사전 대답 (선택 — 비우면 영상 생성 시 강의 자료 기반 RAG 로 자동 생성) */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
+          사전 대답 <span style={{ fontWeight: 400 }}>(비우면 자동 생성)</span>
+        </label>
+        <textarea
+          value={item.answer}
+          onChange={(e) => onChange({ answer: e.target.value })}
+          placeholder="이 질문이 들어오면 아바타가 말할 답변. 비워 두면 강의 자료로 자동 작성됩니다."
+          rows={3}
+          aria-label={`예상 질문 ${index + 1} 사전 대답`}
+          style={textareaStyle}
+        />
+      </div>
+
+      {/* 점검 — ready 클립 미리보기 재생 */}
+      {canPreview && (
+        <button
+          type="button"
+          onClick={() => onPreview!(item.preview_url!)}
+          style={{
+            alignSelf: "flex-start",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "6px 12px",
+            borderRadius: 8,
+            border: "1px solid var(--gold-medium, #E0B65C)",
+            background: "var(--gold-soft)",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: "pointer",
+            color: "var(--gold-on-light, #B88308)",
+            fontFamily: "inherit",
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+          미리보기로 점검
+        </button>
+      )}
+      {item.status === "failed" && (
+        <p style={{ margin: 0, fontSize: 11, color: "#B42318" }}>
+          생성에 실패했어요. 질문이 강의 범위 밖이거나 한도를 초과했을 수 있습니다.
+        </p>
+      )}
     </div>
   );
 }
