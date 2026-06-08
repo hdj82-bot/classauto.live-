@@ -271,7 +271,9 @@ class Settings(BaseSettings):
     STRIPE_PRICE_PRO: str = ""     # Stripe Price ID for PRO plan
 
     # ── pgvector ──────────────────────────────────────────────────
-    SIMILARITY_THRESHOLD: float = 0.7
+    # 학생 Q&A 범위 판정(강의 밖 질문 거부) 임계값. 0.7 은 너무 높아 정상 질문도
+    # 자주 거부됐다(질문↔슬라이드 코사인 유사도는 보통 0.4~0.65). 0.4 로 완화.
+    SIMILARITY_THRESHOLD: float = 0.4
 
     # ── Sentry ──────────────────────────────────────────────────
     SENTRY_DSN: str = ""

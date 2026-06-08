@@ -12,8 +12,8 @@ from app.services.pipeline.embedding import get_embeddings
 
 logger = logging.getLogger(__name__)
 
-# 설정 가능한 유사도 임계값 (기본 0.7 — 0.75는 너무 엄격하여 관련 결과 누락 가능)
-SIMILARITY_THRESHOLD = float(getattr(settings, "SIMILARITY_THRESHOLD", 0.7))
+# 설정 가능한 유사도 임계값 (기본 0.4 — 0.7 은 너무 엄격해 정상 질문도 거부됨)
+SIMILARITY_THRESHOLD = float(getattr(settings, "SIMILARITY_THRESHOLD", 0.4))
 
 
 @dataclass
