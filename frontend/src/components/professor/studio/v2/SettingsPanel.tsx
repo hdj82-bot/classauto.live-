@@ -11,6 +11,7 @@ import type {
   TtsVoice,
   VoiceGender,
 } from "../studioTypes";
+import type { SeedQuestionDraft, SeedQuestionStatus } from "../seedQuestionsApi";
 
 /**
  * Studio v2 — 우측 settings panel.
@@ -64,6 +65,12 @@ export interface SettingsPanelProps {
   onChangeQuizPoint?: (index: number, patch: Partial<QuizInsertionPoint>) => void;
   /** "문제 만들기/수정" — 소크라테스 대화 모달 오픈. */
   onOpenSocratic?: (index: number) => void;
+  // ── 예상 질문 (Q&A 사전 답변) ────────────────────────────────────────────────
+  /** 등록된 사전 질문들 (최대 3). 비면 빈 배열. 교수자는 질문만 입력한다. */
+  seedQuestions?: SeedQuestionDraft[];
+  onAddSeedQuestion?: () => void;
+  onRemoveSeedQuestion?: (index: number) => void;
+  onChangeSeedQuestion?: (index: number, question: string) => void;
 }
 
 const settingsStyle: CSSProperties = {
@@ -198,6 +205,20 @@ const selectStyle: CSSProperties = {
   cursor: "pointer",
 };
 
+const textareaStyle: CSSProperties = {
+  width: "100%",
+  padding: "8px 10px",
+  background: "var(--bg-card)",
+  border: "1px solid var(--line-strong)",
+  borderRadius: 8,
+  fontSize: 12.5,
+  fontWeight: 500,
+  color: "var(--text)",
+  fontFamily: "inherit",
+  lineHeight: 1.5,
+  resize: "vertical",
+};
+
 function Switch({ on, onClick, label }: { on: boolean; onClick?: () => void; label: string }) {
   return (
     <button
@@ -277,6 +298,10 @@ export default function SettingsPanel({
   onRemoveQuizPoint,
   onChangeQuizPoint,
   onOpenSocratic,
+  seedQuestions = [],
+  onAddSeedQuestion,
+  onRemoveSeedQuestion,
+  onChangeSeedQuestion,
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
@@ -288,6 +313,12 @@ export default function SettingsPanel({
     quizPoints.length === 0
       ? "없음"
       : `${quizPoints.length}개${authoredCount > 0 ? ` · ${authoredCount} 작성됨` : ""}`;
+  // 예상 질문 아코디언 요약: 질문 수 + 아바타 클립이 준비된 수(ready).
+  const seedReadyCount = seedQuestions.filter((q) => q.status === "ready").length;
+  const summarySeedVal =
+    seedQuestions.length === 0
+      ? "없음"
+      : `${seedQuestions.length}개${seedReadyCount > 0 ? ` · ${seedReadyCount} 준비됨` : ""}`;
 
   return (
     <aside style={settingsStyle} aria-label="강의 설정">
@@ -526,6 +557,78 @@ export default function SettingsPanel({
             )}
           </div>
         </details>
+
+        {/* 예상 질문 (Q&A 사전 답변) */}
+        <details style={accordionStyle}>
+          <summary style={summaryStyle}>
+            <CaretIcon />
+            <H4Icon>
+              <svg
+                viewBox="0 0 24 24"
+                width="18"
+                height="18"
+                fill="none"
+                stroke="url(#grad-electric)"
+                strokeWidth={2.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+            </H4Icon>
+            <h4 style={summaryTitleStyle}>예상 질문</h4>
+            <span style={summaryValStyle}>{summarySeedVal}</span>
+          </summary>
+          <div style={aBodyStyle}>
+            <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+              학생이 자주 물을 법한 질문을 적어 두세요. 영상 생성 시 그 질문의 답변을 강의
+              자료 기반으로 자동 생성해 아바타 클립으로 미리 만들어 둡니다. 학생이 비슷한
+              질문을 하면 첫 질문부터 아바타가 바로 답합니다. 강의당 최대 3개.
+            </p>
+
+            {seedQuestions.map((sq, i) => (
+              <SeedQuestionCard
+                key={sq.id ?? `new-${i}`}
+                item={sq}
+                index={i}
+                onChange={(question) => onChangeSeedQuestion?.(i, question)}
+                onRemove={() => onRemoveSeedQuestion?.(i)}
+              />
+            ))}
+
+            {seedQuestions.length < 3 ? (
+              <button
+                type="button"
+                onClick={onAddSeedQuestion}
+                style={{
+                  width: "100%",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  padding: "9px 12px",
+                  borderRadius: 9,
+                  border: "1px dashed var(--gold-on-light, #B88308)",
+                  background: "var(--gold-soft)",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  color: "var(--gold-on-light, #B88308)",
+                  fontFamily: "inherit",
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                예상 질문 추가
+              </button>
+            ) : (
+              <p style={{ margin: 0, fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                강의당 최대 3개까지 등록할 수 있습니다.
+              </p>
+            )}
+          </div>
+        </details>
       </div>
     </aside>
   );
@@ -696,6 +799,102 @@ function QuizPointCard({
         </svg>
         {authored ? "문제 보기·수정" : "문제 만들기"}
       </button>
+    </div>
+  );
+}
+
+/** 사전 질문 렌더 상태 → 배지 표기(라벨·색). 답변은 시스템이 생성하므로 상태만 표시. */
+const SEED_STATUS_BADGE: Record<SeedQuestionStatus, { label: string; fg: string; bg: string }> = {
+  pending: { label: "대기", fg: "var(--text-subtle)", bg: "var(--bg-card)" },
+  rendering: { label: "생성 중", fg: "var(--gold-on-light, #B88308)", bg: "var(--gold-soft)" },
+  ready: { label: "준비됨", fg: "#1B7F4B", bg: "rgba(27,127,75,0.10)" },
+  failed: { label: "실패", fg: "#B42318", bg: "rgba(180,35,24,0.10)" },
+};
+
+/** 예상 질문 1개 카드 — 질문만 입력(답변은 영상 생성 시 RAG 로 자동 생성). */
+function SeedQuestionCard({
+  item,
+  index,
+  onChange,
+  onRemove,
+}: {
+  item: SeedQuestionDraft;
+  index: number;
+  onChange: (question: string) => void;
+  onRemove: () => void;
+}) {
+  const badge = item.status ? SEED_STATUS_BADGE[item.status] : null;
+
+  return (
+    <div
+      style={{
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        padding: "10px 12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        background: "var(--bg)",
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text)" }}>
+          질문 {index + 1}
+        </span>
+        <div className="flex items-center" style={{ gap: 6 }}>
+          {badge && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: "1px 7px",
+                borderRadius: 4,
+                background: badge.bg,
+                color: badge.fg,
+              }}
+            >
+              {badge.label}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`예상 질문 ${index + 1} 삭제`}
+            title="삭제"
+            style={{
+              display: "inline-grid",
+              placeItems: "center",
+              width: 22,
+              height: 22,
+              borderRadius: 6,
+              border: "1px solid var(--line-strong)",
+              background: "var(--bg-card)",
+              cursor: "pointer",
+              color: "var(--text-subtle)",
+              lineHeight: 1,
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      {/* 질문 (교수자는 질문만 입력 — 답변은 영상 생성 시 강의 자료로 자동 생성) */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
+          학생 질문
+        </label>
+        <textarea
+          value={item.question}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="예: 이번 장의 핵심 개념을 한 문장으로 정리하면?"
+          rows={2}
+          aria-label={`예상 질문 ${index + 1} 질문`}
+          style={textareaStyle}
+        />
+      </div>
     </div>
   );
 }
