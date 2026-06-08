@@ -22,8 +22,10 @@ import {
   listAuthoredQuizzes,
 } from "@/components/professor/studio/quizApi";
 import {
+  generateSeedAnswer,
   getSeedQuestions,
   putSeedQuestions,
+  renderSeedQuestions,
   type SeedQuestionDraft,
 } from "@/components/professor/studio/seedQuestionsApi";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
@@ -816,6 +818,66 @@ export default function StudioWizardPage() {
     [scheduleSeedSave],
   );
 
+  // 카드별 "AI 답변 자동 생성" — 질문 1건을 강의 자료(RAG)로 답변 생성해 사전 대답을
+  // 채운다(저장은 디바운스). 범위 밖이면 채우지 않고 안내. 미배포/404 는 toast 로 graceful.
+  const handleGenerateSeedAnswer = useCallback(
+    async (index: number) => {
+      if (!lectureId) return;
+      const question = seedQuestions[index]?.question.trim() ?? "";
+      if (!question) {
+        toast("질문을 먼저 입력해주세요.", "error");
+        return;
+      }
+      try {
+        const { answer, inScope } = await generateSeedAnswer(lectureId, question);
+        if (!inScope) {
+          toast("강의 자료 범위 밖 질문이라 답변을 만들 수 없어요.", "error");
+          return;
+        }
+        setSeedQuestions((prev) => {
+          const next = prev.map((q, i) => (i === index ? { ...q, answer } : q));
+          scheduleSeedSave(next);
+          return next;
+        });
+        toast("AI 답변을 생성했어요. 검토 후 수정할 수 있어요.", "success");
+      } catch {
+        toast("아직 답변 자동 생성을 사용할 수 없어요. 잠시 후 다시 시도해주세요.", "error");
+      }
+    },
+    [lectureId, seedQuestions, scheduleSeedSave, toast],
+  );
+
+  // 하단 "AI 질문 승인" — 대기 중 편집을 flush 한 뒤, 저장된 사전 질문을 즉시 아바타
+  // 클립으로 렌더 시작한다(영상 전체 approve 불필요). 응답에 status=rendering 이 담겨
+  // 오면 기존 seedRenderingKey 폴링이 ready 까지 자동 갱신한다. 미배포/404 는 graceful.
+  const handleApproveSeedQuestions = useCallback(async () => {
+    if (!lectureId) return;
+    if (seedSaveRef.current) {
+      clearTimeout(seedSaveRef.current);
+      seedSaveRef.current = null;
+    }
+    await persistSeedQuestions(seedQuestions);
+    try {
+      const { seedQuestions: fresh } = await renderSeedQuestions(lectureId);
+      setSeedQuestions(
+        fresh.map((q) => ({
+          id: q.id,
+          question: q.question,
+          answer: q.answer,
+          // 렌더는 celery 비동기라 이 응답 시점엔 아직 pending 이다. 낙관적으로
+          // pending → rendering 으로 표시해 seedRenderingKey 폴링을 즉시 시동한다.
+          // 4초 뒤 reloadSeedQuestions 가 서버 실제 상태(rendering/ready/failed)로 정정한다.
+          status: q.status === "pending" ? "rendering" : q.status,
+          has_clip: q.has_clip,
+          preview_url: q.preview_url,
+        })),
+      );
+      toast("사전 답변 아바타 생성을 시작했어요.", "success");
+    } catch {
+      toast("아직 아바타 미리 생성을 사용할 수 없어요. 잠시 후 다시 시도해주세요.", "error");
+    }
+  }, [lectureId, seedQuestions, persistSeedQuestions, toast]);
+
   // ── 전체 생성 시작 ───────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     // 생성 직전 — 대기 중인 사전 답변 편집을 즉시 저장(flush). persist 는
@@ -1196,6 +1258,8 @@ export default function StudioWizardPage() {
         onRemoveSeedQuestion={handleRemoveSeedQuestion}
         onChangeSeedQuestion={handleChangeSeedQuestion}
         onPreviewSeed={handlePreviewSeed}
+        onGenerateSeedAnswer={handleGenerateSeedAnswer}
+        onApproveSeedQuestions={handleApproveSeedQuestions}
       />
 
       <div style={{ gridColumn: "1 / -1" }}>
