@@ -1047,7 +1047,7 @@ function SeedQuestionCard({
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <div className="flex items-center justify-between">
           <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
-            사전 대답 <span style={{ fontWeight: 400 }}>(비우면 자동 생성)</span>
+            사전 대답
           </label>
           {onGenerate && (
             <button

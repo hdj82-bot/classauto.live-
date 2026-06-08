@@ -195,12 +195,13 @@ def test_seed_render_uses_instructor_answer_without_rag(sync_db, mock_render, mo
 # ── 2. 범위 밖 질문은 렌더하지 않고 failed ─────────────────────────────────────
 
 
-def test_seed_out_of_scope_marked_failed(sync_db, mock_render, monkeypatch):
+def test_seed_no_slides_marked_failed(sync_db, mock_render, monkeypatch):
     from app.tasks import qa_batch
 
+    # in_scope=False = 강의 슬라이드/임베딩 없음(생성 불가).
     _patch_answer(monkeypatch, in_scope=False)
     prof, _c, lec = _seed_lecture(sync_db)
-    row = _seed(sync_db, lec, prof, "오늘 점심 메뉴 추천해줘")
+    row = _seed(sync_db, lec, prof, "슬라이드가 없는 강의의 질문")
     sync_db.commit()
 
     loop = asyncio.new_event_loop()
@@ -213,8 +214,8 @@ def test_seed_out_of_scope_marked_failed(sync_db, mock_render, monkeypatch):
     assert result["failed"] == 1
     sync_db.refresh(row)
     assert row.status == qa_avatar.STATUS_FAILED
-    assert row.error_message == "강의 범위 밖 질문"
-    assert row.heygen_job_id is None  # 범위 밖은 렌더(제출) 자체를 하지 않는다.
+    assert row.error_message == "강의 자료를 찾지 못했습니다."
+    assert row.heygen_job_id is None  # 자료 없으면 렌더(제출) 자체를 하지 않는다.
 
 
 # ── 3. 영상당 렌더 한도(QA_AVATAR_TOP_CLUSTERS) ────────────────────────────────
