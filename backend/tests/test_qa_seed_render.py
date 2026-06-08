@@ -192,6 +192,41 @@ def test_seed_render_uses_instructor_answer_without_rag(sync_db, mock_render, mo
         loop.close()
 
 
+# ── 1-c. 본인 아바타를 끝내 확보 못 하면 failed + 사유(무한 "대기" 방지) ─────────
+
+
+def test_seed_render_fails_when_avatar_unavailable(sync_db, mock_render, monkeypatch):
+    """_resolve_character 가 None(본인 아바타 등록 실패)이면 seed 를 failed + 사유로 표시.
+
+    종전엔 렌더가 조용히 보류되어 카드가 영구 "대기"에 머물렀다. 교수자 트리거
+    렌더이므로 사유를 알려 무한 대기를 없앤다.
+    """
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    # MOCK 에선 _ensure_talking_photo_sync 가 항상 mock id 를 주므로, 미확보 상황을
+    # 재현하려 _resolve_character 를 직접 None 으로 둔다(본인 아바타 등록 끝내 실패).
+    monkeypatch.setattr(qa_batch, "_resolve_character", lambda *a, **k: None)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    r1 = _seed(sync_db, lec, prof, "질문 1")
+    r2 = _seed(sync_db, lec, prof, "질문 2")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result == {"submitted": 0, "failed": 2}
+    for r in (r1, r2):
+        sync_db.refresh(r)
+        assert r.status == qa_avatar.STATUS_FAILED
+        assert "본인 아바타" in (r.error_message or "")
+        assert r.heygen_job_id is None  # 렌더(제출) 자체를 하지 않는다.
+
+
 # ── 2. 범위 밖 질문은 렌더하지 않고 failed ─────────────────────────────────────
 
 
