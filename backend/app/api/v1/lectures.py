@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user, require_professor
-from app.db.session import get_db
+from app.db.session import SyncSessionLocal, get_db
 from app.models.embedding import SlideEmbedding
 from app.models.user import User
 from app.models.video import Video
@@ -20,6 +21,11 @@ from app.schemas.lecture import (
     SlidesResponse,
     SlideshowResponse,
 )
+from app.schemas.seed_question import (
+    SeedQuestionItem,
+    SeedQuestionsRequest,
+    SeedQuestionsResponse,
+)
 from app.schemas.video import VideoStatusResponse
 from app.services.lecture import (
     assert_professor_owns_lecture,
@@ -30,6 +36,11 @@ from app.services.lecture import (
     list_course_lectures,
     list_my_lectures,
     update_lecture,
+)
+from app.services.pipeline import qa_avatar
+from app.services.pipeline.budget import (
+    qa_render_quota_remaining,
+    qa_renders_used_this_month,
 )
 from app.services.pipeline.s3 import presign_stored_s3_url
 
@@ -180,6 +191,93 @@ async def get_lecture_video(
         status=video.status.value,
         updated_at=video.updated_at,
     )
+
+
+# ── 교수자 Q&A 사전 질문 (영상당 ≤3) ─────────────────────────────────────────
+#
+# 교수자가 영상 생성 전 예상 질문을 미리 등록해, 첫 영상처럼 학생 질문 축적이
+# 없을 때도 첫 학생 질문부터 아바타 답변이 나오게 한다. 저장은 origin=instructor_seed
+# 행으로 쌓이고(qa_avatar.upsert_seed_questions), 영상 승인 시 즉시 렌더된다(창2 배치).
+#
+# async/sync 브리지: qa_avatar·budget 은 동기(Session) 함수다. 소유권 검증만 async
+# 세션으로 하고, seed 작업은 별도 동기 세션에서 실행한다(qa.py ask_question 패턴).
+
+
+def _seed_questions_response(sdb, instructor_id, rows) -> SeedQuestionsResponse:
+    """현재 사전 질문 행 + 이번 달 렌더 한도/사용량을 응답으로 투영."""
+    items = [
+        SeedQuestionItem(
+            id=str(r.id),
+            question=r.question_text,
+            status=r.status,
+            has_clip=bool(r.s3_video_url),
+        )
+        for r in rows
+    ]
+    return SeedQuestionsResponse(
+        questions=items,
+        max=qa_avatar.SEED_QUESTIONS_MAX,
+        used_this_month=qa_renders_used_this_month(sdb, instructor_id),
+        remaining=qa_render_quota_remaining(sdb, instructor_id),
+    )
+
+
+@router.get(
+    "/api/lectures/{lecture_id}/seed-questions",
+    response_model=SeedQuestionsResponse,
+    summary="교수자 Q&A 사전 질문 조회 (소유 교수자 전용)",
+)
+async def get_seed_questions(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """이 강의에 등록된 교수자 사전 질문(instructor_seed)을 결정적 순서로 반환한다.
+
+    비소유 강의는 ``assert_professor_owns_lecture`` 가 404 로 거부한다.
+    """
+    await assert_professor_owns_lecture(db, lecture_id, professor.id)
+    instructor_id = professor.id
+    loop = asyncio.get_event_loop()
+
+    def _work():
+        with SyncSessionLocal() as sdb:
+            rows = qa_avatar.list_seed_questions(sdb, lecture_id)
+            return _seed_questions_response(sdb, instructor_id, rows)
+
+    return await loop.run_in_executor(None, _work)
+
+
+@router.put(
+    "/api/lectures/{lecture_id}/seed-questions",
+    response_model=SeedQuestionsResponse,
+    summary="교수자 Q&A 사전 질문 저장 (소유 교수자 전용)",
+)
+async def put_seed_questions(
+    lecture_id: uuid.UUID,
+    body: SeedQuestionsRequest,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """사전 질문 집합을 ``questions`` 로 맞춘다(차집합 동기화). 4개 이상이면 422.
+
+    같은 텍스트 기존 행은 보존(렌더된 클립 유지), 빠진 행은 삭제, 새 행은
+    pending 으로 추가된다. 비소유 강의는 404.
+    """
+    await assert_professor_owns_lecture(db, lecture_id, professor.id)
+    instructor_id = professor.id
+    questions = body.questions
+    loop = asyncio.get_event_loop()
+
+    def _work():
+        with SyncSessionLocal() as sdb:
+            rows = qa_avatar.upsert_seed_questions(
+                sdb, lecture_id, instructor_id, questions
+            )
+            sdb.commit()
+            return _seed_questions_response(sdb, instructor_id, rows)
+
+    return await loop.run_in_executor(None, _work)
 
 
 # ── 슬라이드 메타 조회 (편집기 즉시 렌더용) ─────────────────────────────────
