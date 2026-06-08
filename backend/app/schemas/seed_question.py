@@ -67,3 +67,18 @@ class SeedQuestionsResponse(BaseModel):
     max: int = Field(..., description="영상당 사전 질문 최대 개수")
     used_this_month: int = Field(..., description="이번 달 이미 사용한 Q&A 렌더 수")
     remaining: int = Field(..., description="이번 달 남은 Q&A 렌더 수")
+
+
+class GenerateSeedAnswerRequest(BaseModel):
+    """POST .../seed-questions/generate-answer 본문 — 답변을 생성할 질문 1건."""
+
+    question: Annotated[str, Field(min_length=1, max_length=500)] = Field(
+        ..., description="답변을 자동 생성할 학생 질문"
+    )
+
+
+class GenerateSeedAnswerResponse(BaseModel):
+    """AI 자동 생성 답변 결과 — 교수자가 검토·수정 후 저장한다."""
+
+    answer: str = Field(..., description="PPT 기반 생성 답변(범위 밖이면 빈 문자열)")
+    in_scope: bool = Field(..., description="강의 자료 범위 안 질문 여부")

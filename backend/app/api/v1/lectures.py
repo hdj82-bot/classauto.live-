@@ -22,6 +22,8 @@ from app.schemas.lecture import (
     SlideshowResponse,
 )
 from app.schemas.seed_question import (
+    GenerateSeedAnswerRequest,
+    GenerateSeedAnswerResponse,
     SeedQuestionItem,
     SeedQuestionsRequest,
     SeedQuestionsResponse,
@@ -284,6 +286,90 @@ async def put_seed_questions(
                 sdb, lecture_id, instructor_id, items
             )
             sdb.commit()
+            return _seed_questions_response(sdb, instructor_id, rows)
+
+    return await loop.run_in_executor(None, _work)
+
+
+@router.post(
+    "/api/lectures/{lecture_id}/seed-questions/generate-answer",
+    response_model=GenerateSeedAnswerResponse,
+    summary="사전 질문 답변 AI 자동 생성 (검토용, 소유 교수자 전용)",
+)
+async def generate_seed_answer_endpoint(
+    lecture_id: uuid.UUID,
+    body: GenerateSeedAnswerRequest,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """질문 1건의 답변을 강의 자료(PPT) 기반으로 즉시 생성해 돌려준다(저장은 안 함).
+
+    교수자가 "AI 답변 자동 생성"으로 받아 검토·수정 후 PUT 으로 저장한다. 답변에는
+    중국어 괄호 병기 등 음성 표기 규칙이 적용된다(generate_seed_answer). 비소유 404,
+    파이프라인 미처리면 400.
+    """
+    from app.models.lecture import Lecture  # noqa: PLC0415
+    from app.services.pipeline.qa import generate_seed_answer  # noqa: PLC0415
+
+    await assert_professor_owns_lecture(db, lecture_id, professor.id)
+
+    lecture = await db.get(Lecture, lecture_id)
+    task_id = lecture.pipeline_task_id if lecture else None
+    if not task_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="강의 파이프라인이 아직 처리되지 않았습니다.",
+        )
+
+    question = body.question
+    loop = asyncio.get_event_loop()
+
+    def _work() -> GenerateSeedAnswerResponse:
+        with SyncSessionLocal() as sdb:
+            answer, in_scope = generate_seed_answer(sdb, task_id, question)
+            return GenerateSeedAnswerResponse(answer=answer, in_scope=in_scope)
+
+    return await loop.run_in_executor(None, _work)
+
+
+@router.post(
+    "/api/lectures/{lecture_id}/seed-questions/render",
+    response_model=SeedQuestionsResponse,
+    summary="사전 질문 아바타 클립 즉시 렌더 시작 (소유 교수자 전용)",
+)
+async def render_seed_questions_endpoint(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """등록된 사전 질문의 아바타 답변 클립 렌더를 지금 시작한다(전체 영상 생성과 별개).
+
+    렌더는 비동기(celery)로 진행되며, 진척은 GET 폴링으로 확인한다. 저장(PUT)은
+    호출 직전에 끝낸 상태를 가정한다. 비소유 404, 파이프라인 미처리면 400.
+    """
+    from app.celery_app import celery  # noqa: PLC0415
+    from app.models.lecture import Lecture  # noqa: PLC0415
+
+    await assert_professor_owns_lecture(db, lecture_id, professor.id)
+
+    lecture = await db.get(Lecture, lecture_id)
+    if not lecture or not lecture.pipeline_task_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="강의 파이프라인이 아직 처리되지 않았습니다.",
+        )
+
+    celery.send_task(
+        "app.tasks.qa_batch.render_seed_questions",
+        args=[str(lecture_id), str(professor.id)],
+    )
+
+    instructor_id = professor.id
+    loop = asyncio.get_event_loop()
+
+    def _work() -> SeedQuestionsResponse:
+        with SyncSessionLocal() as sdb:
+            rows = qa_avatar.list_seed_questions(sdb, lecture_id)
             return _seed_questions_response(sdb, instructor_id, rows)
 
     return await loop.run_in_executor(None, _work)

@@ -495,7 +495,7 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         QARenderQuotaError,
         qa_render_quota_remaining,
     )
-    from app.services.pipeline.qa import answer_question
+    from app.services.pipeline.qa import generate_seed_answer
 
     rows = db.query(QAAnswerCache).filter(
         QAAnswerCache.lecture_id == lecture_id,
@@ -517,16 +517,22 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
             break  # 영상/교수자 렌더 한도 도달 — 나머지는 pending 유지.
 
         # 하이브리드: 교수자가 입력한 사전 대답이 있으면 그대로 쓰고, 비어 있으면
-        # 강의 자료 기반 RAG 로 자동 생성한다(범위 밖이면 렌더하지 않고 실패 표시).
+        # 강의 자료(PPT) 기반으로 자동 생성한다. generate_seed_answer 는 음성 답변용
+        # 표기 규칙(출처 미표기·중국어 괄호 금지)을 적용한다.
         answer = (row.answer_text or "").strip()
         if not answer:
-            res = answer_question(db, task_id, "", row.question_text)
-            if not res.in_scope:
+            generated, in_scope = generate_seed_answer(db, task_id, row.question_text)
+            if not in_scope:
                 row.status = qa_avatar.STATUS_FAILED
                 row.error_message = "강의 범위 밖 질문"
                 failed += 1
                 continue
-            answer = res.answer or ""
+            if not generated.strip():
+                row.status = qa_avatar.STATUS_FAILED
+                row.error_message = "답변 생성 실패"
+                failed += 1
+                continue
+            answer = generated
 
         row.answer_text = answer[: settings.QA_AVATAR_MAX_ANSWER_CHARS]
         row.question_embedding = qa_avatar.embed_question(row.question_text)
