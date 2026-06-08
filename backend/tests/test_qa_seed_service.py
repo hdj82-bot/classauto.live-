@@ -1,10 +1,11 @@
 """교수자 Q&A 사전 질문(instructor_seed) 서비스 단위 테스트.
 
 검증 핵심(qa_avatar.upsert_seed_questions / list_seed_questions):
-- 새 질문 추가 → instructor_seed · pending 행 생성.
-- 텍스트가 같은 기존 행은 보존(이미 렌더된 status/클립 재렌더 없이 유지).
+- 새 질문 추가 → instructor_seed · pending 행 생성(답변 포함/미포함).
+- 질문 텍스트가 같은 기존 행: 답변 동일이면 보존(렌더된 클립 유지), 답변이 바뀌면
+  재렌더 대기로 되돌림(클립·잡 폐기).
 - 목록에서 빠진 질문은 삭제.
-- 정규화: 공백 trim · 빈값 제외 · 중복 제거 · 최대 SEED_QUESTIONS_MAX(3) 상한.
+- 정규화: 질문 trim · 빈 질문 제외 · 질문 기준 중복 제거 · 최대 3개.
 - 학생 적립 행(origin=student)은 절대 건드리지 않음.
 """
 from __future__ import annotations
@@ -61,6 +62,11 @@ def _seed_lecture(db) -> tuple[User, Course, Lecture]:
     return prof, course, lec
 
 
+def _qs(*questions: str) -> list[tuple[str, str]]:
+    """질문 문자열들 → (질문, 빈 답변) 튜플 목록(답변 없는 경우 헬퍼)."""
+    return [(q, "") for q in questions]
+
+
 def _seed_rows(db, lec):
     return qa_avatar.list_seed_questions(db, lec.id)
 
@@ -71,15 +77,24 @@ def _seed_rows(db, lec):
 def test_upsert_creates_pending_seed_rows(sync_db):
     prof, _, lec = _seed_lecture(sync_db)
     rows = qa_avatar.upsert_seed_questions(
-        sync_db, lec.id, prof.id, ["문법 차이가 뭔가요?", "어순은 어떻게 다른가요?"]
+        sync_db, lec.id, prof.id, _qs("문법 차이가 뭔가요?", "어순은 어떻게 다른가요?")
     )
     assert len(rows) == 2
     for r in rows:
         assert r.origin == qa_avatar.ORIGIN_SEED
         assert r.status == qa_avatar.STATUS_PENDING
-        assert r.answer_text is None
+        assert r.answer_text is None  # 빈 답변 → None(RAG 폴백 신호)
         assert r.question_embedding is None
         assert r.instructor_id == prof.id
+
+
+def test_upsert_stores_instructor_answer(sync_db):
+    prof, _, lec = _seed_lecture(sync_db)
+    rows = qa_avatar.upsert_seed_questions(
+        sync_db, lec.id, prof.id, [("질문1", "교수자 사전 대답입니다.")]
+    )
+    assert rows[0].answer_text == "교수자 사전 대답입니다."
+    assert rows[0].status == qa_avatar.STATUS_PENDING
 
 
 def test_list_excludes_student_rows(sync_db):
@@ -90,18 +105,20 @@ def test_list_excludes_student_rows(sync_db):
         status=qa_avatar.STATUS_PENDING, origin=qa_avatar.ORIGIN_STUDENT,
     ))
     sync_db.flush()
-    qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, ["A", "B"])
+    qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, _qs("A", "B"))
     rows = _seed_rows(sync_db, lec)
     # 정렬 보조키가 uuid 라 순서는 비결정적 — 내용(집합)으로 검증.
     assert {r.question_text for r in rows} == {"A", "B"}
 
 
-# ── 보존 ──────────────────────────────────────────────────────────────────────
+# ── 보존 / 재렌더 ──────────────────────────────────────────────────────────────
 
 
-def test_upsert_preserves_matching_rows(sync_db):
+def test_upsert_preserves_when_answer_unchanged(sync_db):
     prof, _, lec = _seed_lecture(sync_db)
-    first = qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, ["A", "B"])
+    first = qa_avatar.upsert_seed_questions(
+        sync_db, lec.id, prof.id, [("A", "답변A"), ("B", "답변B")]
+    )
     keep = next(r for r in first if r.question_text == "A")
     # "A" 가 이미 렌더 완료됐다고 가정.
     keep.status = qa_avatar.STATUS_READY
@@ -109,8 +126,10 @@ def test_upsert_preserves_matching_rows(sync_db):
     sync_db.flush()
     kept_id = keep.id
 
-    # "A" 유지 + "C" 추가, "B" 제거.
-    after = qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, ["A", "C"])
+    # "A" 답변 동일 유지 + "C" 추가, "B" 제거.
+    after = qa_avatar.upsert_seed_questions(
+        sync_db, lec.id, prof.id, [("A", "답변A"), ("C", "답변C")]
+    )
     by_text = {r.question_text: r for r in after}
     assert set(by_text) == {"A", "C"}
     # 보존된 "A" 는 동일 행(재렌더 없음) — id·status·클립 유지.
@@ -121,13 +140,33 @@ def test_upsert_preserves_matching_rows(sync_db):
     assert by_text["C"].status == qa_avatar.STATUS_PENDING
 
 
+def test_upsert_resets_when_answer_changed(sync_db):
+    prof, _, lec = _seed_lecture(sync_db)
+    first = qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, [("A", "이전 답변")])
+    row = first[0]
+    row.status = qa_avatar.STATUS_READY
+    row.s3_video_url = "s3://clip/a.mp4"
+    row.heygen_job_id = "job-1"
+    sync_db.flush()
+    rid = row.id
+
+    # 같은 질문, 답변만 변경 → 같은 행을 재렌더 대기로 되돌린다(클립·잡 폐기).
+    after = qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, [("A", "새 답변")])
+    assert len(after) == 1
+    assert after[0].id == rid  # 같은 행
+    assert after[0].answer_text == "새 답변"
+    assert after[0].status == qa_avatar.STATUS_PENDING
+    assert after[0].s3_video_url is None
+    assert after[0].heygen_job_id is None
+
+
 # ── 삭제 ──────────────────────────────────────────────────────────────────────
 
 
 def test_upsert_deletes_removed_and_empty_clears_all(sync_db):
     prof, _, lec = _seed_lecture(sync_db)
-    qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, ["A", "B", "C"])
-    qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, ["B"])
+    qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, _qs("A", "B", "C"))
+    qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, _qs("B"))
     assert [r.question_text for r in _seed_rows(sync_db, lec)] == ["B"]
     # 빈 목록 → 전부 삭제.
     qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, [])
@@ -141,7 +180,7 @@ def test_upsert_trims_dedups_and_caps(sync_db):
     prof, _, lec = _seed_lecture(sync_db)
     rows = qa_avatar.upsert_seed_questions(
         sync_db, lec.id, prof.id,
-        ["  공백  ", "공백", "", "   ", "Q1", "Q2", "Q3", "Q4"],
+        _qs("  공백  ", "공백", "", "   ", "Q1", "Q2", "Q3", "Q4"),
     )
     texts = {r.question_text for r in rows}
     # "  공백  " → "공백" 으로 trim 되어 두 번째 "공백" 과 중복 제거. 빈/공백 제외.
@@ -159,7 +198,7 @@ def test_student_rows_untouched_by_upsert(sync_db):
     sync_db.add(student)
     sync_db.flush()
     sid = student.id
-    qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, ["A"])
+    qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, _qs("A"))
     qa_avatar.upsert_seed_questions(sync_db, lec.id, prof.id, [])  # seed 전부 삭제
     # 학생 행은 그대로 존재.
     survivor = sync_db.get(QAAnswerCache, sid)

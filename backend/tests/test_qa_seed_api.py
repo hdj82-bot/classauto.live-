@@ -50,7 +50,11 @@ async def test_put_then_get_roundtrip(client, professor, lecture, seed_sync_sess
 
     put = await client.put(
         url,
-        json={"questions": ["파이썬이란?", "변수란 무엇인가?", "함수의 정의는?"]},
+        json={"questions": [
+            {"question": "파이썬이란?", "answer": "프로그래밍 언어입니다."},
+            {"question": "변수란 무엇인가?"},  # answer 생략 → 빈 답변(RAG 폴백)
+            {"question": "함수의 정의는?", "answer": ""},
+        ]},
         headers=make_auth_header(professor),
     )
     assert put.status_code == 200
@@ -59,12 +63,15 @@ async def test_put_then_get_roundtrip(client, professor, lecture, seed_sync_sess
     assert data["used_this_month"] == 0
     assert data["remaining"] >= 0
     assert len(data["questions"]) == 3
-    assert {q["question"] for q in data["questions"]} == {
-        "파이썬이란?", "변수란 무엇인가?", "함수의 정의는?",
-    }
-    # 새로 등록한 질문은 아직 렌더 전 — pending · 클립 없음.
+    by_q = {q["question"]: q for q in data["questions"]}
+    assert set(by_q) == {"파이썬이란?", "변수란 무엇인가?", "함수의 정의는?"}
+    # 교수자 답변은 그대로, 생략/빈 답변은 ""(영상 생성 시 RAG 자동 생성).
+    assert by_q["파이썬이란?"]["answer"] == "프로그래밍 언어입니다."
+    assert by_q["변수란 무엇인가?"]["answer"] == ""
+    # 새로 등록한 질문은 아직 렌더 전 — pending · 클립/미리보기 없음.
     assert all(q["status"] == "pending" for q in data["questions"])
     assert all(q["has_clip"] is False for q in data["questions"])
+    assert all(q["preview_url"] is None for q in data["questions"])
 
     get = await client.get(url, headers=make_auth_header(professor))
     assert get.status_code == 200
@@ -79,7 +86,9 @@ async def test_put_replaces_set(client, professor, lecture, seed_sync_session):
     """PUT 은 차집합 동기화 — 빈 목록을 보내면 전부 삭제된다."""
     url = f"/api/lectures/{lecture.id}/seed-questions"
     await client.put(
-        url, json={"questions": ["q1", "q2"]}, headers=make_auth_header(professor)
+        url,
+        json={"questions": [{"question": "q1"}, {"question": "q2"}]},
+        headers=make_auth_header(professor),
     )
     cleared = await client.put(
         url, json={"questions": []}, headers=make_auth_header(professor)
@@ -96,7 +105,10 @@ async def test_put_rejects_more_than_three(client, professor, lecture, seed_sync
     """질문 4개 → Pydantic max_length=3 위반 → 422."""
     resp = await client.put(
         f"/api/lectures/{lecture.id}/seed-questions",
-        json={"questions": ["q1", "q2", "q3", "q4"]},
+        json={"questions": [
+            {"question": "q1"}, {"question": "q2"},
+            {"question": "q3"}, {"question": "q4"},
+        ]},
         headers=make_auth_header(professor),
     )
     assert resp.status_code == 422
@@ -140,7 +152,7 @@ async def test_put_non_owner_404(client, db, lecture, seed_sync_session):
 
     resp = await client.put(
         f"/api/lectures/{lecture.id}/seed-questions",
-        json={"questions": ["몰래 등록"]},
+        json={"questions": [{"question": "몰래 등록"}]},
         headers=make_auth_header(other),
     )
     assert resp.status_code == 404

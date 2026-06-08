@@ -516,15 +516,19 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         if submitted >= limit:
             break  # 영상/교수자 렌더 한도 도달 — 나머지는 pending 유지.
 
-        res = answer_question(db, task_id, "", row.question_text)
-        if not res.in_scope:
-            # RAG 범위 밖 — 렌더하지 않고 실패 표시(한도 미소모).
-            row.status = qa_avatar.STATUS_FAILED
-            row.error_message = "강의 범위 밖 질문"
-            failed += 1
-            continue
+        # 하이브리드: 교수자가 입력한 사전 대답이 있으면 그대로 쓰고, 비어 있으면
+        # 강의 자료 기반 RAG 로 자동 생성한다(범위 밖이면 렌더하지 않고 실패 표시).
+        answer = (row.answer_text or "").strip()
+        if not answer:
+            res = answer_question(db, task_id, "", row.question_text)
+            if not res.in_scope:
+                row.status = qa_avatar.STATUS_FAILED
+                row.error_message = "강의 범위 밖 질문"
+                failed += 1
+                continue
+            answer = res.answer or ""
 
-        row.answer_text = (res.answer or "")[: settings.QA_AVATAR_MAX_ANSWER_CHARS]
+        row.answer_text = answer[: settings.QA_AVATAR_MAX_ANSWER_CHARS]
         row.question_embedding = qa_avatar.embed_question(row.question_text)
 
         try:

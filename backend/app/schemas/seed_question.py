@@ -21,11 +21,26 @@ class SeedQuestionItem(BaseModel):
 
     id: str = Field(..., description="QAAnswerCache 행 id")
     question: str = Field(..., description="질문 텍스트")
+    answer: str = Field(
+        "", description="교수자가 입력한 사전 대답(비어 있으면 영상 생성 시 RAG 로 자동 생성)"
+    )
     status: str = Field(
         ..., description="렌더 상태: pending | rendering | ready | failed"
     )
     has_clip: bool = Field(
         ..., description="재생 가능한 아바타 클립(s3_video_url) 보유 여부"
+    )
+    preview_url: str | None = Field(
+        None, description="ready 인 경우 점검용 클립 presigned URL(아니면 null)"
+    )
+
+
+class SeedQuestionInput(BaseModel):
+    """PUT 항목 — 교수자가 입력하는 질문 + (선택) 사전 대답."""
+
+    question: Annotated[str, Field(max_length=500)] = Field(..., description="질문 텍스트")
+    answer: Annotated[str, Field(max_length=2000)] = Field(
+        "", description="사전 대답. 비우면 영상 생성 시 강의 자료 기반 RAG 로 자동 생성."
     )
 
 
@@ -33,14 +48,15 @@ class SeedQuestionsRequest(BaseModel):
     """PUT 본문 — 사전 질문 전체 집합(차집합 동기화).
 
     ``questions`` 는 "최종 상태" 목록이다. 서버는 기존 instructor_seed 집합을 이
-    목록에 맞춘다(같은 텍스트 보존·빠진 항목 삭제·새 항목 추가). 4개 이상이면
-    Pydantic 이 422 로 거부하고, trim·빈값·중복 정리는 서비스가 수행한다.
+    목록에 맞춘다(같은 질문 텍스트 보존·빠진 항목 삭제·새 항목 추가·답변 변경 시
+    재렌더). 4개 이상이면 Pydantic 이 422 로 거부하고, trim·빈 질문·중복 정리는
+    서비스가 수행한다.
     """
 
-    questions: list[Annotated[str, Field(max_length=500)]] = Field(
+    questions: list[SeedQuestionInput] = Field(
         default_factory=list,
         max_length=SEED_QUESTIONS_MAX,
-        description="질문 텍스트 목록(영상당 최대 3개). 초과 시 422.",
+        description="질문(+선택 답변) 목록(영상당 최대 3개). 초과 시 422.",
     )
 
 

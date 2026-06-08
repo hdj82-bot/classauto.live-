@@ -166,6 +166,8 @@ export default function StudioWizardPage() {
   const [seedQuestions, setSeedQuestions] = useState<SeedQuestionDraft[]>([]);
   // 입력 중 PUT 폭주 방지용 디바운스 타이머.
   const seedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 점검(미리보기) 모달에 띄울 클립 URL. null 이면 닫힘.
+  const [seedPreviewUrl, setSeedPreviewUrl] = useState<string | null>(null);
   // 좌측 슬라이드 패널에 "문제N"을 슬라이드 사이에 삽입 표시 (작성된 퀴즈만).
   // 번호는 우측 카드("문제 N", 배열 순서)와 동일하게 맞춘다.
   const quizMarkers = useMemo(
@@ -358,8 +360,10 @@ export default function StudioWizardPage() {
           loaded.map((q) => ({
             id: q.id,
             question: q.question,
+            answer: q.answer,
             status: q.status,
             has_clip: q.has_clip,
+            preview_url: q.preview_url,
           })),
         );
       }
@@ -726,17 +730,17 @@ export default function StudioWizardPage() {
   }, []);
 
   // ── 예상 질문 핸들러 ─────────────────────────────────────────────────────────
-  // 교수자는 질문만 입력한다(답변은 영상 생성 시 RAG 로 자동 생성). PUT 은 전량
-  // 교체 — 빈 질문은 제외하고 질문 텍스트 배열만 보낸다. 백엔드 미배포/네트워크
-  // 오류는 삼키고 로컬 상태를 유지(다음 변경/생성 직전에 재시도). 응답으로 state 를
-  // 덮어쓰지 않는다 — 입력 중 디바운스 저장이 커서/순서를 흔드는 것을 막기 위함
-  // (id·status 는 로드/재방문 시 GET 으로 복원).
+  // 교수자는 질문 + (선택) 사전 대답을 입력한다(답변 비우면 생성 시 RAG 자동). PUT 은
+  // 전량 교체 — 질문이 빈 항목은 제외하고 {question, answer} 목록을 보낸다. 백엔드
+  // 미배포/네트워크 오류는 삼키고 로컬 상태를 유지(다음 변경/생성 직전에 재시도).
+  // 응답으로 state 를 덮어쓰지 않는다 — 입력 중 디바운스 저장이 커서/순서를 흔드는 것을
+  // 막기 위함(id·status·preview_url 은 로드/폴링으로 복원).
   const persistSeedQuestions = useCallback(
     async (items: SeedQuestionDraft[]) => {
       if (!lectureId) return;
       const payload = items
-        .map((q) => q.question.trim())
-        .filter((q) => q !== "");
+        .map((q) => ({ question: q.question.trim(), answer: q.answer.trim() }))
+        .filter((q) => q.question !== "");
       try {
         await putSeedQuestions(lectureId, payload);
       } catch {
@@ -759,20 +763,47 @@ export default function StudioWizardPage() {
 
   const handleAddSeedQuestion = useCallback(() => {
     setSeedQuestions((prev) =>
-      prev.length >= 3 ? prev : [...prev, { id: null, question: "" }],
+      prev.length >= 3 ? prev : [...prev, { id: null, question: "", answer: "" }],
     );
   }, []);
 
   const handleChangeSeedQuestion = useCallback(
-    (index: number, question: string) => {
+    (index: number, patch: { question?: string; answer?: string }) => {
       setSeedQuestions((prev) => {
-        const next = prev.map((q, i) => (i === index ? { ...q, question } : q));
+        const next = prev.map((q, i) => (i === index ? { ...q, ...patch } : q));
         scheduleSeedSave(next);
         return next;
       });
     },
     [scheduleSeedSave],
   );
+
+  // 점검(미리보기) — ready 클립 URL 을 모달로 재생.
+  const handlePreviewSeed = useCallback((url: string) => {
+    setSeedPreviewUrl(url);
+  }, []);
+
+  // 서버 기준으로 사전 질문 목록을 다시 불러와 상태(status·preview_url)를 갱신한다.
+  // 영상 생성 직후 + 렌더 진척 폴링에서 사용. 편집 중 디바운스 저장이 대기 중이면
+  // 건너뛰어(seedSaveRef) 입력 값 손실을 막는다.
+  const reloadSeedQuestions = useCallback(async () => {
+    if (!lectureId || seedSaveRef.current) return;
+    try {
+      const { seedQuestions: fresh } = await getSeedQuestions(lectureId);
+      setSeedQuestions(
+        fresh.map((q) => ({
+          id: q.id,
+          question: q.question,
+          answer: q.answer,
+          status: q.status,
+          has_clip: q.has_clip,
+          preview_url: q.preview_url,
+        })),
+      );
+    } catch {
+      /* 미배포/네트워크 — 다음 주기에 재시도 */
+    }
+  }, [lectureId]);
 
   const handleRemoveSeedQuestion = useCallback(
     (index: number) => {
@@ -845,6 +876,8 @@ export default function StudioWizardPage() {
 
       await api.post(`/api/videos/${videoId}/approve`);
       setApproved(true);
+      // 사전 질문 클립 렌더가 막 시작됐다 — 상태를 받아와 진척 폴링을 시동.
+      void reloadSeedQuestions();
     } catch (err) {
       // 409 = 이미 승인됨(동시 클릭·상태 불일치). 에러 대신 현황 모달 유지.
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -866,7 +899,30 @@ export default function StudioWizardPage() {
     t,
     persistSeedQuestions,
     seedQuestions,
+    reloadSeedQuestions,
   ]);
+
+  // 사전 질문 클립 렌더 진척 폴링 — rendering 인 항목이 있으면 4초마다 상태를 갱신.
+  // 키(rendering id 집합)가 그대로면 재실행되지 않아 인터벌은 1개만 유지된다.
+  const seedRenderingKey = seedQuestions
+    .filter((q) => q.status === "rendering")
+    .map((q) => q.id)
+    .filter(Boolean)
+    .sort()
+    .join(",");
+  useEffect(() => {
+    if (!seedRenderingKey) return;
+    let attempts = 0;
+    const id = setInterval(() => {
+      if (attempts >= 40) {
+        clearInterval(id);
+        return;
+      }
+      attempts += 1;
+      void reloadSeedQuestions();
+    }, 4000);
+    return () => clearInterval(id);
+  }, [seedRenderingKey, reloadSeedQuestions]);
 
   // 렌더 진행 폴링 (approved 인 동안)
   useEffect(() => {
@@ -1139,6 +1195,7 @@ export default function StudioWizardPage() {
         onAddSeedQuestion={handleAddSeedQuestion}
         onRemoveSeedQuestion={handleRemoveSeedQuestion}
         onChangeSeedQuestion={handleChangeSeedQuestion}
+        onPreviewSeed={handlePreviewSeed}
       />
 
       <div style={{ gridColumn: "1 / -1" }}>
@@ -1193,6 +1250,71 @@ export default function StudioWizardPage() {
         onClose={() => setSocraticOpenIndex(null)}
         onConfirmed={handleQuizConfirmed}
       />
+
+      {/* 사전 답변 클립 점검 — ready 클립 미리보기 재생 모달 */}
+      {seedPreviewUrl && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="사전 답변 미리보기"
+          onClick={() => setSeedPreviewUrl(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1000,
+            background: "rgba(10,10,10,0.72)",
+            display: "grid",
+            placeItems: "center",
+            padding: 24,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(720px, 100%)",
+              background: "var(--bg-card)",
+              borderRadius: 16,
+              overflow: "hidden",
+              boxShadow: "var(--shadow-lg, 0 20px 60px rgba(0,0,0,0.4))",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 16px",
+                borderBottom: "1px solid var(--line)",
+              }}
+            >
+              <strong style={{ fontSize: 14, color: "var(--text)" }}>사전 답변 점검</strong>
+              <button
+                type="button"
+                onClick={() => setSeedPreviewUrl(null)}
+                aria-label="닫기"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  color: "var(--text-subtle)",
+                  fontFamily: "inherit",
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+            <video
+              src={seedPreviewUrl}
+              controls
+              autoPlay
+              style={{ display: "block", width: "100%", maxHeight: "70vh", background: "#000" }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
