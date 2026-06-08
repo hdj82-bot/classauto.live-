@@ -93,21 +93,40 @@ def _instructor_look_match(db, instructor_id, candidate) -> bool:
 def _ensure_talking_photo_sync(db, loop, professor) -> str | None:
     """본인 제작 아바타의 talking_photo_id 확보 — avatars._ensure_photo_avatar_id 의 동기판.
 
-    preview 와 동일하게 default 룩 이미지를 HeyGen Talking Photo 로 등록해
-    professor.photo_avatar_id 에 캐시한다(있으면 재사용). 룩이 ready 가 아니거나
-    등록 실패면 None → 이번 배치는 렌더 보류(잘못된 id 로 렌더하지 않음).
+    정본(_ensure_photo_avatar_id)과 동작을 일치시킨다:
+    - 현재 기본 룩의 talking photo 가 이미 있으면(``photo_avatar_look_id == look_id``)
+      재사용한다(중복 등록·HeyGen Photo Avatar 한도 누적 방지).
+    - 룩이 바뀌었으면 이전 talking photo 를 먼저 삭제해 한도 슬롯을 회수한 뒤, 새로
+      등록한다. 등록은 ``_register_talking_photo_with_cleanup`` 로 수행해 한도 초과
+      (code 401028) 시 오래된 talking photo 를 자동 정리·재시도한다(self-healing).
+    - 등록 성공 시 ``photo_avatar_look_id`` 도 함께 갱신해 다음 호출의 재사용 판정을
+      정확히 한다.
+
+    룩이 ready 가 아니거나 끝내 등록에 실패하면 기존 photo_avatar_id(없으면 None)를
+    돌려준다. seed 즉시 렌더 경로(_render_seed_questions)는 None 이면 해당 카드를
+    failed 로 표시해 교수자에게 사유를 알린다(무한 "대기" 방지).
+
+    [수정 배경 2026-06-08] 종전 동기판은 정본과 달리 한도 슬롯 회수·self-healing 없이
+    bare ``upload_talking_photo`` 를 호출해, 미리보기를 만든 적 없어 photo_avatar_id 가
+    아직 비어 있고 HeyGen 계정이 3개 한도에 도달한 교수자의 경우 등록이 조용히 실패→
+    seed 카드가 영구 "대기" 로 고착됐다. 정본과 동일 헬퍼를 써 이를 해소한다.
     """
     if professor is None:
         return None
     if settings.HEYGEN_MOCK:
         # MOCK: 외부 호출 0 — 있으면 그대로, 없으면 placeholder(create_video MOCK 가 무시).
         return professor.photo_avatar_id or "mock_talking_photo"
-    if professor.photo_avatar_id:
-        return professor.photo_avatar_id
 
     look_id = professor.photo_avatar_default_look_id
+
+    # 현재 등록된 talking photo 가 현재 기본 룩의 것이면 재사용(중복 등록·한도 누적 방지).
+    # 기본 룩 미지정(레거시)인데 photo_avatar_id 가 있으면 그것을 그대로 쓴다.
+    if professor.photo_avatar_id and (
+        not look_id or professor.photo_avatar_look_id == look_id
+    ):
+        return professor.photo_avatar_id
     if not look_id:
-        return None
+        return professor.photo_avatar_id  # 룩도 캐시도 없으면 None
 
     from app.models.photo_avatar import LookStatus, PhotoAvatarLook
 
@@ -125,12 +144,14 @@ def _ensure_talking_photo_sync(db, loop, professor) -> str | None:
             PhotoAvatarLook.heygen_look_id == str(look_id),
         ).first()
     if look is None or look.status != LookStatus.ready.value or not look.image_url:
-        return None
+        # 새 룩을 만들 수 없으면 기존 talking photo 라도 유지(있으면, 없으면 None).
+        return professor.photo_avatar_id
 
     from urllib.parse import urlparse
 
+    from app.api.v1.avatars import _register_talking_photo_with_cleanup
     from app.services.pipeline import s3 as s3_svc
-    from app.services.pipeline.heygen import upload_talking_photo
+    from app.services.pipeline.heygen import delete_talking_photo
 
     key = urlparse(look.image_url).path.lstrip("/")
     ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
@@ -142,18 +163,29 @@ def _ensure_talking_photo_sync(db, loop, professor) -> str | None:
             img_bytes, ctype = _ensure_talking_photo_payload(img_bytes, ctype)
         except Exception:  # noqa: BLE001
             pass
-        tp = loop.run_until_complete(upload_talking_photo(img_bytes, content_type=ctype))
-    except Exception as exc:  # noqa: BLE001 — 등록 실패면 보류(다음 밤 재시도).
+        # 룩이 바뀌어 새로 만들기 전에 이전 talking photo 를 먼저 지워 한도 슬롯을 회수.
+        old_id = professor.photo_avatar_id
+        if old_id:
+            try:
+                loop.run_until_complete(delete_talking_photo(old_id))
+            except Exception:  # noqa: BLE001 — 회수는 best-effort
+                logger.warning("Q&A 배치: 이전 talking photo 삭제 실패(무시): %s", old_id)
+        # 한도(401028) 자가 회복 등록 — 정본과 동일 헬퍼.
+        tp = loop.run_until_complete(
+            _register_talking_photo_with_cleanup(img_bytes, ctype, keep_id=None)
+        )
+    except Exception as exc:  # noqa: BLE001 — 끝내 실패면 기존 id 유지(없으면 None).
         logger.warning(
-            "Q&A 배치: talking_photo lazy 등록 실패 — instructor=%s, look=%s, error=%s",
+            "Q&A 배치: talking_photo 등록 실패 — instructor=%s, look=%s, error=%s",
             professor.id, look_id, exc,
         )
-        return None
+        return professor.photo_avatar_id
 
     professor.photo_avatar_id = tp
+    professor.photo_avatar_look_id = look_id
     db.commit()
     logger.info(
-        "Q&A 배치: talking_photo lazy 등록 — instructor=%s, talking_photo_id=%s",
+        "Q&A 배치: talking_photo 등록(self-healing) — instructor=%s, talking_photo_id=%s",
         professor.id, tp,
     )
     return tp
@@ -510,6 +542,31 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
 
     lecture = db.get(Lecture, lecture_id)
     task_id = lecture.pipeline_task_id if lecture else None
+
+    # 본인 아바타(Talking Photo) 사전 확보 — 교수자 트리거 렌더이므로, 끝내 못 만들면
+    # seed 카드를 영구 "대기"로 두지 않고 즉시 failed + 사유로 표시한다(피드백 필수).
+    # _ensure_talking_photo_sync 가 한도(401028) self-healing 까지 시도한 뒤에도 None 이면
+    # 본인 얼굴을 등록할 수 없는 상태다(룩 미준비·HeyGen 등록 실패 등).
+    # 월/영상 렌더 한도가 0이면(limit<=0) 어차피 제출하지 않으므로 불필요한 HeyGen
+    # 호출을 피해 건너뛴다(그 경우 rows 는 pending 유지 — 한도는 UI 가 안내).
+    if rows and limit > 0:
+        from app.models.user import User as _User
+
+        professor = db.query(_User).filter(_User.id == instructor_id).first()
+        if _resolve_character(db, loop, lecture, professor) is None:
+            for row in rows:
+                row.status = qa_avatar.STATUS_FAILED
+                row.error_message = (
+                    "본인 아바타를 준비하지 못했습니다. 아바타 페이지에서 ‘움직이는 "
+                    "미리보기’를 한 번 생성해 본인 얼굴을 등록한 뒤 다시 시도해 주세요."
+                )
+            db.commit()
+            logger.warning(
+                "Q&A 사전질문: 본인 아바타 미확보 — seed %d개 failed 표시: "
+                "lecture=%s, instructor=%s",
+                len(rows), lecture_id, instructor_id,
+            )
+            return {"submitted": 0, "failed": len(rows)}
 
     submitted = failed = 0
     for row in rows:
