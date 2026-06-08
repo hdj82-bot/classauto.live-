@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { LANGUAGES, QUIZ_DIFFICULTY_LABEL } from "../studioTypes";
 import type {
@@ -76,6 +77,10 @@ export interface SettingsPanelProps {
   ) => void;
   /** ready 클립 점검(미리보기 재생) — preview_url 을 받아 부모가 모달로 연다. */
   onPreviewSeed?: (url: string) => void;
+  /** 카드별 "AI 답변 자동 생성" — index 질문으로 RAG 답변을 만들어 사전 대답에 채운다. */
+  onGenerateSeedAnswer?: (index: number) => Promise<void>;
+  /** 하단 "AI 질문 승인" — 저장된 사전 질문을 즉시 아바타 클립으로 렌더 시작. */
+  onApproveSeedQuestions?: () => Promise<void>;
 }
 
 const settingsStyle: CSSProperties = {
@@ -308,6 +313,8 @@ export default function SettingsPanel({
   onRemoveSeedQuestion,
   onChangeSeedQuestion,
   onPreviewSeed,
+  onGenerateSeedAnswer,
+  onApproveSeedQuestions,
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
@@ -330,6 +337,11 @@ export default function SettingsPanel({
   ).length;
   const seedProgressPct =
     seedSaved.length > 0 ? Math.round((seedDone / seedSaved.length) * 100) : 0;
+  // "AI 질문 승인" 가능 여부 — 저장됐고 아직 렌더 안 한(pending/failed) 항목이 있고,
+  // 현재 렌더 진행 중이 아닐 때만. (ready 항목은 이미 클립이 있어 재렌더 불필요.)
+  const seedApprovable =
+    !seedRendering &&
+    seedSaved.some((q) => q.status === "pending" || q.status === "failed");
   const summarySeedVal =
     seedQuestions.length === 0
       ? "없음"
@@ -632,6 +644,11 @@ export default function SettingsPanel({
                 onChange={(patch) => onChangeSeedQuestion?.(i, patch)}
                 onRemove={() => onRemoveSeedQuestion?.(i)}
                 onPreview={onPreviewSeed}
+                onGenerate={
+                  onGenerateSeedAnswer
+                    ? () => onGenerateSeedAnswer(i)
+                    : undefined
+                }
               />
             ))}
 
@@ -665,6 +682,15 @@ export default function SettingsPanel({
               <p style={{ margin: 0, fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.5 }}>
                 강의당 최대 3개까지 등록할 수 있습니다.
               </p>
+            )}
+
+            {/* AI 질문 승인 — 저장된 사전 질문을 영상 전체 생성 없이 즉시 아바타로 렌더. */}
+            {onApproveSeedQuestions && seedSaved.length > 0 && (
+              <SeedApproveButton
+                onApprove={onApproveSeedQuestions}
+                disabled={!seedApprovable}
+                rendering={seedRendering}
+              />
             )}
           </div>
         </details>
@@ -850,6 +876,69 @@ const SEED_STATUS_BADGE: Record<SeedQuestionStatus, { label: string; fg: string;
   failed: { label: "실패", fg: "#B42318", bg: "rgba(180,35,24,0.10)" },
 };
 
+/**
+ * "AI 질문 승인" — 저장된 사전 질문을 영상 전체 생성 없이 즉시 아바타 클립으로
+ * 렌더 시작한다. 렌더 중/대상 없음이면 비활성. 자체 busy 상태로 중복 클릭 차단.
+ */
+function SeedApproveButton({
+  onApprove,
+  disabled,
+  rendering,
+}: {
+  onApprove: () => Promise<void>;
+  disabled: boolean;
+  rendering: boolean;
+}) {
+  const [busy, setBusy] = useState(false);
+  const blocked = disabled || busy || rendering;
+
+  const handleClick = async () => {
+    if (blocked) return;
+    setBusy(true);
+    try {
+      await onApprove();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const label = busy
+    ? "승인 중…"
+    : rendering
+      ? "아바타 생성 중…"
+      : "AI 질문 승인 — 아바타 미리 생성";
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={blocked}
+      style={{
+        width: "100%",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        padding: "9px 12px",
+        borderRadius: 9,
+        border: "1px solid var(--gold-on-light, #B88308)",
+        background: blocked ? "var(--gold-soft)" : "var(--gold-on-light, #B88308)",
+        fontSize: 12.5,
+        fontWeight: 700,
+        cursor: blocked ? "not-allowed" : "pointer",
+        opacity: blocked ? 0.6 : 1,
+        color: blocked ? "var(--gold-on-light, #B88308)" : "#fff",
+        fontFamily: "inherit",
+      }}
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20 6 9 17l-5-5" />
+      </svg>
+      {label}
+    </button>
+  );
+}
+
 /** 예상 질문 1개 카드 — 질문 + (선택) 사전 대답 입력. ready 면 미리보기 재생. */
 function SeedQuestionCard({
   item,
@@ -857,16 +946,31 @@ function SeedQuestionCard({
   onChange,
   onRemove,
   onPreview,
+  onGenerate,
 }: {
   item: SeedQuestionDraft;
   index: number;
   onChange: (patch: { question?: string; answer?: string }) => void;
   onRemove: () => void;
   onPreview?: (url: string) => void;
+  /** "AI 답변 자동 생성" — RAG 로 답변을 만들어 사전 대답 칸을 채운다. */
+  onGenerate?: () => Promise<void>;
 }) {
   const badge = item.status ? SEED_STATUS_BADGE[item.status] : null;
   const canPreview =
     item.status === "ready" && !!item.preview_url && !!onPreview;
+  const [generating, setGenerating] = useState(false);
+  const canGenerate = !!onGenerate && item.question.trim() !== "" && !generating;
+
+  const handleGenerate = async () => {
+    if (!onGenerate || generating) return;
+    setGenerating(true);
+    try {
+      await onGenerate();
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   return (
     <div
@@ -941,9 +1045,44 @@ function SeedQuestionCard({
 
       {/* 사전 대답 (선택 — 비우면 영상 생성 시 강의 자료 기반 RAG 로 자동 생성) */}
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
-          사전 대답 <span style={{ fontWeight: 400 }}>(비우면 자동 생성)</span>
-        </label>
+        <div className="flex items-center justify-between">
+          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
+            사전 대답 <span style={{ fontWeight: 400 }}>(비우면 자동 생성)</span>
+          </label>
+          {onGenerate && (
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+              aria-label={`예상 질문 ${index + 1} AI 답변 자동 생성`}
+              title={
+                item.question.trim() === ""
+                  ? "질문을 먼저 입력하세요"
+                  : "강의 자료로 답변 자동 생성"
+              }
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "3px 8px",
+                borderRadius: 7,
+                border: "1px solid var(--gold-medium, #E0B65C)",
+                background: "var(--gold-soft)",
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: canGenerate ? "pointer" : "not-allowed",
+                opacity: canGenerate ? 1 : 0.55,
+                color: "var(--gold-on-light, #B88308)",
+                fontFamily: "inherit",
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+              </svg>
+              {generating ? "생성 중…" : "AI 답변 자동 생성"}
+            </button>
+          )}
+        </div>
         <textarea
           value={item.answer}
           onChange={(e) => onChange({ answer: e.target.value })}
