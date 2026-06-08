@@ -21,6 +21,11 @@ import {
   deleteQuiz,
   listAuthoredQuizzes,
 } from "@/components/professor/studio/quizApi";
+import {
+  getSeedQuestions,
+  putSeedQuestions,
+  type SeedQuestionDraft,
+} from "@/components/professor/studio/seedQuestionsApi";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
 import type {
   LangCode,
@@ -154,6 +159,13 @@ export default function StudioWizardPage() {
   // 저작된 문제는 GET /api/lectures/{id}/quiz 로 불러와 점으로 복원한다.
   const [quizPoints, setQuizPoints] = useState<QuizInsertionPoint[]>([]);
   const [socraticOpenIndex, setSocraticOpenIndex] = useState<number | null>(null);
+
+  // ── 예상 질문 (Q&A 사전 답변) ────────────────────────────────────────────────
+  // 우측 "예상 질문" 패널의 사전 질문·답변 목록. 로드 시 GET, 변경 시 디바운스
+  // PUT(전량 교체), 생성 직전 flush. 백엔드 미배포/404 시 빈 목록으로 degrade.
+  const [seedQuestions, setSeedQuestions] = useState<SeedQuestionDraft[]>([]);
+  // 입력 중 PUT 폭주 방지용 디바운스 타이머.
+  const seedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 좌측 슬라이드 패널에 "문제N"을 슬라이드 사이에 삽입 표시 (작성된 퀴즈만).
   // 번호는 우측 카드("문제 N", 배열 순서)와 동일하게 맞춘다.
   const quizMarkers = useMemo(
@@ -328,6 +340,29 @@ export default function StudioWizardPage() {
         .sort((a, b) => a.boundaryIndex - b.boundaryIndex);
       // 백엔드에 저작된 게 있으면 그것으로 복원. (없으면 빈 상태 — 교수자가 추가)
       if (points.length > 0) setQuizPoints(points);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lectureId]);
+
+  // 등록된 사전 질문 로드 — 있으면 패널에 복원. (없으면 빈 상태 — 교수자가 추가)
+  useEffect(() => {
+    if (!lectureId) return;
+    let cancelled = false;
+    (async () => {
+      const { seedQuestions: loaded } = await getSeedQuestions(lectureId);
+      if (cancelled) return;
+      if (loaded.length > 0) {
+        setSeedQuestions(
+          loaded.map((q) => ({
+            id: q.id,
+            question: q.question,
+            status: q.status,
+            has_clip: q.has_clip,
+          })),
+        );
+      }
     })();
     return () => {
       cancelled = true;
@@ -638,6 +673,7 @@ export default function StudioWizardPage() {
     return () => {
       if (voiceSpeedSaveRef.current) clearTimeout(voiceSpeedSaveRef.current);
       if (avatarScaleSaveRef.current) clearTimeout(avatarScaleSaveRef.current);
+      if (seedSaveRef.current) clearTimeout(seedSaveRef.current);
     };
   }, []);
 
@@ -689,8 +725,76 @@ export default function StudioWizardPage() {
     setActiveIndex((i) => Math.max(0, i - 1));
   }, []);
 
+  // ── 예상 질문 핸들러 ─────────────────────────────────────────────────────────
+  // 교수자는 질문만 입력한다(답변은 영상 생성 시 RAG 로 자동 생성). PUT 은 전량
+  // 교체 — 빈 질문은 제외하고 질문 텍스트 배열만 보낸다. 백엔드 미배포/네트워크
+  // 오류는 삼키고 로컬 상태를 유지(다음 변경/생성 직전에 재시도). 응답으로 state 를
+  // 덮어쓰지 않는다 — 입력 중 디바운스 저장이 커서/순서를 흔드는 것을 막기 위함
+  // (id·status 는 로드/재방문 시 GET 으로 복원).
+  const persistSeedQuestions = useCallback(
+    async (items: SeedQuestionDraft[]) => {
+      if (!lectureId) return;
+      const payload = items
+        .map((q) => q.question.trim())
+        .filter((q) => q !== "");
+      try {
+        await putSeedQuestions(lectureId, payload);
+      } catch {
+        /* 미배포/네트워크 — 로컬 상태 유지 */
+      }
+    },
+    [lectureId],
+  );
+
+  // 입력 중에는 디바운스(700ms)로 마지막 값만 저장해 PUT 폭주를 막는다.
+  const scheduleSeedSave = useCallback(
+    (items: SeedQuestionDraft[]) => {
+      if (seedSaveRef.current) clearTimeout(seedSaveRef.current);
+      seedSaveRef.current = setTimeout(() => {
+        void persistSeedQuestions(items);
+      }, 700);
+    },
+    [persistSeedQuestions],
+  );
+
+  const handleAddSeedQuestion = useCallback(() => {
+    setSeedQuestions((prev) =>
+      prev.length >= 3 ? prev : [...prev, { id: null, question: "" }],
+    );
+  }, []);
+
+  const handleChangeSeedQuestion = useCallback(
+    (index: number, question: string) => {
+      setSeedQuestions((prev) => {
+        const next = prev.map((q, i) => (i === index ? { ...q, question } : q));
+        scheduleSeedSave(next);
+        return next;
+      });
+    },
+    [scheduleSeedSave],
+  );
+
+  const handleRemoveSeedQuestion = useCallback(
+    (index: number) => {
+      setSeedQuestions((prev) => {
+        const next = prev.filter((_, i) => i !== index);
+        scheduleSeedSave(next);
+        return next;
+      });
+    },
+    [scheduleSeedSave],
+  );
+
   // ── 전체 생성 시작 ───────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
+    // 생성 직전 — 대기 중인 사전 답변 편집을 즉시 저장(flush). persist 는
+    // 자체적으로 오류를 삼키므로 생성 흐름을 막지 않는다.
+    if (seedSaveRef.current) {
+      clearTimeout(seedSaveRef.current);
+      seedSaveRef.current = null;
+    }
+    await persistSeedQuestions(seedQuestions);
+
     if (!videoId || !lecture) {
       // 파이프라인 미준비 — 시뮬레이션 모드 (백엔드 없이 시각 데모)
       setGenOpen(true);
@@ -751,7 +855,18 @@ export default function StudioWizardPage() {
         setGenOpen(false);
       }
     }
-  }, [videoId, lecture, lectureId, voiceGender, expiresAt, approved, toast, t]);
+  }, [
+    videoId,
+    lecture,
+    lectureId,
+    voiceGender,
+    expiresAt,
+    approved,
+    toast,
+    t,
+    persistSeedQuestions,
+    seedQuestions,
+  ]);
 
   // 렌더 진행 폴링 (approved 인 동안)
   useEffect(() => {
@@ -1020,6 +1135,10 @@ export default function StudioWizardPage() {
         onRemoveQuizPoint={handleRemoveQuizPoint}
         onChangeQuizPoint={handleChangeQuizPoint}
         onOpenSocratic={setSocraticOpenIndex}
+        seedQuestions={seedQuestions}
+        onAddSeedQuestion={handleAddSeedQuestion}
+        onRemoveSeedQuestion={handleRemoveSeedQuestion}
+        onChangeSeedQuestion={handleChangeSeedQuestion}
       />
 
       <div style={{ gridColumn: "1 / -1" }}>

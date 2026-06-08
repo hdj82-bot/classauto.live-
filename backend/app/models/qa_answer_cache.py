@@ -44,6 +44,12 @@ class QAAnswerCache(Base):
     # 적립 시점의 RAG 텍스트 답변 — 배치가 대표 질문 클립의 TTS 원고로 재사용.
     answer_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # 행 출처. 'student'=학생 미적중 질문 적립(기존), 'instructor_seed'=교수자가
+    # 영상 생성 전 등록한 예상 질문(영상당 ≤3, 생성 시 즉시 렌더 · 야간 클러스터링 제외).
+    origin: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="student", index=True
+    )
+
     # 야간 배치가 부여하는 클러스터 식별자(같은 cluster_key = 같은 클립 공유).
     cluster_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
