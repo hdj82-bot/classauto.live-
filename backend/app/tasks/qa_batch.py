@@ -363,9 +363,15 @@ def _lecture_renders_used_this_month(db, lecture_id) -> int:
 
 
 def _submit_pending(loop, db) -> int:
-    """pending 질문을 강의별 클러스터링 → 상위 N 렌더 제출. 제출 건수 반환."""
+    """pending 질문을 강의별 클러스터링 → 상위 N 렌더 제출. 제출 건수 반환.
+
+    학생 적립(origin=student)만 클러스터링 대상이다. 교수자 사전 질문
+    (origin=instructor_seed)은 영상 생성(approve) 시 render_seed_questions 가 즉시
+    렌더하므로, 야간 클러스터링에서는 제외한다.
+    """
     pending = db.query(QAAnswerCache).filter(
-        QAAnswerCache.status == qa_avatar.STATUS_PENDING
+        QAAnswerCache.status == qa_avatar.STATUS_PENDING,
+        QAAnswerCache.origin == qa_avatar.ORIGIN_STUDENT,
     ).all()
     if not pending:
         return 0
@@ -457,3 +463,144 @@ def run_qa_avatar_batch() -> dict:
     finally:
         loop.close()
         db.close()
+
+
+# ── 교수자 사전 질문(instructor_seed) 즉시 렌더 ───────────────────────────────────
+#
+# 학생 질문 축적을 기다리는 야간 배치와 달리, 교수자가 영상당 ≤3개 등록한 예상
+# 질문(origin=instructor_seed)은 영상 생성(approve) 시점에 곧바로 렌더해 첫 학생
+# 질문부터 아바타 답변이 나오게 한다(08 §5, 09 §5). RAG 범위 밖 질문은 렌더하지
+# 않고 failed 로 표시한다. 클러스터링은 거치지 않고 질문 1건 = 렌더 1건이지만,
+# 영상당 렌더 한도(QA_AVATAR_TOP_CLUSTERS)·교수자 월 한도는 야간 배치와 동일하게
+# 강제한다(_submit_cluster / assert_qa_render_budget 재사용).
+
+
+def _seed_still_rendering(db, lecture_id) -> int:
+    """해당 강의의 instructor_seed 행 중 아직 status=rendering 인 수."""
+    return db.query(QAAnswerCache).filter(
+        QAAnswerCache.lecture_id == lecture_id,
+        QAAnswerCache.origin == qa_avatar.ORIGIN_SEED,
+        QAAnswerCache.status == qa_avatar.STATUS_RENDERING,
+    ).count()
+
+
+def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
+    """교수자 사전 질문(pending)을 RAG로 답변 생성 → 렌더 제출. 제출/실패 수 반환.
+
+    한도 = min(영상당 남은 렌더, 교수자 월 남은 렌더). 한도까지만 제출하고, 범위
+    밖 질문은 렌더 없이 failed 로 표시(한도를 소모하지 않음). 예산 차단 시 중단.
+    """
+    from app.models.lecture import Lecture
+    from app.services.pipeline.budget import (
+        QARenderQuotaError,
+        qa_render_quota_remaining,
+    )
+    from app.services.pipeline.qa import answer_question
+
+    rows = db.query(QAAnswerCache).filter(
+        QAAnswerCache.lecture_id == lecture_id,
+        QAAnswerCache.origin == qa_avatar.ORIGIN_SEED,
+        QAAnswerCache.status == qa_avatar.STATUS_PENDING,
+    ).all()
+
+    limit = min(
+        settings.QA_AVATAR_TOP_CLUSTERS - _lecture_renders_used_this_month(db, lecture_id),
+        qa_render_quota_remaining(db, instructor_id),
+    )
+
+    lecture = db.get(Lecture, lecture_id)
+    task_id = lecture.pipeline_task_id if lecture else None
+
+    submitted = failed = 0
+    for row in rows:
+        if submitted >= limit:
+            break  # 영상/교수자 렌더 한도 도달 — 나머지는 pending 유지.
+
+        res = answer_question(db, task_id, "", row.question_text)
+        if not res.in_scope:
+            # RAG 범위 밖 — 렌더하지 않고 실패 표시(한도 미소모).
+            row.status = qa_avatar.STATUS_FAILED
+            row.error_message = "강의 범위 밖 질문"
+            failed += 1
+            continue
+
+        row.answer_text = (res.answer or "")[: settings.QA_AVATAR_MAX_ANSWER_CHARS]
+        row.question_embedding = qa_avatar.embed_question(row.question_text)
+
+        try:
+            assert_qa_render_budget(db, instructor_id)
+        except QARenderQuotaError as exc:
+            logger.warning(
+                "Q&A 사전질문 예산 차단(중단): instructor=%s, %s", instructor_id, exc
+            )
+            break
+
+        # 질문 1건 = 단독 클러스터 1렌더. 기존 _submit_cluster 재사용(rendering 전이·제출).
+        if _submit_cluster(
+            loop, db, qa_avatar.Cluster(members=[row], centroid=[]),
+            lecture_id, instructor_id,
+        ):
+            submitted += 1
+
+    db.commit()
+    result = {"submitted": submitted, "failed": failed}
+    logger.info(
+        "Q&A 사전질문 렌더 제출: lecture=%s, instructor=%s, %s",
+        lecture_id, instructor_id, result,
+    )
+    return result
+
+
+def _poll_seed_renders(db, loop, lecture_id) -> dict:
+    """instructor_seed 렌더 완료를 폴링해 ready/failed 로 전이. 기존 _poll_inflight 재사용.
+
+    _poll_inflight 는 status=rendering 인 모든 대표 행을 폴링하므로 seed/student 를
+    가리지 않지만, 같은 클립을 ready 로 굳히는 동작이 동일해 그대로 재사용한다.
+    """
+    completed, failed = _poll_inflight(loop, db)
+    db.commit()
+    return {"completed": completed, "failed": failed}
+
+
+@celery.task(name="app.tasks.qa_batch.render_seed_questions")
+def render_seed_questions(lecture_id, instructor_id) -> dict:
+    """영상 approve 시 호출(video.approve_video → send_task). 사전 질문 즉시 렌더.
+
+    제출 후 seed 가 rendering 으로 남아 있으면(실 모드는 렌더가 진행 중), 자체
+    폴링 태스크(poll_seed_renders)를 예약해 완료를 회수한다.
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        with SyncSessionLocal() as db:
+            try:
+                result = _render_seed_questions(db, loop, lecture_id, instructor_id)
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                logger.error("Q&A 사전질문 렌더 실패: lecture=%s, %s", lecture_id, exc)
+                return {"submitted": 0, "failed": 0, "error": str(exc)}
+            still_rendering = _seed_still_rendering(db, lecture_id)
+        if still_rendering:
+            poll_seed_renders.apply_async((lecture_id,), countdown=30)
+        return result
+    finally:
+        loop.close()
+
+
+@celery.task(name="app.tasks.qa_batch.poll_seed_renders")
+def poll_seed_renders(lecture_id, attempt: int = 0) -> dict:
+    """render_seed_questions 가 예약하는 자체 폴링. 완료될 때까지 30초 간격 재예약(최대 20회)."""
+    loop = asyncio.new_event_loop()
+    try:
+        with SyncSessionLocal() as db:
+            try:
+                result = _poll_seed_renders(db, loop, lecture_id)
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                logger.error("Q&A 사전질문 폴링 실패: lecture=%s, %s", lecture_id, exc)
+                return {"completed": 0, "failed": 0, "error": str(exc)}
+            still_rendering = _seed_still_rendering(db, lecture_id)
+        if still_rendering and attempt < 20:
+            poll_seed_renders.apply_async((lecture_id, attempt + 1), countdown=30)
+        return result
+    finally:
+        loop.close()
