@@ -831,7 +831,7 @@ export default function StudioWizardPage() {
       try {
         const { answer, inScope } = await generateSeedAnswer(lectureId, question);
         if (!inScope) {
-          toast("강의 자료 범위 밖 질문이라 답변을 만들 수 없어요.", "error");
+          toast("강의 자료가 아직 준비되지 않아 답변을 만들 수 없어요.", "error");
           return;
         }
         setSeedQuestions((prev) => {

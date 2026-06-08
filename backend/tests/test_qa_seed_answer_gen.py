@@ -18,6 +18,7 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.models.user import User, UserRole
 from app.services.pipeline import qa as qa_mod
+from app.services.pipeline.retriever import RetrievalResult
 from tests.conftest import _patch_jsonb_columns, make_auth_header
 
 
@@ -31,22 +32,22 @@ def test_seed_system_prompt_forbids_chinese_parenthesis():
     assert "大学生" in p  # 예시로 규칙을 못박았는지
 
 
-def test_generate_seed_answer_out_of_scope(monkeypatch):
+def test_generate_seed_answer_no_slides(monkeypatch):
+    # 슬라이드/임베딩이 전혀 없을 때만 생성 불가(in_scope=False).
     monkeypatch.setattr(qa_mod, "search_similar_slides", lambda db, t, q, top_k=3: [])
-    monkeypatch.setattr(qa_mod, "is_in_scope", lambda results: False)
-    # 범위 밖이면 Claude 를 부르지 않아야 한다.
     monkeypatch.setattr(qa_mod, "_claude_seed_call", lambda *a, **k: pytest.fail("Claude 호출됨"))
 
-    answer, in_scope = qa_mod.generate_seed_answer(None, "task-1", "범위 밖 질문")
+    answer, in_scope = qa_mod.generate_seed_answer(None, "task-1", "질문")
     assert answer == ""
     assert in_scope is False
 
 
-def test_generate_seed_answer_in_scope(monkeypatch):
-    monkeypatch.setattr(qa_mod, "search_similar_slides", lambda db, t, q, top_k=3: ["slide"])
-    monkeypatch.setattr(qa_mod, "is_in_scope", lambda results: True)
+def test_generate_seed_answer_low_similarity_still_generates(monkeypatch):
+    # ★ 핵심 회귀: 유사도가 0.7 미만(학생 게이트라면 거부)이라도 슬라이드가 있으면
+    #    교수자 사전 답변은 생성돼야 한다(스코프 게이트 제거).
+    low = RetrievalResult(slide_number=1, text_content="문법 차이", similarity=0.55)
+    monkeypatch.setattr(qa_mod, "search_similar_slides", lambda db, t, q, top_k=3: [low])
     monkeypatch.setattr(qa_mod, "_build_context", lambda results: "슬라이드 내용")
-    # Anthropic 클라이언트 생성 시 API 키 검증을 우회(네트워크 호출 없음).
     monkeypatch.setattr("anthropic.Anthropic", lambda **k: object())
 
     fake = types.SimpleNamespace(
@@ -54,7 +55,7 @@ def test_generate_seed_answer_in_scope(monkeypatch):
     )
     monkeypatch.setattr(qa_mod, "_claude_seed_call", lambda client, content: fake)
 
-    answer, in_scope = qa_mod.generate_seed_answer(None, "task-1", "大学生이 뭔가요?")
+    answer, in_scope = qa_mod.generate_seed_answer(None, "task-1", "어순 차이는 왜 생기나요?")
     assert in_scope is True
     assert answer == "大学生은 대학에 다니는 학생입니다."  # trim 됨
 

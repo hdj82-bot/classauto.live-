@@ -76,14 +76,20 @@ def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str,
     """교수자 사전 질문 1건에 대한 답변을 PPT(강의 자료) 기반으로 생성.
 
     반환 ``(answer, in_scope)``:
-    - 범위 밖(유사도 임계 미만)이면 ``("", False)``.
-    - 범위 안이면 ``(생성된 답변, True)``. Claude 오류/빈 응답이면 ``("", True)``.
+    - 강의 슬라이드가 하나도 검색되지 않으면(임베딩 미생성 등) ``("", False)``.
+    - 그 외에는 가장 가까운 슬라이드로 답변을 생성해 ``(생성된 답변, True)``.
+      Claude 오류/빈 응답이면 ``("", True)``.
+
+    ★ 학생 Q&A(answer_question)와 달리 ``is_in_scope`` 유사도 게이트(0.7)를 적용하지
+    않는다. 사전 질문은 교수자가 직접 고른 본 강의 질문이라(신뢰된 저작), 0.7 게이트로는
+    정상 질문도 자주 거부됐다(유사도 0.5~0.65). 학생용 범위 제한 가드레일은
+    answer_question 에 그대로 유지된다.
 
     "AI 답변 자동 생성" 버튼(즉시 검토)과 렌더 시 빈 답변 폴백이 공유한다. 중국어
     괄호 병기 금지 등 표기 규칙은 SEED_ANSWER_SYSTEM_PROMPT 가 강제한다.
     """
     results = search_similar_slides(db, task_id, question, top_k=3)
-    if not is_in_scope(results):
+    if not results:
         return "", False
 
     context = _build_context(results)

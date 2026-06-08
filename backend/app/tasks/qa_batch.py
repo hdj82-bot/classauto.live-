@@ -523,8 +523,9 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         if not answer:
             generated, in_scope = generate_seed_answer(db, task_id, row.question_text)
             if not in_scope:
+                # 슬라이드/임베딩이 없어 답변을 만들 수 없음(파이프라인 미완 등).
                 row.status = qa_avatar.STATUS_FAILED
-                row.error_message = "강의 범위 밖 질문"
+                row.error_message = "강의 자료를 찾지 못했습니다."
                 failed += 1
                 continue
             if not generated.strip():
