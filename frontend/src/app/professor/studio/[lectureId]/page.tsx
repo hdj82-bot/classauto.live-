@@ -864,7 +864,10 @@ export default function StudioWizardPage() {
           id: q.id,
           question: q.question,
           answer: q.answer,
-          status: q.status,
+          // 렌더는 celery 비동기라 이 응답 시점엔 아직 pending 이다. 낙관적으로
+          // pending → rendering 으로 표시해 seedRenderingKey 폴링을 즉시 시동한다.
+          // 4초 뒤 reloadSeedQuestions 가 서버 실제 상태(rendering/ready/failed)로 정정한다.
+          status: q.status === "pending" ? "rendering" : q.status,
           has_clip: q.has_clip,
           preview_url: q.preview_url,
         })),
