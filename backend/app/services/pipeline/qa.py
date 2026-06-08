@@ -47,6 +47,64 @@ QA_SYSTEM_PROMPT = """\
 """
 
 
+# 사전(seed) 답변 전용 시스템 프롬프트. 학생 Q&A(QA_SYSTEM_PROMPT)와 달리:
+# - 아바타가 음성으로 읽으므로 "[슬라이드 3,7]" 같은 출처 표기를 넣지 않는다.
+# - 중국어/한자 용어에 괄호 병기(예: 대학생(大学生))를 절대 넣지 않는다(교수자 요청).
+SEED_ANSWER_SYSTEM_PROMPT = """\
+당신은 강의 자료(PPT) 기반 Q&A 아바타의 답변 작성기입니다.
+제공된 슬라이드 내용만을 근거로, 아바타가 학생에게 음성으로 전달할 답변을 작성하세요.
+
+규칙:
+1. 제공된 슬라이드 내용에 기반해 정확하게 답합니다. 슬라이드에 없는 내용은 추측하지 않습니다.
+2. 한국어로 자연스럽게, 말하듯이 작성합니다(아바타가 음성으로 읽습니다).
+3. 슬라이드 번호 등 출처 표기를 답변에 넣지 않습니다(음성으로 읽히면 어색함).
+4. 중국어/한자 용어에 괄호로 음·뜻을 병기하지 않습니다.
+   예: '대학생(大学生)'(X), '大学生(대학생)'(X) → '大学生'(O). 해당 용어만 그대로 씁니다.
+"""
+
+
+@track_external_api("claude")
+@retry_external(label="claude.seed.create", extra_retry_on=_CLAUDE_RETRY_ON)
+def _claude_seed_call(client, user_content: str):
+    return client.messages.create(
+        model=settings.QA_MODEL, max_tokens=1024, system=SEED_ANSWER_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_content}],
+    )
+
+
+def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str, bool]:
+    """교수자 사전 질문 1건에 대한 답변을 PPT(강의 자료) 기반으로 생성.
+
+    반환 ``(answer, in_scope)``:
+    - 범위 밖(유사도 임계 미만)이면 ``("", False)``.
+    - 범위 안이면 ``(생성된 답변, True)``. Claude 오류/빈 응답이면 ``("", True)``.
+
+    "AI 답변 자동 생성" 버튼(즉시 검토)과 렌더 시 빈 답변 폴백이 공유한다. 중국어
+    괄호 병기 금지 등 표기 규칙은 SEED_ANSWER_SYSTEM_PROMPT 가 강제한다.
+    """
+    results = search_similar_slides(db, task_id, question, top_k=3)
+    if not is_in_scope(results):
+        return "", False
+
+    context = _build_context(results)
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
+    try:
+        response = _claude_seed_call(
+            client,
+            f"## 참고 슬라이드 내용\n{context}\n\n## 학생 질문\n{question}",
+        )
+    except anthropic.APIError as exc:
+        logger.error("사전 답변 생성 Claude 호출 실패: %s", exc)
+        return "", True
+
+    if not response.content:
+        logger.warning("사전 답변 생성: Claude 빈 응답")
+        return "", True
+
+    text_block = next((b for b in response.content if b.type == "text"), None)
+    return (text_block.text.strip() if text_block else ""), True
+
+
 @dataclass
 class QAResult:
     answer: str

@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import asyncio
-import types
 import uuid
 
 import pytest
@@ -68,16 +67,17 @@ def mock_render(monkeypatch):
 
 
 def _patch_answer(monkeypatch, *, in_scope: bool, answer: str = "사전 답변입니다."):
-    """app.services.pipeline.qa.answer_question 을 결정적으로 대체(RAG·Claude 호출 차단).
+    """app.services.pipeline.qa.generate_seed_answer 를 결정적으로 대체(RAG·Claude 차단).
 
-    _render_seed_questions 가 함수 내부에서 import 하므로 원본 모듈 속성을 패치한다.
+    _render_seed_questions 가 빈 답변 폴백에서 generate_seed_answer(db, task_id, question)
+    → (answer, in_scope) 를 호출하므로 원본 모듈 속성을 패치한다.
     """
     import app.services.pipeline.qa as qa_mod
 
-    def _fake(db, task_id, session_id, question):
-        return types.SimpleNamespace(in_scope=in_scope, answer=answer)
+    def _fake(db, task_id, question):
+        return (answer if in_scope else "", in_scope)
 
-    monkeypatch.setattr(qa_mod, "answer_question", _fake)
+    monkeypatch.setattr(qa_mod, "generate_seed_answer", _fake)
 
 
 def _seed_lecture(db) -> tuple[User, Course, Lecture]:
@@ -163,13 +163,13 @@ def test_seed_render_roundtrip_to_ready(sync_db, mock_render, monkeypatch):
 def test_seed_render_uses_instructor_answer_without_rag(sync_db, mock_render, monkeypatch):
     from app.tasks import qa_batch
 
-    # answer_question 이 호출되면 테스트 실패 — 교수자 답변이 있으면 RAG 미호출이어야 함.
+    # generate_seed_answer 가 호출되면 실패 — 교수자 답변이 있으면 RAG 미호출이어야 함.
     import app.services.pipeline.qa as qa_mod
 
     def _boom(*_a, **_k):
-        raise AssertionError("교수자 답변이 있는데 RAG(answer_question)가 호출됨")
+        raise AssertionError("교수자 답변이 있는데 RAG(generate_seed_answer)가 호출됨")
 
-    monkeypatch.setattr(qa_mod, "answer_question", _boom)
+    monkeypatch.setattr(qa_mod, "generate_seed_answer", _boom)
 
     prof, _c, lec = _seed_lecture(sync_db)
     row = QAAnswerCache(
