@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.celery_app import celery
 from app.models.video import Video, VideoScript, VideoStatus
 from app.schemas.video import ScriptSegment, SubtitleSegment
 
@@ -402,6 +403,14 @@ async def approve_video(
 
     for rid, text in renders:
         render_slide.delay(rid, text, str(professor_id))
+
+    # 교수자 사전 질문(instructor_seed) 즉시 렌더 — 영상 승인과 동시에 교수자가
+    # 미리 등록한 예상 질문을 렌더해, 첫 학생 질문부터 아바타 답변이 나오게 한다.
+    # qa_batch(창2)를 직접 import 하지 않고 celery 태스크 이름으로만 호출(디커플링).
+    celery.send_task(
+        "app.tasks.qa_batch.render_seed_questions",
+        args=[str(video.lecture_id), str(professor_id)],
+    )
 
     return video
 
