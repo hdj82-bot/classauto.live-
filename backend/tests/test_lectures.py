@@ -701,3 +701,29 @@ async def test_slideshow_returns_segments_with_audio(
 async def test_slideshow_404_for_unknown_slug(client):
     resp = await client.get("/api/lectures/no-such-slug-xyz/slideshow")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_slideshow_is_ready_reflects_video_done(
+    client, db, lecture, video_pending
+):
+    """is_ready 는 Video.status == done 일 때만 True.
+
+    공개됐지만 본문 렌더가 아직 안 끝났으면(pending_review/rendering) 음성이 없어
+    무음 재생되는 대신 플레이어가 "준비 중"을 띄울 수 있게 False 로 내려준다.
+    done 으로 전환되면 종전과 동일하게 True(재생).
+    """
+    from app.models.video import VideoStatus
+
+    # 승인 전(pending_review) — 아직 준비 안 됨.
+    resp = await client.get(f"/api/lectures/{lecture.slug}/slideshow")
+    assert resp.status_code == 200
+    assert resp.json()["is_ready"] is False
+
+    # 본문 렌더 완료(done) 로 전환되면 준비 완료.
+    video_pending.status = VideoStatus.done
+    await db.commit()
+
+    resp = await client.get(f"/api/lectures/{lecture.slug}/slideshow")
+    assert resp.status_code == 200
+    assert resp.json()["is_ready"] is True

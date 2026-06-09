@@ -171,6 +171,12 @@
       "publishedNotice": "Published",
       "unpublishedNotice": "Unpublished (students can't view even with the link)",
       "publishedSuccess": "Lecture published.",
+      "privacyWarnTitle": "Still private — students can't see it",
+      "privacyWarnBody": "If you open this link now, students see \"Lecture not found.\" Click \"Publish now\" below so students can enter.",
+      "publishNow": "Publish now",
+      "publishNowBusy": "Publishing…",
+      "publishedBannerTitle": "Published — students can enter",
+      "publishedBannerBody": "Share the link or QR below. You can switch back to private anytime.",
       "viewLecture": "Preview as student",
       "backToDashboard": "Back to dashboard"
     },

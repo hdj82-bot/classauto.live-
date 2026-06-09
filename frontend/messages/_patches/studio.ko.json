@@ -171,6 +171,12 @@
       "publishedNotice": "공개됨",
       "unpublishedNotice": "비공개 (링크가 있어도 학생이 볼 수 없습니다)",
       "publishedSuccess": "강의가 공개되었습니다.",
+      "privacyWarnTitle": "아직 비공개라 학생이 볼 수 없어요",
+      "privacyWarnBody": "지금 이 링크를 열면 학생 화면에 ‘강의를 찾을 수 없습니다’가 표시됩니다. 아래 ‘지금 공개하기’를 눌러야 학생이 입장할 수 있어요.",
+      "publishNow": "지금 공개하기",
+      "publishNowBusy": "공개하는 중…",
+      "publishedBannerTitle": "공개됨 — 학생이 입장할 수 있어요",
+      "publishedBannerBody": "아래 링크·QR를 학생에게 공유하세요. 언제든 다시 비공개로 바꿀 수 있어요.",
       "viewLecture": "학생 화면 미리보기",
       "backToDashboard": "대시보드로 돌아가기"
     },
