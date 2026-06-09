@@ -151,6 +151,16 @@ export default function LectureLibraryPage() {
     [lectures, router],
   );
 
+  // 카드에서 바로 미리보기 — 완료 강의를 studio 에 들어가지 않고 학생과 동일한
+  // 플레이어로 점검(새 탭). 소유 교수자는 미발행이어도 조회 가능(백엔드 owner-bypass).
+  const handlePreview = useCallback(
+    (id: string) => {
+      const lec = lectures.find((l) => l.id === id);
+      if (lec?.slug) window.open(`/lecture/${lec.slug}?preview=1`, "_blank");
+    },
+    [lectures],
+  );
+
   const handleDeleted = useCallback(
     (id: string) => {
       // 삭제된 강의가 폴더에 속해 있었다면 해당 폴더의 lecture_count 를 1 감소.
@@ -413,6 +423,7 @@ export default function LectureLibraryPage() {
                     lecture={lec}
                     onContinue={handleContinue}
                     onDeleted={handleDeleted}
+                    onPreview={handlePreview}
                   />
                   <button
                     type="button"
