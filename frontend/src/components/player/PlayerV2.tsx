@@ -384,16 +384,24 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // ─── Q&A 전송 ───
   const sendQuestion = async (text?: string) => {
     const question = (text ?? qaInput).trim();
-    if (!question || !sessionId) return;
+    // 일반 시청은 세션이 필요하고, 미리보기(교수자)는 세션 없이 RAG 답변만 받는다.
+    if (!question || (!sessionId && !preview)) return;
     setQaInput("");
     setQaMessages((m) => [...m, { role: "user", text: question }]);
     setQaSending(true);
     try {
-      const { data } = await api.post(`/api/v1/qa`, {
-        session_id: sessionId,
-        lecture_id: lecture?.id,
-        question,
-      });
+      // 미리보기(교수자)는 세션이 없으므로 소유 교수자 전용 /qa/preview 로,
+      // 일반 학생 시청은 세션 기반 /qa 로 호출한다.
+      const { data } = preview
+        ? await api.post(`/api/v1/qa/preview`, {
+            lecture_id: lecture?.id,
+            question,
+          })
+        : await api.post(`/api/v1/qa`, {
+            session_id: sessionId,
+            lecture_id: lecture?.id,
+            question,
+          });
       setQaMessages((m) => [
         ...m,
         {

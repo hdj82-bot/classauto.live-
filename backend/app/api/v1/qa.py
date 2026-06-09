@@ -131,6 +131,58 @@ async def ask_question(
     }
 
 
+# ── 교수자 미리보기 Q&A (세션 없이, 소유 강의 한정) ───────────────────────────
+#
+# 배포 전 교수자가 학생과 동일한 플레이어로 자유 채팅 Q&A 를 점검하는 경로.
+# 학생 /qa 와 달리 세션·QALog·아바타 큐가 없다(로그·비용 오염 방지) — RAG 답변만.
+
+
+class QAPreviewRequest(BaseModel):
+    lecture_id: uuid.UUID
+    question: str = Field(..., min_length=1, max_length=500)
+
+
+@router.post("/preview", summary="Q&A 미리보기 (소유 교수자, 세션 없이)")
+async def preview_question(
+    body: QAPreviewRequest,
+    user: User = Depends(require_professor),
+):
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        with SyncSessionLocal() as db:
+            lecture = db.execute(
+                select(Lecture).where(Lecture.id == body.lecture_id)
+            ).scalar_one_or_none()
+            if not lecture or not lecture.pipeline_task_id:
+                raise LookupError("강의 파이프라인이 아직 처리되지 않았습니다.")
+            instructor_id = db.execute(
+                select(Course.instructor_id).where(Course.id == lecture.course_id)
+            ).scalar_one_or_none()
+            if instructor_id != user.id:
+                raise PermissionError("미리보기 Q&A 는 소유 교수자만 가능합니다.")
+            # session_id 자리에 합성 키 — 로그/세션 없이 RAG 답변만 받는다.
+            return answer_question(
+                db, lecture.pipeline_task_id, f"preview-{user.id}", body.question
+            )
+
+    try:
+        result = await loop.run_in_executor(None, _run)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
+
+    return {
+        "answer": result.answer,
+        "in_scope": result.in_scope,
+        "avatar": None,
+        "cost_usd": result.cost_usd,
+    }
+
+
 # ── 교수자용 Q&A 종합 리포트 내보내기 ─────────────────────────────────────────
 #
 # /professor/inbox 페이지가 요구하는 "강의별 질문/답변 종합 리포트" 다운로드.
