@@ -14,7 +14,6 @@ import {
   SocraticQuizModal,
   type StudioSlide,
 } from "@/components/professor/studio/v2";
-import LectureDownloadButton from "@/components/professor/studio/v2/LectureDownloadButton";
 import { useStudioI18n } from "@/components/professor/studio/useStudioI18n";
 import { langLabel } from "@/components/professor/studio/studioTypes";
 import {
@@ -1276,19 +1275,12 @@ export default function StudioWizardPage() {
         open={genOpen}
         percent={genPercent}
         activeStage={genStage}
-        eta={genDone ? undefined : "약 2분 30초"}
         lectureTitle={lecture.title}
         slideCount={slides.length}
         processedSlides={Math.min(genCompleted, slides.length)}
-        expectedDuration="약 5분 12초"
         done={genDone}
         onBackground={() => setGenOpen(false)}
         onViewVideo={handleViewVideo}
-        downloadSlot={
-          genDone && lectureId ? (
-            <LectureDownloadButton lectureId={lectureId} title={lecture.title} />
-          ) : undefined
-        }
         // DEV 시뮬레이션 버튼은 로컬 개발에서만 노출 — 프로덕션 빌드에서는
         // process.env.NODE_ENV 가 "production" 으로 정적 치환돼 props 자체가
         // 안 넘어가므로 모달의 DEV 컨트롤 박스가 렌더되지 않는다.
