@@ -390,12 +390,18 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     setQaMessages((m) => [...m, { role: "user", text: question }]);
     setQaSending(true);
     try {
-      const { data } = await api.post(`/api/v1/qa`, {
-        // 미리보기는 session_id 를 생략한다(백엔드가 소유 교수자 검증 후 답변).
-        session_id: sessionId ?? undefined,
-        lecture_id: lecture?.id,
-        question,
-      });
+      // 미리보기(교수자)는 세션이 없으므로 소유 교수자 전용 /qa/preview 로,
+      // 일반 학생 시청은 세션 기반 /qa 로 호출한다.
+      const { data } = preview
+        ? await api.post(`/api/v1/qa/preview`, {
+            lecture_id: lecture?.id,
+            question,
+          })
+        : await api.post(`/api/v1/qa`, {
+            session_id: sessionId,
+            lecture_id: lecture?.id,
+            question,
+          });
       setQaMessages((m) => [
         ...m,
         {
