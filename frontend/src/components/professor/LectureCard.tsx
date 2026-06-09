@@ -22,6 +22,12 @@ interface Props {
   onContinue: (id: string) => void;
   /** 성공적으로 삭제된 직후 호출 — 부모 state 에서 해당 강의 제거 + 토스트 호출자 책임 */
   onDeleted: (id: string) => void;
+  /**
+   * "미리보기" 클릭 시 — 완료된 강의를 학생과 동일한 플레이어로 점검
+   * (/lecture/[slug]?preview=1). 슬러그는 부모가 알기에 콜백으로 위임. 제공되고
+   * 제작 완료(미제작중)된 강의에서만 버튼이 노출된다.
+   */
+  onPreview?: (id: string) => void;
   padding?: number;
 }
 
@@ -36,6 +42,7 @@ export default function LectureCard({
   lecture,
   onContinue,
   onDeleted,
+  onPreview,
   padding = 20,
 }: Props) {
   const { t } = useI18n();
@@ -126,6 +133,24 @@ export default function LectureCard({
           >
             {continueLabel}
           </button>
+          {onPreview && !isProduction && (
+            <button
+              type="button"
+              onClick={() => onPreview(lecture.id)}
+              className="rounded-lg motion-safe:transition"
+              style={{
+                padding: "8px 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--text)",
+                background: "var(--bg-card)",
+                border: "1px solid var(--line-strong)",
+                cursor: "pointer",
+              }}
+            >
+              {t("lectureCard.preview")}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}

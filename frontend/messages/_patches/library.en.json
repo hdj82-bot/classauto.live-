@@ -2,6 +2,7 @@
   "lectureCard": {
     "continueCreating": "Continue",
     "openLecture": "Open lecture",
+    "preview": "Preview",
     "openLibrary": "Open library",
     "inProduction": "Rendering",
     "delete": "Delete",
