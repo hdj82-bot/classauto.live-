@@ -7,6 +7,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import Link from "next/link";
 import { useToast } from "@/components/ui/Toast";
 import { listHeyGenAccountAvatars, registerStandardAvatar } from "./avatarsApi";
 import type { Avatar, StandardAvatar } from "./avatarsTypes";
@@ -14,6 +15,8 @@ import type { Avatar, StandardAvatar } from "./avatarsTypes";
 interface StandardAvatarRegisterCardProps {
   /** 등록 성공 시 — 페이지가 라이브러리를 즉시 다시 불러온다. */
   onRegistered?: (avatar: StandardAvatar) => void;
+  /** 강의 컨텍스트 — 전체 둘러보기 링크에 보존한다. */
+  lectureId?: string | null;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -39,8 +42,12 @@ const MAX_VISIBLE = 48;
  */
 export default function StandardAvatarRegisterCard({
   onRegistered,
+  lectureId,
   t,
 }: StandardAvatarRegisterCardProps) {
+  const browseHref = `/professor/avatars/browse${
+    lectureId ? `?lecture=${lectureId}` : ""
+  }`;
   const { toast } = useToast();
 
   // 계정 아바타 목록(피커). null = 아직 로드 전.
@@ -142,15 +149,9 @@ export default function StandardAvatarRegisterCard({
         <h3 style={titleStyle}>{t("standardRegisterTitle")}</h3>
       </div>
       <p style={descStyle}>{t("standardRegisterDescription")}</p>
-      <a
-        href="https://app.heygen.com/avatars"
-        target="_blank"
-        rel="noopener noreferrer"
-        data-testid="standard-heygen-link"
-        style={heygenLinkStyle}
-      >
-        {t("standardHeygenListLink")} ↗
-      </a>
+      <Link href={browseHref} data-testid="standard-browse-link" style={heygenLinkStyle}>
+        {t("standardBrowseLink")} →
+      </Link>
 
       {/* 계정 아바타 피커 — 이름으로 검색해 본인 스튜디오 아바타를 고른다. */}
       {loadStatus !== "error" && (accountAvatars?.length ?? 0) > 0 && (
