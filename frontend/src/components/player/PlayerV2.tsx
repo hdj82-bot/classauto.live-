@@ -750,29 +750,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
           <aside className={styles.qa} aria-label={t("student.playerV2.qaTitle")}>
             <div className={styles.qaHead}>
               <h3>{t("student.playerV2.qaTitle")}</h3>
-              <span className={styles.askPill}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.4}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                {t("student.playerV2.qaAskPill")}
-              </span>
-            </div>
-            <div className={styles.qaQuota}>
-              <span className={styles.qaQuotaPill}>
-                {t("student.playerV2.qaQuotaEpisode", {
-                  used: String(Math.max(qaMessages.filter((m) => m.role === "user").length, 0)),
-                  limit: "100",
-                })}
-              </span>
-              <span>{t("student.playerV2.qaQuotaDaily", { used: "12", limit: "30" })}</span>
             </div>
 
             <div className={styles.qaBody} aria-live="polite">
@@ -849,25 +826,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               <div ref={qaBottomRef} />
             </div>
 
-            <div className={styles.suggest}>
-              <span className={styles.suggestLabel}>
-                {t("student.playerV2.qaSuggestLabel")}
-              </span>
-              <button
-                type="button"
-                className={styles.chip}
-                onClick={() => sendQuestion("把자문은 언제 사용하나요?")}
-              >
-                把자문은 언제 사용하나요?
-              </button>
-              <button
-                type="button"
-                className={styles.chip}
-                onClick={() => sendQuestion("일반 어순과 어떻게 다른가요?")}
-              >
-                일반 어순과 어떻게 다른가요?
-              </button>
-            </div>
+            {/* 추천 질문: 강의와 무관한 하드코딩 샘플 2개를 제거. 교수자가 사전
+                제작한 예상 질문(seed)을 클릭→Q&A 영상으로 보여주는 연결은 후속
+                작업(공개 seed-questions 엔드포인트 필요)으로 와이어링한다. */}
 
             <form
               className={styles.qaInput}
