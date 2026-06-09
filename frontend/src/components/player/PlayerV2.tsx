@@ -95,9 +95,15 @@ const indexToLetter = (idx: string): string =>
 
 export interface PlayerV2Props {
   slug: string;
+  /**
+   * 교수자 미리보기 모드. 배포 전 결과물을 학생과 동일한 플레이어로 검토한다.
+   * 학생 시청 세션·집중도 추적을 만들지 않아(분석 오염 방지) 슬라이드쇼·자막
+   * 재생만 그대로 확인한다. (소유 교수자는 미발행 강의도 백엔드가 조회 허용.)
+   */
+  preview?: boolean;
 }
 
-export default function PlayerV2({ slug }: PlayerV2Props) {
+export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useI18n();
@@ -184,6 +190,9 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
 
   // ─── 세션 생성 + 첫 환영 메시지 ───
   useEffect(() => {
+    // 미리보기 모드: 학생 시청 세션·집중도를 만들지 않는다(분석 오염 방지).
+    // sessionId 가 null 로 남으면 퀴즈 제출·Q&A·집중도 등은 기존 가드로 no-op.
+    if (preview) return;
     if (!lecture || !user || !durationSec) return;
     (async () => {
       try {
@@ -200,7 +209,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
         /* ignore */
       }
     })();
-  }, [lecture, user, durationSec]);
+  }, [lecture, user, durationSec, preview]);
 
   // ─── 인터스티셜 퀴즈 목록 fetch (타임스탬프 트리거용, 정답·해설 미포함) ───
   useEffect(() => {

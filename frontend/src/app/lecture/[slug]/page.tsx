@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import PlayerV2 from "@/components/player/PlayerV2";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AccessibilityPanel from "@/components/student/accessibility/AccessibilityPanel";
@@ -19,6 +19,9 @@ import AccessibilityPanel from "@/components/student/accessibility/Accessibility
 export default function LectureViewerPage() {
   const params = useParams<{ slug: string | string[] }>();
   const slug = Array.isArray(params?.slug) ? params.slug[0] : params?.slug;
+  // ?preview=1 → 교수자 미리보기(세션·집중도 추적 없이 결과물 검토).
+  const searchParams = useSearchParams();
+  const preview = searchParams.get("preview") === "1";
 
   if (!slug) {
     return null;
@@ -26,7 +29,7 @@ export default function LectureViewerPage() {
 
   return (
     <ProtectedRoute>
-      <PlayerV2 slug={slug} />
+      <PlayerV2 slug={slug} preview={preview} />
       <AccessibilityPanel />
     </ProtectedRoute>
   );

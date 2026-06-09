@@ -6,7 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_current_user, require_professor
+from app.api.deps import (
+    get_current_user,
+    get_current_user_optional,
+    require_professor,
+)
 from app.db.session import SyncSessionLocal, get_db
 from app.models.embedding import SlideEmbedding
 from app.models.user import User
@@ -493,15 +497,19 @@ async def get_lecture_slides(
 async def get_public_lecture(
     slug: str,
     db: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_current_user_optional),
 ):
     """
     인증 없이 접근 가능한 공개 엔드포인트입니다.
 
     - `is_published=true` 인 강의만 반환됩니다.
+    - 단, 토큰이 소유 교수자면 미발행 강의도 반환(배포 전 미리보기).
     - `expires_at`이 현재 시각보다 과거이면 `is_expired=true`, `video_url=null` 로 반환됩니다.
     """
     try:
-        return await get_public_lecture_by_slug(db, slug)
+        return await get_public_lecture_by_slug(
+            db, slug, viewer_id=viewer.id if viewer else None
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
@@ -514,14 +522,18 @@ async def get_public_lecture(
 async def get_lecture_slideshow(
     slug: str,
     db: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_current_user_optional),
 ):
     """학생 플레이어용 슬라이드쇼 데이터(슬라이드 이미지 + 구간 음성 + 타임라인).
 
     본문은 MP4 가 아니라 이 데이터로 클라이언트가 동기 재생한다
     (docs/planning/08-cost-optimization.md). 만료 강의는 빈 슬라이드 목록을 반환한다.
+    소유 교수자는 미발행 강의도 재생 가능(배포 전 미리보기).
     """
     try:
-        return await get_lecture_slideshow_by_slug(db, slug)
+        return await get_lecture_slideshow_by_slug(
+            db, slug, viewer_id=viewer.id if viewer else None
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 

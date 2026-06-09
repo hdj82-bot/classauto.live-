@@ -47,8 +47,10 @@ export interface GenerationModalProps {
   onDevAdd?: (delta: number) => void;
   onDevComplete?: () => void;
   onDevBackground?: () => void;
-  /** 완료 후 "영상 확인하기" 핸들러. */
+  /** 완료 후 "공유하기"(공유·게시 화면 이동) 핸들러. */
   onViewVideo?: () => void;
+  /** 완료 후 "미리보기"(학생과 동일한 플레이어로 결과물 검토) 핸들러. */
+  onPreview?: () => void;
   /** 완료 후 추가 액션 슬롯(예: mp4 다운로드 버튼). done 일 때만 렌더. */
   downloadSlot?: React.ReactNode;
 }
@@ -102,6 +104,7 @@ export default function GenerationModal({
   onDevComplete,
   onDevBackground,
   onViewVideo,
+  onPreview,
   downloadSlot,
 }: GenerationModalProps) {
   const ringFillRef = useRef<SVGCircleElement | null>(null);
@@ -535,22 +538,38 @@ export default function GenerationModal({
           <div style={{ fontSize: 11.5, color: "var(--text-subtle)" }}>
             진행 상황은 자동으로 저장됩니다.
           </div>
-          {done && onViewVideo ? (
+          {done && (onPreview || onViewVideo) ? (
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               {downloadSlot}
-              <PrimaryButton
-                variant="primary"
-                size="md"
-                onClick={onViewVideo}
-                trailingIcon={
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14" />
-                    <path d="M12 5l7 7-7 7" />
-                  </svg>
-                }
-              >
-                공유하기
-              </PrimaryButton>
+              {onPreview && (
+                <PrimaryButton
+                  variant="primary"
+                  size="md"
+                  onClick={onPreview}
+                  trailingIcon={
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                  }
+                >
+                  미리보기
+                </PrimaryButton>
+              )}
+              {onViewVideo && (
+                <PrimaryButton
+                  variant="secondary"
+                  size="md"
+                  onClick={onViewVideo}
+                  trailingIcon={
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14" />
+                      <path d="M12 5l7 7-7 7" />
+                    </svg>
+                  }
+                >
+                  공유하기
+                </PrimaryButton>
+              )}
             </div>
           ) : (
             <span
