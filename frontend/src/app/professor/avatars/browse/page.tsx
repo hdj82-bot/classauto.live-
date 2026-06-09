@@ -12,11 +12,16 @@ import {
   addFavoriteAvatar,
   listFavoriteAvatars,
   listHeyGenAccountAvatars,
+  listHeyGenAvatarGroups,
+  listHeyGenGroupLooks,
   registerStandardAvatar,
   removeFavoriteAvatar,
   setRecentAvatar,
 } from "@/components/professor/avatars/avatarsApi";
-import type { Avatar } from "@/components/professor/avatars/avatarsTypes";
+import type {
+  Avatar,
+  HeyGenAvatarGroup,
+} from "@/components/professor/avatars/avatarsTypes";
 
 /** 백엔드 오류 응답의 detail 문구를 꺼낸다(없으면 null). */
 function backendDetail(err: unknown): string | null {
@@ -44,6 +49,7 @@ export default function AvatarBrowsePage() {
   const backHref = `/professor/avatars${lectureId ? `?lecture=${lectureId}` : ""}`;
 
   const [avatars, setAvatars] = useState<Avatar[]>([]);
+  const [groups, setGroups] = useState<HeyGenAvatarGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [registeringId, setRegisteringId] = useState<string | null>(null);
@@ -52,17 +58,20 @@ export default function AvatarBrowsePage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const list = await listHeyGenAccountAvatars();
-        if (!cancelled) {
-          setAvatars(list);
-          setError(list.length === 0);
-        }
-      } catch {
-        if (!cancelled) setError(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      // Video Avatar(/v2/avatars)와 Photo Avatar 그룹(/v2/avatar_group.list)을 함께
+      // 불러온다. 둘 다 실패해야 에러로 본다(하나만 와도 표시 가능).
+      const [accountRes, groupRes] = await Promise.allSettled([
+        listHeyGenAccountAvatars(),
+        listHeyGenAvatarGroups(),
+      ]);
+      if (cancelled) return;
+      const list =
+        accountRes.status === "fulfilled" ? accountRes.value : [];
+      const grpList = groupRes.status === "fulfilled" ? groupRes.value : [];
+      setAvatars(list);
+      setGroups(grpList);
+      setError(list.length === 0 && grpList.length === 0);
+      setLoading(false);
     })();
     (async () => {
       try {
@@ -95,6 +104,12 @@ export default function AvatarBrowsePage() {
       });
     });
   }, []);
+
+  // 그룹 룩 lazy 로드 — 캐릭터를 열 때 호출(AvatarBrowser 가 결과를 캐시).
+  const handleLoadGroupLooks = useCallback(
+    (groupId: string) => listHeyGenGroupLooks(groupId),
+    [],
+  );
 
   const handleRegister = useCallback(
     async (a: Avatar) => {
@@ -137,6 +152,8 @@ export default function AvatarBrowsePage() {
         />
         <AvatarBrowser
           avatars={avatars}
+          groups={groups}
+          loadGroupLooks={handleLoadGroupLooks}
           loading={loading}
           error={error}
           onRegister={handleRegister}

@@ -8,29 +8,26 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import type { Avatar } from "./avatarsTypes";
+import type { Avatar, HeyGenAvatarGroup } from "./avatarsTypes";
 
 interface AvatarBrowserProps {
+  /** Video Avatar(/v2/avatars) — 이름 앞 토큰으로 캐릭터 그룹핑. */
   avatars: Avatar[];
+  /** Photo Avatar 그룹(/v2/avatar_group.list) — 룩은 열 때 lazy 로드. */
+  groups: HeyGenAvatarGroup[];
+  /** 그룹 룩 lazy 로드 — 카드를 열 때 호출(결과는 캐시됨). */
+  loadGroupLooks: (groupId: string) => Promise<Avatar[]>;
   loading: boolean;
   error: boolean;
-  /** 룩 등록(표준 아바타로). 성공 시 호출자가 네비게이션을 처리한다. */
   onRegister: (avatar: Avatar) => Promise<void> | void;
-  /** 등록 진행 중인 룩의 avatar_id(버튼 로딩 표시). */
   registeringId: string | null;
-  /** 즐겨찾기한 avatar_id 집합. */
   favorites: Set<string>;
-  /** 별표 토글 — (avatar_id, next). 낙관적 갱신은 호출자가 처리. */
   onToggleFavorite: (avatarId: string, next: boolean) => void;
   reducedMotion: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-/**
- * 캐릭터 이름 추출 — "Aditya in Blue blazer"→"Aditya", "Abigail (Upper Body)"→"Abigail",
- * "Adriana Nurse Front"→"Adriana", "Annie"→"Annie". HeyGen /v2/avatars 는 룩을 개별
- * 아바타로 주고 그룹 필드를 안정적으로 안 주므로, 이름 앞 토큰으로 캐릭터를 묶는다.
- */
+/** "Aditya in Blue blazer"→"Aditya" 등 이름 앞 토큰으로 Video Avatar 를 묶는다. */
 function characterOf(name: string): string {
   const trimmed = (name || "").trim();
   let base = trimmed.split(/\s+in\s+/i)[0];
@@ -39,21 +36,28 @@ function characterOf(name: string): string {
   return base || trimmed || "Avatar";
 }
 
-interface CharacterGroup {
-  character: string;
-  looks: Avatar[];
+/** 통합 캐릭터 — Video Avatar 그룹(looks 준비됨) 또는 Photo Avatar 그룹(lazy). */
+interface BrowserChar {
+  key: string;
+  name: string;
+  count: number;
+  preview: Avatar; // 카드 썸네일/호버용 대표
+  videoLooks: Avatar[] | null; // video: 준비된 룩 / group: null(lazy)
+  groupId: string | null;
 }
 
 /**
  * 공개 아바타 브라우저 — HeyGen "공개 아바타" 갤러리 스타일.
  *
- * 모든 공개 아바타를 캐릭터별로 묶어 큰 카드로 보여 주고(룩 수 표시), 카드를 클릭하면
- * 그 캐릭터의 룩을 크게 펼쳐 고른다. 카드/룩에 마우스를 올리면 미리보기 영상이
- * 재생되고, 룩을 클릭하면 원본 크기로 크게(라이트박스) 볼 수 있다. 룩 우상단 별표로
- * 즐겨찾기하고 "즐겨찾기만 보기"로 거른다. "이 아바타 등록"으로 표준 아바타 등록.
+ * Video Avatar(/v2/avatars)는 이름으로 캐릭터를 묶고, Photo Avatar 그룹
+ * (/v2/avatar_group.list, 웹의 "Annie 57룩" 류)은 카드로 함께 노출한다. 그룹은
+ * 룩이 많아 카드를 열 때 그 그룹의 룩을 lazy 로 받는다. 호버 미리보기·별표 즐겨찾기·
+ * "즐겨찾기만 보기"·룩 클릭 확대(라이트박스)·"이 아바타 등록"을 제공한다.
  */
 export default function AvatarBrowser({
   avatars,
+  groups,
+  loadGroupLooks,
   loading,
   error,
   onRegister,
@@ -65,10 +69,12 @@ export default function AvatarBrowser({
 }: AvatarBrowserProps) {
   const [search, setSearch] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
-  const [openCharacter, setOpenCharacter] = useState<string | null>(null);
+  const [openChar, setOpenChar] = useState<BrowserChar | null>(null);
+  const [groupLooks, setGroupLooks] = useState<Record<string, Avatar[]>>({});
+  const [loadingLooks, setLoadingLooks] = useState(false);
   const [zoom, setZoom] = useState<Avatar | null>(null);
 
-  const groups = useMemo<CharacterGroup[]>(() => {
+  const characters = useMemo<BrowserChar[]>(() => {
     const m = new Map<string, Avatar[]>();
     for (const a of avatars) {
       const c = characterOf(a.name);
@@ -76,37 +82,77 @@ export default function AvatarBrowser({
       if (arr) arr.push(a);
       else m.set(c, [a]);
     }
-    return Array.from(m.entries())
-      .map(([character, looks]) => ({ character, looks }))
-      .sort((a, b) => a.character.localeCompare(b.character));
-  }, [avatars]);
+    const videoChars: BrowserChar[] = Array.from(m.entries()).map(
+      ([name, looks]) => ({
+        key: `v:${name}`,
+        name,
+        count: looks.length,
+        preview: looks[0],
+        videoLooks: looks,
+        groupId: null,
+      }),
+    );
+    const groupChars: BrowserChar[] = groups.map((g) => ({
+      key: `g:${g.group_id}`,
+      name: g.name,
+      count: g.num_looks,
+      preview: {
+        id: g.group_id,
+        name: g.name,
+        preview_image_url: g.preview_image_url,
+        preview_video_url: null,
+      },
+      videoLooks: null,
+      groupId: g.group_id,
+    }));
+    return [...videoChars, ...groupChars].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [avatars, groups]);
 
-  const filteredGroups = useMemo<CharacterGroup[]>(() => {
+  // 캐릭터의 알려진 룩(video=준비됨, group=캐시됐으면). 검색/즐겨찾기 필터에 쓴다.
+  const knownLooksOf = useCallback(
+    (c: BrowserChar): Avatar[] | null =>
+      c.videoLooks ?? (c.groupId ? groupLooks[c.groupId] ?? null : null),
+    [groupLooks],
+  );
+
+  const visibleChars = useMemo<BrowserChar[]>(() => {
     const q = search.trim().toLowerCase();
-    const out: CharacterGroup[] = [];
-    for (const g of groups) {
-      let looks = favoritesOnly
-        ? g.looks.filter((l) => favorites.has(l.id))
-        : g.looks;
-      if (q && !g.character.toLowerCase().includes(q)) {
-        looks = looks.filter((l) => l.name.toLowerCase().includes(q));
+    return characters.filter((c) => {
+      if (favoritesOnly) {
+        const known = knownLooksOf(c);
+        // 룩을 아직 모르는 그룹은 즐겨찾기 여부를 알 수 없어 제외(열어 본 그룹만 노출).
+        if (!known || !known.some((l) => favorites.has(l.id))) return false;
       }
-      if (looks.length) out.push({ character: g.character, looks });
-    }
-    return out;
-  }, [groups, search, favoritesOnly, favorites]);
+      if (q) {
+        if (c.name.toLowerCase().includes(q)) return true;
+        const known = knownLooksOf(c);
+        return !!known && known.some((l) => l.name.toLowerCase().includes(q));
+      }
+      return true;
+    });
+  }, [characters, search, favoritesOnly, favorites, knownLooksOf]);
 
-  // 열린 캐릭터의 룩(즐겨찾기만 보기면 즐겨찾기 룩으로 한정).
-  const openGroup = useMemo(() => {
-    const g = groups.find((x) => x.character === openCharacter);
-    if (!g) return null;
-    const looks = favoritesOnly
-      ? g.looks.filter((l) => favorites.has(l.id))
-      : g.looks;
-    return looks.length ? { character: g.character, looks } : null;
-  }, [groups, openCharacter, favoritesOnly, favorites]);
+  const openLooks: Avatar[] | null = openChar
+    ? openChar.videoLooks ??
+      (openChar.groupId ? groupLooks[openChar.groupId] ?? null : [])
+    : null;
 
-  const totalLooks = avatars.length;
+  const handleOpen = useCallback(
+    async (c: BrowserChar) => {
+      setOpenChar(c);
+      if (c.videoLooks || !c.groupId || groupLooks[c.groupId]) return;
+      setLoadingLooks(true);
+      try {
+        const looks = await loadGroupLooks(c.groupId);
+        setGroupLooks((prev) => ({ ...prev, [c.groupId as string]: looks }));
+      } finally {
+        setLoadingLooks(false);
+      }
+    },
+    [groupLooks, loadGroupLooks],
+  );
 
   return (
     <div data-testid="avatar-browser">
@@ -128,7 +174,12 @@ export default function AvatarBrowser({
           {favoritesOnly ? "★" : "☆"} {t("favoritesOnly")}
         </button>
         <span style={countLabel}>
-          {t("browseCount", { characters: groups.length, looks: totalLooks })}
+          {t("browseCount", {
+            characters: characters.length,
+            looks:
+              avatars.length +
+              groups.reduce((s, g) => s + (g.num_looks || 0), 0),
+          })}
         </span>
       </div>
 
@@ -140,39 +191,39 @@ export default function AvatarBrowser({
         <p role="alert" style={errNote} data-testid="browse-error">
           {t("browseError")}
         </p>
-      ) : filteredGroups.length === 0 ? (
-        <p style={note}>
-          {favoritesOnly ? t("browseFavEmpty") : t("browseEmpty")}
-        </p>
+      ) : visibleChars.length === 0 ? (
+        <p style={note}>{favoritesOnly ? t("browseFavEmpty") : t("browseEmpty")}</p>
       ) : (
         <div style={grid} data-testid="browse-grid">
-          {filteredGroups.map((g) => (
+          {visibleChars.map((c) => (
             <button
-              key={g.character}
+              key={c.key}
               type="button"
-              onClick={() => setOpenCharacter(g.character)}
-              data-testid={`browse-character-${g.character}`}
+              onClick={() => handleOpen(c)}
+              data-testid={`browse-character-${c.name}`}
               style={charCard}
             >
-              <HoverPreview avatar={g.looks[0]} reducedMotion={reducedMotion} aspect="3 / 4" />
+              <HoverPreview avatar={c.preview} reducedMotion={reducedMotion} aspect="3 / 4" />
               <span style={charMeta}>
-                <span style={charName} title={g.character}>
-                  {g.character}
+                <span style={charName} title={c.name}>
+                  {c.name}
                 </span>
-                <span style={lookCount}>{t("browseLookCount", { count: g.looks.length })}</span>
+                <span style={lookCount}>{t("browseLookCount", { count: c.count })}</span>
               </span>
             </button>
           ))}
         </div>
       )}
 
-      {/* 캐릭터 룩 상세 — 클릭하면 룩을 크게 펼친다. */}
-      {openGroup && (
-        <CharacterLooksModal
-          group={openGroup}
+      {openChar && (
+        <CharacterModal
+          name={openChar.name}
+          looks={openLooks}
+          loading={loadingLooks && !openLooks}
+          favoritesOnly={favoritesOnly}
           favorites={favorites}
           onToggleFavorite={onToggleFavorite}
-          onClose={() => setOpenCharacter(null)}
+          onClose={() => setOpenChar(null)}
           onRegister={onRegister}
           registeringId={registeringId}
           onZoom={(a) => setZoom(a)}
@@ -181,7 +232,6 @@ export default function AvatarBrowser({
         />
       )}
 
-      {/* 원본 크기 크게 보기(라이트박스) */}
       {zoom && (
         <Lightbox
           avatar={zoom}
@@ -198,10 +248,6 @@ export default function AvatarBrowser({
   );
 }
 
-/**
- * 정지 썸네일 + 마우스 호버 시 미리보기 영상 재생. onClick 이 있으면 클릭 가능(확대),
- * cornerSlot 은 우상단에 겹쳐 그린다(별표 등).
- */
 function HoverPreview({
   avatar,
   reducedMotion,
@@ -279,9 +325,12 @@ function StarButton({
   );
 }
 
-/** 캐릭터의 모든 룩을 크게 펼치는 모달 — 룩 호버 미리보기 + 별표 + 확대 + 등록. */
-function CharacterLooksModal({
-  group,
+/** 캐릭터의 룩을 크게 펼치는 모달 — lazy 로딩 지원. */
+function CharacterModal({
+  name,
+  looks,
+  loading,
+  favoritesOnly,
   favorites,
   onToggleFavorite,
   onClose,
@@ -291,7 +340,10 @@ function CharacterLooksModal({
   reducedMotion,
   t,
 }: {
-  group: CharacterGroup;
+  name: string;
+  looks: Avatar[] | null;
+  loading: boolean;
+  favoritesOnly: boolean;
   favorites: Set<string>;
   onToggleFavorite: (avatarId: string, next: boolean) => void;
   onClose: () => void;
@@ -307,11 +359,20 @@ function CharacterLooksModal({
     },
     [onClose],
   );
+  const shown = useMemo(
+    () =>
+      looks
+        ? favoritesOnly
+          ? looks.filter((l) => favorites.has(l.id))
+          : looks
+        : [],
+    [looks, favoritesOnly, favorites],
+  );
   return (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={group.character}
+      aria-label={name}
       data-testid="browse-looks-modal"
       style={overlay}
       onClick={onClose}
@@ -320,8 +381,10 @@ function CharacterLooksModal({
       <div style={modalCard} onClick={(e) => e.stopPropagation()}>
         <div style={modalHeader}>
           <div>
-            <h3 style={modalTitle}>{group.character}</h3>
-            <p style={modalSub}>{t("browseLookCount", { count: group.looks.length })}</p>
+            <h3 style={modalTitle}>{name}</h3>
+            <p style={modalSub}>
+              {looks ? t("browseLookCount", { count: shown.length }) : t("browseLoading")}
+            </p>
           </div>
           <button
             type="button"
@@ -334,51 +397,56 @@ function CharacterLooksModal({
           </button>
         </div>
 
-        <div style={modalGrid}>
-          {group.looks.map((look) => {
-            const busy = registeringId === look.id;
-            const fav = favorites.has(look.id);
-            return (
-              <div key={look.id} style={lookCard} data-testid={`browse-look-${look.id}`}>
-                <HoverPreview
-                  avatar={look}
-                  reducedMotion={reducedMotion}
-                  aspect="3 / 4"
-                  onClick={() => onZoom(look)}
-                  cornerSlot={
-                    <StarButton
-                      active={fav}
-                      onToggle={() => onToggleFavorite(look.id, !fav)}
-                      t={t}
-                    />
-                  }
-                />
-                <span style={lookName} title={look.name}>
-                  {look.name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onRegister(look)}
-                  disabled={!!registeringId}
-                  data-testid={`browse-register-${look.id}`}
-                  style={{
-                    ...registerBtn,
-                    opacity: registeringId ? 0.5 : 1,
-                    cursor: registeringId ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {busy ? t("browseRegistering") : t("browseRegister")}
-                </button>
-              </div>
-            );
-          })}
-        </div>
+        {loading || !looks ? (
+          <p style={note}>{t("browseLoading")}</p>
+        ) : shown.length === 0 ? (
+          <p style={note}>{t("browseFavEmpty")}</p>
+        ) : (
+          <div style={modalGrid}>
+            {shown.map((look) => {
+              const busy = registeringId === look.id;
+              const fav = favorites.has(look.id);
+              return (
+                <div key={look.id} style={lookCard} data-testid={`browse-look-${look.id}`}>
+                  <HoverPreview
+                    avatar={look}
+                    reducedMotion={reducedMotion}
+                    aspect="3 / 4"
+                    onClick={() => onZoom(look)}
+                    cornerSlot={
+                      <StarButton
+                        active={fav}
+                        onToggle={() => onToggleFavorite(look.id, !fav)}
+                        t={t}
+                      />
+                    }
+                  />
+                  <span style={lookName} title={look.name}>
+                    {look.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onRegister(look)}
+                    disabled={!!registeringId}
+                    data-testid={`browse-register-${look.id}`}
+                    style={{
+                      ...registerBtn,
+                      opacity: registeringId ? 0.5 : 1,
+                      cursor: registeringId ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    {busy ? t("browseRegistering") : t("browseRegister")}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-/** 원본 크기 크게 보기 — 영상(있으면)·이미지를 큰 화면으로, 별표·등록 포함. */
 function Lightbox({
   avatar,
   favorite,

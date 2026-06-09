@@ -235,6 +235,105 @@ async def list_avatars() -> list[dict[str, Any]]:
     ]
 
 
+# ── 아바타 그룹 (Photo Avatar — 웹 "공개 아바타" 캐릭터) ───────────────────────
+#
+# /v2/avatars 는 Video Avatar 만 돌려준다. 웹 갤러리의 "Annie 57룩" 같은 캐릭터는
+# Photo Avatar 그룹이라 별도 API(/v2/avatar_group.list + 그룹별 룩)로만 조회된다.
+# 응답 형태가 버전에 따라 달라 방어적으로 파싱한다(UGC 아바타는 API 미제공).
+
+
+async def list_avatar_groups() -> list[dict[str, Any]]:
+    """공개/계정 아바타 그룹(캐릭터) 목록. ``GET /v2/avatar_group.list``.
+
+    각 항목을 ``{group_id, name, num_looks, preview_image_url}`` 로 정규화한다.
+    실패는 HeyGenError 로 래핑.
+    """
+    if settings.HEYGEN_MOCK:
+        return []
+    url = f"{settings.HEYGEN_BASE_URL}/v2/avatar_group.list"
+    resp = await _request_with_retry("GET", url, timeout=30.0)
+    if resp.status_code != 200:
+        raise HeyGenError(
+            f"HeyGen 아바타 그룹 목록 오류 [{resp.status_code}]: {resp.text[:200]}"
+        )
+    data = resp.json().get("data", {})
+    if isinstance(data, list):
+        groups = data
+    elif isinstance(data, dict):
+        groups = (
+            data.get("avatar_group_list")
+            or data.get("avatar_groups")
+            or data.get("list")
+            or []
+        )
+    else:
+        groups = []
+    out: list[dict[str, Any]] = []
+    for g in groups:
+        if not isinstance(g, dict):
+            continue
+        gid = g.get("id") or g.get("group_id") or g.get("avatar_group_id")
+        if not gid:
+            continue
+        out.append(
+            {
+                "group_id": gid,
+                "name": g.get("name") or g.get("group_name") or "Avatar",
+                "num_looks": g.get("num_looks") or g.get("looks_count") or 0,
+                "preview_image_url": (
+                    g.get("preview_image_url")
+                    or g.get("preview_image")
+                    or g.get("image_url")
+                ),
+            }
+        )
+    return out
+
+
+async def list_avatars_in_group(group_id: str) -> list[dict[str, Any]]:
+    """한 아바타 그룹의 룩 목록. ``GET /v2/avatar_group/{group_id}/avatars``.
+
+    각 룩을 list_avatars 와 동일한 shape(``{avatar_id, avatar_name, gender,
+    preview_image_url, preview_video_url}``)로 정규화해 프론트가 동일하게 소비한다.
+    """
+    if settings.HEYGEN_MOCK:
+        return []
+    url = f"{settings.HEYGEN_BASE_URL}/v2/avatar_group/{group_id}/avatars"
+    resp = await _request_with_retry("GET", url, timeout=30.0)
+    if resp.status_code != 200:
+        raise HeyGenError(
+            f"HeyGen 그룹 룩 목록 오류 [{resp.status_code}]: {resp.text[:200]}"
+        )
+    data = resp.json().get("data", {})
+    if isinstance(data, list):
+        looks = data
+    elif isinstance(data, dict):
+        looks = data.get("avatar_list") or data.get("avatars") or data.get("list") or []
+    else:
+        looks = []
+    out: list[dict[str, Any]] = []
+    for a in looks:
+        if not isinstance(a, dict):
+            continue
+        aid = a.get("avatar_id") or a.get("id")
+        if not aid:
+            continue
+        out.append(
+            {
+                "avatar_id": aid,
+                "avatar_name": a.get("avatar_name") or a.get("name") or "Avatar",
+                "gender": a.get("gender"),
+                "preview_image_url": (
+                    a.get("preview_image_url") or a.get("image_url")
+                ),
+                "preview_video_url": (
+                    a.get("preview_video_url") or a.get("motion_preview_url")
+                ),
+            }
+        )
+    return out
+
+
 # ── Talking Photo (본인 사진 아바타) ─────────────────────────────────────────
 
 

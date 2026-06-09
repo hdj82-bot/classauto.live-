@@ -75,6 +75,17 @@ export interface ProfilePhotoResponse {
   name?: string | null;
 }
 
+/**
+ * GET /api/avatars/heygen-groups 의 단일 항목 — Photo Avatar 그룹(웹 "공개 아바타"
+ * 캐릭터). 룩은 무거워 카드를 열 때 ``.../looks`` 로 lazy 로드한다.
+ */
+export interface HeyGenAvatarGroup {
+  group_id: string;
+  name: string;
+  num_looks: number;
+  preview_image_url: string | null;
+}
+
 /** GET /api/avatars 결과 래퍼. deferred=true 면 fixture 미리보기 모드. */
 export interface AvatarListResult {
   avatars: Avatar[];

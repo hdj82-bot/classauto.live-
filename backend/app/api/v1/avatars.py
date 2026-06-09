@@ -38,6 +38,7 @@ from app.schemas.avatar import (
     AvatarPreviewRequest,
     AvatarPreviewResponse,
     AvatarsResponse,
+    HeyGenAvatarGroup,
     LookGenerateRequest,
     LookGenerateResponse,
     LookItem,
@@ -2034,6 +2035,83 @@ async def list_heygen_account_avatars(
 
     items: list[AvatarMeta] = []
     for a in avatars:
+        avatar_id = a.get("avatar_id")
+        if not avatar_id:
+            continue
+        items.append(
+            AvatarMeta(
+                avatar_id=avatar_id,
+                avatar_name=a.get("avatar_name") or "Avatar",
+                gender=a.get("gender"),
+                preview_image_url=a.get("preview_image_url"),
+                preview_video_url=a.get("preview_video_url"),
+                is_custom=False,
+            )
+        )
+    return items
+
+
+@router.get(
+    "/api/avatars/heygen-groups",
+    response_model=list[HeyGenAvatarGroup],
+    summary="HeyGen 아바타 그룹(Photo Avatar 캐릭터) 목록",
+)
+async def list_heygen_avatar_groups_endpoint(
+    user: User = Depends(require_professor),
+):
+    """웹 "공개 아바타"의 캐릭터(아바타 그룹) 목록. ``/v2/avatars`` 에 없는 Photo
+    Avatar 들이라 별도 API(``/v2/avatar_group.list``)로 조회한다. 룩은 무거워 여기엔
+    메타데이터만 주고, 카드를 열 때 ``.../looks`` 로 lazy 로드한다. MOCK 은 빈 목록."""
+    if settings.HEYGEN_MOCK:
+        return []
+
+    from app.services.pipeline.heygen import HeyGenError, list_avatar_groups
+
+    try:
+        groups = await list_avatar_groups()
+    except HeyGenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"HeyGen 아바타 그룹 목록을 불러오지 못했습니다: {e}",
+        ) from e
+    return [
+        HeyGenAvatarGroup(
+            group_id=g["group_id"],
+            name=g.get("name") or "Avatar",
+            num_looks=int(g.get("num_looks") or 0),
+            preview_image_url=g.get("preview_image_url"),
+        )
+        for g in groups
+        if g.get("group_id")
+    ]
+
+
+@router.get(
+    "/api/avatars/heygen-groups/{group_id}/looks",
+    response_model=list[AvatarMeta],
+    summary="한 아바타 그룹의 룩 목록 (lazy)",
+)
+async def list_heygen_group_looks_endpoint(
+    group_id: str,
+    user: User = Depends(require_professor),
+):
+    """한 아바타 그룹(캐릭터)의 룩들을 ``/v2/avatar_group/{id}/avatars`` 로 조회해
+    ``/v2/avatars`` 와 동일한 AvatarMeta shape 로 반환한다(프론트가 동일 소비).
+    MOCK 은 빈 목록."""
+    if settings.HEYGEN_MOCK:
+        return []
+
+    from app.services.pipeline.heygen import HeyGenError, list_avatars_in_group
+
+    try:
+        looks = await list_avatars_in_group(group_id)
+    except HeyGenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"HeyGen 그룹 룩 목록을 불러오지 못했습니다: {e}",
+        ) from e
+    items: list[AvatarMeta] = []
+    for a in looks:
         avatar_id = a.get("avatar_id")
         if not avatar_id:
             continue
