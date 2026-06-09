@@ -425,16 +425,16 @@ async def rerender_video(
     """이미 제작 완료(done)된 강의를 다시 제작(재생성)한다.
 
     approve 는 pending_review 에서만 가능(아니면 409)이라, 한 번 done 이 된
-    강의는 스크립트·음성을 고쳐도 재제작할 길이 없었다. 이 함수는 done/rendering
-    상태의 강의에 대해 **전 구간을 다시 합성**한다 — 교수자가 명시적으로 누르는
-    동작이라(프론트에서 비용 확인) 텍스트·음성 변경을 모두 반영하도록 전량 재렌더.
+    강의는 스크립트를 고쳐도 재제작할 길이 없었다. 이 함수는 done/rendering
+    상태의 강의에 대해 **변경된 구간만** 다시 합성한다 — 발화 텍스트가 그대로인
+    슬라이드는 기존 음성을 재사용해 **비용이 들지 않는다**(재과금 최소화).
 
     구현: 기존 VideoRender 를 **삭제하지 않고**(비용 로그 cascade 보존) 슬라이드별
-    최신 행을 in-place 로 리셋한다 — audio_url 을 비우면 render_slide 의
-    TTS idempotency(`tts_already_done`) 가 풀려 새로 합성한다. 세그먼트가 늘었으면
-    새 VideoRender 를 만든다. 그 뒤 render_slide 를 다시 enqueue 한다.
+    최신 행과 현재 세그먼트 텍스트를 비교한다. 텍스트가 바뀐(또는 매칭 렌더가
+    없거나 오디오가 없는) 슬라이드만 audio_url 을 비워 render_slide 의 TTS
+    idempotency(`tts_already_done`) 를 풀어 새로 합성한다. 그 뒤 그 항목만 enqueue.
 
-    반환: (video, 재렌더 대상 구간 수).
+    반환: (video, 재렌더 대상 구간 수). 0 이면 변경 없음(상태 불변, 비용 0).
     """
     video = await _get_video_with_script(db, video_id)
     if video is None:
@@ -485,10 +485,10 @@ async def rerender_video(
         if r.slide_number is not None:
             latest_by_slide[int(r.slide_number)] = r
 
-    video.status = VideoStatus.rendering
-    video.script.approved_at = datetime.now(tz=timezone.utc)
-    video.script.approved_by_id = professor_id
-
+    # 변경된 구간만 재합성한다(재과금 최소화). 발화 텍스트가 그대로이고 이미
+    # 완료(ready+오디오)된 슬라이드는 기존 음성을 재사용하므로 비용이 들지 않는다.
+    # 텍스트가 바뀐 슬라이드만 audio_url 을 비워 TTS 를 새로 합성한다.
+    # (주의: 음성/속도 변경은 render 행에 기록이 없어 텍스트 기준으로만 감지한다.)
     to_enqueue: list[tuple[str, str]] = []
     for seg in segments:
         if not isinstance(seg, dict):
@@ -500,6 +500,14 @@ async def rerender_video(
             if slide_number is not None
             else None
         )
+        # 변경 없음 + 이미 완료 → 재사용(비용 0).
+        if (
+            render is not None
+            and render.status == RenderStatus.ready
+            and render.audio_url
+            and (render.script_text or "") == script_text
+        ):
+            continue
         if render is None:
             # 세그먼트가 늘었거나 매칭 렌더 없음 → 새 행.
             render = VideoRender(
@@ -513,13 +521,21 @@ async def rerender_video(
             db.add(render)
             await db.flush()
         else:
-            # in-place 리셋 — audio_url 을 비워 TTS 재합성 유도(텍스트·음성 변경 반영).
+            # in-place 리셋 — audio_url 을 비워 TTS 재합성 유도(변경된 텍스트 반영).
             render.script_text = script_text
             render.audio_url = None
             render.status = RenderStatus.pending
             render.completed_at = None
             render.heygen_job_id = None
         to_enqueue.append((str(render.id), script_text))
+
+    # 바뀐 구간이 없으면 재제작할 게 없다 — 상태도 그대로 두고 0 을 반환한다.
+    if not to_enqueue:
+        return video, 0
+
+    video.status = VideoStatus.rendering
+    video.script.approved_at = datetime.now(tz=timezone.utc)
+    video.script.approved_by_id = professor_id
 
     await db.commit()
     await db.refresh(video)

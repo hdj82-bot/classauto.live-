@@ -914,21 +914,28 @@ export default function StudioWizardPage() {
     // 이미 승인된 강의: approve 는 pending_review 에서만 가능(아니면 409).
     if (approved) {
       // 제작이 끝난(done) 강의에서 다시 누르면 = "다시 제작(재생성)".
-      // 전 구간 TTS 를 재합성하므로 비용이 든다 — 확인 후 진행.
+      // 변경된 슬라이드만 음성을 새로 합성한다(미변경=비용 0) — 확인 후 진행.
       if (genDone && videoId) {
         const ok = window.confirm(
-          "이미 제작된 강의입니다. 다시 제작하면 모든 슬라이드의 음성을 새로 합성합니다(비용 발생). 수정한 스크립트·음성이 반영됩니다. 계속할까요?",
+          "수정한 슬라이드의 음성만 새로 합성합니다(바뀐 부분만 비용 발생, 변경 없으면 비용 0). 계속할까요?",
         );
         if (!ok) return;
         try {
-          // 모달을 진행 상태로 되돌린다(완료 표시 제거).
+          const { data } = await api.post<{ rerendered_segments?: number }>(
+            `/api/videos/${videoId}/rerender`,
+          );
+          // 바뀐 구간이 없으면 재합성할 게 없다 — 모달을 열지 않고 안내만.
+          if (!data?.rerendered_segments) {
+            toast("변경된 내용이 없어 다시 제작할 슬라이드가 없습니다.", "info");
+            return;
+          }
+          // 모달을 진행 상태로 되돌리고(완료 표시 제거), 멈춰 있던 렌더 폴링을
+          // 재가동(nonce 증가 → 폴링 effect 재실행).
           setGenDone(false);
           setGenPercent(0);
           setGenStage(1);
           setGenCompleted(0);
           setGenOpen(true);
-          await api.post(`/api/videos/${videoId}/rerender`);
-          // 완료 시 멈춰 있던 렌더 폴링을 재가동(nonce 증가 → 폴링 effect 재실행).
           setRenderPollNonce((n) => n + 1);
         } catch {
           toast(t("step2.saveError"), "error");
