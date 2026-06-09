@@ -232,6 +232,35 @@ async def approve_video(
     )
 
 
+# ── POST /api/videos/{id}/rerender ───────────────────────────────────────────
+
+@router.post(
+    "/{video_id}/rerender",
+    status_code=status.HTTP_200_OK,
+    summary="제작 완료된 강의 다시 제작(재생성) — 전 구간 재합성 (교수자 전용)",
+)
+async def rerender_video(
+    video_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_professor),
+):
+    """제작 완료(done)된 강의를 다시 제작합니다.
+
+    - `done`/`rendering` → `rendering` 으로 전환하고 전 구간 TTS 를 재합성
+    - 스크립트·음성 수정분이 반영됨. 비용이 다시 발생하므로 프론트에서 확인 후 호출.
+    """
+    video, count = await video_svc.rerender_video(
+        db=db,
+        video_id=video_id,
+        professor_id=current_user.id,
+    )
+    return {
+        "id": str(video.id),
+        "status": video.status.value,
+        "rerendered_segments": count,
+    }
+
+
 # ── POST /api/videos/{id}/archive ────────────────────────────────────────────
 
 @router.post(

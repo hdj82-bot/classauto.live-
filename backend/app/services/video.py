@@ -415,6 +415,123 @@ async def approve_video(
     return video
 
 
+# ── 다시 제작(재생성) ─────────────────────────────────────────────────────────
+
+async def rerender_video(
+    db: AsyncSession,
+    video_id: uuid.UUID,
+    professor_id: uuid.UUID,
+) -> tuple[Video, int]:
+    """이미 제작 완료(done)된 강의를 다시 제작(재생성)한다.
+
+    approve 는 pending_review 에서만 가능(아니면 409)이라, 한 번 done 이 된
+    강의는 스크립트·음성을 고쳐도 재제작할 길이 없었다. 이 함수는 done/rendering
+    상태의 강의에 대해 **전 구간을 다시 합성**한다 — 교수자가 명시적으로 누르는
+    동작이라(프론트에서 비용 확인) 텍스트·음성 변경을 모두 반영하도록 전량 재렌더.
+
+    구현: 기존 VideoRender 를 **삭제하지 않고**(비용 로그 cascade 보존) 슬라이드별
+    최신 행을 in-place 로 리셋한다 — audio_url 을 비우면 render_slide 의
+    TTS idempotency(`tts_already_done`) 가 풀려 새로 합성한다. 세그먼트가 늘었으면
+    새 VideoRender 를 만든다. 그 뒤 render_slide 를 다시 enqueue 한다.
+
+    반환: (video, 재렌더 대상 구간 수).
+    """
+    video = await _get_video_with_script(db, video_id)
+    if video is None:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="영상을 찾을 수 없습니다.",
+        )
+
+    await assert_professor_owns_video(db, video, professor_id)
+
+    # done(완료) 또는 rendering(진행 중 재시도) 에서만 허용. pending_review 는
+    # 일반 approve 경로를 쓰면 된다.
+    if video.status not in (VideoStatus.done, VideoStatus.rendering):
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"'{video.status.value}' 상태에서는 다시 제작할 수 없습니다. 제작 완료(done) 강의에서만 가능합니다.",
+        )
+
+    if video.script is None or not video.script.segments:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="스크립트가 비어 있습니다.",
+        )
+
+    from app.models.lecture import Lecture  # noqa: PLC0415
+    from app.models.user import User  # noqa: PLC0415
+    from app.models.video_render import RenderStatus, VideoRender  # noqa: PLC0415
+
+    segments = video.script.segments
+    lecture = await db.get(Lecture, video.lecture_id)
+    avatar_id = (lecture.avatar_id if lecture else None) or ""
+    if not avatar_id:
+        professor = await db.get(User, professor_id)
+        if professor and professor.photo_avatar_default_look_id:
+            avatar_id = professor.photo_avatar_default_look_id
+
+    # 기존 렌더 — 슬라이드 번호별 최신 1개(created_at 오름차순이므로 마지막이 최신).
+    existing = await db.execute(
+        select(VideoRender)
+        .where(VideoRender.lecture_id == video.lecture_id)
+        .order_by(VideoRender.created_at)
+    )
+    latest_by_slide: dict[int, VideoRender] = {}
+    for r in existing.scalars().all():
+        if r.slide_number is not None:
+            latest_by_slide[int(r.slide_number)] = r
+
+    video.status = VideoStatus.rendering
+    video.script.approved_at = datetime.now(tz=timezone.utc)
+    video.script.approved_by_id = professor_id
+
+    to_enqueue: list[tuple[str, str]] = []
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        script_text = seg.get("text") or ""
+        slide_number = seg.get("slide_index")
+        render = (
+            latest_by_slide.get(int(slide_number))
+            if slide_number is not None
+            else None
+        )
+        if render is None:
+            # 세그먼트가 늘었거나 매칭 렌더 없음 → 새 행.
+            render = VideoRender(
+                lecture_id=video.lecture_id,
+                instructor_id=professor_id,
+                avatar_id=avatar_id,
+                tts_provider="elevenlabs",
+                script_text=script_text,
+                slide_number=slide_number,
+            )
+            db.add(render)
+            await db.flush()
+        else:
+            # in-place 리셋 — audio_url 을 비워 TTS 재합성 유도(텍스트·음성 변경 반영).
+            render.script_text = script_text
+            render.audio_url = None
+            render.status = RenderStatus.pending
+            render.completed_at = None
+            render.heygen_job_id = None
+        to_enqueue.append((str(render.id), script_text))
+
+    await db.commit()
+    await db.refresh(video)
+
+    from app.tasks.render import render_slide  # noqa: PLC0415
+
+    for rid, text in to_enqueue:
+        render_slide.delay(rid, text, str(professor_id))
+
+    return video, len(to_enqueue)
+
+
 # ── 보관 처리 ─────────────────────────────────────────────────────────────────
 
 async def archive_video(
