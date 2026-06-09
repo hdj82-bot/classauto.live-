@@ -884,4 +884,39 @@ export async function deleteStandardAvatar(
   }
 }
 
+// ── 아바타 즐겨찾기 (GET/PUT/DELETE /api/avatars/favorites) ─────────────────────
+//
+// 공개 아바타 브라우저의 별표·"즐겨찾기만 보기". voice 즐겨찾기와 같은 계약.
+
+/** GET /api/avatars/favorites — 즐겨찾기한 avatar_id 목록. deferred 면 빈 목록. */
+export async function listFavoriteAvatars(): Promise<string[]> {
+  try {
+    const { data } = await api.get<string[]>("/api/avatars/favorites");
+    return data ?? [];
+  } catch (err) {
+    if (isDeferredError(err)) return [];
+    throw err;
+  }
+}
+
+/** PUT /api/avatars/{id}/favorite — 즐겨찾기 추가. deferred 면 멱등 성공(무시). */
+export async function addFavoriteAvatar(avatarId: string): Promise<void> {
+  try {
+    await api.put(`/api/avatars/${encodeURIComponent(avatarId)}/favorite`);
+  } catch (err) {
+    if (isDeferredError(err)) return;
+    throw err;
+  }
+}
+
+/** DELETE /api/avatars/{id}/favorite — 즐겨찾기 해제. deferred 면 멱등 성공(무시). */
+export async function removeFavoriteAvatar(avatarId: string): Promise<void> {
+  try {
+    await api.delete(`/api/avatars/${encodeURIComponent(avatarId)}/favorite`);
+  } catch (err) {
+    if (isDeferredError(err)) return;
+    throw err;
+  }
+}
+
 export const __fixtures = { FIXTURE_AVATARS };

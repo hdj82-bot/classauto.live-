@@ -815,6 +815,48 @@ async def test_delete_my_voice_clears_fields(client, professor, db):
 
 
 @pytest.mark.asyncio
+async def test_avatar_favorites_add_list_remove(client, professor):
+    # 추가 → 목록에 노출(멱등) → 해제 → 빈 목록.
+    empty = await client.get(
+        "/api/avatars/favorites", headers=make_auth_header(professor)
+    )
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    r1 = await client.put(
+        "/api/avatars/av_fav_1/favorite", headers=make_auth_header(professor)
+    )
+    assert r1.status_code == 204
+    # 멱등 — 다시 추가해도 204, 중복 없음.
+    r2 = await client.put(
+        "/api/avatars/av_fav_1/favorite", headers=make_auth_header(professor)
+    )
+    assert r2.status_code == 204
+
+    listed = await client.get(
+        "/api/avatars/favorites", headers=make_auth_header(professor)
+    )
+    assert listed.json() == ["av_fav_1"]
+
+    rm = await client.request(
+        "DELETE", "/api/avatars/av_fav_1/favorite", headers=make_auth_header(professor)
+    )
+    assert rm.status_code == 204
+    after = await client.get(
+        "/api/avatars/favorites", headers=make_auth_header(professor)
+    )
+    assert after.json() == []
+
+
+@pytest.mark.asyncio
+async def test_avatar_favorites_requires_professor(client, student):
+    resp = await client.get(
+        "/api/avatars/favorites", headers=make_auth_header(student)
+    )
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
 async def test_list_heygen_account_avatars(client, professor):
     # 표준 아바타 등록 피커용 — 큐레이션 없이 HeyGen 전체 목록을 그대로 반환한다.
     with _patch_list():

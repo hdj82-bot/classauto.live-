@@ -243,6 +243,7 @@
     "browseLoading": "공개 아바타 목록을 불러오는 중...",
     "browseError": "공개 아바타 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
     "browseEmpty": "표시할 아바타가 없습니다.",
+    "browseFavEmpty": "즐겨찾기한 아바타가 없습니다. 룩 카드의 ★로 추가해 보세요.",
     "browseLookCount": "룩 {count}개",
     "browseClose": "닫기",
     "browseRegister": "이 아바타 등록",

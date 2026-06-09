@@ -8,13 +8,25 @@ import asyncio
 import logging
 import uuid
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy import func, select
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Path,
+    Response,
+    UploadFile,
+    status,
+)
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_professor
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.avatar_favorite import AvatarFavorite
 from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.photo_avatar import LookStatus, PhotoAvatarLook
@@ -2036,6 +2048,69 @@ async def list_heygen_account_avatars(
             )
         )
     return items
+
+
+# ── 아바타 즐겨찾기 (공개 아바타 브라우저) ──────────────────────────────────────
+#
+# 교수자별 즐겨찾기 HeyGen 아바타(avatar_id). voice_favorites 와 같은 패턴.
+# 공개 아바타 브라우저가 별표로 토글하고 "즐겨찾기만 보기"로 필터한다.
+
+
+@router.get(
+    "/api/avatars/favorites",
+    response_model=list[str],
+    summary="즐겨찾기한 아바타 id 목록",
+)
+async def list_avatar_favorites(
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """교수자가 즐겨찾기한 아바타 avatar_id 목록을 반환한다(맨 배열)."""
+    rows = (
+        await db.execute(
+            select(AvatarFavorite.avatar_id).where(
+                AvatarFavorite.user_id == user.id
+            )
+        )
+    ).scalars().all()
+    return list(rows)
+
+
+@router.put(
+    "/api/avatars/{avatar_id}/favorite",
+    status_code=204,
+    summary="아바타 즐겨찾기 추가",
+)
+async def add_avatar_favorite(
+    avatar_id: str = Path(..., max_length=255),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    existing = await db.get(AvatarFavorite, (user.id, avatar_id))
+    if existing is None:
+        db.add(AvatarFavorite(user_id=user.id, avatar_id=avatar_id))
+        await db.commit()
+    return Response(status_code=204)
+
+
+@router.delete(
+    "/api/avatars/{avatar_id}/favorite",
+    status_code=204,
+    summary="아바타 즐겨찾기 해제",
+)
+async def remove_avatar_favorite(
+    avatar_id: str = Path(..., max_length=255),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    await db.execute(
+        delete(AvatarFavorite).where(
+            AvatarFavorite.user_id == user.id,
+            AvatarFavorite.avatar_id == avatar_id,
+        )
+    )
+    await db.commit()
+    return Response(status_code=204)
 
 
 @router.post(
