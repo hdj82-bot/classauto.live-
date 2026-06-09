@@ -9,8 +9,11 @@ import { useAvatarsI18n } from "@/components/professor/avatars/useAvatarsI18n";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
 import AvatarBrowser from "@/components/professor/avatars/AvatarBrowser";
 import {
+  addFavoriteAvatar,
+  listFavoriteAvatars,
   listHeyGenAccountAvatars,
   registerStandardAvatar,
+  removeFavoriteAvatar,
   setRecentAvatar,
 } from "@/components/professor/avatars/avatarsApi";
 import type { Avatar } from "@/components/professor/avatars/avatarsTypes";
@@ -44,6 +47,7 @@ export default function AvatarBrowsePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [registeringId, setRegisteringId] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -60,9 +64,36 @@ export default function AvatarBrowsePage() {
         if (!cancelled) setLoading(false);
       }
     })();
+    (async () => {
+      try {
+        const favs = await listFavoriteAvatars();
+        if (!cancelled) setFavorites(new Set(favs));
+      } catch {
+        /* 즐겨찾기 로드 실패는 무시(빈 집합) */
+      }
+    })();
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // 별표 토글 — 낙관적으로 갱신하고 서버에 반영(실패 시 되돌린다).
+  const handleToggleFavorite = useCallback((avatarId: string, next: boolean) => {
+    setFavorites((prev) => {
+      const s = new Set(prev);
+      if (next) s.add(avatarId);
+      else s.delete(avatarId);
+      return s;
+    });
+    const op = next ? addFavoriteAvatar : removeFavoriteAvatar;
+    void op(avatarId).catch(() => {
+      setFavorites((prev) => {
+        const s = new Set(prev);
+        if (next) s.delete(avatarId);
+        else s.add(avatarId);
+        return s;
+      });
+    });
   }, []);
 
   const handleRegister = useCallback(
@@ -110,6 +141,8 @@ export default function AvatarBrowsePage() {
           error={error}
           onRegister={handleRegister}
           registeringId={registeringId}
+          favorites={favorites}
+          onToggleFavorite={handleToggleFavorite}
           reducedMotion={reducedMotion}
           t={t}
         />

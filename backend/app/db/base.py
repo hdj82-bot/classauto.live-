@@ -10,5 +10,5 @@ from app.models import (  # noqa: F401, E402
     user, course, lecture, session, question, response, video,
     video_render, embedding, qa_log, qa_answer_cache, cost_log, subscription,
     translation, assessment_result, folder, voice_favorite,
-    photo_avatar, saved_avatar, standard_avatar,
+    photo_avatar, saved_avatar, standard_avatar, avatar_favorite,
 )

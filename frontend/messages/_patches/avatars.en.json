@@ -243,6 +243,7 @@
     "browseLoading": "Loading public avatars...",
     "browseError": "Couldn't load public avatars. Please try again shortly.",
     "browseEmpty": "No avatars to show.",
+    "browseFavEmpty": "No favorited avatars yet. Add some with the ★ on a look card.",
     "browseLookCount": "{count} looks",
     "browseClose": "Close",
     "browseRegister": "Register this avatar",
