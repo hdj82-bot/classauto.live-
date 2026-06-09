@@ -43,8 +43,13 @@ interface AvatarScriptTestProps {
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-// 진행률(의사) 추정 기준 — 실제 HeyGen 렌더는 보통 30~90초. %는 안심 신호용.
-const ESTIMATED_RENDER_SECONDS = 75;
+// 진행률(의사) 추정 기준 — %는 안심 신호용.
+//  - 포토 아바타(Talking Photo): 보통 30~90초.
+//  - 표준 아바타(Video Avatar): HeyGen 렌더가 훨씬 길어 보통 2~4분. 75초로 잡으면
+//    95%에 일찍 도달해 "무한 로딩"처럼 보였다(2026-06-09 사용자 피드백: ~200초).
+//    종류별 추정치를 달리해 막대가 실제 시간에 맞춰 천천히 차도록 한다.
+const ESTIMATED_RENDER_SECONDS_PHOTO = 75;
+const ESTIMATED_RENDER_SECONDS_STANDARD = 210;
 
 /**
  * "아바타 제작 — 성능 확인" 작업대.
@@ -135,9 +140,14 @@ export default function AvatarScriptTest({
       clearInterval(id);
     };
   }, [processing]);
+  // 표준 아바타(Video Avatar)는 렌더가 길어 추정치를 크게 잡는다(막대가 천천히 참).
+  const isStandard = look?.kind === "standard";
+  const estimatedSeconds = isStandard
+    ? ESTIMATED_RENDER_SECONDS_STANDARD
+    : ESTIMATED_RENDER_SECONDS_PHOTO;
   const percent = Math.min(
     95,
-    Math.round((elapsed / ESTIMATED_RENDER_SECONDS) * 100),
+    Math.round((elapsed / estimatedSeconds) * 100),
   );
 
   if (!enabled || !look) return null;
@@ -185,7 +195,13 @@ export default function AvatarScriptTest({
               <div style={progressLabelStyle}>
                 {percent}% · {elapsed}s
               </div>
-              <div style={progressHintStyle}>{t("scriptTestRenderingHint")}</div>
+              <div style={progressHintStyle}>
+                {t(
+                  isStandard
+                    ? "scriptTestRenderingHintStandard"
+                    : "scriptTestRenderingHint",
+                )}
+              </div>
             </div>
           )}
         </div>

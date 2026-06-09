@@ -74,8 +74,6 @@ export default function AvatarViewerModal({
     }
   };
 
-  const src = avatar.preview_image_url ?? "";
-
   return (
     <div
       role="dialog"
@@ -143,16 +141,25 @@ export default function AvatarViewerModal({
 
         <div style={bodyStyle}>
           <div style={frameStyle}>
-            {src ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={src} alt={avatar.name} style={imgStyle} />
-            ) : avatar.preview_video_url ? (
+            {/* 미리보기 영상이 있으면 바로 재생한다("클릭하면 크게 재생"). 자동재생은
+                브라우저 정책상 muted 로만 가능 — 컨트롤로 소리를 켤 수 있다. 영상이
+                없을 때만 정지 이미지로 폴백한다. 이전엔 이미지가 있으면 영상이 있어도
+                정지 이미지를 보여 줘 "재생"이 되지 않았다(2026-06-09 사용자 피드백). */}
+            {avatar.preview_video_url ? (
               <video
                 src={avatar.preview_video_url}
+                poster={avatar.preview_image_url ?? undefined}
                 controls
+                autoPlay
+                muted
+                loop
                 playsInline
+                aria-label={avatar.name}
                 style={imgStyle}
               />
+            ) : avatar.preview_image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatar.preview_image_url} alt={avatar.name} style={imgStyle} />
             ) : (
               <span style={{ color: "var(--text-faint)", fontSize: 13 }}>
                 {t("viewerNoImage")}

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -55,6 +56,8 @@ export default function SavedAvatarCard({
 }: SavedAvatarCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(avatar.name);
+  // 크게 보기(라이트박스) — ready 영상을 큰 화면에서 소리와 함께 재생한다.
+  const [zoom, setZoom] = useState(false);
 
   // 우상단 ⋮ 메뉴(이름 변경·삭제) — AvatarCard 와 동일 패턴.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -111,22 +114,34 @@ export default function SavedAvatarCard({
       style={{ position: "relative" }}
     >
       <div style={cardStyle}>
-        {/* 미디어 — ready 루프 영상 / 룩 썸네일 / 이니셜 */}
+        {/* 미디어 — ready 루프 영상(클릭하면 크게 재생) / 룩 썸네일 / 이니셜 */}
         <div style={mediaWrapStyle}>
           {ready ? (
-            <video
-              key={avatar.preview_video_url ?? avatar.id}
-              data-testid={`saved-avatar-video-${avatar.id}`}
-              src={avatar.preview_video_url ?? undefined}
-              poster={lookImageUrl ?? undefined}
-              muted
-              loop
-              playsInline
-              autoPlay={!reducedMotion}
-              preload="metadata"
-              aria-label={avatar.name}
-              style={fillStyle}
-            />
+            <button
+              type="button"
+              onClick={() => setZoom(true)}
+              aria-label={t("playPreviewLarge")}
+              data-testid={`saved-avatar-open-${avatar.id}`}
+              style={mediaButtonStyle}
+            >
+              <video
+                key={avatar.preview_video_url ?? avatar.id}
+                data-testid={`saved-avatar-video-${avatar.id}`}
+                src={avatar.preview_video_url ?? undefined}
+                poster={lookImageUrl ?? undefined}
+                muted
+                loop
+                playsInline
+                autoPlay={!reducedMotion}
+                preload="metadata"
+                aria-hidden="true"
+                style={fillStyle}
+              />
+              {/* 클릭 안내 — 카드 영상은 무음 미리보기, 클릭하면 소리와 함께 크게 재생 */}
+              <span style={readyBadgeStyle}>
+                <span aria-hidden="true">▶</span> {t("playPreviewLarge")}
+              </span>
+            </button>
           ) : lookImageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -150,13 +165,6 @@ export default function SavedAvatarCard({
               <span style={spinnerStyle} aria-hidden="true" />
               <span style={overlayTextStyle}>{t("previewProcessing")}</span>
             </div>
-          )}
-
-          {/* ready 배지 — "미리보기" */}
-          {ready && (
-            <span style={readyBadgeStyle}>
-              <span aria-hidden="true">▶</span> {t("previewReady")}
-            </span>
           )}
         </div>
 
@@ -285,6 +293,85 @@ export default function SavedAvatarCard({
           </div>
         )}
       </div>
+
+      {/* 크게 보기 — ready 영상을 큰 화면에서 소리와 함께 재생(룩 + 음성 확인). */}
+      {zoom && ready && (
+        <SavedAvatarLightbox
+          name={avatar.name}
+          videoUrl={avatar.preview_video_url ?? ""}
+          poster={lookImageUrl ?? undefined}
+          voiceName={voiceName || t("savedDefaultVoice")}
+          onClose={() => setZoom(false)}
+          t={t}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 저장된 아바타의 미리보기 영상을 큰 화면에서 소리와 함께 재생하는 모달. */
+function SavedAvatarLightbox({
+  name,
+  videoUrl,
+  poster,
+  voiceName,
+  onClose,
+  t,
+}: {
+  name: string;
+  videoUrl: string;
+  poster?: string;
+  voiceName: string;
+  onClose: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  const onKey = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === "Escape") onClose();
+    },
+    [onClose],
+  );
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={name}
+      data-testid="saved-avatar-lightbox"
+      style={lightboxOverlayStyle}
+      onClick={onClose}
+      onKeyDown={onKey}
+    >
+      <div style={lightboxInnerStyle} onClick={(e) => e.stopPropagation()}>
+        <div style={lightboxMediaStyle}>
+          {/* 모달에선 컨트롤 + 자동재생(소리 포함) — 클릭이 사용자 제스처라 재생 허용. */}
+          <video
+            src={videoUrl}
+            poster={poster}
+            controls
+            autoPlay
+            playsInline
+            style={lightboxFillStyle}
+          />
+        </div>
+        <div style={lightboxBarStyle}>
+          <span style={lightboxNameStyle} title={name}>
+            {name}
+            <span style={lightboxVoiceStyle}>
+              {" "}
+              · <span aria-hidden="true">🔊</span> {voiceName}
+            </span>
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("viewerClose")}
+            data-testid="saved-avatar-lightbox-close"
+            style={lightboxCloseStyle}
+          >
+            ✕
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -316,6 +403,19 @@ const mediaWrapStyle: CSSProperties = {
   aspectRatio: "16 / 9",
   background: "var(--bg-subtle)",
   overflow: "hidden",
+};
+
+const mediaButtonStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  width: "100%",
+  height: "100%",
+  padding: 0,
+  border: "none",
+  background: "transparent",
+  cursor: "zoom-in",
+  display: "block",
+  fontFamily: "inherit",
 };
 
 const fillStyle: CSSProperties = {
@@ -526,4 +626,80 @@ const menuItemStyle: CSSProperties = {
   cursor: "pointer",
   fontFamily: "inherit",
   whiteSpace: "nowrap",
+};
+
+const lightboxOverlayStyle: CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  zIndex: 1000,
+  background: "rgba(10,10,10,0.72)",
+  backdropFilter: "blur(3px)",
+  display: "grid",
+  placeItems: "center",
+  padding: 24,
+};
+
+const lightboxInnerStyle: CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: 12,
+  maxWidth: "min(92vw, 1100px)",
+  maxHeight: "92vh",
+};
+
+const lightboxMediaStyle: CSSProperties = {
+  position: "relative",
+  display: "grid",
+  placeItems: "center",
+  maxHeight: "80vh",
+  borderRadius: 14,
+  overflow: "hidden",
+  background: "#000",
+};
+
+const lightboxFillStyle: CSSProperties = {
+  maxWidth: "92vw",
+  maxHeight: "80vh",
+  width: "auto",
+  height: "auto",
+  objectFit: "contain",
+  display: "block",
+};
+
+const lightboxBarStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap",
+  padding: "4px 2px",
+};
+
+const lightboxNameStyle: CSSProperties = {
+  fontSize: 15,
+  fontWeight: 700,
+  color: "#fff",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  minWidth: 0,
+};
+
+const lightboxVoiceStyle: CSSProperties = {
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: "rgba(255,255,255,0.75)",
+};
+
+const lightboxCloseStyle: CSSProperties = {
+  flexShrink: 0,
+  width: 38,
+  height: 38,
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.3)",
+  background: "rgba(255,255,255,0.15)",
+  color: "#fff",
+  fontSize: 15,
+  cursor: "pointer",
+  fontFamily: "inherit",
 };
