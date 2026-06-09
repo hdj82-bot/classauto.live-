@@ -108,19 +108,34 @@ async def get_lecture_or_404(db: AsyncSession, lecture_id: uuid.UUID) -> Lecture
 
 
 async def get_public_lecture_by_slug(
-    db: AsyncSession, slug: str
+    db: AsyncSession, slug: str, viewer_id: uuid.UUID | None = None
 ) -> LecturePublicResponse:
     """공개 강의 조회 + R2W2: professor_name / course_name / duration_sec 채움.
 
     Lecture → Course → User(instructor) 체인을 ``selectinload`` 로 함께 로드하고,
     별도 쿼리로 가장 최근에 길이 메타가 채워진 Video.duration_seconds 를 끌어
     온다. 어느 한 쪽이라도 없으면 해당 필드는 ``None`` (frontend 가 안전하게 무시).
+
+    ``viewer_id`` 가 소유 교수자면 **미발행 강의도** 조회 가능(배포 전 미리보기).
+    익명·타인은 종전처럼 ``is_published=True`` 만 보인다.
     """
-    result = await db.execute(
+    from sqlalchemy import or_  # noqa: PLC0415
+
+    stmt = (
         select(Lecture)
         .options(selectinload(Lecture.course).selectinload(Course.instructor))
-        .where(Lecture.slug == slug, Lecture.is_published == True)  # noqa: E712
+        .where(Lecture.slug == slug)
     )
+    if viewer_id is not None:
+        stmt = stmt.join(Course, Lecture.course_id == Course.id).where(
+            or_(
+                Lecture.is_published == True,  # noqa: E712
+                Course.instructor_id == viewer_id,
+            )
+        )
+    else:
+        stmt = stmt.where(Lecture.is_published == True)  # noqa: E712
+    result = await db.execute(stmt)
     lecture = result.scalar_one_or_none()
     if not lecture:
         raise ValueError("강의를 찾을 수 없습니다.")
@@ -152,7 +167,9 @@ async def get_public_lecture_by_slug(
     )
 
 
-async def get_lecture_slideshow_by_slug(db: AsyncSession, slug: str):
+async def get_lecture_slideshow_by_slug(
+    db: AsyncSession, slug: str, viewer_id: uuid.UUID | None = None
+):
     """공개 강의의 클라이언트 슬라이드쇼 재생 데이터를 반환한다.
 
     본문은 MP4 가 아니라 슬라이드 이미지 + 구간 TTS 음성 + 타임라인으로 재생된다
@@ -160,20 +177,30 @@ async def get_lecture_slideshow_by_slug(db: AsyncSession, slug: str):
     슬라이드 PNG(SlideEmbedding)와 구간 음성(VideoRender.audio_url)을 슬라이드 번호로
     합쳐 내려준다. 만료 강의는 빈 슬라이드 목록을 반환한다.
 
+    ``viewer_id`` 가 소유 교수자면 **미발행 강의도** 재생 가능(배포 전 미리보기).
+
     슬라이드 번호 규약:
     - segment.slide_index / VideoRender.slide_number = 0-based(approve_video 에서 동일).
     - SlideEmbedding.slide_number = 1-based(parser.py) → slide_index + 1.
     """
+    from sqlalchemy import or_  # noqa: PLC0415
+
     from app.models.embedding import SlideEmbedding
     from app.models.video_render import RenderStatus, VideoRender
     from app.schemas.lecture import SlideshowResponse, SlideshowSlide
     from app.services.pipeline.s3 import presign_stored_s3_url
 
-    result = await db.execute(
-        select(Lecture).where(
-            Lecture.slug == slug, Lecture.is_published == True  # noqa: E712
+    stmt = select(Lecture).where(Lecture.slug == slug)
+    if viewer_id is not None:
+        stmt = stmt.join(Course, Lecture.course_id == Course.id).where(
+            or_(
+                Lecture.is_published == True,  # noqa: E712
+                Course.instructor_id == viewer_id,
+            )
         )
-    )
+    else:
+        stmt = stmt.where(Lecture.is_published == True)  # noqa: E712
+    result = await db.execute(stmt)
     lecture = result.scalar_one_or_none()
     if not lecture:
         raise ValueError("강의를 찾을 수 없습니다.")

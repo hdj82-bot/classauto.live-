@@ -1308,6 +1308,11 @@ export default function StudioWizardPage() {
         done={genDone}
         onBackground={() => setGenOpen(false)}
         onViewVideo={handleViewVideo}
+        onPreview={() => {
+          // 학생과 동일한 플레이어로 결과물 검토(미발행이어도 소유 교수자는 조회 가능).
+          // 새 탭으로 열어 studio 편집 화면을 유지한다.
+          if (lecture?.slug) window.open(`/lecture/${lecture.slug}?preview=1`, "_blank");
+        }}
         // DEV 시뮬레이션 버튼은 로컬 개발에서만 노출 — 프로덕션 빌드에서는
         // process.env.NODE_ENV 가 "production" 으로 정적 치환돼 props 자체가
         // 안 넘어가므로 모달의 DEV 컨트롤 박스가 렌더되지 않는다.
