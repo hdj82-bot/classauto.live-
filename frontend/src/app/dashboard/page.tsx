@@ -103,7 +103,7 @@ export default function DashboardPage() {
                       <button
                         key={lec.id}
                         type="button"
-                        onClick={() => user.role === "student" ? router.push(`/lecture/${lec.slug}`) : router.push(`/professor/lecture/${lec.id}`)}
+                        onClick={() => user.role === "student" ? router.push(`/lecture/${lec.slug}`) : router.push(`/professor/studio/${lec.id}`)}
                         aria-label={`${lec.title} - ${lec.is_published ? t("common.published") : t("common.unpublished")}`}
                         className="text-left w-full border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-white dark:bg-gray-900 hover:border-indigo-300 dark:hover:border-indigo-500 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 transition group">
                         <div className="relative aspect-video bg-gray-100 dark:bg-gray-800 rounded-lg mb-3 flex items-center justify-center overflow-hidden">

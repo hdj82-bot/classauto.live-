@@ -181,14 +181,11 @@ export default function ProfessorDashboardPage() {
     (lectureId: string) => {
       const lec = lectures.find((l) => l.id === lectureId);
       if (!lec) return;
-      // #185·#184 합의: 발행 안 됐고 영상도 없으면 = 제작 중단/미완 →
-      // Studio 마법사로 이어서 제작 진입. 영상이 있으면 강의 편집 페이지.
-      const inProgress = !lec.is_published && !lec.video_url;
-      if (inProgress) {
-        router.push(`/professor/studio/${lectureId}`);
-      } else {
-        router.push(`/professor/lecture/${lectureId}`);
-      }
+      // 편집 진입점을 studio 하나로 통일. 이전에는 발행/렌더 완료 강의를
+      // 별도의 단순 에디터(/professor/lecture/[id])로 보냈으나, 그 탓에
+      // PPT 미리보기·번역·Q&A 아바타 패널이 "사라진" 것처럼 보였다. studio
+      // 는 승인/렌더 완료 상태도 표시하므로(재승인만 차단) 모두 studio 로 보낸다.
+      router.push(`/professor/studio/${lectureId}`);
     },
     [lectures, router],
   );

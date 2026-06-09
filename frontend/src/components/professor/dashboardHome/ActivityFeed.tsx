@@ -106,7 +106,7 @@ export default function ActivityFeed({ activity }: ActivityFeedProps) {
               </span>
             )}
             <Link
-              href={`/professor/lecture/${item.lectureId}`}
+              href={`/professor/studio/${item.lectureId}`}
               className="self-center text-[11px] text-indigo-600 hover:text-indigo-700"
             >
               {t("activity.viewSource")}
