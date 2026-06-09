@@ -809,3 +809,142 @@ async def test_delete_my_voice_clears_fields(client, professor, db):
     await db.refresh(professor)
     assert professor.cloned_voice_id is None
     assert professor.cloned_voice_sample_url is None
+
+
+# ── 표준 아바타 등록 (GET/POST/PATCH/DELETE /api/avatars/me/standard) ───────────
+
+
+@pytest.mark.asyncio
+async def test_register_standard_avatar_validates_and_persists(client, professor):
+    # avatar_id 가 HeyGen 계정 목록에 있으면 메타데이터와 함께 등록되고, 이름 미지정
+    # 시 HeyGen 이름을 폴백으로 쓴다.
+    with _patch_list():
+        resp = await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(professor),
+            json={"avatar_id": "av_m"},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["avatar_id"] == "av_m"
+    assert data["name"] == "James"  # HeyGen 이름 폴백
+    assert data["preview_video_url"] == "https://hg.example/m.mp4"
+    assert data["gender"] == "male"
+    assert data["id"]  # 등록 레코드 id
+
+    # 목록에 1개로 노출.
+    with _patch_list():
+        listing = await client.get(
+            "/api/avatars/me/standard", headers=make_auth_header(professor)
+        )
+    assert listing.status_code == 200
+    rows = listing.json()
+    assert len(rows) == 1
+    assert rows[0]["avatar_id"] == "av_m"
+
+
+@pytest.mark.asyncio
+async def test_register_standard_avatar_custom_name(client, professor):
+    with _patch_list():
+        resp = await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(professor),
+            json={"avatar_id": "av_f", "name": "내 강의 아바타"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "내 강의 아바타"
+
+
+@pytest.mark.asyncio
+async def test_register_standard_avatar_not_found_404(client, professor):
+    # HeyGen 계정 목록에 없는 avatar_id → 404 로 안내.
+    with _patch_list():
+        resp = await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(professor),
+            json={"avatar_id": "does_not_exist"},
+        )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_register_standard_avatar_idempotent(client, professor):
+    # 같은 avatar_id 재등록은 중복 행을 만들지 않고 이름만 갱신한다.
+    with _patch_list():
+        await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(professor),
+            json={"avatar_id": "av_m", "name": "처음"},
+        )
+        resp = await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(professor),
+            json={"avatar_id": "av_m", "name": "두번째"},
+        )
+        listing = await client.get(
+            "/api/avatars/me/standard", headers=make_auth_header(professor)
+        )
+    assert resp.status_code == 200
+    assert resp.json()["name"] == "두번째"
+    assert len(listing.json()) == 1  # 중복 없음
+
+
+@pytest.mark.asyncio
+async def test_rename_and_delete_standard_avatar(client, professor):
+    with _patch_list():
+        created = await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(professor),
+            json={"avatar_id": "av_m"},
+        )
+    record_id = created.json()["id"]
+
+    rename = await client.patch(
+        f"/api/avatars/me/standard/{record_id}/name",
+        headers=make_auth_header(professor),
+        json={"name": "새 이름"},
+    )
+    assert rename.status_code == 200
+    assert rename.json()["name"] == "새 이름"
+
+    deleted = await client.request(
+        "DELETE",
+        f"/api/avatars/me/standard/{record_id}",
+        headers=make_auth_header(professor),
+    )
+    assert deleted.status_code == 200
+    listing = await client.get(
+        "/api/avatars/me/standard", headers=make_auth_header(professor)
+    )
+    assert listing.json() == []
+
+
+@pytest.mark.asyncio
+async def test_register_standard_avatar_requires_professor(client, student):
+    with _patch_list():
+        resp = await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(student),
+            json={"avatar_id": "av_m"},
+        )
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_register_standard_avatar_mock_mode_skips_validation(
+    client, professor, db
+):
+    # HEYGEN_MOCK 환경은 외부 검증 없이 통과(개발/테스트). 메타데이터는 비고 등록만 된다.
+    from app.core.config import settings
+
+    with patch.object(settings, "HEYGEN_MOCK", True):
+        resp = await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(professor),
+            json={"avatar_id": "studio_av_123", "name": "스튜디오 아바타"},
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["avatar_id"] == "studio_av_123"
+    assert data["name"] == "스튜디오 아바타"
+    assert data["preview_video_url"] is None

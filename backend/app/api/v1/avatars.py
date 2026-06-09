@@ -19,6 +19,7 @@ from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.photo_avatar import LookStatus, PhotoAvatarLook
 from app.models.saved_avatar import SavedAvatar
+from app.models.standard_avatar import StandardAvatar
 from app.models.user import User
 from app.schemas.avatar import (
     AvatarMeta,
@@ -39,6 +40,9 @@ from app.schemas.avatar import (
     SavedAvatarItem,
     SavedAvatarPreviewRequest,
     SavedAvatarUpdate,
+    StandardAvatarItem,
+    StandardAvatarNameUpdate,
+    StandardAvatarRegisterRequest,
     VoiceCloneResponse,
     VoiceScriptRequest,
     VoiceScriptResponse,
@@ -1906,5 +1910,211 @@ async def apply_saved_avatar(
     lecture.avatar_name = row.name
     lecture.avatar_scale = row.avatar_scale
     lecture.voice_id = row.voice_id
+    await db.commit()
+    return {"ok": True}
+
+
+# ── 표준 아바타 (HeyGen 웹 스튜디오 Video Avatar 등록) ─────────────────────────
+#
+# Pay-As-You-Go 등급은 커스텀 Video Avatar 를 API 로 "생성"할 수 없다(Enterprise
+# 전용). 대신 교수자가 웹 스튜디오에서 만든 Video Avatar 의 avatar_id 를 여기에
+# 등록해 두면 갤러리에서 골라 강의에 적용할 수 있고, 렌더 시 HeyGen 이 그대로
+# character.type="avatar" 로 사용한다(qa_batch._resolve_character). Photo Avatar
+# (Talking Photo, 몸 고정)와 달리 전신이 자연스럽게 움직이는 비교용 아바타.
+
+
+def _standard_avatar_item(row: StandardAvatar) -> StandardAvatarItem:
+    """StandardAvatar row → 응답 스키마. 미리보기 URL 은 HeyGen 외부 URL 그대로."""
+    return StandardAvatarItem(
+        id=str(row.id),
+        avatar_id=row.heygen_avatar_id,
+        name=row.name,
+        preview_image_url=row.preview_image_url,
+        preview_video_url=row.preview_video_url,
+        gender=row.gender,
+        created_at=row.created_at,
+    )
+
+
+@router.get(
+    "/api/avatars/me/standard",
+    response_model=list[StandardAvatarItem],
+    summary="등록한 표준 아바타 목록",
+)
+async def list_standard_avatars(
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """교수자가 등록한 표준 Video Avatar 목록을 최신순으로 반환한다(맨 배열).
+
+    프론트(avatarsApi.listMyStandardAvatars)가 배열을 직접 map 하므로 래핑 없이
+    ``list[StandardAvatarItem]`` 으로 응답한다.
+    """
+    rows = (
+        await db.execute(
+            select(StandardAvatar)
+            .where(StandardAvatar.user_id == user.id)
+            .order_by(StandardAvatar.created_at.desc())
+        )
+    ).scalars().all()
+    return [_standard_avatar_item(r) for r in rows]
+
+
+@router.post(
+    "/api/avatars/me/standard",
+    response_model=StandardAvatarItem,
+    summary="표준 아바타 등록 (HeyGen avatar_id)",
+)
+async def register_standard_avatar(
+    payload: StandardAvatarRegisterRequest,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """HeyGen Video Avatar 의 avatar_id 를 등록한다.
+
+    HeyGen ``/v2/avatars`` 에서 그 id 를 조회해 미리보기·성별 메타데이터를 함께
+    보관한다. 계정 아바타 목록에 없는 id 면 404 로 안내한다(오타·권한). 이미 같은
+    avatar_id 를 등록했으면 이름만 갱신해 멱등하게 반환한다.
+    """
+    avatar_id = payload.avatar_id.strip()
+    if not avatar_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="아바타 id 가 비어 있습니다."
+        )
+
+    # 이미 등록된 같은 avatar_id 가 있으면 이름만 갱신(중복 행 방지, 멱등).
+    existing = (
+        await db.execute(
+            select(StandardAvatar).where(
+                StandardAvatar.user_id == user.id,
+                StandardAvatar.heygen_avatar_id == avatar_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+    # HeyGen 메타데이터 조회 — MOCK 환경은 외부 호출 없이 통과(개발/테스트).
+    meta: dict | None = None
+    if not settings.HEYGEN_MOCK:
+        from app.services.pipeline.heygen import (
+            HeyGenError,
+            list_avatars as heygen_list_avatars,
+        )
+
+        try:
+            avatars = await heygen_list_avatars()
+        except HeyGenError as e:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"HeyGen 아바타 목록을 불러오지 못했습니다: {e}",
+            ) from e
+        meta = next((a for a in avatars if a.get("avatar_id") == avatar_id), None)
+        if meta is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "이 avatar_id 를 HeyGen 계정에서 찾을 수 없습니다. 웹 스튜디오에서 "
+                    "만든 Video Avatar 의 정확한 avatar_id 인지 확인해 주세요."
+                ),
+            )
+
+    name = (payload.name or "").strip()[:80] or None
+    # 이름 미지정 시 HeyGen 아바타 이름을 폴백으로 사용.
+    fallback_name = (meta or {}).get("avatar_name") if meta else None
+    resolved_name = name or (fallback_name[:80] if fallback_name else None)
+
+    if existing is not None:
+        existing.name = resolved_name
+        if meta:
+            existing.preview_image_url = meta.get("preview_image_url")
+            existing.preview_video_url = meta.get("preview_video_url")
+            existing.gender = meta.get("gender")
+        await db.commit()
+        await db.refresh(existing)
+        return _standard_avatar_item(existing)
+
+    row = StandardAvatar(
+        user_id=user.id,
+        heygen_avatar_id=avatar_id,
+        name=resolved_name,
+        preview_image_url=(meta or {}).get("preview_image_url") if meta else None,
+        preview_video_url=(meta or {}).get("preview_video_url") if meta else None,
+        gender=(meta or {}).get("gender") if meta else None,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+    return _standard_avatar_item(row)
+
+
+@router.patch(
+    "/api/avatars/me/standard/{record_id}/name",
+    response_model=dict,
+    summary="표준 아바타 이름 변경",
+)
+async def rename_standard_avatar(
+    record_id: str,
+    payload: StandardAvatarNameUpdate,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """등록한 표준 아바타의 표시 이름을 저장한다(연필). 공백/빈 문자열은 해제(NULL)."""
+    try:
+        rid = uuid.UUID(record_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 아바타를 찾을 수 없습니다."
+        )
+    row = (
+        await db.execute(
+            select(StandardAvatar).where(
+                StandardAvatar.user_id == user.id,
+                StandardAvatar.id == rid,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 아바타를 찾을 수 없습니다."
+        )
+    name = (payload.name or "").strip()
+    row.name = name[:80] or None
+    await db.commit()
+    return {"ok": True, "name": row.name}
+
+
+@router.delete(
+    "/api/avatars/me/standard/{record_id}",
+    response_model=dict,
+    summary="표준 아바타 등록 해제",
+)
+async def delete_standard_avatar(
+    record_id: str,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """등록한 표준 아바타를 갤러리에서 제거한다(등록 해제).
+
+    HeyGen 의 Video Avatar 자체는 건드리지 않는다(웹 스튜디오 소유물). 우리 쪽
+    등록 레코드만 삭제한다.
+    """
+    try:
+        rid = uuid.UUID(record_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 아바타를 찾을 수 없습니다."
+        )
+    row = (
+        await db.execute(
+            select(StandardAvatar).where(
+                StandardAvatar.user_id == user.id,
+                StandardAvatar.id == rid,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="해당 아바타를 찾을 수 없습니다."
+        )
+    await db.delete(row)
     await db.commit()
     return {"ok": True}

@@ -153,7 +153,26 @@ function RecentAvatarBox({
       </button>
 
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <span style={recentEyebrowStyle}>{t("recentTitle")}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={recentEyebrowStyle}>{t("recentTitle")}</span>
+          {(recent.kind === "photo" || recent.kind === "standard") && (
+            <span
+              data-testid="recent-kind-badge"
+              style={{
+                padding: "2px 8px",
+                borderRadius: 999,
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#0A0A0A",
+                background:
+                  recent.kind === "standard" ? "var(--gold)" : "var(--bg-card)",
+                border: `1px solid ${recent.kind === "standard" ? "var(--gold)" : "var(--gold-medium)"}`,
+              }}
+            >
+              {recent.kind === "standard" ? t("kindStandard") : t("kindPhoto")}
+            </span>
+          )}
+        </div>
 
         {/* 이름 줄 — 영어 프롬프트 대신 사용자 지정 이름. 룩이면 연필로 편집. */}
         {editing ? (
