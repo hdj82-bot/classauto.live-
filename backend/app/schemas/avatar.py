@@ -389,3 +389,55 @@ class SavedAvatarApply(BaseModel):
     """``POST /api/avatars/me/saved/{id}/apply`` — 강의에 적용."""
 
     lecture_id: str = Field(..., description="이 아바타(룩+음성)를 적용할 강의 id.")
+
+
+# ── 표준 아바타 (HeyGen 웹 스튜디오에서 만든 Video Avatar 등록) ─────────────────
+
+
+class StandardAvatarRegisterRequest(BaseModel):
+    """``POST /api/avatars/me/standard`` 요청 — 표준 Video Avatar 등록.
+
+    교수자가 HeyGen 웹 스튜디오에서 만든 Video Avatar 의 ``avatar_id`` 를 등록한다.
+    서버가 HeyGen ``/v2/avatars`` 에서 그 id 를 조회해 미리보기·성별 메타데이터를
+    함께 보관한다(계정에 없는 id 면 404).
+    """
+
+    avatar_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="HeyGen Video Avatar 의 avatar_id (웹 스튜디오 → Share/URL 에서 확인).",
+    )
+    name: str | None = Field(
+        default=None,
+        max_length=80,
+        description="갤러리에 표시할 이름(선택). 비우면 HeyGen 아바타 이름을 쓴다.",
+    )
+
+
+class StandardAvatarItem(BaseModel):
+    """등록된 표준 아바타 1개 (``GET /api/avatars/me/standard``)."""
+
+    id: str = Field(..., description="등록 레코드 내부 id (rename·delete 키).")
+    avatar_id: str = Field(..., description="HeyGen avatar_id (강의 적용 시 lecture.avatar_id).")
+    name: str | None = Field(default=None, description="교수자가 붙인 표시 이름(없으면 null).")
+    preview_image_url: str | None = Field(
+        default=None, description="HeyGen 정적 썸네일 URL."
+    )
+    preview_video_url: str | None = Field(
+        default=None, description="HeyGen 동적 샘플 영상 URL(자연스러운 움직임 비교용)."
+    )
+    gender: str | None = Field(
+        default=None, description='"male" | "female" | null (HeyGen 제공값).'
+    )
+    created_at: datetime | None = Field(default=None, description="등록 시각(ISO8601, UTC).")
+
+
+class StandardAvatarNameUpdate(BaseModel):
+    """``PATCH /api/avatars/me/standard/{id}/name`` 요청 — 표시 이름 변경."""
+
+    name: str | None = Field(
+        default=None,
+        max_length=80,
+        description="새 표시 이름. 공백·빈 문자열이면 이름을 지운다(null).",
+    )

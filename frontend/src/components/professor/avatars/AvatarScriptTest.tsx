@@ -76,7 +76,10 @@ export default function AvatarScriptTest({
   reducedMotion,
   t,
 }: AvatarScriptTestProps) {
-  const enabled = active && !!look?.is_custom && !!voiceId;
+  // 인라인 렌더는 포토 아바타(Talking Photo) 전용 — 표준 Video Avatar(kind="standard")는
+  // me/preview 의 talking_photo 경로로 렌더할 수 없으므로 작업대를 열지 않는다.
+  const enabled =
+    active && !!look?.is_custom && look?.kind !== "standard" && !!voiceId;
   const preview = useScriptTestPreview(enabled);
   const [script, setScript] = useState(() => t("scriptTestDefault"));
   const sectionRef = useRef<HTMLElement | null>(null);

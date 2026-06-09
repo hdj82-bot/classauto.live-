@@ -15,6 +15,14 @@ export type AvatarGender = "male" | "female";
 
 export type CustomAvatarStatus = "processing" | "ready" | "failed";
 
+/**
+ * 갤러리 항목의 종류 — 갤러리에서 포토 아바타와 표준 아바타를 구별해 라벨링한다.
+ *  - "photo"    : 본인 사진으로 만든 Photo Avatar(Talking Photo) 룩. 몸 고정·얼굴만 움직임.
+ *  - "standard" : HeyGen 웹 스튜디오에서 만든 표준 Video Avatar. 전신이 자연스럽게 움직임.
+ * 큐레이션된 HeyGen 기본 아바타 등 그 외는 undefined.
+ */
+export type AvatarKind = "photo" | "standard";
+
 export interface Avatar {
   id: string;
   name: string;
@@ -31,6 +39,32 @@ export interface Avatar {
    * HeyGen 표준 아바타(is_custom=false)는 이름 변경 불가라 false/undefined.
    */
   isLook?: boolean;
+  /**
+   * 갤러리에서 포토/표준을 구별하는 종류 태그. 라이브러리 항목에만 채운다
+   * (포토 룩="photo", 등록한 표준 Video Avatar="standard"). 큐레이션 기본
+   * 아바타 등은 undefined.
+   */
+  kind?: AvatarKind;
+  /**
+   * 표준 아바타(kind="standard")의 등록 레코드 id — rename/delete API 키.
+   * ``id`` 는 렌더용 heygen avatar_id 라 별도로 보관한다.
+   */
+  recordId?: string;
+}
+
+/**
+ * GET /api/avatars/me/standard 의 단일 항목 (등록한 표준 Video Avatar).
+ * wire 는 snake_case 그대로 소비한다.
+ */
+export interface StandardAvatar {
+  /** 등록 레코드 내부 id (rename·delete 키). */
+  id: string;
+  /** HeyGen avatar_id — 강의 적용·렌더 character 로 통용. */
+  avatar_id: string;
+  name: string | null;
+  preview_image_url: string | null;
+  preview_video_url: string | null;
+  gender: string | null;
 }
 
 export interface ProfilePhotoResponse {

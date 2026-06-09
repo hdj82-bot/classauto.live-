@@ -104,6 +104,14 @@ export default function AvatarCard({
         ? t("genderFemale")
         : null;
 
+  // 포토 아바타 / 표준 아바타 구별 배지 — 라이브러리 항목에만(kind 지정 시) 노출.
+  const kindLabel =
+    avatar.kind === "photo"
+      ? t("kindPhoto")
+      : avatar.kind === "standard"
+        ? t("kindStandard")
+        : null;
+
   return (
     <div style={{ position: "relative" }}>
     <div
@@ -184,6 +192,34 @@ export default function AvatarCard({
               }}
             >
               {avatar.name.slice(0, 1)}
+            </span>
+          )}
+
+          {/* 포토/표준 구별 배지 — 좌상단 */}
+          {kindLabel && (
+            <span
+              data-testid={`avatar-card-kind-${avatar.id}`}
+              style={{
+                position: "absolute",
+                top: 6,
+                left: 6,
+                padding: "2px 8px",
+                borderRadius: 999,
+                fontSize: 10,
+                fontWeight: 700,
+                color: "#0A0A0A",
+                background:
+                  avatar.kind === "standard"
+                    ? "var(--gold)"
+                    : "rgba(255,255,255,0.92)",
+                border:
+                  avatar.kind === "standard"
+                    ? "1px solid var(--gold)"
+                    : "1px solid var(--line)",
+                boxShadow: "var(--shadow-sm)",
+              }}
+            >
+              {kindLabel}
             </span>
           )}
 

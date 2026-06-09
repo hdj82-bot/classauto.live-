@@ -7,6 +7,7 @@ import type {
   ProfilePhotoResponse,
   SavedAvatar,
   SavedAvatarPreviewStatus,
+  StandardAvatar,
   VoiceClone,
   VoiceScriptResult,
 } from "./avatarsTypes";
@@ -758,6 +759,93 @@ export async function applySavedAvatar(
     const { data } = await api.post<{ ok: boolean }>(
       `/api/avatars/me/saved/${encodeURIComponent(id)}/apply`,
       { lecture_id: lectureId },
+    );
+    return { ok: data?.ok ?? true };
+  } catch (err) {
+    if (isDeferredError(err)) return { ok: true };
+    throw err;
+  }
+}
+
+// ── 표준 아바타 등록 (GET/POST/PATCH/DELETE /api/avatars/me/standard) ──────────
+//
+// 교수자가 HeyGen 웹 스튜디오에서 만든 표준 Video Avatar 의 avatar_id 를 등록해
+// 갤러리에서 포토 아바타와 나란히 비교·선택한다. 등록 시 서버가 HeyGen 메타데이터
+// (미리보기·성별)를 함께 보관하므로, 목록은 추가 호출 없이 썸네일·샘플 영상을 쓴다.
+// 미배포(404/405)면 빈 목록/시뮬레이션으로 폴백해 UI 개발을 막지 않는다.
+
+interface StandardAvatarWire {
+  id: string;
+  avatar_id: string;
+  name?: string | null;
+  preview_image_url?: string | null;
+  preview_video_url?: string | null;
+  gender?: string | null;
+}
+
+function toStandardAvatar(w: StandardAvatarWire): StandardAvatar {
+  return {
+    id: w.id,
+    avatar_id: w.avatar_id,
+    name: w.name ?? null,
+    preview_image_url: w.preview_image_url ?? null,
+    preview_video_url: w.preview_video_url ?? null,
+    gender: w.gender ?? null,
+  };
+}
+
+/** GET /api/avatars/me/standard — 등록한 표준 아바타 목록. deferred 면 빈 목록. */
+export async function listMyStandardAvatars(): Promise<StandardAvatar[]> {
+  try {
+    const { data } = await api.get<StandardAvatarWire[]>("/api/avatars/me/standard");
+    return (data ?? []).map(toStandardAvatar);
+  } catch (err) {
+    if (isDeferredError(err)) return [];
+    throw err;
+  }
+}
+
+/**
+ * POST /api/avatars/me/standard — HeyGen avatar_id 를 등록한다.
+ * 서버가 계정 아바타 목록에 그 id 가 있는지 검증한다(없으면 404 → throw).
+ * 미배포(404 라우트 없음과 구분 불가)일 때를 대비해, 호출자는 에러 detail 을
+ * 토스트로 표면화한다(이 함수는 폴백하지 않고 그대로 throw).
+ */
+export async function registerStandardAvatar(
+  avatarId: string,
+  name?: string | null,
+): Promise<StandardAvatar> {
+  const { data } = await api.post<StandardAvatarWire>("/api/avatars/me/standard", {
+    avatar_id: avatarId,
+    name: name ?? null,
+  });
+  return toStandardAvatar(data);
+}
+
+/** PATCH /api/avatars/me/standard/{id}/name — 표시 이름 변경. deferred 면 멱등 성공. */
+export async function renameStandardAvatar(
+  recordId: string,
+  name: string,
+): Promise<{ ok: boolean; name: string | null }> {
+  try {
+    const { data } = await api.patch<{ ok: boolean; name: string | null }>(
+      `/api/avatars/me/standard/${encodeURIComponent(recordId)}/name`,
+      { name },
+    );
+    return { ok: data?.ok ?? true, name: data?.name ?? null };
+  } catch (err) {
+    if (isDeferredError(err)) return { ok: true, name: name.trim() || null };
+    throw err;
+  }
+}
+
+/** DELETE /api/avatars/me/standard/{id} — 등록 해제. deferred/이미 없음(404)은 멱등 성공. */
+export async function deleteStandardAvatar(
+  recordId: string,
+): Promise<{ ok: boolean }> {
+  try {
+    const { data } = await api.delete<{ ok: boolean }>(
+      `/api/avatars/me/standard/${encodeURIComponent(recordId)}`,
     );
     return { ok: data?.ok ?? true };
   } catch (err) {

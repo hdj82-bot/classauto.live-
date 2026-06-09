@@ -191,8 +191,6 @@
     "studioPhotoFormat": "20MB or smaller · JPEG or PNG",
     "studioPhotoTooLarge": "The photo must be 20MB or smaller.",
 
-    "backToStudio": "Back to the editor",
-
     "savedTitle": "My avatar gallery",
     "savedDescription": "Your saved avatars — each a look paired with a voice. Apply one to any lecture instantly, no re-generation (zero cost). Build a preview clip and the card plays your avatar actually speaking.",
     "savedEmpty": "No saved avatars yet. Check a look and voice in 'Build avatar — performance check' above, then press 'Save this avatar' to collect them here.",
@@ -215,6 +213,32 @@
     "previewCreate": "Build preview clip",
     "previewRetry": "Rebuild preview clip",
     "previewFailed": "Failed to build the preview clip. Please try again.",
-    "previewError": "Could not start building the preview clip. Please try again shortly."
+    "previewError": "Could not start building the preview clip. Please try again shortly.",
+
+    "kindPhoto": "Photo avatar",
+    "kindStandard": "Standard avatar",
+    "standardUntitled": "My standard avatar",
+
+    "createTypeTitle": "How to create the avatar",
+    "createTypePhotoLabel": "Photo avatar",
+    "createTypePhotoDesc": "Made from your photo. The body stays fixed and only the face moves. This is what you use now.",
+    "createTypeStandardLabel": "Standard avatar",
+    "createTypeStandardDesc": "Register the ID of a Video Avatar you made in HeyGen web studio. The whole body moves naturally (same per-minute price).",
+
+    "standardRegisterTitle": "Register a standard avatar",
+    "standardRegisterDescription": "Register the avatar_id of a Video Avatar you created in HeyGen web studio. It will be added to your gallery as a standard avatar so you can compare its naturalness with the photo avatar and apply it to a lecture.",
+    "standardRegisterStep1": "1. In HeyGen web studio, create a Video Avatar from your own footage (Pay-As-You-Go can't create one via API — make it once in the studio).",
+    "standardRegisterStep2": "2. Open that avatar's detail page and copy its avatar_id.",
+    "standardRegisterStep3": "3. Paste it below and register; we verify it against your account avatars before adding it to the gallery.",
+    "standardRegisterIdLabel": "HeyGen avatar_id",
+    "standardRegisterIdPlaceholder": "e.g. a1b2c3d4e5f6...",
+    "standardRegisterNameLabel": "Display name (optional)",
+    "standardRegisterNamePlaceholder": "Leave empty to use the HeyGen name",
+    "standardRegisterSubmit": "Register standard avatar",
+    "standardRegistering": "Registering...",
+    "standardRegisterSuccess": "Standard avatar registered. Pick it from your library to apply it to a lecture.",
+    "standardRegisterError": "Failed to register the standard avatar. Check the avatar_id and try again.",
+
+    "backToStudio": "Back to the editor"
   }
 }

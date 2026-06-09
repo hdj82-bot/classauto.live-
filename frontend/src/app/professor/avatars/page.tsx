@@ -15,6 +15,8 @@ import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploa
 import SampleVoicePicker from "@/components/professor/avatars/SampleVoicePicker";
 import AvatarBuilderBar from "@/components/professor/avatars/AvatarBuilderBar";
 import AvatarScriptTest from "@/components/professor/avatars/AvatarScriptTest";
+import AvatarCreateTypeToggle from "@/components/professor/avatars/AvatarCreateTypeToggle";
+import StandardAvatarRegisterCard from "@/components/professor/avatars/StandardAvatarRegisterCard";
 import { selectLook } from "@/components/professor/avatars/onboarding/photoAvatarApi";
 import {
   applyAvatarToLecture,
@@ -24,14 +26,17 @@ import {
   deleteMyLook,
   deleteMyVoice,
   deleteSavedAvatar,
+  deleteStandardAvatar,
   getLectureTitle,
   getMyVoice,
   getRecentAvatarId,
   listAvatars,
   listMyLooks,
+  listMyStandardAvatars,
   listSavedAvatars,
   renameAvatarForLecture,
   renameMyLook,
+  renameStandardAvatar,
   renderSavedAvatarPreview,
   requestVoiceScript,
   setRecentAvatar,
@@ -42,7 +47,9 @@ import type { MyLook, ScriptLanguage } from "@/components/professor/avatars/avat
 import { listVoiceOptions, previewVoice } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
+  AvatarKind,
   SavedAvatar,
+  StandardAvatar,
   VoiceClone,
   VoiceScriptResult,
 } from "@/components/professor/avatars/avatarsTypes";
@@ -104,6 +111,13 @@ export default function AvatarsPage() {
   const [applyingSavedId, setApplyingSavedId] = useState<string | null>(null);
   const [savingAvatar, setSavingAvatar] = useState(false);
 
+  // 등록한 표준 아바타(HeyGen 웹 스튜디오 Video Avatar) — 라이브러리에 포토 아바타와
+  // 나란히 노출하고 강의에 적용할 수 있다.
+  const [standardAvatars, setStandardAvatars] = useState<StandardAvatar[]>([]);
+
+  // 아바타 제작 방식 — "photo"(내 사진) | "standard"(표준 avatar_id 등록). 기본 photo.
+  const [createType, setCreateType] = useState<AvatarKind>("photo");
+
   // 녹음 대본 주제로 쓸 현재 강의 제목(없으면 null → 일반 학술 대본).
   const [lectureTitle, setLectureTitle] = useState<string | null>(null);
 
@@ -138,6 +152,11 @@ export default function AvatarsPage() {
     } catch {
       /* 실패 시 기존 룩 유지 */
     }
+    try {
+      setStandardAvatars(await listMyStandardAvatars());
+    } catch {
+      /* 실패 시 기존 표준 아바타 유지 */
+    }
   }, []);
 
   useEffect(() => {
@@ -166,6 +185,12 @@ export default function AvatarsPage() {
       try {
         const list = await listMyLooks();
         if (!cancelled) setLooks(list);
+      } catch {
+        /* 미배포/실패 시 빈 목록 유지 */
+      }
+      try {
+        const list = await listMyStandardAvatars();
+        if (!cancelled) setStandardAvatars(list);
       } catch {
         /* 미배포/실패 시 빈 목록 유지 */
       }
@@ -286,7 +311,10 @@ export default function AvatarsPage() {
   // 라이브러리 = 교수자가 만든 본인 아바타(talking photo) + ready 룩. 룩은 렌더용
   // avatar_id 로 그대로 통용되므로(video.py) 동일 Avatar shape 로 정규화한다.
   const libraryItems = useMemo<Avatar[]>(() => {
-    const customAvatars = avatars.filter((a) => a.is_custom);
+    // 본인 Talking Photo(GET /api/avatars 의 is_custom 항목)도 포토 아바타로 태그.
+    const customAvatars: Avatar[] = avatars
+      .filter((a) => a.is_custom)
+      .map((a) => ({ ...a, kind: "photo" as const }));
     // 라이브러리는 "확정(saved)된" 룩만 노출한다 — 온보딩에서 생성한 모든 후보가
     // 자동으로 라이브러리에 쌓이지 않게(사용자 결정 2026-06-02).
     const lookAvatars: Avatar[] = looks
@@ -299,22 +327,38 @@ export default function AvatarsPage() {
         preview_video_url: null,
         is_custom: true,
         isLook: true,
+        kind: "photo" as const,
         status: "ready" as const,
       }));
+    // 등록한 표준 Video Avatar — 렌더용 id 는 heygen avatar_id, rename/delete 는 recordId.
+    const standardItems: Avatar[] = standardAvatars.map((s) => ({
+      id: s.avatar_id,
+      recordId: s.id,
+      name: s.name?.trim() || t("standardUntitled"),
+      preview_image_url: s.preview_image_url,
+      preview_video_url: s.preview_video_url,
+      gender: s.gender,
+      is_custom: true,
+      isLook: true,
+      kind: "standard" as const,
+      status: "ready" as const,
+    }));
     // 같은 id 중복 제거(본인 아바타와 룩이 우연히 겹칠 일은 없으나 방어적으로).
     const seen = new Set<string>();
-    return [...customAvatars, ...lookAvatars].filter((a) =>
+    return [...customAvatars, ...lookAvatars, ...standardItems].filter((a) =>
       seen.has(a.id) ? false : (seen.add(a.id), true),
     );
-  }, [avatars, looks, t]);
+  }, [avatars, looks, standardAvatars, t]);
 
-  // 선택/최근 id 를 (표준 아바타 ∪ 라이브러리)에서 해석한다.
+  // 선택/최근 id 를 해석한다. 라이브러리(kind·preview 가 정규화된 항목)를 먼저 보고,
+  // 없으면 원본 아바타 목록으로 폴백한다 — 이래야 포토/표준 배지와 작업대 분기가
+  // 선택·최근·뷰어에서도 일관되게 동작한다(원본 목록은 kind 미태깅).
   const resolveAvatar = useCallback(
     (id: string | null): Avatar | null => {
       if (!id) return null;
       return (
-        avatars.find((a) => a.id === id) ??
         libraryItems.find((a) => a.id === id) ??
+        avatars.find((a) => a.id === id) ??
         null
       );
     },
@@ -385,15 +429,33 @@ export default function AvatarsPage() {
     [handleSelect, toast, t],
   );
 
-  // 룩 이름 저장(연필) — 낙관적으로 룩 목록의 name 을 갱신하고 서버에 반영한다.
+  // 룩/표준 아바타 이름 저장(연필) — 낙관적으로 목록의 name 을 갱신하고 서버에 반영.
+  // 전달되는 id 는 렌더용 id(룩 id 또는 표준 avatar_id)이므로, 표준이면 그 항목의
+  // 등록 레코드 id(recordId)로 rename API 를 호출한다.
   const handleRenameLook = useCallback(
-    async (lookId: string, name: string) => {
+    async (itemId: string, name: string) => {
       const next = name.trim();
+      const std = standardAvatars.find((s) => s.avatar_id === itemId);
+      if (std) {
+        setStandardAvatars((prev) =>
+          prev.map((s) =>
+            s.id === std.id ? { ...s, name: next || null } : s,
+          ),
+        );
+        try {
+          await renameStandardAvatar(std.id, next);
+          toast(t("lookRenameSuccess"), "success");
+        } catch {
+          toast(t("lookRenameError"), "error");
+          await refreshAvatars();
+        }
+        return;
+      }
       setLooks((prev) =>
-        prev.map((l) => (l.id === lookId ? { ...l, name: next || null } : l)),
+        prev.map((l) => (l.id === itemId ? { ...l, name: next || null } : l)),
       );
       try {
-        await renameMyLook(lookId, next);
+        await renameMyLook(itemId, next);
         toast(t("lookRenameSuccess"), "success");
       } catch {
         toast(t("lookRenameError"), "error");
@@ -401,7 +463,7 @@ export default function AvatarsPage() {
         await refreshAvatars();
       }
     },
-    [toast, t, refreshAvatars],
+    [toast, t, refreshAvatars, standardAvatars],
   );
 
   // 본인 클론 음성 id (있으면). 샘플 목록에서 제외하고, "내 목소리" 토글의 값이 된다.
@@ -610,7 +672,10 @@ export default function AvatarsPage() {
   // (Talking Photo 없음) 바로 강의에 적용한다.
   const handleOpenBuilder = useCallback(() => {
     if (!selectedId || !selectedVoiceId) return;
-    if (selectedAvatar?.is_custom) {
+    // 인라인 렌더 작업대는 포토 아바타(Talking Photo) 전용 — me/preview 가
+    // talking_photo 로 렌더하기 때문. 표준 Video Avatar 는 인라인 렌더 대상이 아니라
+    // (HeyGen 의 자연스러운 샘플 영상으로 비교) 바로 강의에 적용한다.
+    if (selectedAvatar?.is_custom && selectedAvatar?.kind !== "standard") {
       setBuilderOpen(true);
       setRenderNonce((n) => n + 1);
     } else {
@@ -628,13 +693,17 @@ export default function AvatarsPage() {
       ) {
         return;
       }
-      // 낙관적 제거 — 룩(라이브러리 본체)과 본인 아바타 양쪽에서 동시에 뺀다.
+      // 낙관적 제거 — 룩(라이브러리 본체)·본인 아바타·표준 아바타에서 동시에 뺀다.
+      const std = standardAvatars.find((s) => s.avatar_id === id);
       setLooks((prev) => prev.filter((l) => l.id !== id));
+      setStandardAvatars((prev) => prev.filter((s) => s.avatar_id !== id));
       setAvatars((prev) => prev.filter((a) => !(a.is_custom && a.id === id)));
       setSelectedId((prev) => (prev === id ? null : prev));
       setRecentId((prev) => (prev === id ? null : prev));
       try {
-        await deleteMyLook(id);
+        // 표준 아바타는 등록 레코드 id(recordId)로, 룩은 그 id 로 삭제한다.
+        if (std) await deleteStandardAvatar(std.id);
+        else await deleteMyLook(id);
         toast(t("cardDeleteSuccess"), "success");
       } catch {
         toast(t("cardDeleteError"), "error");
@@ -643,7 +712,7 @@ export default function AvatarsPage() {
         await refreshAvatars();
       }
     },
-    [t, toast, refreshAvatars],
+    [t, toast, refreshAvatars, standardAvatars],
   );
 
   const handleRename = useCallback(
@@ -820,12 +889,21 @@ export default function AvatarsPage() {
           t={t}
         />
 
-        {/* ① 내 사진으로 아바타 만들기 — Design with AI 룩 온보딩을 카드 안에 인라인 임베드 */}
-        <PhotoAvatarStudioCard
-          reducedMotion={reducedMotion}
-          onConfirmed={refreshAvatars}
-          onLibraryChanged={refreshAvatars}
-        />
+        {/* ① 아바타 제작 — 포토(내 사진) vs 표준(웹 스튜디오 Video Avatar 등록) 선택.
+            포토는 몸 고정·얼굴만 움직이고, 표준은 전신이 자연스럽게 움직인다(동일 단가). */}
+        <AvatarCreateTypeToggle value={createType} onChange={setCreateType} t={t} />
+
+        {createType === "photo" ? (
+          // 내 사진으로 아바타 만들기 — Design with AI 룩 온보딩을 카드 안에 인라인 임베드
+          <PhotoAvatarStudioCard
+            reducedMotion={reducedMotion}
+            onConfirmed={refreshAvatars}
+            onLibraryChanged={refreshAvatars}
+          />
+        ) : (
+          // 표준 아바타 등록 — HeyGen avatar_id 등록 → 라이브러리에 표준 아바타로 추가
+          <StandardAvatarRegisterCard onRegistered={refreshAvatars} t={t} />
+        )}
 
         {/* ② 내 목소리로 음성 만들기 — 파일 업로드 + 브라우저 직접 녹음 + 읽기 대본
             + "이 음성을 아바타 제작에 사용"(샘플 보이스와 상호 배타) */}
