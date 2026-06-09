@@ -144,7 +144,8 @@ export default function LectureLibraryPage() {
       if (isProduction) {
         router.push(`/professor/studio?lecture=${id}`);
       } else {
-        router.push(`/professor/lecture/${id}`);
+        // 편집 진입점 통일 — 발행/완료 강의도 studio 에서 편집(단순 에디터 폐지).
+        router.push(`/professor/studio/${id}`);
       }
     },
     [lectures, router],

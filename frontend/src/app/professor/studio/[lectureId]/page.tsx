@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -92,7 +92,6 @@ const RENDER_POLL_MS = 5000;
 export default function StudioWizardPage() {
   const { lectureId } = useParams<{ lectureId: string }>();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { toast } = useToast();
   const { t } = useStudioI18n();
   const reducedMotion = useReducedMotion();
@@ -1164,10 +1163,9 @@ export default function StudioWizardPage() {
   const activeSlide = slides[activeIndex];
   const slideTitle = activeSlide?.title ?? lecture.title;
 
-  // URL ?step=5 호환성 (기존 진입로 보존)
-  if (searchParams.get("step") === "5") {
-    router.replace(`/professor/lecture/${lectureId}`);
-  }
+  // 과거 ?step=5 는 별도 단순 에디터(/professor/lecture/[id])로 보냈으나,
+  // 편집 진입점을 studio 로 통일하면서 그 페이지는 redirect 스텁이 됐다.
+  // step=5 로 들어와도 studio 가 곧 에디터이므로 그대로 렌더한다(파라미터 무시).
 
   return (
     <div
