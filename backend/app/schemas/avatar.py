@@ -61,6 +61,14 @@ class AvatarPreviewRequest(BaseModel):
             "'스크립트 테스트'에서 임의 문장을 보낼 때 쓴다."
         ),
     )
+    avatar_id: str | None = Field(
+        default=None,
+        max_length=255,
+        description=(
+            "등록한 표준 아바타(Video Avatar)의 heygen avatar_id. 주어지면 talking_photo "
+            "대신 이 아바타로 렌더한다(전신 자연 움직임). null 이면 본인 포토 아바타."
+        ),
+    )
 
 
 class AvatarPreviewResponse(BaseModel):
@@ -412,6 +420,18 @@ class StandardAvatarRegisterRequest(BaseModel):
         default=None,
         max_length=80,
         description="갤러리에 표시할 이름(선택). 비우면 HeyGen 아바타 이름을 쓴다.",
+    )
+    # 피커에서 고른 경우, 프론트가 이미 가진 메타데이터를 함께 보내 서버 재조회를
+    # 건너뛰게 한다(빠른 등록). 출처가 우리 /api/avatars/heygen-account(=/v2/avatars)라
+    # 신뢰 가능. 셋 중 하나라도 오면 "메타 제공"으로 보고 HeyGen 재조회를 생략한다.
+    preview_image_url: str | None = Field(
+        default=None, max_length=1024, description="피커가 가진 HeyGen 썸네일 URL(선택)."
+    )
+    preview_video_url: str | None = Field(
+        default=None, max_length=1024, description="피커가 가진 HeyGen 샘플 영상 URL(선택)."
+    )
+    gender: str | None = Field(
+        default=None, max_length=20, description="피커가 가진 성별 값(선택)."
     )
 
 

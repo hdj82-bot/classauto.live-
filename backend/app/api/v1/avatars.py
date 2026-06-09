@@ -555,19 +555,41 @@ async def create_avatar_preview(
     상태 조회·완료 수령은 ``GET /api/avatars/me/preview`` 폴링으로 한다.
     """
     payload = payload or AvatarPreviewRequest()
-    # 2026-06-01: 기존엔 select 가 HeyGen 등록까지 했지만, 이제 select 는 default
-    # 만 저장한다. preview 진입 시점에 lazy 등록 — 사진→룩→default 까지 끝낸
-    # 사용자만 도달할 수 있는 시점이고, 어차피 preview 자체가 HeyGen 호출이므로
-    # 여기서 talking_photo 등록을 함께 수행한다(idempotent).
-    talking_photo_id = await _ensure_photo_avatar_id(user, db)
-    if not talking_photo_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "본인 아바타가 아직 등록되지 않았습니다. 먼저 사진을 올리고 "
-                "기본 룩을 지정해 주세요."
-            ),
-        )
+
+    # 표준 아바타(등록한 Video Avatar) 미리보기면 talking_photo 대신 avatar 모드로
+    # 렌더한다(전신 자연 움직임). avatar_id 미지정이면 기존 본인 포토 아바타 경로.
+    std_avatar_id = (payload.avatar_id or "").strip() or None
+    character_kwargs: dict = {}
+    if std_avatar_id:
+        std_row = (
+            await db.execute(
+                select(StandardAvatar).where(
+                    StandardAvatar.user_id == user.id,
+                    StandardAvatar.heygen_avatar_id == std_avatar_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if std_row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="등록된 표준 아바타가 아닙니다. 먼저 표준 아바타를 등록해 주세요.",
+            )
+        character_kwargs = {"avatar_id": std_avatar_id}
+    else:
+        # 2026-06-01: 기존엔 select 가 HeyGen 등록까지 했지만, 이제 select 는 default
+        # 만 저장한다. preview 진입 시점에 lazy 등록 — 사진→룩→default 까지 끝낸
+        # 사용자만 도달할 수 있는 시점이고, 어차피 preview 자체가 HeyGen 호출이므로
+        # 여기서 talking_photo 등록을 함께 수행한다(idempotent).
+        talking_photo_id = await _ensure_photo_avatar_id(user, db)
+        if not talking_photo_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "본인 아바타가 아직 등록되지 않았습니다. 먼저 사진을 올리고 "
+                    "기본 룩을 지정해 주세요."
+                ),
+            )
+        character_kwargs = {"talking_photo_id": talking_photo_id}
 
     voice_id = payload.voice_id
     # 렌더할 대본 — "스크립트 테스트"가 임의 문장을 보내면 그 문장을, 아니면 기본
@@ -575,10 +597,13 @@ async def create_avatar_preview(
     render_text = (payload.text or "").strip() or _PREVIEW_TEXT
     cached_text = user.photo_avatar_preview_text or _PREVIEW_TEXT
     text_matches = cached_text == render_text
+    # 같은 슬롯을 포토/표준이 공유하므로 어느 아바타의 캐시인지도 일치해야 적중.
+    avatar_matches = (user.photo_avatar_preview_avatar_id or None) == std_avatar_id
 
-    # 캐시 적중: 강제 아님 + 완성본 있음 + 같은 음성(또는 음성 미지정) + 같은 대본.
+    # 캐시 적중: 강제 아님 + 완성본 + 같은 아바타 + 같은 음성(또는 미지정) + 같은 대본.
     if (
         not payload.force
+        and avatar_matches
         and user.photo_avatar_preview_url
         and (voice_id is None or voice_id == user.photo_avatar_preview_voice_id)
         and text_matches
@@ -589,8 +614,8 @@ async def create_avatar_preview(
             voice_id=user.photo_avatar_preview_voice_id,
         )
 
-    # 이미 렌더 진행 중 + 강제 아님 → 새로 시작하지 않고 진행 상태만 알린다.
-    if not payload.force and user.photo_avatar_preview_video_id:
+    # 같은 아바타로 이미 렌더 진행 중 + 강제 아님 → 새로 시작하지 않고 진행만 알린다.
+    if not payload.force and avatar_matches and user.photo_avatar_preview_video_id:
         return AvatarPreviewResponse(
             status="processing", voice_id=user.photo_avatar_preview_voice_id
         )
@@ -610,8 +635,8 @@ async def create_avatar_preview(
         audio_url = s3_svc.presign_stored_s3_url(stored_audio_url) or stored_audio_url
         video_id = await create_video(
             audio_url=audio_url,
-            talking_photo_id=talking_photo_id,
             callback_id=f"avatar-preview:{user.id}",
+            **character_kwargs,
         )
     except (HeyGenError, tts.TTSError) as e:
         return AvatarPreviewResponse(
@@ -623,6 +648,7 @@ async def create_avatar_preview(
     user.photo_avatar_preview_video_id = video_id
     user.photo_avatar_preview_voice_id = voice_id
     user.photo_avatar_preview_text = render_text
+    user.photo_avatar_preview_avatar_id = std_avatar_id  # 표준이면 그 id, 포토면 None.
     user.photo_avatar_preview_url = None  # 새 렌더 시작 — 이전 캐시 무효화.
     await db.commit()
 
@@ -2044,9 +2070,23 @@ async def register_standard_avatar(
         )
     ).scalar_one_or_none()
 
-    # HeyGen 메타데이터 조회 — MOCK 환경은 외부 호출 없이 통과(개발/테스트).
+    # 메타데이터 결정 — 피커가 보낸 값이 있으면 그걸 신뢰해 HeyGen 재조회를 생략한다
+    # (출처가 우리 /api/avatars/heygen-account=/v2/avatars 라 유효 → 빠른 등록). 없으면
+    # (수동 ID 입력) HeyGen 목록을 조회해 검증한다. MOCK 환경은 항상 통과(외부 호출 0).
+    client_meta = (
+        payload.preview_image_url is not None
+        or payload.preview_video_url is not None
+        or payload.gender is not None
+    )
     meta: dict | None = None
-    if not settings.HEYGEN_MOCK:
+    if client_meta:
+        meta = {
+            "avatar_name": None,
+            "preview_image_url": payload.preview_image_url,
+            "preview_video_url": payload.preview_video_url,
+            "gender": payload.gender,
+        }
+    elif not settings.HEYGEN_MOCK:
         from app.services.pipeline.heygen import (
             HeyGenError,
             list_avatars as heygen_list_avatars,

@@ -221,9 +221,9 @@
 
     "createTypeTitle": "How to create the avatar",
     "createTypePhotoLabel": "Photo avatar",
-    "createTypePhotoDesc": "Made from your photo. The body stays fixed and only the face moves. This is what you use now.",
+    "createTypePhotoDesc": "Made from your photo. The body stays fixed and only the face moves.",
     "createTypeStandardLabel": "Standard avatar",
-    "createTypeStandardDesc": "Register the ID of a Video Avatar you made in HeyGen web studio. The whole body moves naturally (same per-minute price).",
+    "createTypeStandardDesc": "Pick a Video Avatar you made in HeyGen web studio and choose a voice. (e.g. Adriana Business Front)",
 
     "standardRegisterTitle": "Register a standard avatar",
     "standardRegisterDescription": "Pick a Video Avatar you created in HeyGen web studio from the list below and register it — just search by the name you gave it in the studio. Once registered, it's added to your gallery as a standard avatar so you can compare its naturalness with the photo avatar and apply it to a lecture.",
@@ -231,7 +231,8 @@
     "standardPickerLoading": "Loading your HeyGen avatars...",
     "standardPickerError": "Couldn't load your HeyGen avatars. You can register via 'Enter avatar_id manually' below.",
     "standardPickerSearchEmpty": "No matches. Try searching by the name you gave the avatar in the studio.",
-    "standardPickerMoreHint": "{count} more. Search by avatar name to narrow down.",
+    "standardPickerMoreHint": "{count} more. Search by avatar name, or open 'See the full avatar list on HeyGen' above.",
+    "standardHeygenListLink": "See the full avatar list on HeyGen",
     "standardManualToggle": "Enter avatar_id manually",
     "standardManualHide": "Back to picking from the list",
     "standardRegisterStep1": "1. In HeyGen web studio, create a Video Avatar from your own footage (Pay-As-You-Go can't create one via API — make it once in the studio).",

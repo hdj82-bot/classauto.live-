@@ -87,21 +87,42 @@ export default function StandardAvatarRegisterCard({
   const visible = filtered.slice(0, MAX_VISIBLE);
   const overflow = filtered.length - visible.length;
 
-  // 카드 선택 — 표시 이름을 그 아바타 이름으로 채운다(사용자가 이후 수정 가능).
+  // 카드 선택 — 다른 아바타로 바꾸면 표시 이름도 그 아바타 이름으로 갱신한다
+  // (사용자가 이후 수정 가능). 이전엔 비어 있을 때만 채워 전환 시 안 바뀌던 버그 수정.
   const handlePick = useCallback((a: Avatar) => {
     setSelectedId(a.id);
     setManualId("");
-    setName((prev) => prev.trim() || a.name);
+    setName(a.name);
   }, []);
 
-  const effectiveId = manualOpen && manualId.trim() ? manualId.trim() : selectedId;
+  // 등록 대상 id — 수동 입력이 있으면 그것, 아니면 피커에서 고른 것.
+  const usingManual = manualOpen && !!manualId.trim();
+  const effectiveId = usingManual ? manualId.trim() : selectedId;
+  // 피커에서 고른 아바타 — 등록 시 메타데이터를 함께 보내 서버 재조회(느림)를 건너뛴다.
+  const picked = useMemo(
+    () =>
+      usingManual
+        ? null
+        : (accountAvatars ?? []).find((a) => a.id === selectedId) ?? null,
+    [usingManual, accountAvatars, selectedId],
+  );
 
   const handleSubmit = useCallback(async () => {
     const id = (effectiveId || "").trim();
     if (!id) return;
     setSubmitting(true);
     try {
-      const avatar = await registerStandardAvatar(id, name.trim() || null);
+      const avatar = await registerStandardAvatar(
+        id,
+        name.trim() || null,
+        picked
+          ? {
+              preview_image_url: picked.preview_image_url,
+              preview_video_url: picked.preview_video_url,
+              gender: picked.gender,
+            }
+          : null,
+      );
       toast(t("standardRegisterSuccess"), "success");
       setSelectedId(null);
       setManualId("");
@@ -112,7 +133,7 @@ export default function StandardAvatarRegisterCard({
     } finally {
       setSubmitting(false);
     }
-  }, [effectiveId, name, toast, t, onRegistered]);
+  }, [effectiveId, name, picked, toast, t, onRegistered]);
 
   return (
     <div data-testid="standard-avatar-register" style={cardStyle}>
@@ -121,6 +142,15 @@ export default function StandardAvatarRegisterCard({
         <h3 style={titleStyle}>{t("standardRegisterTitle")}</h3>
       </div>
       <p style={descStyle}>{t("standardRegisterDescription")}</p>
+      <a
+        href="https://app.heygen.com/avatars"
+        target="_blank"
+        rel="noopener noreferrer"
+        data-testid="standard-heygen-link"
+        style={heygenLinkStyle}
+      >
+        {t("standardHeygenListLink")} ↗
+      </a>
 
       {/* 계정 아바타 피커 — 이름으로 검색해 본인 스튜디오 아바타를 고른다. */}
       {loadStatus !== "error" && (accountAvatars?.length ?? 0) > 0 && (
@@ -294,6 +324,15 @@ const descStyle: CSSProperties = {
   fontSize: 13,
   lineHeight: 1.6,
   color: "var(--text-muted)",
+};
+
+const heygenLinkStyle: CSSProperties = {
+  display: "inline-block",
+  marginTop: 8,
+  fontSize: 12.5,
+  fontWeight: 700,
+  color: "var(--gold-on-light, #B88308)",
+  textDecoration: "none",
 };
 
 const labelStyle: CSSProperties = {
