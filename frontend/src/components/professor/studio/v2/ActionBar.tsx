@@ -17,7 +17,7 @@ export interface ActionBarProps {
   onPrev: () => void;
   onGenerate: () => void;
   generating?: boolean;
-  /** 기본 "전체 생성 시작". 이미 생성된 강의면 "생성 현황 보기" 등으로 교체. */
+  /** 기본 "슬라이드 쇼 제작". 필요 시 호출부에서 교체. */
   ctaLabel?: string;
 }
 
@@ -103,7 +103,7 @@ export default function ActionBar({
             </svg>
           }
         >
-          {generating ? "생성 중…" : (ctaLabel ?? "전체 생성 시작")}
+          {generating ? "제작 중…" : (ctaLabel ?? "슬라이드 쇼 제작")}
         </PrimaryButton>
       </div>
     </div>

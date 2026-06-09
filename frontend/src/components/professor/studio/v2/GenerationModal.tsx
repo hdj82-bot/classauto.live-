@@ -144,14 +144,14 @@ export default function GenerationModal({
     },
     {
       id: 3,
-      title: "AI 아바타 영상 합성",
-      detail: activeStage < 3 ? "대기 중 — 예상 시작: 2분 후" : "합성 진행 중",
+      title: "자막·슬라이드 쇼 합성",
+      detail: activeStage < 3 ? "대기 중" : "슬라이드·음성·자막 타임라인 합성 중",
       time: activeStage >= 3 ? eta ?? "—" : "—",
     },
     {
       id: 4,
-      title: "최종 인코딩",
-      detail: activeStage < 4 ? "대기 중 — 예상 시작: 6분 후" : "인코딩 진행 중",
+      title: "마무리·게시 준비",
+      detail: activeStage < 4 ? "대기 중" : "마무리 중",
       time: activeStage >= 4 ? eta ?? "—" : "—",
     },
   ];
@@ -236,7 +236,7 @@ export default function GenerationModal({
                 color: "var(--text)",
               }}
             >
-              {done ? "강의 영상이 완성되었어요!" : "강의 영상 만드는 중…"}
+              {done ? "슬라이드 쇼가 완성되었어요!" : "슬라이드 쇼 만드는 중…"}
             </h2>
             <div style={{ color: "var(--text-muted)", fontSize: 13.5 }}>
               {lectureTitle} · 슬라이드 {slideCount}장
@@ -455,7 +455,7 @@ export default function GenerationModal({
                 label="슬라이드"
                 value={`${processedSlides} / ${slideCount} (${Math.round((processedSlides / Math.max(slideCount, 1)) * 100)}%)`}
               />
-              {expectedDuration && <InfoRow label="예상 영상 길이" value={expectedDuration} />}
+              {expectedDuration && <InfoRow label="예상 재생 길이" value={expectedDuration} />}
               {monthlyUsed != null && monthlyLimit != null && (
                 <InfoRow
                   label="사용 가능"
@@ -481,7 +481,7 @@ export default function GenerationModal({
                 백그라운드 실행
               </div>
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                이 창을 닫아도 서버에서 계속 생성됩니다. 완성된 영상은 강의 페이지에서 확인하실 수 있어요.
+                이 창을 닫아도 서버에서 계속 제작됩니다. 완성된 슬라이드 쇼는 강의 페이지에서 확인하실 수 있어요.
               </div>
               <button
                 type="button"

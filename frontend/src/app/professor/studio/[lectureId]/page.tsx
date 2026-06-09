@@ -1268,7 +1268,7 @@ export default function StudioWizardPage() {
           canPrev={activeIndex > 0}
           onPrev={handlePrev}
           onGenerate={handleGenerate}
-          ctaLabel={approved ? "생성 현황 보기" : undefined}
+          ctaLabel="슬라이드 쇼 제작"
         />
       </div>
 
