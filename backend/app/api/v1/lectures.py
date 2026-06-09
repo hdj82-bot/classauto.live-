@@ -538,6 +538,49 @@ async def get_lecture_slideshow(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
+@router.get(
+    "/api/lectures/{slug}/seed-questions/public",
+    summary="학생 플레이어용 추천(사전 제작) 질문 — 클립 보유분만",
+)
+async def get_public_seed_questions(
+    slug: str,
+    db: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_current_user_optional),
+):
+    """교수자가 사전 제작한 예상 질문 중 **렌더 완료(클립 보유)** 항목만 반환한다.
+
+    학생 Q&A 패널의 "추천 질문"으로 노출되며, 클릭하면 미리 만든 Q&A 아바타
+    영상을 재생한다(실시간 RAG 가 아니라 사전 제작 클립). 발행 강의는 누구나,
+    소유 교수자는 미발행이어도 조회 가능(배포 전 미리보기). ``status=ready`` +
+    ``s3_video_url`` 있는 행만 내려준다.
+    """
+    try:
+        pub = await get_public_lecture_by_slug(
+            db, slug, viewer_id=viewer.id if viewer else None
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    lecture_id = pub.id
+    loop = asyncio.get_event_loop()
+
+    def _work():
+        with SyncSessionLocal() as sdb:
+            rows = qa_avatar.list_seed_questions(sdb, lecture_id)
+            return [
+                {
+                    "id": str(r.id),
+                    "question": r.question_text,
+                    "video_url": presign_stored_s3_url(r.s3_video_url),
+                }
+                for r in rows
+                if r.status == "ready" and r.s3_video_url
+            ]
+
+    questions = await loop.run_in_executor(None, _work)
+    return {"questions": questions}
+
+
 # ── 강의 mp4 on-demand 다운로드 (교수자) ──────────────────────────────────────
 
 @router.post(

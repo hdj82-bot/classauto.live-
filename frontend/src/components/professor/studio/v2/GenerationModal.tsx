@@ -136,31 +136,39 @@ export default function GenerationModal({
     return () => cancelAnimationFrame(handle);
   }, [done]);
 
+  // 슬라이드쇼 본문은 "슬라이드 검토 → 구간 TTS 음성 합성"이 전부다(HeyGen 영상
+  // 굽기·인코딩 없음). 예전 4단계(아바타 합성·인코딩)는 실제 작업이 없어 진척이
+  // 멈춘 듯 보였으므로, 실제 파이프라인에 맞춰 2단계로 줄인다. 가짜 소요시간 표기도
+  // 제거(측정값이 아니었음).
   const stages = [
-    { id: 1, title: "스크립트 검토 완료", detail: `${slideCount} / ${slideCount} 슬라이드 채택됨`, time: "0초" },
+    {
+      id: 1,
+      title: "스크립트 검토 완료",
+      detail: `${slideCount} / ${slideCount} 슬라이드 채택됨`,
+    },
     {
       id: 2,
-      title: "TTS 음성 생성 중…",
+      title: done ? "음성 합성 완료" : "음성 합성 중… (TTS)",
       detail: `${Math.min(processedSlides, slideCount)} / ${slideCount} 슬라이드`,
-      time: eta ?? "—",
-      live: `현재: 슬라이드 ${Math.min(processedSlides, slideCount)} 음성 생성`,
-    },
-    {
-      id: 3,
-      title: "자막·슬라이드 쇼 합성",
-      detail: activeStage < 3 ? "대기 중" : "슬라이드·음성·자막 타임라인 합성 중",
-      time: activeStage >= 3 ? eta ?? "—" : "—",
-    },
-    {
-      id: 4,
-      title: "마무리·게시 준비",
-      detail: activeStage < 4 ? "대기 중" : "마무리 중",
-      time: activeStage >= 4 ? eta ?? "—" : "—",
+      live: done
+        ? undefined
+        : `현재: 슬라이드 ${Math.min(processedSlides, slideCount)} 음성 합성`,
     },
   ];
 
   return (
-    <div style={overlayStyle(open)} role="dialog" aria-modal="true" aria-labelledby="gen-h1">
+    <div
+      style={overlayStyle(open)}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="gen-h1"
+      // 모달 바깥(backdrop) 클릭 시 닫아 studio 편집 화면으로 복귀한다. 안쪽
+      // 모달 콘텐츠 클릭은 currentTarget 이 아니므로 닫히지 않는다. 생성은
+      // 백그라운드에서 계속 진행된다(onBackground = setGenOpen(false)).
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onBackground?.();
+      }}
+    >
       <div style={modalStyle(open)}>
         {/* DEV controls */}
         {(onDevAdd || onDevComplete || onDevBackground) && (
@@ -400,23 +408,6 @@ export default function GenerationModal({
                         {s.live}
                       </div>
                     )}
-                  </div>
-                  <div
-                    style={{
-                      ...tabularStyle,
-                      fontSize: 11,
-                      color:
-                        state === "done"
-                          ? "var(--success)"
-                          : state === "active"
-                            ? "var(--gold)"
-                            : "var(--text-subtle)",
-                      fontWeight: state === "pending" ? 400 : 600,
-                      marginTop: 4,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {s.time}
                   </div>
                 </div>
               );

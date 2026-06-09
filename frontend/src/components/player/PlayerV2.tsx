@@ -67,6 +67,9 @@ interface QAMessage {
    * 질문이 아니라 비슷한 과거 질문에 렌더된 것이므로, 클립 위에 그 사실을 표기한다.
    */
   matchedQuestion?: string | null;
+  /** 교수자 사전 제작 추천 질문의 정답 클립(=이 질문에 대한 정확한 답). 캐시
+   *  "비슷한 질문" 안내문을 띄우지 않는다. */
+  seed?: boolean;
 }
 
 interface ReactionCount {
@@ -142,6 +145,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const [qaInput, setQaInput] = useState("");
   const [qaSending, setQaSending] = useState(false);
   const [micOn, setMicOn] = useState(false);
+  // 교수자 사전 제작 추천 질문(클립 보유분). 클릭 시 미리 만든 Q&A 영상 재생.
+  const [seedSuggestions, setSeedSuggestions] = useState<
+    { id: string; question: string; video_url: string }[]
+  >([]);
   const qaBottomRef = useRef<HTMLDivElement>(null);
   const [reactions, setReactions] = useState<ReactionCount>({
     like: 12,
@@ -223,6 +230,25 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       cancelled = true;
     };
   }, [lecture?.id]);
+
+  // ─── 추천(사전 제작) 질문 fetch — 클립 보유분만, 클릭 시 사전 제작 영상 재생 ───
+  useEffect(() => {
+    if (!slug) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get<{
+          questions: { id: string; question: string; video_url: string }[];
+        }>(`/api/lectures/${slug}/seed-questions/public`);
+        if (!cancelled) setSeedSuggestions(data.questions ?? []);
+      } catch {
+        /* 사전 질문 없으면 추천 미표시 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
 
   // 환영 메시지를 i18n locale 로드 후 한 번 세팅 (placeholder → 실제 텍스트).
   // react-hooks/set-state-in-effect: rAF 로 비동기화.
@@ -394,6 +420,26 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     setTimeout(() => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
   };
 
+  // ─── 추천(사전 제작) 질문 클릭 — 실시간 RAG 대신 미리 만든 Q&A 영상 재생 ───
+  // 일반 질문은 채팅(sendQuestion)으로 RAG, 추천 질문은 교수자가 미리 만든 정답
+  // 클립을 보여준다. 강의를 잠시 멈추고 질문+정답 영상을 채팅에 띄운다.
+  const playSeedQuestion = (q: {
+    id: string;
+    question: string;
+    video_url: string;
+  }) => {
+    pausePlayer();
+    setQaMessages((m) => [
+      ...m,
+      { role: "user", text: q.question },
+      { role: "assistant", text: "", avatarUrl: q.video_url, seed: true },
+    ]);
+    setTimeout(
+      () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
+      50,
+    );
+  };
+
   if (loading) {
     return (
       <PlayerSurfaceDark>
@@ -526,12 +572,17 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                 </div>
               )}
 
-              {/* 자막 — 슬라이드별 텍스트(자막 언어가 다르면 번역본). 토글 가능. */}
+              {/* 자막 — 한국어 음성에 맞춰 외국어 번역 자막을 문장 단위로 순차
+                  노출(노래방식). 구간 내 경과 시간 비례로 현재 문장을 보여준다. */}
               {captionsOn && currentSlide?.image_url &&
                 (currentSlide.subtitle_text || currentSlide.text) && (
-                  <div className={styles.caption} aria-live="off">
-                    {currentSlide.subtitle_text || currentSlide.text}
-                  </div>
+                  <KaraokeCaption
+                    className={styles.caption}
+                    text={currentSlide.subtitle_text || currentSlide.text}
+                    slideStart={currentSlide.start_seconds}
+                    slideEnd={currentSlide.end_seconds}
+                    currentTime={player.currentTime}
+                  />
                 )}
             </div>
 
@@ -750,29 +801,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
           <aside className={styles.qa} aria-label={t("student.playerV2.qaTitle")}>
             <div className={styles.qaHead}>
               <h3>{t("student.playerV2.qaTitle")}</h3>
-              <span className={styles.askPill}>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.4}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-                {t("student.playerV2.qaAskPill")}
-              </span>
-            </div>
-            <div className={styles.qaQuota}>
-              <span className={styles.qaQuotaPill}>
-                {t("student.playerV2.qaQuotaEpisode", {
-                  used: String(Math.max(qaMessages.filter((m) => m.role === "user").length, 0)),
-                  limit: "100",
-                })}
-              </span>
-              <span>{t("student.playerV2.qaQuotaDaily", { used: "12", limit: "30" })}</span>
             </div>
 
             <div className={styles.qaBody} aria-live="polite">
@@ -781,11 +809,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   <div key={i} className={styles.msg}>
                     <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
                     <div>
-                      <div className={styles.bubble}>{m.text}</div>
-                      {m.avatarUrl && (
+                      {m.text && <div className={styles.bubble}>{m.text}</div>}
+                      {m.avatarUrl && !m.seed && (
                         // 투명성(09 §5.2) — 캐시 클립은 비슷한 과거 질문에 렌더된 것.
                         // "권위 있는 답"은 위 텍스트(이 학생 질문에 맞춘 RAG)이고 아바타는
-                        // 전달 보조임을 명시한다.
+                        // 전달 보조임을 명시한다. (사전 제작 추천 질문은 정확한 답이라 제외.)
                         <span
                           className={styles.source}
                           style={{ marginTop: 8, display: "flex" }}
@@ -849,25 +877,25 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               <div ref={qaBottomRef} />
             </div>
 
-            <div className={styles.suggest}>
-              <span className={styles.suggestLabel}>
-                {t("student.playerV2.qaSuggestLabel")}
-              </span>
-              <button
-                type="button"
-                className={styles.chip}
-                onClick={() => sendQuestion("把자문은 언제 사용하나요?")}
-              >
-                把자문은 언제 사용하나요?
-              </button>
-              <button
-                type="button"
-                className={styles.chip}
-                onClick={() => sendQuestion("일반 어순과 어떻게 다른가요?")}
-              >
-                일반 어순과 어떻게 다른가요?
-              </button>
-            </div>
+            {/* 추천 질문 = 교수자가 사전 제작한 예상 질문(클립 보유분). 클릭 시
+                실시간 RAG 가 아니라 미리 만든 Q&A 영상을 재생한다. */}
+            {seedSuggestions.length > 0 && (
+              <div className={styles.suggest}>
+                <span className={styles.suggestLabel}>
+                  {t("student.playerV2.qaSuggestLabel")}
+                </span>
+                {seedSuggestions.map((q) => (
+                  <button
+                    key={q.id}
+                    type="button"
+                    className={styles.chip}
+                    onClick={() => playSeedQuestion(q)}
+                  >
+                    {q.question}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <form
               className={styles.qaInput}
@@ -996,4 +1024,47 @@ function formatClock(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * 노래방식 자막 — 외국어 번역 자막을 문장 단위로 순차 노출한다.
+ *
+ * 한국어 음성에 맞춰 현재 슬라이드의 자막을 한 문장씩 보여준다. 구간(슬라이드)
+ * 내 경과 시간 비례로 현재 문장을 고른다(문장별 균등 분배 — 강제정렬 없이도
+ * "노래방처럼" 진행되는 근사). 과거 문장은 흐리게, 현재 문장은 강조한다.
+ */
+function splitIntoSentences(text: string): string[] {
+  const parts = text
+    .split(/(?<=[。．.!?！？\n])/u)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts : [text];
+}
+
+function KaraokeCaption({
+  className,
+  text,
+  slideStart,
+  slideEnd,
+  currentTime,
+}: {
+  className?: string;
+  text: string;
+  slideStart: number;
+  slideEnd: number;
+  currentTime: number;
+}) {
+  const sentences = splitIntoSentences(text);
+  const dur = Math.max(slideEnd - slideStart, 0.001);
+  const progress = Math.min(Math.max((currentTime - slideStart) / dur, 0), 0.9999);
+  const activeIdx = Math.min(
+    Math.floor(progress * sentences.length),
+    sentences.length - 1,
+  );
+  const active = sentences[activeIdx] ?? text;
+  return (
+    <div className={className} aria-live="off">
+      {active}
+    </div>
+  );
 }
