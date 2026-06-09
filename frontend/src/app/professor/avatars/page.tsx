@@ -411,24 +411,21 @@ export default function AvatarsPage() {
 
   // browse 페이지에서 표준 아바타 등록 후 복귀 — ?selectStandard=<avatar_id> 가 있으면
   // 그 아바타를 제작용 룩으로 선택하고(상단 "룩"), 파라미터를 정리한다.
-  // Next 라우터 캐시로 복귀 시 이 페이지가 재마운트되지 않아 standardAvatars 가 stale
-  // 일 수 있다(등록한 새 아바타가 목록에 없음). 그 경우 한 번 새로고침해 목록을 채운
-  // 뒤 선택한다. refreshedRef 로 새로고침을 sel 당 1회만 호출(루프 방지).
-  const selStandardRefreshedRef = useRef<string | null>(null);
+  //
+  // Next 라우터 캐시로 복귀하면 standardAvatars 가 stale 일 수 있어, "목록에 있으면
+  // 선택"하는 조건부 방식은 타이밍에 취약했다(2026-06-09 사용자: 등록해도 룩 미선택).
+  // 그래서 sel 이 보이면 조건 없이 **즉시 selectedId 로 지정**하고(룩 박스는 목록이
+  // 로드되면 resolve), 동시에 목록을 새로고침해 라이브러리에 포함시킨 뒤 파라미터를
+  // 정리한다. ref 로 sel 당 1회만 실행한다.
+  const selStandardDoneRef = useRef<string | null>(null);
   useEffect(() => {
     const sel = searchParams?.get("selectStandard");
-    if (!sel) return;
-    if (standardAvatars.some((s) => s.avatar_id === sel)) {
-      handleSelect(sel);
-      selStandardRefreshedRef.current = null;
-      router.replace(`/professor/avatars${lectureId ? `?lecture=${lectureId}` : ""}`);
-      return;
-    }
-    if (selStandardRefreshedRef.current !== sel) {
-      selStandardRefreshedRef.current = sel;
-      void refreshAvatars();
-    }
-  }, [searchParams, standardAvatars, handleSelect, router, lectureId, refreshAvatars]);
+    if (!sel || selStandardDoneRef.current === sel) return;
+    selStandardDoneRef.current = sel;
+    handleSelect(sel);
+    void refreshAvatars();
+    router.replace(`/professor/avatars${lectureId ? `?lecture=${lectureId}` : ""}`);
+  }, [searchParams, handleSelect, refreshAvatars, router, lectureId]);
 
   // 카드/최근 박스 클릭 — 큰 보기(뷰어)를 열고, 동시에 선택(최근/미리보기 반영)한다.
   const handleOpen = useCallback(
