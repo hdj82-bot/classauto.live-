@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_professor, require_student
+from app.api.deps import get_current_user, require_professor, require_student  # noqa: F401
 from app.db.session import SyncSessionLocal, get_db
 from app.models.course import Course
 from app.models.lecture import Lecture
@@ -28,7 +28,9 @@ router = APIRouter(prefix="/api/v1/qa", tags=["qa"])
 
 
 class QARequest(BaseModel):
-    session_id: uuid.UUID
+    # session_id 가 없으면(미리보기) = 소유 교수자가 배포 전 Q&A 를 점검하는 경로.
+    # 세션·로그·쿼터·아바타 큐 없이 RAG 답변만 반환한다.
+    session_id: uuid.UUID | None = None
     lecture_id: uuid.UUID
     # 1차 가드레일 — 입력 제약(docs/planning/02 §3.1: 텍스트 ≤ 500자). 서버 사이드에서
     # 강제해 "보고서 붙여넣기"식 남용을 RAG·Claude 호출 전에 차단한다(비용 0). 초과/공백
@@ -39,15 +41,35 @@ class QARequest(BaseModel):
 @router.post("", summary="Q&A 질문")
 async def ask_question(
     body: QARequest,
-    user: User = Depends(require_student),
+    user: User = Depends(get_current_user),
 ):
     loop = asyncio.get_event_loop()
+    preview = body.session_id is None
 
     def _run():
         with SyncSessionLocal() as db:
-            # 권한·정합 검증 — 본인 세션이고 그 세션이 이 강의의 것인지 확인한다.
-            # (검증 없으면 임의 학생이 아무 강의의 RAG 를 호출하고 비용을 그 강의에
-            #  전가할 수 있다.)
+            lecture = db.execute(
+                select(Lecture).where(Lecture.id == body.lecture_id)
+            ).scalar_one_or_none()
+            if not lecture or not lecture.pipeline_task_id:
+                raise LookupError("강의 파이프라인이 아직 처리되지 않았습니다.")
+
+            # ── 미리보기(세션 없음): 소유 교수자만. 세션·로그·쿼터·아바타 큐 없이
+            #    RAG 답변만 반환한다(배포 전 Q&A 품질 점검). ──
+            if preview:
+                instructor_id = db.execute(
+                    select(Course.instructor_id).where(Course.id == lecture.course_id)
+                ).scalar_one_or_none()
+                if instructor_id != user.id:
+                    raise PermissionError("미리보기 Q&A 는 소유 교수자만 가능합니다.")
+                result = answer_question(
+                    db, lecture.pipeline_task_id, f"preview-{user.id}", body.question
+                )
+                return result, None
+
+            # ── 학생 시청 흐름 — 본인 세션이고 그 세션이 이 강의의 것인지 검증한다.
+            # (검증 없으면 임의 사용자가 아무 강의의 RAG 를 호출하고 비용을 그 강의에
+            #  전가할 수 있다.) ──
             session = db.execute(
                 select(LearningSession).where(LearningSession.id == body.session_id)
             ).scalar_one_or_none()
@@ -58,11 +80,6 @@ async def ask_question(
             ):
                 raise PermissionError("이 세션에 대한 권한이 없습니다.")
 
-            lecture = db.execute(
-                select(Lecture).where(Lecture.id == body.lecture_id)
-            ).scalar_one_or_none()
-            if not lecture or not lecture.pipeline_task_id:
-                raise LookupError("강의 파이프라인이 아직 처리되지 않았습니다.")
             result = answer_question(db, lecture.pipeline_task_id, str(body.session_id), body.question)
 
             top_slide_numbers = (
