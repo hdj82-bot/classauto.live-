@@ -526,12 +526,17 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                 </div>
               )}
 
-              {/* 자막 — 슬라이드별 텍스트(자막 언어가 다르면 번역본). 토글 가능. */}
+              {/* 자막 — 한국어 음성에 맞춰 외국어 번역 자막을 문장 단위로 순차
+                  노출(노래방식). 구간 내 경과 시간 비례로 현재 문장을 보여준다. */}
               {captionsOn && currentSlide?.image_url &&
                 (currentSlide.subtitle_text || currentSlide.text) && (
-                  <div className={styles.caption} aria-live="off">
-                    {currentSlide.subtitle_text || currentSlide.text}
-                  </div>
+                  <KaraokeCaption
+                    className={styles.caption}
+                    text={currentSlide.subtitle_text || currentSlide.text}
+                    slideStart={currentSlide.start_seconds}
+                    slideEnd={currentSlide.end_seconds}
+                    currentTime={player.currentTime}
+                  />
                 )}
             </div>
 
@@ -957,4 +962,47 @@ function formatClock(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/**
+ * 노래방식 자막 — 외국어 번역 자막을 문장 단위로 순차 노출한다.
+ *
+ * 한국어 음성에 맞춰 현재 슬라이드의 자막을 한 문장씩 보여준다. 구간(슬라이드)
+ * 내 경과 시간 비례로 현재 문장을 고른다(문장별 균등 분배 — 강제정렬 없이도
+ * "노래방처럼" 진행되는 근사). 과거 문장은 흐리게, 현재 문장은 강조한다.
+ */
+function splitIntoSentences(text: string): string[] {
+  const parts = text
+    .split(/(?<=[。．.!?！？\n])/u)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts : [text];
+}
+
+function KaraokeCaption({
+  className,
+  text,
+  slideStart,
+  slideEnd,
+  currentTime,
+}: {
+  className?: string;
+  text: string;
+  slideStart: number;
+  slideEnd: number;
+  currentTime: number;
+}) {
+  const sentences = splitIntoSentences(text);
+  const dur = Math.max(slideEnd - slideStart, 0.001);
+  const progress = Math.min(Math.max((currentTime - slideStart) / dur, 0), 0.9999);
+  const activeIdx = Math.min(
+    Math.floor(progress * sentences.length),
+    sentences.length - 1,
+  );
+  const active = sentences[activeIdx] ?? text;
+  return (
+    <div className={className} aria-live="off">
+      {active}
+    </div>
+  );
 }
