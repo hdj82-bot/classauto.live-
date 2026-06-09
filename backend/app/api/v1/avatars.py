@@ -1960,6 +1960,58 @@ async def list_standard_avatars(
     return [_standard_avatar_item(r) for r in rows]
 
 
+@router.get(
+    "/api/avatars/heygen-account",
+    response_model=list[AvatarMeta],
+    summary="HeyGen 계정의 전체 아바타 목록 (표준 아바타 등록 피커용)",
+)
+async def list_heygen_account_avatars(
+    user: User = Depends(require_professor),
+):
+    """HeyGen ``/v2/avatars`` 의 전체 아바타 목록을 그대로 반환한다(큐레이션 없음).
+
+    표준 아바타 등록 화면의 "내 아바타 고르기" 피커가 쓴다. 교수자는 avatar_id 를
+    직접 찾을 필요 없이, 본인이 웹 스튜디오에서 지은 아바타 이름으로 검색해 고른다.
+    공개 샘플 아바타도 함께 포함되므로(HeyGen 이 소유 구분 필드를 안정적으로 주지
+    않음), 프론트는 이름 검색으로 본인 것을 찾게 한다. 여기서 고른 id 는 곧 이
+    엔드포인트의 출처(``/v2/avatars``)에 존재하므로 등록 검증을 항상 통과한다.
+
+    MOCK 환경은 빈 목록을 돌려준다(외부 호출 0).
+    """
+    if settings.HEYGEN_MOCK:
+        return []
+
+    from app.services.pipeline.heygen import (
+        HeyGenError,
+        list_avatars as heygen_list_avatars,
+    )
+
+    try:
+        avatars = await heygen_list_avatars()
+    except HeyGenError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"HeyGen 아바타 목록을 불러오지 못했습니다: {e}",
+        ) from e
+
+    items: list[AvatarMeta] = []
+    for a in avatars:
+        avatar_id = a.get("avatar_id")
+        if not avatar_id:
+            continue
+        items.append(
+            AvatarMeta(
+                avatar_id=avatar_id,
+                avatar_name=a.get("avatar_name") or "Avatar",
+                gender=a.get("gender"),
+                preview_image_url=a.get("preview_image_url"),
+                preview_video_url=a.get("preview_video_url"),
+                is_custom=False,
+            )
+        )
+    return items
+
+
 @router.post(
     "/api/avatars/me/standard",
     response_model=StandardAvatarItem,

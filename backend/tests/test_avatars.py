@@ -815,6 +815,29 @@ async def test_delete_my_voice_clears_fields(client, professor, db):
 
 
 @pytest.mark.asyncio
+async def test_list_heygen_account_avatars(client, professor):
+    # 표준 아바타 등록 피커용 — 큐레이션 없이 HeyGen 전체 목록을 그대로 반환한다.
+    with _patch_list():
+        resp = await client.get(
+            "/api/avatars/heygen-account", headers=make_auth_header(professor)
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [a["avatar_id"] for a in data] == ["av_m", "av_f"]
+    assert all(a["is_custom"] is False for a in data)
+    assert data[0]["preview_video_url"] == "https://hg.example/m.mp4"
+
+
+@pytest.mark.asyncio
+async def test_list_heygen_account_avatars_requires_professor(client, student):
+    with _patch_list():
+        resp = await client.get(
+            "/api/avatars/heygen-account", headers=make_auth_header(student)
+        )
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
 async def test_register_standard_avatar_validates_and_persists(client, professor):
     # avatar_id 가 HeyGen 계정 목록에 있으면 메타데이터와 함께 등록되고, 이름 미지정
     # 시 HeyGen 이름을 폴백으로 쓴다.

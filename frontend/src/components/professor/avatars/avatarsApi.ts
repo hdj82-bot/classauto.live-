@@ -794,6 +794,23 @@ function toStandardAvatar(w: StandardAvatarWire): StandardAvatar {
   };
 }
 
+/**
+ * GET /api/avatars/heygen-account — HeyGen 계정의 전체 아바타 목록(피커용).
+ *
+ * 표준 아바타 등록 시 교수자가 avatar_id 를 직접 찾지 않고 이름·썸네일로 골라
+ * 선택할 수 있게 한다. 공개 샘플도 포함되므로 UI 는 이름 검색으로 본인 것을 찾는다.
+ * deferred(미배포)·MOCK 이면 빈 목록 → 카드가 수동 입력으로 폴백한다.
+ */
+export async function listHeyGenAccountAvatars(): Promise<Avatar[]> {
+  try {
+    const { data } = await api.get<AvatarWire[]>("/api/avatars/heygen-account");
+    return (data ?? []).map(toAvatar);
+  } catch (err) {
+    if (isDeferredError(err)) return [];
+    throw err;
+  }
+}
+
 /** GET /api/avatars/me/standard — 등록한 표준 아바타 목록. deferred 면 빈 목록. */
 export async function listMyStandardAvatars(): Promise<StandardAvatar[]> {
   try {
