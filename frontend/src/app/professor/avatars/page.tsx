@@ -409,6 +409,15 @@ export default function AvatarsPage() {
     void setRecentAvatar(id).catch(() => {});
   }, []);
 
+  // browse 페이지에서 표준 아바타 등록 후 복귀 — ?selectStandard=<avatar_id> 가 있으면
+  // 그 아바타가 목록에 로드되는 즉시 제작용 룩으로 선택하고(상단 "룩"), 파라미터를 정리한다.
+  useEffect(() => {
+    const sel = searchParams?.get("selectStandard");
+    if (!sel || !standardAvatars.some((s) => s.avatar_id === sel)) return;
+    handleSelect(sel);
+    router.replace(`/professor/avatars${lectureId ? `?lecture=${lectureId}` : ""}`);
+  }, [searchParams, standardAvatars, handleSelect, router, lectureId]);
+
   // 카드/최근 박스 클릭 — 큰 보기(뷰어)를 열고, 동시에 선택(최근/미리보기 반영)한다.
   const handleOpen = useCallback(
     (avatar: Avatar) => {
@@ -884,7 +893,11 @@ export default function AvatarsPage() {
           />
         ) : (
           // 표준 아바타 등록 — 등록 후 그 아바타를 제작용 룩으로 바로 선택(상단 "룩")
-          <StandardAvatarRegisterCard onRegistered={handleStandardRegistered} t={t} />
+          <StandardAvatarRegisterCard
+            onRegistered={handleStandardRegistered}
+            lectureId={lectureId}
+            t={t}
+          />
         )}
 
         {/* 내 아바타(룩 + 음성 조합) 갤러리 — 저장한 조합을 재생성 없이 바로 강의에
