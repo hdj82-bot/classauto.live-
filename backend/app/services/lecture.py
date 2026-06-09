@@ -197,6 +197,14 @@ async def get_lecture_slideshow_by_slug(db: AsyncSession, slug: str):
     segments = (script.segments if script else None) or []
     subtitle_segments = (script.subtitle_segments if script else None) or []
 
+    # 본문 렌더 완료 여부 — Video 가 done 으로 전환된 경우에만 학생에게 재생을 허용한다.
+    # done 이 아니면(승인 전·렌더 진행 중) 음성이 아직 없어 무음으로 재생될 수 있으므로
+    # is_ready=False 로 내려 플레이어가 "준비 중"을 표시하게 한다. 기본 True 가 아니라
+    # 여기서 명시적으로 계산해 내려준다.
+    from app.models.video import VideoStatus  # noqa: PLC0415
+
+    is_body_ready = video is not None and video.status == VideoStatus.done
+
     # slide_index → 번역 자막(자막 언어가 음성과 다를 때만 채워짐).
     subtitle_by_index: dict[int, str] = {}
     for sub in subtitle_segments:
@@ -254,6 +262,7 @@ async def get_lecture_slideshow_by_slug(db: AsyncSession, slug: str):
     return SlideshowResponse(
         lecture_id=lecture.id,
         is_expired=False,
+        is_ready=is_body_ready,
         total_seconds=total_seconds,
         slides=slides,
     )

@@ -30,13 +30,18 @@ export interface SlideshowSlide {
 interface SlideshowWire {
   lecture_id: string;
   is_expired: boolean;
+  /** 본문 렌더 완료 여부. 구버전 백엔드 응답엔 없으므로 optional — 없으면 true 취급. */
+  is_ready?: boolean;
   total_seconds: number;
   slides: SlideshowSlide[];
 }
 
 export interface SlideshowPlayback {
   slides: SlideshowSlide[];
+  /** 슬라이드쇼 데이터 fetch + 음성 길이 해석이 끝났는지(로딩 완료). */
   ready: boolean;
+  /** 본문 렌더가 실제로 끝났는지(Video done). false 면 "준비 중"을 표시한다. */
+  bodyReady: boolean;
   isExpired: boolean;
   currentIndex: number;
   currentSlide: SlideshowSlide | null;
@@ -89,6 +94,7 @@ export function useSlideshowPlayback(
   const [slides, setSlides] = useState<SlideshowSlide[]>([]);
   const [durations, setDurations] = useState<number[]>([]);
   const [ready, setReady] = useState(false);
+  const [bodyReady, setBodyReady] = useState(true);
   const [isExpired, setIsExpired] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -160,6 +166,8 @@ export function useSlideshowPlayback(
           setReady(true);
           return;
         }
+        // 구버전 백엔드(필드 없음)는 true 로 간주해 종전 동작 유지.
+        setBodyReady(data.is_ready !== false);
         const ss = data.slides ?? [];
         setSlides(ss);
         const resolved = await Promise.all(ss.map(resolveDuration));
@@ -374,6 +382,7 @@ export function useSlideshowPlayback(
   return {
     slides,
     ready,
+    bodyReady,
     isExpired,
     currentIndex,
     currentSlide,

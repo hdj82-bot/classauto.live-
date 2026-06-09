@@ -121,6 +121,7 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
     audioRef,
     currentSlide,
     ready: playerReady,
+    bodyReady,
     pause: pausePlayer,
     play: playPlayer,
   } = player;
@@ -479,7 +480,10 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
             <div className={styles.video} ref={stageRef}>
               {/* 본문 = 슬라이드쇼: 현재 슬라이드 이미지 + 숨겨진 구간 음성 + 자막. */}
               <audio ref={audioRef} preload="auto" aria-hidden="true" />
-              {currentSlide?.image_url ? (
+              {/* 본문 렌더가 끝났고(bodyReady) 슬라이드 이미지가 있을 때만 재생면을
+                  보여준다. 공개됐지만 아직 렌더 중(bodyReady=false)이면 무음으로
+                  슬라이드만 넘기는 대신 "준비 중" 안내를 띄운다. */}
+              {bodyReady && currentSlide?.image_url ? (
                 <button
                   type="button"
                   className={styles.slideClick}
@@ -505,6 +509,11 @@ export default function PlayerV2({ slug }: PlayerV2Props) {
                       ? t("student.playerV2.videoNotReady")
                       : t("student.entry.loadingLecture")}
                   </span>
+                  {playerReady && !bodyReady && (
+                    <span className={styles.placeholderLabel}>
+                      {t("student.playerV2.videoNotReadyDesc")}
+                    </span>
+                  )}
                 </div>
               )}
 

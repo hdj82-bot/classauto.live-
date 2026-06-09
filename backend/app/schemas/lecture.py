@@ -93,6 +93,14 @@ class SlideshowResponse(BaseModel):
 
     lecture_id: uuid.UUID
     is_expired: bool = False
+    is_ready: bool = Field(
+        default=True,
+        description=(
+            "본문 렌더 완료 여부. 강의가 공개됐지만 아직 본문 TTS 렌더가 끝나지 "
+            "않았으면(Video.status != done) False — 학생 플레이어는 무음 재생 대신 "
+            "'준비 중'을 표시한다. 기본 True 로 두어 done 강의는 종전과 동일하게 재생."
+        ),
+    )
     total_seconds: float = Field(default=0, description="전체 타임라인 길이(초).")
     slides: list[SlideshowSlide]
 

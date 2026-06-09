@@ -66,6 +66,59 @@ export default function Step5Share({
         )}
       </header>
 
+      {/* 공개 상태 배너 — 비공개면 링크가 항상 404 이므로 절대 놓치지 않게 크게 경고하고
+          한 번에 공개할 수 있게 한다(자동 공개는 하지 않음 — 교수자 명시 결정). */}
+      {lecture.is_published ? (
+        <div
+          role="status"
+          className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-5"
+        >
+          <span aria-hidden="true" className="mt-0.5 text-emerald-600">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M8 12.5l2.5 2.5L16 9" />
+            </svg>
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-emerald-900">
+              {t("step5.publishedBannerTitle")}
+            </p>
+            <p className="text-xs text-emerald-700 mt-0.5">
+              {t("step5.publishedBannerBody")}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div
+          role="alert"
+          className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-2xl p-5"
+        >
+          <span aria-hidden="true" className="mt-0.5 text-amber-600">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 9v4" />
+              <path d="M12 17h.01" />
+              <path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+            </svg>
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-900">
+              {t("step5.privacyWarnTitle")}
+            </p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              {t("step5.privacyWarnBody")}
+            </p>
+            <button
+              type="button"
+              onClick={() => onPublishToggle(true)}
+              disabled={publishing}
+              className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white rounded-xl px-4 py-2 transition disabled:opacity-50"
+            >
+              {publishing ? t("step5.publishNowBusy") : t("step5.publishNow")}
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white border border-gray-200 rounded-2xl p-6">
         <ShareLinks
           url={lectureUrl}
