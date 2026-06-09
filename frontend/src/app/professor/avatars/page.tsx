@@ -857,6 +857,24 @@ export default function AvatarsPage() {
           t={t}
         />
 
+        {/* ① 아바타 제작 — 포토(내 사진) vs 표준(웹 스튜디오 Video Avatar 등록) 선택.
+            포토는 몸 고정·얼굴만 움직이고, 표준은 전신이 자연스럽게 움직인다(동일 단가).
+            저장/라이브러리 섹션 위(헤더 바로 아래)에 둬, 제작 방식 선택이 바로 보이게 한다
+            (2026-06-09 사용자 피드백: 갤러리·라이브러리에 밀려 토글이 안 보였음). */}
+        <AvatarCreateTypeToggle value={createType} onChange={setCreateType} t={t} />
+
+        {createType === "photo" ? (
+          // 내 사진으로 아바타 만들기 — Design with AI 룩 온보딩을 카드 안에 인라인 임베드
+          <PhotoAvatarStudioCard
+            reducedMotion={reducedMotion}
+            onConfirmed={refreshAvatars}
+            onLibraryChanged={refreshAvatars}
+          />
+        ) : (
+          // 표준 아바타 등록 — HeyGen avatar_id 등록 → 라이브러리에 표준 아바타로 추가
+          <StandardAvatarRegisterCard onRegistered={refreshAvatars} t={t} />
+        )}
+
         {/* 내 아바타(룩 + 음성 조합) 갤러리 — 저장한 조합을 재생성 없이 바로 강의에
             적용한다. 미리보기 영상이 ready 면 카드에서 무음 루프로 재생된다(Phase 2).
             기존 "저장된 아바타·룩 라이브러리" 위에 둔다. */}
@@ -888,22 +906,6 @@ export default function AvatarsPage() {
           onDelete={handleLibraryDelete}
           t={t}
         />
-
-        {/* ① 아바타 제작 — 포토(내 사진) vs 표준(웹 스튜디오 Video Avatar 등록) 선택.
-            포토는 몸 고정·얼굴만 움직이고, 표준은 전신이 자연스럽게 움직인다(동일 단가). */}
-        <AvatarCreateTypeToggle value={createType} onChange={setCreateType} t={t} />
-
-        {createType === "photo" ? (
-          // 내 사진으로 아바타 만들기 — Design with AI 룩 온보딩을 카드 안에 인라인 임베드
-          <PhotoAvatarStudioCard
-            reducedMotion={reducedMotion}
-            onConfirmed={refreshAvatars}
-            onLibraryChanged={refreshAvatars}
-          />
-        ) : (
-          // 표준 아바타 등록 — HeyGen avatar_id 등록 → 라이브러리에 표준 아바타로 추가
-          <StandardAvatarRegisterCard onRegistered={refreshAvatars} t={t} />
-        )}
 
         {/* ② 내 목소리로 음성 만들기 — 파일 업로드 + 브라우저 직접 녹음 + 읽기 대본
             + "이 음성을 아바타 제작에 사용"(샘플 보이스와 상호 배타) */}
