@@ -243,17 +243,21 @@ export async function getAvatarPreview(): Promise<AvatarPreview> {
  * POST /api/avatars/me/preview — 렌더 시작(또는 캐시 반환).
  * voiceId 를 주면 그 음성으로 렌더한다. force=true 면 캐시 무시하고 재생성.
  * text 를 주면 아바타가 그 대본을 말한다(스크립트 테스트). 없으면 기본 샘플.
+ * avatarId 를 주면 등록한 표준 아바타(Video Avatar)로 렌더한다(전신 자연 움직임).
+ * 없으면 본인 포토 아바타(Talking Photo).
  */
 export async function startAvatarPreview(
   voiceId?: string | null,
   force = false,
   text?: string | null,
+  avatarId?: string | null,
 ): Promise<AvatarPreview> {
   try {
     const { data } = await api.post<AvatarPreview>("/api/avatars/me/preview", {
       voice_id: voiceId ?? null,
       force,
       text: text ?? null,
+      avatar_id: avatarId ?? null,
     });
     return data;
   } catch (err) {
@@ -831,10 +835,19 @@ export async function listMyStandardAvatars(): Promise<StandardAvatar[]> {
 export async function registerStandardAvatar(
   avatarId: string,
   name?: string | null,
+  meta?: {
+    preview_image_url?: string | null;
+    preview_video_url?: string | null;
+    gender?: string | null;
+  } | null,
 ): Promise<StandardAvatar> {
   const { data } = await api.post<StandardAvatarWire>("/api/avatars/me/standard", {
     avatar_id: avatarId,
     name: name ?? null,
+    // 피커에서 고른 경우 메타데이터를 함께 보내 서버 재조회(느림)를 건너뛴다.
+    preview_image_url: meta?.preview_image_url ?? null,
+    preview_video_url: meta?.preview_video_url ?? null,
+    gender: meta?.gender ?? null,
   });
   return toStandardAvatar(data);
 }

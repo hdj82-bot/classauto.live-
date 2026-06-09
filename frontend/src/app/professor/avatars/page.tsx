@@ -418,6 +418,18 @@ export default function AvatarsPage() {
     [handleSelect],
   );
 
+  // 표준 아바타 등록 직후 — 라이브러리를 갱신하고 그 아바타를 제작용 룩으로 바로
+  // 선택한다(상단 "룩" 박스에 표시). 등록만 하고 끝나 "변화가 없어 보이던" 문제 해소:
+  // 등록 → 룩 확정 → 음성 선택 후 "룩과 목소리 아바타 제작"으로 합성까지 잇는다.
+  const handleStandardRegistered = useCallback(
+    async (avatar: StandardAvatar) => {
+      await refreshAvatars(); // standardAvatars 갱신 → libraryItems 에 새 아바타 포함.
+      handleSelect(avatar.avatar_id); // 렌더용 id = heygen avatar_id → 상단 "룩"에 표시.
+      setBuilderOpen(false);
+    },
+    [refreshAvatars, handleSelect],
+  );
+
   // "아바타 제작에 사용" — 최근 선택 룩을 제작용 룩으로 확정한다(상단 "룩" 박스에 표시).
   // 강의에 바로 적용하지 않는다 — 음성과 함께 "룩과 목소리 아바타 제작"에서 적용한다.
   const handleUseForBuild = useCallback(
@@ -672,10 +684,10 @@ export default function AvatarsPage() {
   // (Talking Photo 없음) 바로 강의에 적용한다.
   const handleOpenBuilder = useCallback(() => {
     if (!selectedId || !selectedVoiceId) return;
-    // 인라인 렌더 작업대는 포토 아바타(Talking Photo) 전용 — me/preview 가
-    // talking_photo 로 렌더하기 때문. 표준 Video Avatar 는 인라인 렌더 대상이 아니라
-    // (HeyGen 의 자연스러운 샘플 영상으로 비교) 바로 강의에 적용한다.
-    if (selectedAvatar?.is_custom && selectedAvatar?.kind !== "standard") {
+    // 인라인 렌더 작업대 — 포토 아바타(talking_photo)·표준 아바타(avatar_id) 모두
+    // me/preview 로 그 자리에서 합성해 확인한다. 그 외(큐레이션 기본 아바타 등)는
+    // 인라인 렌더 대상이 아니라 바로 강의에 적용한다.
+    if (selectedAvatar?.is_custom) {
       setBuilderOpen(true);
       setRenderNonce((n) => n + 1);
     } else {
@@ -871,8 +883,8 @@ export default function AvatarsPage() {
             onLibraryChanged={refreshAvatars}
           />
         ) : (
-          // 표준 아바타 등록 — HeyGen avatar_id 등록 → 라이브러리에 표준 아바타로 추가
-          <StandardAvatarRegisterCard onRegistered={refreshAvatars} t={t} />
+          // 표준 아바타 등록 — 등록 후 그 아바타를 제작용 룩으로 바로 선택(상단 "룩")
+          <StandardAvatarRegisterCard onRegistered={handleStandardRegistered} t={t} />
         )}
 
         {/* 내 아바타(룩 + 음성 조합) 갤러리 — 저장한 조합을 재생성 없이 바로 강의에

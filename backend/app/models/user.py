@@ -50,6 +50,10 @@ class User(Base):
     photo_avatar_preview_video_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     photo_avatar_preview_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     photo_avatar_preview_text: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    # 이 미리보기가 표준 아바타(등록한 Video Avatar)의 것이면 그 heygen avatar_id.
+    # NULL = 포토 아바타(Talking Photo) 미리보기. 동일 슬롯을 두 종류가 공유하므로,
+    # 캐시 적중 판정에 이 값을 키로 써서 표준 영상이 포토 미리보기로 잘못 나오지 않게 한다.
+    photo_avatar_preview_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 교수자가 본인 음성 샘플(mp3 등)로 만든 ElevenLabs Cloned Voice (IVC).
     # cloned_voice_id: ElevenLabs voice_id. 채워지면 GET /api/voices 계정 보이스로
     #   자동 노출돼 음성 패널·미리보기·강의 렌더에 본인 목소리로 쓸 수 있다. NULL =

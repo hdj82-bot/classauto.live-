@@ -221,9 +221,9 @@
 
     "createTypeTitle": "아바타 제작 방식",
     "createTypePhotoLabel": "포토 아바타",
-    "createTypePhotoDesc": "내 사진으로 만듭니다. 몸은 고정되고 얼굴만 움직여요. 지금 쓰는 방식입니다.",
+    "createTypePhotoDesc": "내 사진으로 만듭니다. 몸은 고정되고 얼굴만 움직여요.",
     "createTypeStandardLabel": "표준 아바타",
-    "createTypeStandardDesc": "HeyGen 웹 스튜디오에서 만든 Video Avatar의 ID를 등록합니다. 전신이 자연스럽게 움직여요(동일 단가).",
+    "createTypeStandardDesc": "HeyGen 웹 스튜디오에서 만든 Video Avatar를 선택하고 음성을 선택합니다. (예시: Adriana Business Front)",
 
     "standardRegisterTitle": "표준 아바타 등록",
     "standardRegisterDescription": "HeyGen 웹 스튜디오에서 만든 Video Avatar를 아래 목록에서 골라 등록하세요. 스튜디오에서 지은 아바타 이름으로 검색하면 됩니다. 등록하면 갤러리에 표준 아바타로 추가되어, 포토 아바타와 자연스러움을 비교하고 강의에 적용할 수 있습니다.",
@@ -231,7 +231,8 @@
     "standardPickerLoading": "내 HeyGen 아바타 목록을 불러오는 중...",
     "standardPickerError": "HeyGen 아바타 목록을 불러오지 못했습니다. 아래 'avatar_id 직접 입력'으로 등록할 수 있어요.",
     "standardPickerSearchEmpty": "검색 결과가 없습니다. 스튜디오에서 지은 아바타 이름으로 다시 검색해 보세요.",
-    "standardPickerMoreHint": "{count}개가 더 있어요. 아바타 이름으로 검색해 좁혀 주세요.",
+    "standardPickerMoreHint": "{count}개가 더 있어요. 아바타 이름으로 검색해 좁히거나, 위 'HeyGen에서 전체 아바타 목록 보기'로 확인하세요.",
+    "standardHeygenListLink": "HeyGen에서 전체 아바타 목록 보기",
     "standardManualToggle": "avatar_id 직접 입력",
     "standardManualHide": "목록에서 고르기로 돌아가기",
     "standardRegisterStep1": "1. HeyGen 웹 스튜디오에서 본인 영상으로 Video Avatar를 만듭니다(자가 결제 등급은 API로 생성 불가, 스튜디오에서 1회 생성).",

@@ -838,6 +838,86 @@ async def test_list_heygen_account_avatars_requires_professor(client, student):
 
 
 @pytest.mark.asyncio
+async def test_register_standard_avatar_with_metadata_skips_heygen(client, professor):
+    # 피커 메타데이터를 함께 보내면 HeyGen 재조회 없이 빠르게 등록된다.
+    # list_avatars 가 호출되면 실패하도록 패치 → 호출 안 됨을 보장.
+    with patch(
+        "app.services.pipeline.heygen.list_avatars",
+        new=AsyncMock(side_effect=AssertionError("should not be called")),
+    ):
+        resp = await client.post(
+            "/api/avatars/me/standard",
+            headers=make_auth_header(professor),
+            json={
+                "avatar_id": "studio_x",
+                "name": "내 표준",
+                "preview_video_url": "https://hg/x.mp4",
+                "gender": "male",
+            },
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["avatar_id"] == "studio_x"
+    assert data["preview_video_url"] == "https://hg/x.mp4"
+    assert data["gender"] == "male"
+
+
+@pytest.mark.asyncio
+async def test_preview_standard_avatar_uses_avatar_mode(client, professor, db):
+    # 등록한 표준 아바타로 미리보기를 렌더하면 talking_photo 가 아니라 avatar 모드로
+    # create_video 를 호출하고, 캐시 구분 컬럼에 그 avatar_id 를 기록한다.
+    from app.models.standard_avatar import StandardAvatar
+
+    db.add(
+        StandardAvatar(
+            user_id=professor.id, heygen_avatar_id="std_av_1", name="내 표준"
+        )
+    )
+    await db.flush()
+
+    tts_result = MagicMock(audio_bytes=b"audio")
+    with patch(
+        "app.services.pipeline.tts.synthesize",
+        new=AsyncMock(return_value=tts_result),
+    ), patch(
+        "app.services.pipeline.s3.upload_audio_bytes",
+        return_value="https://b.s3/a.mp3",
+    ), patch(
+        "app.services.pipeline.s3.presign_stored_s3_url",
+        side_effect=lambda u, *a, **k: u,
+    ), patch(
+        "app.services.pipeline.heygen.create_video",
+        new=AsyncMock(return_value="vid_std"),
+    ) as create_video:
+        resp = await client.post(
+            "/api/avatars/me/preview",
+            headers=make_auth_header(professor),
+            json={"voice_id": "v1", "avatar_id": "std_av_1"},
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "processing"
+    create_video.assert_awaited_once()
+    # avatar 모드(talking_photo 아님)로 호출되었는지.
+    assert create_video.await_args.kwargs.get("avatar_id") == "std_av_1"
+    assert "talking_photo_id" not in create_video.await_args.kwargs
+    await db.refresh(professor)
+    assert professor.photo_avatar_preview_video_id == "vid_std"
+    assert professor.photo_avatar_preview_avatar_id == "std_av_1"
+
+
+@pytest.mark.asyncio
+async def test_preview_unknown_standard_avatar_returns_404(client, professor):
+    # 등록되지 않은 표준 avatar_id 로 미리보기를 요청하면 404.
+    resp = await client.post(
+        "/api/avatars/me/preview",
+        headers=make_auth_header(professor),
+        json={"avatar_id": "not_registered"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_register_standard_avatar_validates_and_persists(client, professor):
     # avatar_id 가 HeyGen 계정 목록에 있으면 메타데이터와 함께 등록되고, 이름 미지정
     # 시 HeyGen 이름을 폴백으로 쓴다.

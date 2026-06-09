@@ -26,8 +26,16 @@ export interface ScriptTestPreviewState {
   videoUrl: string | null;
   voiceId: string | null;
   message: string | null;
-  /** voiceId 음성으로 text 대본을 렌더(또는 캐시 반환). force=true 면 재생성. */
-  generate: (voiceId?: string | null, text?: string | null, force?: boolean) => void;
+  /**
+   * voiceId 음성으로 text 대본을 렌더(또는 캐시 반환). force=true 면 재생성.
+   * avatarId 를 주면 등록한 표준 아바타로 렌더한다(없으면 본인 포토 아바타).
+   */
+  generate: (
+    voiceId?: string | null,
+    text?: string | null,
+    force?: boolean,
+    avatarId?: string | null,
+  ) => void;
 }
 
 export function useScriptTestPreview(enabled: boolean): ScriptTestPreviewState {
@@ -81,11 +89,16 @@ export function useScriptTestPreview(enabled: boolean): ScriptTestPreviewState {
   }, [enabled, clearPoll]);
 
   const generate = useCallback(
-    (vId?: string | null, text?: string | null, force = false) => {
+    (
+      vId?: string | null,
+      text?: string | null,
+      force = false,
+      avatarId?: string | null,
+    ) => {
       setStatus("processing");
       setMessage(null);
       (async () => {
-        const r = await startAvatarPreview(vId, force, text);
+        const r = await startAvatarPreview(vId, force, text, avatarId);
         apply(r);
         if (r.status === "processing") startPolling();
       })();

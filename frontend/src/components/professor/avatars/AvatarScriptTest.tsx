@@ -76,10 +76,9 @@ export default function AvatarScriptTest({
   reducedMotion,
   t,
 }: AvatarScriptTestProps) {
-  // 인라인 렌더는 포토 아바타(Talking Photo) 전용 — 표준 Video Avatar(kind="standard")는
-  // me/preview 의 talking_photo 경로로 렌더할 수 없으므로 작업대를 열지 않는다.
-  const enabled =
-    active && !!look?.is_custom && look?.kind !== "standard" && !!voiceId;
+  // 포토 아바타(Talking Photo)와 표준 아바타(Video Avatar) 모두 인라인 렌더 가능.
+  // 표준이면 avatar_id 로, 포토면 talking_photo 로 me/preview 가 렌더한다.
+  const enabled = active && !!look?.is_custom && !!voiceId;
   const preview = useScriptTestPreview(enabled);
   const [script, setScript] = useState(() => t("scriptTestDefault"));
   const sectionRef = useRef<HTMLElement | null>(null);
@@ -87,11 +86,13 @@ export default function AvatarScriptTest({
   const speak = useCallback(
     async (force: boolean) => {
       const text = (script || "").trim() || t("scriptTestDefault");
-      // 선택 룩을 렌더 대상(기본 룩)으로 맞춘 뒤 렌더한다.
+      // 표준 아바타면 그 avatar_id 로 렌더(없으면 포토 아바타 기본 경로).
+      const avatarId = look?.kind === "standard" ? look.id : null;
+      // 선택 룩을 렌더 대상(기본 룩)으로 맞춘 뒤 렌더한다(포토 룩일 때만 의미).
       await onPrepareRender?.();
-      preview.generate(voiceId, text, force);
+      preview.generate(voiceId, text, force, avatarId);
     },
-    [script, voiceId, preview, onPrepareRender, t],
+    [script, voiceId, preview, onPrepareRender, look, t],
   );
 
   // 제작 버튼(renderNonce)을 누르면 현재 스크립트로 렌더를 시작한다.
