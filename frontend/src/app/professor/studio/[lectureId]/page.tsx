@@ -150,6 +150,9 @@ export default function StudioWizardPage() {
   const [genCompleted, setGenCompleted] = useState(0);
   const [approved, setApproved] = useState(false);
   const renderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // "다시 제작" 시 완료돼 멈춘 렌더 폴링을 다시 돌리기 위한 트리거. 증가하면
+  // 렌더 폴링 effect 가 재실행돼 interval 을 새로 건다.
+  const [renderPollNonce, setRenderPollNonce] = useState(0);
 
   // ── 스크립트 검토 패널 액션 진행 상태 ────────────────────────────────────────
   const [savingScript, setSavingScript] = useState(false);
@@ -909,10 +912,33 @@ export default function StudioWizardPage() {
       return;
     }
 
-    // 이미 승인(생성 시작/완료)된 강의는 다시 approve 하지 않는다 — approve 는
-    // pending_review 에서만 가능(아니면 409 "rendering/done 상태에선 승인 불가").
-    // 진행 현황 모달만 연다(approved 동안 렌더 폴링이 진행/완료를 채운다).
+    // 이미 승인된 강의: approve 는 pending_review 에서만 가능(아니면 409).
     if (approved) {
+      // 제작이 끝난(done) 강의에서 다시 누르면 = "다시 제작(재생성)".
+      // 전 구간 TTS 를 재합성하므로 비용이 든다 — 확인 후 진행.
+      if (genDone && videoId) {
+        const ok = window.confirm(
+          "이미 제작된 강의입니다. 다시 제작하면 모든 슬라이드의 음성을 새로 합성합니다(비용 발생). 수정한 스크립트·음성이 반영됩니다. 계속할까요?",
+        );
+        if (!ok) return;
+        try {
+          // 모달을 진행 상태로 되돌린다(완료 표시 제거).
+          setGenDone(false);
+          setGenPercent(0);
+          setGenStage(1);
+          setGenCompleted(0);
+          setGenOpen(true);
+          await api.post(`/api/videos/${videoId}/rerender`);
+          // 완료 시 멈춰 있던 렌더 폴링을 재가동(nonce 증가 → 폴링 effect 재실행).
+          setRenderPollNonce((n) => n + 1);
+        } catch {
+          toast(t("step2.saveError"), "error");
+          setGenOpen(false);
+          setGenDone(true);
+        }
+        return;
+      }
+      // 아직 진행 중이면 현황 모달만 연다(폴링이 진행/완료를 채운다).
       setGenOpen(true);
       return;
     }
@@ -956,6 +982,7 @@ export default function StudioWizardPage() {
     voiceGender,
     expiresAt,
     approved,
+    genDone,
     toast,
     t,
     persistSeedQuestions,
@@ -1048,7 +1075,7 @@ export default function StudioWizardPage() {
         renderPollRef.current = null;
       }
     };
-  }, [approved, lectureId, slides.length]);
+  }, [approved, lectureId, slides.length, renderPollNonce]);
 
   const handleViewVideo = useCallback(() => {
     setGenOpen(false);
@@ -1268,7 +1295,7 @@ export default function StudioWizardPage() {
           canPrev={activeIndex > 0}
           onPrev={handlePrev}
           onGenerate={handleGenerate}
-          ctaLabel="슬라이드 쇼 제작"
+          ctaLabel={genDone ? "다시 제작" : "슬라이드 쇼 제작"}
         />
       </div>
 
