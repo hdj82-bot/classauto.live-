@@ -815,6 +815,60 @@ async def test_delete_my_voice_clears_fields(client, professor, db):
 
 
 @pytest.mark.asyncio
+async def test_list_heygen_avatar_groups(client, professor):
+    # Photo Avatar 그룹(웹 "공개 아바타" 캐릭터) 목록 — /v2/avatars 에 없는 세트.
+    fake_groups = [
+        {"group_id": "grp_annie", "name": "Annie", "num_looks": 57,
+         "preview_image_url": "https://hg/annie.png"},
+        {"group_id": "grp_david", "name": "David", "num_looks": 1,
+         "preview_image_url": None},
+    ]
+    with patch(
+        "app.services.pipeline.heygen.list_avatar_groups",
+        new=AsyncMock(return_value=fake_groups),
+    ):
+        resp = await client.get(
+            "/api/avatars/heygen-groups", headers=make_auth_header(professor)
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [g["group_id"] for g in data] == ["grp_annie", "grp_david"]
+    assert data[0]["name"] == "Annie"
+    assert data[0]["num_looks"] == 57
+
+
+@pytest.mark.asyncio
+async def test_list_heygen_group_looks(client, professor):
+    fake_looks = [
+        {"avatar_id": "annie_1", "avatar_name": "Annie Office", "gender": "female",
+         "preview_image_url": "https://hg/a1.png", "preview_video_url": "https://hg/a1.mp4"},
+        {"avatar_id": "annie_2", "avatar_name": "Annie Sofa", "gender": "female",
+         "preview_image_url": "https://hg/a2.png", "preview_video_url": None},
+    ]
+    with patch(
+        "app.services.pipeline.heygen.list_avatars_in_group",
+        new=AsyncMock(return_value=fake_looks),
+    ):
+        resp = await client.get(
+            "/api/avatars/heygen-groups/grp_annie/looks",
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [a["avatar_id"] for a in data] == ["annie_1", "annie_2"]
+    assert data[0]["preview_video_url"] == "https://hg/a1.mp4"
+    assert all(a["is_custom"] is False for a in data)
+
+
+@pytest.mark.asyncio
+async def test_list_heygen_groups_requires_professor(client, student):
+    resp = await client.get(
+        "/api/avatars/heygen-groups", headers=make_auth_header(student)
+    )
+    assert resp.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
 async def test_avatar_favorites_add_list_remove(client, professor):
     # 추가 → 목록에 노출(멱등) → 해제 → 빈 목록.
     empty = await client.get(

@@ -4,6 +4,7 @@ import type {
   Avatar,
   AvatarListResult,
   CustomAvatarStatus,
+  HeyGenAvatarGroup,
   ProfilePhotoResponse,
   SavedAvatar,
   SavedAvatarPreviewStatus,
@@ -808,6 +809,49 @@ function toStandardAvatar(w: StandardAvatarWire): StandardAvatar {
 export async function listHeyGenAccountAvatars(): Promise<Avatar[]> {
   try {
     const { data } = await api.get<AvatarWire[]>("/api/avatars/heygen-account");
+    return (data ?? []).map(toAvatar);
+  } catch (err) {
+    if (isDeferredError(err)) return [];
+    throw err;
+  }
+}
+
+// ── HeyGen 아바타 그룹 (Photo Avatar — 웹 "공개 아바타" 캐릭터) ─────────────────
+//
+// /v2/avatars(=heygen-account)에 없는 Photo Avatar 캐릭터들. 그룹 목록만 먼저 받고,
+// 캐릭터를 열 때 그 그룹의 룩을 lazy 로 받는다. deferred/MOCK 이면 빈 목록.
+
+interface HeyGenAvatarGroupWire {
+  group_id: string;
+  name: string;
+  num_looks?: number;
+  preview_image_url?: string | null;
+}
+
+/** GET /api/avatars/heygen-groups — Photo Avatar 그룹(캐릭터) 목록. */
+export async function listHeyGenAvatarGroups(): Promise<HeyGenAvatarGroup[]> {
+  try {
+    const { data } = await api.get<HeyGenAvatarGroupWire[]>(
+      "/api/avatars/heygen-groups",
+    );
+    return (data ?? []).map((g) => ({
+      group_id: g.group_id,
+      name: g.name,
+      num_looks: g.num_looks ?? 0,
+      preview_image_url: g.preview_image_url ?? null,
+    }));
+  } catch (err) {
+    if (isDeferredError(err)) return [];
+    throw err;
+  }
+}
+
+/** GET /api/avatars/heygen-groups/{id}/looks — 한 그룹의 룩 목록(lazy). */
+export async function listHeyGenGroupLooks(groupId: string): Promise<Avatar[]> {
+  try {
+    const { data } = await api.get<AvatarWire[]>(
+      `/api/avatars/heygen-groups/${encodeURIComponent(groupId)}/looks`,
+    );
     return (data ?? []).map(toAvatar);
   } catch (err) {
     if (isDeferredError(err)) return [];

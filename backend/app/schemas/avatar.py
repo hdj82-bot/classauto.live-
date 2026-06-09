@@ -42,6 +42,21 @@ class AvatarsResponse(BaseModel):
     total: int
 
 
+class HeyGenAvatarGroup(BaseModel):
+    """아바타 그룹(Photo Avatar 캐릭터) 1개 — ``GET /api/avatars/heygen-groups``.
+
+    웹 "공개 아바타"의 캐릭터(예: "Annie 57룩")에 해당한다. 룩은 무겁고 많아
+    여기엔 메타데이터만 주고, 카드를 열 때 ``.../looks`` 로 lazy 로드한다.
+    """
+
+    group_id: str = Field(..., description="HeyGen avatar group id.")
+    name: str = Field(..., description="캐릭터 이름.")
+    num_looks: int = Field(default=0, description="이 그룹의 룩 수.")
+    preview_image_url: str | None = Field(
+        default=None, description="대표 썸네일(있으면)."
+    )
+
+
 class AvatarPreviewRequest(BaseModel):
     """``POST /api/avatars/me/preview`` 요청 본문."""
 
