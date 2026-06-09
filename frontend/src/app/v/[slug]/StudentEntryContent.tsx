@@ -85,8 +85,12 @@ export default function StudentEntryContent() {
     let cancelled = false;
     (async () => {
       try {
+        // slug 는 useParams 가 주는 그대로 사용한다(이미 URL-인코딩된 세그먼트).
+        // encodeURIComponent 로 다시 감싸면 한글 slug 가 이중 인코딩돼(%EC→%25EC)
+        // 백엔드 정확일치 조회가 실패→404→"강의를 찾을 수 없습니다"가 됐다.
+        // 형제 경로(PlayerV2·assess)도 raw 통과 규약을 쓴다.
         const { data } = await api.get<PublicLecture>(
-          `/api/lectures/${encodeURIComponent(slug)}/public`,
+          `/api/lectures/${slug}/public`,
         );
         if (cancelled) return;
         if (data.is_expired) {
@@ -117,7 +121,7 @@ export default function StudentEntryContent() {
   useEffect(() => {
     if (state.kind !== "ok" || authLoading) return;
     if (user?.role === "student" && slug) {
-      router.replace(`/lecture/${encodeURIComponent(slug)}`);
+      router.replace(`/lecture/${slug}`);
     }
   }, [state, user, authLoading, slug, router]);
 
