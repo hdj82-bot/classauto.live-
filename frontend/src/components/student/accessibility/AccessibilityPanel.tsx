@@ -1,18 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useProfileHubI18n } from "@/components/student/profile/useProfileHubI18n";
-import { A11yProvider, useA11y, type FontSize } from "./A11yContext";
+import { useA11y, type FontSize } from "./A11yContext";
 import KeyboardShortcutsModal from "./KeyboardShortcutsModal";
 import { useVideoShortcuts } from "./useVideoShortcuts";
 
 /**
  * 접근성 floating panel.
  *
- * - 우측 하단의 작은 버튼 → 클릭 시 본 패널이 슬라이드인.
- * - 자체 `<A11yProvider>` 를 포함해 lecture 페이지 본문을 만지지 않고도
- *   동작한다 — 이미 상위 트리에 provider 가 있으면 React 가 가장 가까운
- *   provider 를 사용하므로 중첩이 안전하다.
+ * - 좌측 하단의 작은 버튼 → 클릭 시 본 패널이 슬라이드인.
+ * - `A11yProvider` 는 lecture 페이지에서 PlayerV2 와 **함께** 감싼다(상위 mount).
+ *   예전엔 본 컴포넌트가 자체 provider 를 들어 토글이 영상에 닿지 않았다 —
+ *   이제 상위 단일 provider 를 공유해 패널 토글이 곧 영상 설정이 된다.
+ * - 패널 박스 밖을 클릭하면 자동으로 닫힌다(아래 useEffect).
  * - lecture 페이지 video element 단축키도 본 panel 이 마운트되면 활성화된다.
  *
  * 학생 데이터 보호 정책:
@@ -21,18 +22,26 @@ import { useVideoShortcuts } from "./useVideoShortcuts";
  * - 외부 공유·광고 슬롯 0.
  */
 export default function AccessibilityPanel() {
-  return (
-    <A11yProvider>
-      <PanelInner />
-    </A11yProvider>
-  );
-}
-
-function PanelInner() {
   const { t } = useProfileHubI18n();
   const a11y = useA11y();
   const [open, setOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const openerRef = useRef<HTMLButtonElement | null>(null);
+
+  // 패널 박스(및 여는 버튼) 밖을 클릭하면 닫는다. pointerdown 으로 듣되
+  // 패널·여는 버튼 내부 클릭은 무시 — 여는 버튼은 자체 토글을 유지한다.
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (openerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
 
   // 단축키는 본 panel 이 마운트된 시점부터 활성화. 패널이 열려있는 동안에만
   // 활성화하면 학생이 패널을 닫고 영상으로 돌아갔을 때 단축키가 안 먹는
@@ -47,6 +56,7 @@ function PanelInner() {
     <>
       {/* Floating opener — 페이드아웃 안 함 (학생이 항상 접근 가능해야 함) */}
       <button
+        ref={openerRef}
         type="button"
         data-testid="a11y-open-button"
         aria-expanded={open}
@@ -78,6 +88,7 @@ function PanelInner() {
 
       {open && (
         <aside
+          ref={panelRef}
           id="a11y-panel"
           data-testid="a11y-panel"
           role="region"

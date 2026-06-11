@@ -1380,7 +1380,9 @@
         "modelAnswerLabel": "모범답안",
         "submit": "제출",
         "submitting": "제출 중…",
-        "shortAnswerPlaceholder": "답을 입력하세요…"
+        "shortAnswerPlaceholder": "답을 입력하세요…",
+        "leadIn": "이제 잠깐 중간 퀴즈를 풀어볼까요?",
+        "previewNote": "미리보기에서는 채점되지 않아요. 실제 학생은 이 화면에서 응답합니다."
       },
       "warning": {
         "pausedKicker": "세션이 일시정지되었습니다",

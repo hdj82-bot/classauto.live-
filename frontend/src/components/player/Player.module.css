@@ -716,6 +716,13 @@
   width: 12px;
   height: 12px;
 }
+.quizLeadIn {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: 0.01em;
+}
 .quizQ {
   font-family: var(--font-display);
   font-weight: 700;
