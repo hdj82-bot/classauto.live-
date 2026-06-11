@@ -22,9 +22,7 @@ import {
 import { useProfessorI18n } from "@/components/professor/useProfessorI18n";
 import {
   StatGrid,
-  MainChart,
   Donut,
-  AttentionWidget,
   ActivityFeed,
   useDashboardHubI18n,
   aggregateDashboardHub,
@@ -83,8 +81,9 @@ interface DashboardSummaryRow {
  * 데이터 wiring 은 그대로 보존하고 시각만 v2 prototype 톤으로 교체.
  * docs/prototypes/05-studio-flow.extracted.html 의 topbar 는 layout.tsx 의
  * AppShell 이 제공하고, 본 페이지는 PageContainer + PageHeader + StatGrid
- * + MainChart + AttentionWidget + MonthlyQuotaMeter + Donut + ActivityFeed
- * + 최근 강의 그리드 순으로 구성한다.
+ * + 내 강의(LectureLibrarySection) + Donut/MonthlyQuotaMeter + ActivityFeed
+ * 순으로 구성한다. 메인 차트·"주의 필요"(AttentionWidget) 는 데이터가 쌓이기
+ * 전까지 빈 상태라 교수자 요청으로 제거(2026-06-11).
  *
  * 비용 표시 정책 (planning/05 §1.1):
  * - StatGrid 의 cost 카드는 `hideCostCard` 옵션으로 숨김.
@@ -179,7 +178,7 @@ export default function ProfessorDashboardPage() {
   const [hub, setHub] = useState<DashboardHubData | null>(
     () => getCachedHub<DashboardHubData>(hubCacheKey(lectures)),
   );
-  const [hubLoading, setHubLoading] = useState(false);
+  const [, setHubLoading] = useState(false);
 
   useEffect(() => {
     if (lectures.length === 0) return;
@@ -352,7 +351,6 @@ export default function ProfessorDashboardPage() {
   return (
     <DashboardHomeView
       hub={hub}
-      hubLoading={hubLoading}
       onCreateLecture={handleCreateLecture}
       onOpenProfile={() => setProfileModalOpen(true)}
       onJumpToInbox={() => router.push("/professor/inbox")}
@@ -372,7 +370,6 @@ export default function ProfessorDashboardPage() {
  */
 function DashboardHomeView({
   hub,
-  hubLoading,
   onCreateLecture,
   onOpenProfile,
   onJumpToInbox,
@@ -382,7 +379,6 @@ function DashboardHomeView({
   profileDraft,
 }: {
   hub: DashboardHubData | null;
-  hubLoading: boolean;
   onCreateLecture: () => void;
   onOpenProfile: () => void;
   onJumpToInbox: () => void;
@@ -477,27 +473,36 @@ function DashboardHomeView({
         </section>
       )}
 
-      {/* §4.3 메인 차트 (2/3) + §4.4 우측 위젯 (1/3) */}
+      {/* §4.5 내 강의 — 통계(분석) 카드 바로 아래에 둬 교수자가 강의에 먼저
+          접근하게 한다(교수자 요청). 메인 차트·"주의 필요" 위젯은 데이터가 쌓이기
+          전까지 빈 상태라 일단 제거(교수자 요청). */}
+      <div style={{ marginBottom: 28 }}>
+        <LectureLibrarySection
+          title={t("library.sectionTitle")}
+          subtitle={t("library.sectionSubtitle")}
+        />
+      </div>
+
+      {/* 도넛(학습자 진도 분포)+월 영상 사용량 / 최근 활동 */}
       <div
         className="grid grid-cols-1 gap-4 lg:grid-cols-3"
         style={{ marginBottom: 28 }}
       >
-        <div className="lg:col-span-2">
-          {hub ? (
-            <MainChart series={hub.mainChart} />
-          ) : (
-            <Card padding={32}>
-              <p
-                className="text-center"
-                style={{ color: "var(--text-muted)" }}
-              >
-                {hubLoading ? "..." : th("loadError")}
-              </p>
-            </Card>
-          )}
-        </div>
         <div className="space-y-4">
-          {hub && <AttentionWidget data={hub.attention} />}
+          <Card padding={22}>
+            <h2
+              style={{
+                ...displayStyle,
+                margin: 0,
+                marginBottom: 14,
+                fontSize: 16,
+                fontWeight: 700,
+              }}
+            >
+              {th("donut.title")}
+            </h2>
+            {hub && <Donut data={hub.donut} />}
+          </Card>
           {hub && (
             <MonthlyQuotaMeter
               used={hub.stats.monthlyVideoCount}
@@ -506,36 +511,6 @@ function DashboardHomeView({
             />
           )}
         </div>
-      </div>
-
-      {/* §4.5 내 강의 — 보관함(폴더·검색·미리보기) 임베드. 학습자 분석(도넛·활동)
-          보다 위에 둬 교수자가 강의에 먼저 접근하게 한다(교수자 요청). */}
-      <div style={{ marginBottom: 28 }}>
-        <LectureLibrarySection
-          title={t("library.sectionTitle")}
-          subtitle={t("library.sectionSubtitle")}
-        />
-      </div>
-
-      {/* 도넛 + 활동 피드 — 학습자 진도 분포·최근 활동 */}
-      <div
-        className="grid grid-cols-1 gap-4 lg:grid-cols-3"
-        style={{ marginBottom: 28 }}
-      >
-        <Card padding={22}>
-          <h2
-            style={{
-              ...displayStyle,
-              margin: 0,
-              marginBottom: 14,
-              fontSize: 16,
-              fontWeight: 700,
-            }}
-          >
-            {th("donut.title")}
-          </h2>
-          {hub && <Donut data={hub.donut} />}
-        </Card>
         <section className="lg:col-span-2">
           <h2
             style={{
