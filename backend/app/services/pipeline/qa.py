@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.metrics import track_external_api
 from app.core.retry import retry_external
-from app.services.pipeline.retriever import RetrievalResult, is_in_scope, search_similar_slides
+from app.services.pipeline.retriever import (
+    RetrievalResult,
+    is_in_scope,
+    search_similar_script,
+    search_similar_slides,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +42,12 @@ OUT_OF_SCOPE_MESSAGE = (
 
 QA_SYSTEM_PROMPT = """\
 당신은 강의 자료 기반 Q&A 도우미입니다.
-아래 제공된 슬라이드 내용만을 근거로 학습자의 질문에 답변하세요.
+아래 제공된 강의 자료(슬라이드 PPT + 강의 스크립트(교수자 발화))만을 근거로
+학습자의 질문에 답변하세요.
 
 규칙:
-1. 제공된 슬라이드 내용에 기반하여 정확하게 답변합니다.
-2. 슬라이드에 없는 내용은 추측하지 않습니다.
+1. 제공된 슬라이드와 강의 스크립트 내용에 기반하여 정확하게 답변합니다.
+2. 제공된 강의 자료에 없는 내용은 추측하지 않습니다.
 3. 한국어로 자연스럽게 답변합니다.
 4. 참고한 슬라이드 번호를 답변 끝에 표기합니다. (예: [슬라이드 3, 7])
 """
@@ -174,29 +180,36 @@ class QAResult:
 
 
 def answer_question(db: Session, task_id: str, session_id: str, question: str) -> QAResult:
-    """RAG 파이프라인 실행."""
-    results = search_similar_slides(db, task_id, question, top_k=3)
-    scoped = is_in_scope(results)
+    """RAG 파이프라인 실행.
+
+    범위 게이트·답변 컨텍스트 모두 **슬라이드(PPT) + 강의 스크립트(발화)** 두 자료를
+    함께 본다. "서술어" 처럼 PPT 불릿엔 약하고 교수자 발화에만 자세히 나오는 내용도
+    답변되도록(False negative 해소). 가드레일은 유지된다 — 슬라이드·스크립트 양쪽 모두
+    유사도 임계값을 못 넘으면 범위 밖으로 거부한다.
+    """
+    slide_results = search_similar_slides(db, task_id, question, top_k=3)
+    script_results = search_similar_script(db, task_id, question, top_k=3)
+    scoped = is_in_scope(slide_results) or is_in_scope(script_results)
 
     if not scoped:
         return QAResult(
-            answer=OUT_OF_SCOPE_MESSAGE, in_scope=False, top_slides=results,
+            answer=OUT_OF_SCOPE_MESSAGE, in_scope=False, top_slides=slide_results,
             input_tokens=0, output_tokens=0, cost_usd=0.0,
         )
 
-    context = _build_context(results)
+    context = _build_combined_context(slide_results, script_results)
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
 
     try:
         response = _claude_qa_call(
             client,
-            f"## 참고 슬라이드 내용\n{context}\n\n## 학습자 질문\n{question}",
+            f"## 참고 강의 자료\n{context}\n\n## 학습자 질문\n{question}",
         )
     except anthropic.APIError as exc:
         logger.error("Q&A Claude API 호출 실패: %s", exc)
         return QAResult(
             answer="죄송합니다. 일시적인 오류로 답변을 생성하지 못했습니다. 잠시 후 다시 시도해주세요.",
-            in_scope=True, top_slides=results,
+            in_scope=True, top_slides=slide_results,
             input_tokens=0, output_tokens=0, cost_usd=0.0,
         )
 
@@ -204,7 +217,7 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
         logger.warning("Q&A: Claude API가 빈 응답을 반환")
         return QAResult(
             answer="답변을 생성하지 못했습니다. 질문을 다시 작성해주세요.",
-            in_scope=True, top_slides=results,
+            in_scope=True, top_slides=slide_results,
             input_tokens=0, output_tokens=0, cost_usd=0.0,
         )
 
@@ -216,11 +229,31 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
     cost = (input_tokens * settings.CLAUDE_INPUT_COST_PER_M + output_tokens * settings.CLAUDE_OUTPUT_COST_PER_M) / 1_000_000
 
     return QAResult(
-        answer=answer, in_scope=True, top_slides=results,
+        answer=answer, in_scope=True, top_slides=slide_results,
         input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=round(cost, 6),
     )
 
 
 def _build_context(results: list[RetrievalResult]) -> str:
     parts = [f"### 슬라이드 {r.slide_number} (유사도: {r.similarity:.4f})\n{r.text_content}" for r in results]
+    return "\n\n".join(parts)
+
+
+def _build_combined_context(
+    slide_results: list[RetrievalResult],
+    script_results: list[RetrievalResult],
+) -> str:
+    """슬라이드(PPT)와 강의 스크립트(발화) 검색 결과를 하나의 RAG 컨텍스트로 합친다.
+
+    교수자 요청대로 답변 근거에 PPT 텍스트와 발화 스크립트를 모두 포함한다.
+    """
+    parts: list[str] = []
+    if slide_results:
+        parts.append("## 슬라이드(PPT)\n" + _build_context(slide_results))
+    if script_results:
+        seg = "\n\n".join(
+            f"### 슬라이드 {r.slide_number} 발화 (유사도: {r.similarity:.4f})\n{r.text_content}"
+            for r in script_results
+        )
+        parts.append("## 강의 스크립트(발화)\n" + seg)
     return "\n\n".join(parts)

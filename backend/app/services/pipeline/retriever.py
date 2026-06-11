@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 
 from sqlalchemy import text
@@ -74,3 +75,72 @@ def is_in_scope(results: list[RetrievalResult], threshold: float | None = None) 
     if not results:
         return False
     return results[0].similarity >= (threshold or SIMILARITY_THRESHOLD)
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    na = math.sqrt(sum(x * x for x in a))
+    nb = math.sqrt(sum(y * y for y in b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def _script_segments_for_task(db: Session, task_id: str) -> list[tuple[int, str]]:
+    """task_id 강의의 생성된 스크립트 세그먼트 ``[(slide_number(1-based), text)]``.
+
+    강의/영상/스크립트가 없으면 빈 리스트.
+    """
+    from app.models.lecture import Lecture
+    from app.models.video import Video
+
+    lecture = db.query(Lecture).filter(Lecture.pipeline_task_id == task_id).first()
+    if lecture is None:
+        return []
+    video = db.query(Video).filter(Video.lecture_id == lecture.id).first()
+    if video is None or video.script is None:
+        return []
+
+    out: list[tuple[int, str]] = []
+    for seg in video.script.segments or []:
+        if not isinstance(seg, dict):
+            continue
+        text_val = (seg.get("text") or "").strip()
+        if not text_val:
+            continue
+        idx = seg.get("slide_index")
+        slide_no = idx + 1 if isinstance(idx, int) else 0
+        out.append((slide_no, text_val))
+    return out
+
+
+def search_similar_script(
+    db: Session, task_id: str, question: str, top_k: int = 3,
+) -> list[RetrievalResult]:
+    """생성된 스크립트(발화 텍스트) 세그먼트를 질문과 임베딩 유사도로 검색.
+
+    슬라이드 임베딩(PPT 텍스트)은 step2 에서, 스크립트는 step3 에서 만들어져 스크립트가
+    ``slide_embeddings`` 에 없다. 강의 내레이션에만 있는 내용(예: PPT 불릿엔 없지만
+    교수자가 말로 설명한 문법 용어)도 범위·답변 컨텍스트에 포함하려고 여기서 on-the-fly
+    로 임베딩해 비교한다. 강의당 세그먼트 수가 적어(보통 수십 개) 1~2회 임베딩 호출이면
+    충분하다.
+    """
+    segments = _script_segments_for_task(db, task_id)
+    if not segments:
+        return []
+    try:
+        q_emb = get_embeddings([question])[0]
+        seg_embs = get_embeddings([t for _, t in segments])
+    except Exception as exc:  # 임베딩 실패 시 스크립트 검색만 건너뛴다(슬라이드 검색은 유효).
+        logger.error("스크립트 임베딩 검색 실패: task_id=%s, error=%s", task_id, exc)
+        return []
+
+    scored = [
+        RetrievalResult(
+            slide_number=slide_no, text_content=seg_text,
+            similarity=_cosine(q_emb, emb),
+        )
+        for (slide_no, seg_text), emb in zip(segments, seg_embs)
+    ]
+    scored.sort(key=lambda r: r.similarity, reverse=True)
+    return scored[:top_k]

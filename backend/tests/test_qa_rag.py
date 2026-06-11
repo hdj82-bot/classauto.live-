@@ -39,9 +39,22 @@ def test_is_in_scope_respects_explicit_threshold():
 # ── answer_question: 범위 밖이면 Claude 미호출(비용 0) ────────────────────────
 
 
+def _fake_qa_resp():
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = "환율은 두 통화의 교환 비율입니다. [슬라이드 1]"
+    fake_resp = MagicMock()
+    fake_resp.content = [text_block]
+    fake_resp.usage.input_tokens = 120
+    fake_resp.usage.output_tokens = 45
+    return fake_resp
+
+
 def test_answer_question_out_of_scope_skips_claude():
+    """슬라이드·스크립트 양쪽 모두 임계값 미달이면 범위 밖(거부·비용 0)."""
     db = MagicMock()
     with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.3)]), \
+         patch.object(qa_svc, "search_similar_script", return_value=[_r(0.2)]), \
          patch("anthropic.Anthropic") as anthropic_cls:
         result = answer_question(db, "task-1", "sess-1", "강의 범위 밖 잡담")
 
@@ -56,6 +69,7 @@ def test_answer_question_out_of_scope_skips_claude():
 def test_answer_question_no_results_skips_claude():
     db = MagicMock()
     with patch.object(qa_svc, "search_similar_slides", return_value=[]), \
+         patch.object(qa_svc, "search_similar_script", return_value=[]), \
          patch("anthropic.Anthropic") as anthropic_cls:
         result = answer_question(db, "task-1", "sess-1", "관련 자료 없음")
     assert result.in_scope is False
@@ -64,20 +78,12 @@ def test_answer_question_no_results_skips_claude():
 
 
 def test_answer_question_in_scope_calls_claude():
-    """범위 안(>=0.7)이면 Claude 를 호출하고 답변·토큰·비용을 채운다."""
+    """슬라이드만으로 범위 안(>=0.4)이면 Claude 를 호출하고 답변·토큰·비용을 채운다."""
     db = MagicMock()
-
-    text_block = MagicMock()
-    text_block.type = "text"
-    text_block.text = "환율은 두 통화의 교환 비율입니다. [슬라이드 1]"
-    fake_resp = MagicMock()
-    fake_resp.content = [text_block]
-    fake_resp.usage.input_tokens = 120
-    fake_resp.usage.output_tokens = 45
-
     with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.83)]), \
+         patch.object(qa_svc, "search_similar_script", return_value=[]), \
          patch("anthropic.Anthropic") as anthropic_cls, \
-         patch.object(qa_svc, "_claude_qa_call", return_value=fake_resp) as call:
+         patch.object(qa_svc, "_claude_qa_call", return_value=_fake_qa_resp()) as call:
         result = answer_question(db, "task-1", "sess-1", "환율이란?")
 
     assert result.in_scope is True
@@ -86,3 +92,20 @@ def test_answer_question_in_scope_calls_claude():
     assert "환율" in result.answer
     assert result.input_tokens == 120 and result.output_tokens == 45
     assert result.cost_usd > 0.0
+
+
+def test_answer_question_in_scope_via_script_only():
+    """슬라이드는 임계값 미달이어도 스크립트(발화)가 범위 안이면 답변한다.
+
+    '서술어'처럼 PPT 불릿엔 약하고 교수자 발화에만 자세한 내용 회귀 방지.
+    """
+    db = MagicMock()
+    with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.2)]), \
+         patch.object(qa_svc, "search_similar_script", return_value=[_r(0.55, slide=2)]), \
+         patch("anthropic.Anthropic") as anthropic_cls, \
+         patch.object(qa_svc, "_claude_qa_call", return_value=_fake_qa_resp()) as call:
+        result = answer_question(db, "task-1", "sess-1", "서술어에 대해 자세히 알려주세요")
+
+    assert result.in_scope is True
+    call.assert_called_once()
+    anthropic_cls.assert_called_once()
