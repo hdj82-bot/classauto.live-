@@ -152,23 +152,30 @@
   object-fit: contain;
   display: block;
 }
-/* 자막 — 슬라이드 하단 중앙. */
+/* 자막 — 슬라이드 하단 중앙. 컨트롤바(하단 ~64px 그라데이션 오버레이) 위로 띄운다. */
 .caption {
   position: absolute;
   left: 50%;
-  bottom: 18px;
+  bottom: 84px;
   transform: translateX(-50%);
-  max-width: 86%;
-  padding: 8px 16px;
-  border-radius: 10px;
-  background: rgba(10, 10, 10, 0.72);
+  max-width: 90%;
+  padding: 10px 20px;
+  border-radius: 12px;
+  background: rgba(10, 10, 10, 0.78);
   color: #fff;
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.45;
   text-align: center;
   backdrop-filter: blur(4px);
   z-index: 3;
   pointer-events: none;
+}
+@media (max-width: 900px) {
+  .caption {
+    bottom: 72px;
+    font-size: 19px;
+  }
 }
 .video::before {
   content: "";
