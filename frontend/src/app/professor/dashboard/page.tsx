@@ -508,7 +508,16 @@ function DashboardHomeView({
         </div>
       </div>
 
-      {/* 도넛 + 활동 피드 */}
+      {/* §4.5 내 강의 — 보관함(폴더·검색·미리보기) 임베드. 학습자 분석(도넛·활동)
+          보다 위에 둬 교수자가 강의에 먼저 접근하게 한다(교수자 요청). */}
+      <div style={{ marginBottom: 28 }}>
+        <LectureLibrarySection
+          title={t("library.sectionTitle")}
+          subtitle={t("library.sectionSubtitle")}
+        />
+      </div>
+
+      {/* 도넛 + 활동 피드 — 학습자 진도 분포·최근 활동 */}
       <div
         className="grid grid-cols-1 gap-4 lg:grid-cols-3"
         style={{ marginBottom: 28 }}
@@ -542,13 +551,6 @@ function DashboardHomeView({
           {hub && <ActivityFeed activity={hub.activity} />}
         </section>
       </div>
-
-      {/* §4.5 내 강의 — 보관함(폴더·검색·미리보기)을 대시보드에 통째로 임베드.
-          교수자가 미리보기를 하려고 매번 보관함으로 이동하던 불편을 없앤다. */}
-      <LectureLibrarySection
-        title={t("library.sectionTitle")}
-        subtitle={t("library.sectionSubtitle")}
-      />
 
       <InstructorProfileModal
         open={profileModalOpen}

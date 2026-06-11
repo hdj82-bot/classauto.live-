@@ -29,7 +29,10 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   padding?: number | string;
   /** 둥근 정도 (기본 14). */
   radius?: number;
-  /** hover 인터랙션 표시. */
+  /**
+   * hover 시 살짝 떠오르는 입체 인터랙션. 기본 true — 대시보드/보관함 등 모든 카드에
+   * 입체감을 주기 위함(교수자 요청). 움직임이 거슬리는 정적 카드는 false 로 끈다.
+   */
   interactive?: boolean;
 }
 
@@ -50,7 +53,7 @@ export default function Card({
   children,
   padding = 18,
   radius = 14,
-  interactive = false,
+  interactive = true,
   style,
   onMouseEnter,
   onMouseLeave,
