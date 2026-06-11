@@ -40,6 +40,7 @@ from app.services.auth import (
     save_temp_code,
     validate_and_delete_refresh_token,
 )
+from app.services.invite import consume_invite, validate_invite
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +108,16 @@ def _to_access_only(tokens: TokenResponse, response: Response) -> AccessTokenOnl
 @router.get("/google", summary="Google OAuth 로그인 시작")
 async def google_login(
     role: Literal["professor", "student"] = Query(..., description="가입 역할"),
+    invite: str | None = Query(
+        None, description="교수자 가입 초대 토큰(신규 교수자 가입 시 필수)"
+    ),
 ):
     """
     Google 인증 페이지로 리다이렉트합니다.
-    state에 UUID를 생성하여 Redis에 role과 함께 저장합니다 (CSRF 방지).
+    state에 UUID를 생성하여 Redis에 role(및 교수자 초대 토큰)과 함께 저장합니다 (CSRF 방지).
     """
     state = str(uuid.uuid4())
-    await save_oauth_state(state, role)
+    await save_oauth_state(state, role, invite)
 
     params = {
         "client_id": settings.GOOGLE_OAUTH_CLIENT_ID,
@@ -147,9 +151,11 @@ async def google_callback(
     """
     frontend = settings.FRONTEND_URL
 
-    role_str = await pop_oauth_state(state)
-    if not role_str:
+    state_data = await pop_oauth_state(state)
+    if not state_data or not state_data.get("role"):
         return RedirectResponse(f"{frontend}/auth/login?error=invalid_state")
+    role_str: str = state_data["role"]
+    invite_token: str | None = state_data.get("invite")
 
     try:
         userinfo = await exchange_google_code(code)
@@ -162,12 +168,27 @@ async def google_callback(
 
     existing_user = await get_user_by_google_sub(db, google_sub)
     if existing_user:
+        # 위험 방향 차단: 학습자 계정이 '교수자'로 로그인을 시도하면 거부한다.
+        # (반대 방향 — 교수자가 '학습자' 선택 — 은 권한 상승이 아니므로 허용하고
+        #  실제 역할인 교수자로 로그인된다.) 기존 계정은 가입 시 역할이 권위 있다.
+        if existing_user.role == UserRole.student and role_str == "professor":
+            return RedirectResponse(f"{frontend}/auth/login?error=role_denied")
         auth_code = str(uuid.uuid4())
         await save_auth_code(auth_code, str(existing_user.id), existing_user.role.value)
         return RedirectResponse(f"{frontend}/auth/callback?code={auth_code}")
 
-    # 신규 유저: 추가 정보 입력 필요
-    temp_token = create_temp_token(google_sub, email, name, role_str)
+    # 신규 유저 — 교수자 가입은 베타 게이트: 계정주가 그 이메일로 발급한 유효한
+    # 초대가 있어야 한다. 학습자 가입은 게이트 없음(강의 링크로 자유 가입).
+    if role_str == "professor":
+        invite = await validate_invite(db, invite_token, email)
+        if invite is None:
+            return RedirectResponse(f"{frontend}/auth/login?error=invalid_invite")
+
+    # 추가 정보 입력 필요. 교수자면 초대 토큰을 temp_token 에 실어 프로필
+    # 완성 단계에서 재검증·소비한다(temp_token 재사용 방어).
+    temp_token = create_temp_token(
+        google_sub, email, name, role_str, invite=invite_token
+    )
     temp_code = str(uuid.uuid4())
     await save_temp_code(temp_code, temp_token, email, name, role_str)
     return RedirectResponse(f"{frontend}/auth/complete-profile?temp_code={temp_code}")
@@ -284,11 +305,21 @@ async def complete_profile(
 
     role_str: str = payload["role"]
 
+    invite = None
     if role_str == "professor":
         if not body.school or not body.department:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="교수자는 school과 department가 필수입니다.",
+            )
+        # 베타 게이트 재검증 — temp_token 에 실린 초대 토큰을 이메일과 함께
+        # 다시 확인한다(콜백 통과 후 temp_token 재사용·만료를 방어). 유효한
+        # 초대가 없으면 가입 거부. 학습자는 이 게이트와 무관.
+        invite = await validate_invite(db, payload.get("invite"), payload["email"])
+        if invite is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="유효하지 않거나 만료된 교수자 초대입니다.",
             )
     elif role_str == "student":
         if not body.student_number:
@@ -320,6 +351,9 @@ async def complete_profile(
         department=body.department,
         student_number=body.student_number,
     )
+    # 교수자 가입 성공 — 초대를 단일 사용 처리(이후 동일 링크 재사용 차단).
+    if invite is not None:
+        await consume_invite(db, invite, user.id)
     tokens = await issue_tokens(user)
     return _to_access_only(tokens, response)
 
