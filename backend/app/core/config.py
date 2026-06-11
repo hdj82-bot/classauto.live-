@@ -271,7 +271,10 @@ class Settings(BaseSettings):
     STRIPE_PRICE_PRO: str = ""     # Stripe Price ID for PRO plan
 
     # ── pgvector ──────────────────────────────────────────────────
-    SIMILARITY_THRESHOLD: float = 0.7
+    # 학생 실시간 Q&A 범위 게이트(is_in_scope). 0.7 은 정상 강의 질문(유사도
+    # 0.5~0.65)까지 거부해 0.4 로 낮춘다(사용자 결정 — 강의 내용 질문은 답변되어야
+    # 함). seed 답변 경로는 게이트 미적용. Railway 환경변수로도 덮어쓸 수 있다.
+    SIMILARITY_THRESHOLD: float = 0.4
 
     # ── Sentry ──────────────────────────────────────────────────
     SENTRY_DSN: str = ""

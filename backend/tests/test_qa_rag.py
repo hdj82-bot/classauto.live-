@@ -1,8 +1,8 @@
-"""RAG 범위 제한(2차 가드레일) 단위 테스트 (docs/planning/02 §4 — 유사도 0.7).
+"""RAG 범위 제한(2차 가드레일) 단위 테스트 (docs/planning/02 §4 — 학생 게이트 0.4).
 
 핵심 검증(단독·외부 호출 0):
-- ``is_in_scope`` 가 임계값 0.7 경계에서 정확히 갈린다.
-- 범위 밖 질문(최고 유사도 < 0.7)은 Claude API 를 **호출하지 않고** 거부 메시지·비용 0
+- ``is_in_scope`` 가 임계값 0.4 경계에서 정확히 갈린다(0.7→0.4, 정상 질문 거부 해소).
+- 범위 밖 질문(최고 유사도 < 0.4)은 Claude API 를 **호출하지 않고** 거부 메시지·비용 0
   으로 즉시 반환한다(2차 가드레일의 비용 절약 효과 — 02 §4.4).
 - 범위 안 질문은 Claude 를 호출해 답변·토큰·비용을 채운다.
 """
@@ -23,12 +23,12 @@ def _r(sim: float, slide: int = 1) -> RetrievalResult:
 
 
 def test_is_in_scope_threshold_boundary():
-    assert is_in_scope([_r(0.70)]) is True       # 0.7 = 통과(>=)
-    assert is_in_scope([_r(0.6999)]) is False     # 0.7 미만 = 거부
+    assert is_in_scope([_r(0.40)]) is True       # 0.4 = 통과(>=)
+    assert is_in_scope([_r(0.3999)]) is False     # 0.4 미만 = 거부
     assert is_in_scope([_r(0.95)]) is True
     assert is_in_scope([]) is False               # 결과 없음 = 범위 밖
     # 정렬상 results[0] 가 최고 유사도 — 첫 결과가 임계값을 못 넘으면 거부.
-    assert is_in_scope([_r(0.5), _r(0.99)]) is False
+    assert is_in_scope([_r(0.3), _r(0.99)]) is False
 
 
 def test_is_in_scope_respects_explicit_threshold():
@@ -41,7 +41,7 @@ def test_is_in_scope_respects_explicit_threshold():
 
 def test_answer_question_out_of_scope_skips_claude():
     db = MagicMock()
-    with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.55)]), \
+    with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.3)]), \
          patch("anthropic.Anthropic") as anthropic_cls:
         result = answer_question(db, "task-1", "sess-1", "강의 범위 밖 잡담")
 
