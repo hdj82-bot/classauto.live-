@@ -9,7 +9,10 @@ import { API_URL } from "./api";
 // CSRF state 는 백엔드에서 발급·검증한다 (Redis getdel + 10분 TTL).
 // 프론트가 별도 state 를 발급하던 이전 구현은 콜백 redirect URL 에
 // state 를 echo 하지 않아 항상 invalid_state 로 실패했음.
-export function startGoogleLogin(role: "professor" | "student"): void {
+export function startGoogleLogin(
+  role: "professor" | "student",
+  invite?: string,
+): void {
   if (typeof window === "undefined") return;
 
   const expectedOrigin = new URL(API_URL).origin;
@@ -23,5 +26,7 @@ export function startGoogleLogin(role: "professor" | "student"): void {
   }
 
   target.searchParams.set("role", role);
+  // 교수자 초대 가입 — 초대 토큰을 함께 전달(백엔드 state 에 보관 후 검증).
+  if (invite) target.searchParams.set("invite", invite);
   window.location.href = target.toString();
 }

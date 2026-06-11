@@ -12,7 +12,9 @@ import pytest
 from sqlalchemy import select
 
 from app.core.security import create_temp_token
+from app.models.invite import ProfessorInvite
 from app.models.user import User, UserRole
+from app.services.invite import create_invite
 
 pytestmark = pytest.mark.asyncio
 
@@ -20,8 +22,17 @@ pytestmark = pytest.mark.asyncio
 # ── 헬퍼 ──────────────────────────────────────────────────────────────────────
 
 
-def _temp_token(role: str, *, sub="google-new-001", email="new@test.ac.kr", name="신규 유저"):
-    return create_temp_token(google_sub=sub, email=email, name=name, role=role)
+def _temp_token(
+    role: str,
+    *,
+    sub="google-new-001",
+    email="new@test.ac.kr",
+    name="신규 유저",
+    invite=None,
+):
+    return create_temp_token(
+        google_sub=sub, email=email, name=name, role=role, invite=invite
+    )
 
 
 # ── 학습자 — 기존 호환 ───────────────────────────────────────────────────────
@@ -154,11 +165,13 @@ async def test_complete_profile_rejects_too_long_name(client):
 # ── 교수자 — 기존 호환 ───────────────────────────────────────────────────────
 
 
-async def test_complete_profile_professor_legacy_body_still_works(client, db):
-    """기존 교수자 가입 — school/department 만 — 회귀 보호."""
+async def test_complete_profile_professor_with_invite(client, db):
+    """교수자 가입 — 유효한 초대(이메일 일치) 가 있으면 가입 성공 + 초대 소비."""
+    email = "prof-legacy@test.ac.kr"
+    inv = await create_invite(db, email=email, created_by=None)
     token = _temp_token(
-        "professor", sub="google-prof-100", email="prof-legacy@test.ac.kr",
-        name="기본 교수",
+        "professor", sub="google-prof-100", email=email,
+        name="기본 교수", invite=inv.token,
     )
     resp = await client.post(
         "/api/auth/complete-profile",
@@ -170,20 +183,29 @@ async def test_complete_profile_professor_legacy_body_still_works(client, db):
     )
     assert resp.status_code == 201
     user = (
-        await db.execute(select(User).where(User.email == "prof-legacy@test.ac.kr"))
+        await db.execute(select(User).where(User.email == email))
     ).scalar_one()
     assert user.role == UserRole.professor
     assert user.school == "서울대"
     assert user.department == "중어중문학과"
-    # form name 미전송 → Google name 그대로
     assert user.name == "기본 교수"
+    # 초대가 단일 사용 처리됐는지 — used_at/used_by 채워짐.
+    refreshed = (
+        await db.execute(
+            select(ProfessorInvite).where(ProfessorInvite.id == inv.id)
+        )
+    ).scalar_one()
+    assert refreshed.used_at is not None
+    assert refreshed.used_by == user.id
 
 
 async def test_complete_profile_professor_with_form_name(client, db):
-    """교수자도 동일하게 form name override 동작."""
+    """교수자도 동일하게 form name override 동작 (유효 초대 전제)."""
+    email = "prof-name@test.ac.kr"
+    inv = await create_invite(db, email=email, created_by=None)
     token = _temp_token(
-        "professor", sub="google-prof-101", email="prof-name@test.ac.kr",
-        name="구글 이름",
+        "professor", sub="google-prof-101", email=email,
+        name="구글 이름", invite=inv.token,
     )
     resp = await client.post(
         "/api/auth/complete-profile",
@@ -197,9 +219,75 @@ async def test_complete_profile_professor_with_form_name(client, db):
     )
     assert resp.status_code == 201
     user = (
-        await db.execute(select(User).where(User.email == "prof-name@test.ac.kr"))
+        await db.execute(select(User).where(User.email == email))
     ).scalar_one()
     assert user.name == "교수 본명"
+
+
+# ── 교수자 가입 초대 게이트 (베타) ────────────────────────────────────────────
+
+
+async def test_complete_profile_professor_without_invite_blocked(client, db):
+    """초대 없이 교수자 가입 시도 → 403 (베타 게이트). 유저는 생성되지 않는다."""
+    email = "prof-noinvite@test.ac.kr"
+    token = _temp_token(
+        "professor", sub="google-prof-200", email=email, name="무초대 교수",
+    )
+    resp = await client.post(
+        "/api/auth/complete-profile",
+        json={
+            "temp_token": token,
+            "school": "경기대",
+            "department": "중어중문학과",
+        },
+    )
+    assert resp.status_code == 403
+    assert (
+        await db.execute(select(User).where(User.email == email))
+    ).scalar_one_or_none() is None
+
+
+async def test_complete_profile_professor_invite_email_mismatch_blocked(client, db):
+    """초대 대상 이메일과 가입 Google 이메일이 다르면 → 403."""
+    inv = await create_invite(db, email="invited@test.ac.kr", created_by=None)
+    token = _temp_token(
+        "professor", sub="google-prof-201", email="other@test.ac.kr",
+        name="다른 이메일", invite=inv.token,
+    )
+    resp = await client.post(
+        "/api/auth/complete-profile",
+        json={
+            "temp_token": token,
+            "school": "경기대",
+            "department": "중어중문학과",
+        },
+    )
+    assert resp.status_code == 403
+    assert (
+        await db.execute(select(User).where(User.email == "other@test.ac.kr"))
+    ).scalar_one_or_none() is None
+
+
+async def test_complete_profile_professor_invite_not_reusable(client, db):
+    """이미 사용된 초대로 재가입 시도 → 403 (단일 사용)."""
+    email = "reuse@test.ac.kr"
+    inv = await create_invite(db, email=email, created_by=None)
+    body = {"school": "경기대", "department": "중어중문학과"}
+    token1 = _temp_token(
+        "professor", sub="google-prof-202", email=email, invite=inv.token
+    )
+    resp1 = await client.post(
+        "/api/auth/complete-profile", json={"temp_token": token1, **body}
+    )
+    assert resp1.status_code == 201
+    # 같은 초대 토큰으로 다른 sub 가 재가입 시도 → 거부.
+    token2 = _temp_token(
+        "professor", sub="google-prof-203", email=email, invite=inv.token
+    )
+    resp2 = await client.post(
+        "/api/auth/complete-profile", json={"temp_token": token2, **body}
+    )
+    assert resp2.status_code == 403
 
 
 # ── 검증 분기 (기존 422 동작 보존) ────────────────────────────────────────────

@@ -27,11 +27,14 @@ export default function LoginContent() {
   const searchParams = useSearchParams();
   const { t } = useI18n();
   const errorKey = searchParams.get("error");
-  const errorMsg = errorKey === "invalid_state"
-    ? t("auth.errorInvalidState")
-    : errorKey === "google_failed"
-      ? t("auth.errorGoogleFailed")
-      : null;
+  const ERROR_KEYS: Record<string, string> = {
+    invalid_state: "auth.errorInvalidState",
+    google_failed: "auth.errorGoogleFailed",
+    exchange_failed: "auth.errorExchangeFailed",
+    role_denied: "auth.errorRoleDenied",
+    invalid_invite: "auth.errorInvalidInvite",
+  };
+  const errorMsg = errorKey && ERROR_KEYS[errorKey] ? t(ERROR_KEYS[errorKey]) : null;
 
   const [role, setRole] = useState<"professor" | "student">("student");
   const [isRedirecting, setIsRedirecting] = useState(false);

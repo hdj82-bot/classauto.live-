@@ -280,6 +280,15 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 프로덕션 트레이싱 10%
 
+    # ── 베타 초대제 (교수자 가입 게이트) ─────────────────────────
+    # 계정주(운영자) 이메일 목록 — 교수자 초대 링크를 발급할 수 있는 사람.
+    # 쉼표 구분. 이 목록의 이메일을 가진 로그인 사용자는 role 과 무관하게
+    # 초대 발급 화면(/owner/invites)과 /api/owner/invites/* 를 쓸 수 있다.
+    # (베타 동안 신규 교수자 가입은 이 사람이 보낸 초대 링크로만 가능.)
+    ADMIN_EMAILS: str = "classauto101@gmail.com"
+    # 교수자 초대 링크 유효기간(일). 0 이면 무기한.
+    PROFESSOR_INVITE_TTL_DAYS: int = 14
+
     # ── Frontend ────────────────────────────────────────────────
     FRONTEND_URL: str = "http://localhost:3000"
     # FRONTEND_URL 외 추가 허용 CORS origin(쉼표 구분) — apex/www/커스텀 도메인 등.
@@ -287,6 +296,11 @@ class Settings(BaseSettings):
     CORS_EXTRA_ORIGINS: str = ""
     # Vercel 프리뷰 배포(https://*.vercel.app) 허용 — 프리뷰에서 API 테스트 시 필요.
     CORS_ALLOW_VERCEL_PREVIEWS: bool = False
+
+    @property
+    def admin_email_set(self) -> set[str]:
+        """ADMIN_EMAILS(쉼표 구분)를 소문자 set 으로 정규화 — 운영자 식별용."""
+        return {e.strip().lower() for e in self.ADMIN_EMAILS.split(",") if e.strip()}
 
 
 settings = Settings()

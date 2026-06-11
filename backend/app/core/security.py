@@ -62,8 +62,18 @@ def decode_token(token: str) -> dict:
     )
 
 
-def create_temp_token(google_sub: str, email: str, name: str, role: str) -> str:
-    """신규 유저 프로필 완성 전까지 사용하는 단기 임시 토큰 (10분)."""
+def create_temp_token(
+    google_sub: str,
+    email: str,
+    name: str,
+    role: str,
+    invite: str | None = None,
+) -> str:
+    """신규 유저 프로필 완성 전까지 사용하는 단기 임시 토큰 (10분).
+
+    교수자 가입은 ``invite``(초대 토큰)을 함께 실어, 프로필 완성 단계에서
+    초대를 재검증·소비한다(베타 게이트). 학습자는 invite 없이 None.
+    """
     expire = datetime.now(timezone.utc) + timedelta(minutes=10)
     payload = {
         "sub": google_sub,
@@ -74,4 +84,6 @@ def create_temp_token(google_sub: str, email: str, name: str, role: str) -> str:
         "exp": expire,
         "jti": str(uuid.uuid4()),
     }
+    if invite:
+        payload["invite"] = invite
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)

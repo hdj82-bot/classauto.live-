@@ -6,6 +6,7 @@ from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.redis import get_redis
 from app.core.security import decode_token
 from app.db.session import get_db
@@ -122,3 +123,18 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
             detail="관리자 권한이 필요합니다.",
         )
     return user
+
+
+async def require_owner(user: User = Depends(get_current_user)) -> User:
+    """계정주(운영자) 전용 — ADMIN_EMAILS 의 이메일이거나 admin 역할.
+
+    역할(admin)과 무관하게 ADMIN_EMAILS 로 식별하므로, 운영자가 교수자
+    계정이어도 초대 발급 권한을 갖는다(베타 게이트 운영용).
+    """
+    email = (user.email or "").strip().lower()
+    if email in settings.admin_email_set or user.role.value == "admin":
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="운영자 권한이 필요합니다.",
+    )

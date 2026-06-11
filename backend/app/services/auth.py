@@ -44,15 +44,33 @@ async def validate_and_delete_refresh_token(jti: str, user_id: str) -> bool:
 
 # ── Redis: OAuth State ────────────────────────────────────────────────────────
 
-async def save_oauth_state(state: str, role: str) -> None:
+async def save_oauth_state(
+    state: str, role: str, invite: str | None = None
+) -> None:
     r = get_redis()
-    await r.setex(f"{_STATE_PREFIX}{state}", 600, role)  # 10분 TTL
+    # role 과 (교수자 초대 시) invite 토큰을 함께 보관. 과거엔 role 문자열만
+    # 저장했으나, 가입 게이트를 위해 JSON 으로 확장(콜백에서 둘 다 복원).
+    payload = json.dumps({"role": role, "invite": invite})
+    await r.setex(f"{_STATE_PREFIX}{state}", 600, payload)  # 10분 TTL
 
 
-async def pop_oauth_state(state: str) -> str | None:
-    """state를 읽고 즉시 삭제 (재사용 방지)."""
+async def pop_oauth_state(state: str) -> dict | None:
+    """state를 읽고 즉시 삭제(재사용 방지). {"role", "invite"} dict 반환.
+
+    하위호환: 과거 형식(역할 문자열만 저장)도 dict 로 정규화한다.
+    """
     r = get_redis()
-    return await r.getdel(f"{_STATE_PREFIX}{state}")
+    raw = await r.getdel(f"{_STATE_PREFIX}{state}")
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and "role" in data:
+            return {"role": data.get("role"), "invite": data.get("invite")}
+    except (TypeError, ValueError):
+        pass
+    # 구형: 역할 문자열만 저장돼 있던 경우.
+    return {"role": raw, "invite": None}
 
 
 # ── Redis: OAuth Auth Code (1회용) ────────────────────────────────────────────

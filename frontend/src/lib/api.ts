@@ -171,6 +171,34 @@ export const authApi = {
 
   // refresh_token 쿠키는 서버가 만료 처리하므로 body 불필요
   logout: () => api.delete("/api/auth/logout"),
+
+  // 초대 랜딩 페이지용 — 토큰으로 초대 대상 이메일·상태 조회 (토큰 보유자 공개).
+  inviteInfo: (token: string) =>
+    api.get<{ email: string; role: string; status: string }>(
+      `/api/auth/invite/${encodeURIComponent(token)}`,
+    ),
+};
+
+export interface OwnerInvite {
+  id: string;
+  token: string;
+  email: string;
+  role: string;
+  status: "active" | "used" | "expired";
+  invite_url: string;
+  created_at: string;
+  expires_at: string | null;
+  used_at: string | null;
+}
+
+// 계정주(운영자) 전용 — 교수자 초대 발급/목록/취소. 백엔드 require_owner 가
+// ADMIN_EMAILS 로 권한을 강제하므로, 비운영자가 호출하면 403 이 떨어진다.
+export const ownerInviteApi = {
+  list: () => api.get<OwnerInvite[]>("/api/owner/invites"),
+  create: (email: string) =>
+    api.post<OwnerInvite>("/api/owner/invites", { email }),
+  revoke: (id: string) =>
+    api.delete(`/api/owner/invites/${encodeURIComponent(id)}`),
 };
 
 export interface MeResponse {
