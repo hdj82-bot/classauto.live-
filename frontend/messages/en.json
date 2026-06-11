@@ -1380,7 +1380,9 @@
         "modelAnswerLabel": "Model answer",
         "submit": "Submit",
         "submitting": "Submitting…",
-        "shortAnswerPlaceholder": "Type your answer…"
+        "shortAnswerPlaceholder": "Type your answer…",
+        "leadIn": "Let's pause for a quick check-in quiz.",
+        "previewNote": "Not graded in preview — students respond right here."
       },
       "warning": {
         "pausedKicker": "Session paused",

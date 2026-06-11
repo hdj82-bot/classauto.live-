@@ -11,11 +11,14 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_professor, require_student
 from app.core.redis import get_redis
 from app.db.session import SyncSessionLocal, get_db
+from app.models.course import Course
+from app.models.lecture import Lecture
 from app.models.user import User
 from app.schemas.quiz import (
     AuthoredQuizItem,
@@ -291,6 +294,50 @@ async def quiz_playback(
             return [PlaybackQuizItem.model_validate(r).model_dump() for r in rows]
 
     items = await loop.run_in_executor(None, _run)
+    return PlaybackQuizListResponse(lecture_id=lecture_id, quizzes=items)
+
+
+@router.get(
+    "/lectures/{lecture_id}/quiz/playback/preview",
+    response_model=PlaybackQuizListResponse,
+    summary="영상 재생 중 트리거할 퀴즈 목록 미리보기 (소유 교수자, 세션 없이)",
+)
+async def quiz_playback_preview(
+    lecture_id: uuid.UUID,
+    current_user: User = Depends(require_professor),
+):
+    """교수자 미리보기 전용 — 배포 전 결과물을 학생과 동일한 인라인 퀴즈로 점검.
+
+    qa/preview 와 동일하게 소유 교수자만 허용한다(분석 오염 없이 영상 흐름 확인).
+    정답·해설은 학생 경로와 동일하게 미포함.
+    """
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        with SyncSessionLocal() as db:
+            lecture = db.execute(
+                select(Lecture).where(Lecture.id == lecture_id)
+            ).scalar_one_or_none()
+            if not lecture:
+                raise LookupError("강의를 찾을 수 없습니다.")
+            instructor_id = db.execute(
+                select(Course.instructor_id).where(Course.id == lecture.course_id)
+            ).scalar_one_or_none()
+            if instructor_id != current_user.id:
+                raise PermissionError("미리보기는 소유 교수자만 가능합니다.")
+            rows = quiz_svc.list_playback(db, lecture_id)
+            return [PlaybackQuizItem.model_validate(r).model_dump() for r in rows]
+
+    try:
+        items = await loop.run_in_executor(None, _run)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)
+        ) from exc
     return PlaybackQuizListResponse(lecture_id=lecture_id, quizzes=items)
 
 

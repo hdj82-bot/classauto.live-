@@ -9,6 +9,7 @@ import { tokens as tokenStorage } from "@/lib/tokens";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAttention } from "@/hooks/useAttention";
+import { useA11y, type FontSize } from "@/components/student/accessibility/A11yContext";
 import { parseCourseTitle } from "@/components/student/v2/CourseTitle";
 import OnboardingFlowV2 from "@/components/student/v2/OnboardingFlowV2";
 import PlayerSurfaceDark from "./PlayerSurfaceDark";
@@ -73,13 +74,6 @@ interface QAMessage {
   seed?: boolean;
 }
 
-interface ReactionCount {
-  like: number;
-  curious: number;
-  fun: number;
-  aha: number;
-}
-
 /** PlaybackQuiz → InterstitialQuiz 가 쓰는 QuizQuestion 으로 변환 (보기에 A/B/C/D 부여). */
 function toQuizQuestion(pb: PlaybackQuiz): QuizQuestion {
   return {
@@ -111,6 +105,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const router = useRouter();
   const { user } = useAuth();
   const { t } = useI18n();
+  // 접근성 패널과 **같은** A11yProvider(상위 mount)를 공유한다. 자막 표시·글씨
+  // 크기·고대비가 곧 영상 설정이 되도록 본 컨텍스트를 단일 source 로 쓴다.
+  const a11y = useA11y();
+  const captionsOn = a11y.captions;
 
   const [lecture, setLecture] = useState<LectureData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -119,7 +117,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // 본문은 단일 영상이 아니라 슬라이드쇼(이미지 + 구간 음성 + 타임라인)로 재생한다.
   // 진행 콜백은 ref 로 최신화해 훅(안정 콜백)과 퀴즈/집중도 로직의 순환 의존을 끊는다.
   const stageRef = useRef<HTMLDivElement | null>(null);
-  const [captionsOn, setCaptionsOn] = useState(true);
   const handleProgressRef = useRef<(sec: number) => void>(() => {});
   const handleProgress = useCallback(
     (sec: number) => handleProgressRef.current(sec),
@@ -151,12 +148,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     { id: string; question: string; video_url: string }[]
   >([]);
   const qaBottomRef = useRef<HTMLDivElement>(null);
-  const [reactions, setReactions] = useState<ReactionCount>({
-    like: 12,
-    curious: 4,
-    fun: 7,
-    aha: 3,
-  });
 
   // 인터스티셜 퀴즈 — 백엔드에서 받은 타임스탬프 퀴즈를 재생 중 자동 출제.
   const [playbackQuizzes, setPlaybackQuizzes] = useState<PlaybackQuiz[]>([]);
@@ -224,13 +215,13 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     if (!lecture?.id) return;
     let cancelled = false;
     (async () => {
-      const quizzes = await getPlaybackQuizzes(lecture.id);
+      const quizzes = await getPlaybackQuizzes(lecture.id, preview);
       if (!cancelled) setPlaybackQuizzes(quizzes);
     })();
     return () => {
       cancelled = true;
     };
-  }, [lecture?.id]);
+  }, [lecture?.id, preview]);
 
   // ─── 추천(사전 제작) 질문 fetch — 클립 보유분만, 클릭 시 사전 제작 영상 재생 ───
   useEffect(() => {
@@ -375,11 +366,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     } else {
       el.requestFullscreen?.().catch(() => {});
     }
-  };
-
-  // ─── 익명 반응 ───
-  const bumpReaction = (key: keyof ReactionCount) => {
-    setReactions((r) => ({ ...r, [key]: r[key] + 1 }));
   };
 
   // ─── Q&A 전송 ───
@@ -593,6 +579,8 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     }
                     elapsed={player.currentSlideElapsed}
                     duration={player.currentSlideDuration}
+                    fontSize={a11y.fontSize}
+                    highContrast={a11y.highContrast}
                   />
                 )}
             </div>
@@ -684,91 +672,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     {formatClock(progressSec)} / {formatClock(durationSec)}
                   </span>
                 </div>
-                <div className={styles.reacts} role="group" aria-label="익명 반응">
-                  <ReactBtn
-                    label={t("student.playerV2.reactionLike")}
-                    count={reactions.like}
-                    onClick={() => bumpReaction("like")}
-                    icon={
-                      <svg viewBox="0 0 24 24" fill="url(#ca-grad-electric)" stroke="none">
-                        <path d="M7 22V11l5-8a2 2 0 0 1 3 2l-1 6h4a3 3 0 0 1 3 3l-2 7a3 3 0 0 1-3 2h-9z" />
-                      </svg>
-                    }
-                  />
-                  <ReactBtn
-                    label={t("student.playerV2.reactionCurious")}
-                    count={reactions.curious}
-                    onClick={() => bumpReaction("curious")}
-                    icon={
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="url(#ca-grad-violet)"
-                        strokeWidth={2.2}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M9.5 9a2.5 2.5 0 1 1 4.5 1.6c-1 .8-1.5 1.2-1.5 2.4" />
-                        <circle cx="12" cy="17" r="0.6" fill="currentColor" />
-                      </svg>
-                    }
-                  />
-                  <ReactBtn
-                    label={t("student.playerV2.reactionFun")}
-                    count={reactions.fun}
-                    onClick={() => bumpReaction("fun")}
-                    icon={
-                      <svg viewBox="0 0 24 24" fill="url(#ca-grad-success)" stroke="none">
-                        <circle cx="12" cy="12" r="10" />
-                        <path
-                          d="M8 14q4 4 8 0"
-                          stroke="#0A0A0A"
-                          strokeWidth={1.8}
-                          fill="none"
-                          strokeLinecap="round"
-                        />
-                        <circle cx="9" cy="10" r="1.2" fill="#0A0A0A" />
-                        <circle cx="15" cy="10" r="1.2" fill="#0A0A0A" />
-                      </svg>
-                    }
-                  />
-                  <ReactBtn
-                    label={t("student.playerV2.reactionAha")}
-                    count={reactions.aha}
-                    onClick={() => bumpReaction("aha")}
-                    icon={
-                      <svg viewBox="0 0 24 24" fill="none">
-                        <path
-                          d="M12 3l1.5 4 4 .4-3 2.8.9 4-3.4-2-3.4 2 .9-4-3-2.8 4-.4z"
-                          fill="url(#ca-grad-electric)"
-                        />
-                        <path
-                          d="M12 14v6"
-                          stroke="url(#ca-grad-electric)"
-                          strokeWidth={2.2}
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                    }
-                  />
-                </div>
                 <div className={styles.controlsRight}>
                   <button
                     type="button"
-                    className={styles.assessTrigger}
-                    onClick={() =>
-                      router.push(
-                        `/lecture/${slug}/assess${sessionId ? `?session_id=${sessionId}` : ""}`,
-                      )
-                    }
-                  >
-                    {t("student.playerV2.startAssess")}
-                  </button>
-                  <button
-                    type="button"
                     className={styles.ctrl}
-                    onClick={() => setCaptionsOn((v) => !v)}
+                    onClick={() => a11y.setCaptions(!captionsOn)}
                     aria-label={t("student.playerV2.controlCaptions")}
                     aria-pressed={captionsOn}
                     style={captionsOn ? undefined : { opacity: 0.5 }}
@@ -977,6 +885,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         question={activeQuiz ? toQuizQuestion(activeQuiz) : null}
         onClose={handleQuizClose}
         onSubmit={handleQuizSubmit}
+        preview={preview}
       />
 
       {/* Attention warning — useAttention 의 warningLevel 이 1/2/3 일 때만 표시 */}
@@ -1003,30 +912,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         />
       )}
     </PlayerSurfaceDark>
-  );
-}
-
-function ReactBtn({
-  label,
-  count,
-  icon,
-  onClick,
-}: {
-  label: string;
-  count: number;
-  icon: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={styles.react}
-      aria-label={label}
-      onClick={onClick}
-    >
-      {icon}
-      <span className={styles.reactCount}>{count}</span>
-    </button>
   );
 }
 
@@ -1057,15 +942,37 @@ function KaraokeCaption({
   sourceText,
   elapsed,
   duration,
+  fontSize = "normal",
+  highContrast = false,
 }: {
   className?: string;
   text: string;
   sourceText?: string;
   elapsed: number;
   duration: number;
+  /** 접근성 글씨 크기 — 자막 텍스트를 확대한다. */
+  fontSize?: FontSize;
+  /** 접근성 고대비 — 자막 배경을 불투명 검정 + 굵게로 강화한다. */
+  highContrast?: boolean;
 }) {
+  // 자막은 다크 surface 위 CSS 모듈 고정 크기라 body 클래스(globals)에 안 닿는다.
+  // 접근성 토글이 자막에 직접 반영되도록 인라인 style 로 덮어쓴다.
+  const scale = fontSize === "x-large" ? 1.5 : fontSize === "large" ? 1.25 : 1;
+  const style: React.CSSProperties = {
+    fontSize: scale === 1 ? undefined : `calc(1em * ${scale})`,
+    ...(highContrast
+      ? {
+          background: "#000",
+          color: "#fff",
+          fontWeight: 800,
+          padding: "0.4em 0.7em",
+          borderRadius: 8,
+          outline: "2px solid #fff",
+        }
+      : null),
+  };
   return (
-    <div className={className} aria-live="off">
+    <div className={className} style={style} aria-live="off">
       {pickActiveCaption(text, sourceText, elapsed, duration)}
     </div>
   );

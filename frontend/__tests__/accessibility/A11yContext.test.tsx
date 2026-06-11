@@ -31,7 +31,8 @@ describe("A11yProvider", () => {
     };
     try {
       const { result } = renderHook(() => useA11y(), { wrapper: wrap });
-      expect(result.current.captions).toBe(false);
+      // 자막 기본값 ON — 영상 자막 표시의 단일 source.
+      expect(result.current.captions).toBe(true);
       expect(result.current.fontSize).toBe("normal");
       expect(result.current.highContrast).toBe(false);
       expect(result.current.reduceMotion).toBe(false);
@@ -78,7 +79,7 @@ describe("A11yProvider", () => {
       result.current.setReduceMotion(true);
     });
     act(() => result.current.reset());
-    expect(result.current.captions).toBe(false);
+    expect(result.current.captions).toBe(true);
     expect(result.current.fontSize).toBe("normal");
     expect(result.current.highContrast).toBe(false);
     expect(result.current.reduceMotion).toBe(false);
@@ -86,8 +87,8 @@ describe("A11yProvider", () => {
 
   it("falls back to a no-op shape when used outside provider (graceful)", () => {
     const { result } = renderHook(() => useA11y());
-    // 호출은 throw 하지 않고 기본값을 반환해야 한다.
-    expect(result.current.captions).toBe(false);
+    // 호출은 throw 하지 않고 기본값을 반환해야 한다(자막 기본 ON).
+    expect(result.current.captions).toBe(true);
     expect(typeof result.current.setCaptions).toBe("function");
     // setter 호출도 throw 안 함.
     expect(() => result.current.setCaptions(true)).not.toThrow();

@@ -395,8 +395,15 @@ def list_authored(db: Session, lecture_id: uuid.UUID) -> list[Question]:
 
 
 def list_playback(db: Session, lecture_id: uuid.UUID) -> list[Question]:
-    """학생 재생용 — 타임스탬프가 있는 활성 인터랙티브 퀴즈를 시점 순으로 반환.
+    """학생 재생용 — 타임스탬프가 있는 활성 문제를 시점 순으로 반환.
 
+    포함 대상:
+      - 스튜디오 저작 인터랙티브 퀴즈(슬라이드 anchor → insert_after_slide_index 보유)
+      - AI 생성 형성평가(formative) 문제. timestamp_seconds 가 0~영상길이로 분포돼
+        있어 영상 중간에 자동 출제된다. (예전엔 슬라이드 anchor 가 없어 별도 '평가'
+        페이지로만 노출됐고, 학생이 거의 풀지 않았다.)
+
+    총괄평가(summative)는 timestamp_seconds 가 null 이라 자연히 제외된다.
     정답·해설은 응답 단계에서만(그리고 reveal_answer=true 일 때만) 노출하므로,
     호출부가 PlaybackQuizItem 으로 변환할 때 정답 필드를 제외해야 한다.
     """
@@ -405,7 +412,6 @@ def list_playback(db: Session, lecture_id: uuid.UUID) -> list[Question]:
             select(Question)
             .where(
                 Question.lecture_id == lecture_id,
-                Question.insert_after_slide_index.isnot(None),
                 Question.is_active.is_(True),
                 Question.timestamp_seconds.isnot(None),
             )

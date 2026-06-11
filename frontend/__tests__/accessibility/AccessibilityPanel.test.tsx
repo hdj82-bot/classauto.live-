@@ -1,13 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import AccessibilityPanel from "@/components/student/accessibility/AccessibilityPanel";
+import { A11yProvider } from "@/components/student/accessibility/A11yContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ToastProvider } from "@/components/ui/Toast";
 
+// AccessibilityPanel 은 더 이상 자체 provider 를 들지 않는다(lecture 페이지가
+// PlayerV2 와 함께 상위에서 감싼다). 테스트도 동일하게 provider 로 감싼다.
 const wrap = (ui: React.ReactNode) =>
   render(
     <I18nProvider>
-      <ToastProvider>{ui}</ToastProvider>
+      <ToastProvider>
+        <A11yProvider>{ui}</A11yProvider>
+      </ToastProvider>
     </I18nProvider>,
   );
 
@@ -39,9 +44,19 @@ describe("AccessibilityPanel", () => {
     wrap(<AccessibilityPanel />);
     fireEvent.click(screen.getByTestId("a11y-open-button"));
     const cb = screen.getByTestId("a11y-captions") as HTMLInputElement;
-    expect(cb.checked).toBe(false);
+    // 자막 기본값은 ON(영상 자막의 단일 source) — 클릭하면 꺼진다.
+    expect(cb.checked).toBe(true);
     fireEvent.click(cb);
-    expect((screen.getByTestId("a11y-captions") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByTestId("a11y-captions") as HTMLInputElement).checked).toBe(false);
+  });
+
+  it("closes the panel when clicking outside the box", () => {
+    wrap(<AccessibilityPanel />);
+    fireEvent.click(screen.getByTestId("a11y-open-button"));
+    expect(screen.getByTestId("a11y-panel")).toBeTruthy();
+    // 패널 박스 밖(document.body) pointerdown → 자동 닫힘.
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByTestId("a11y-panel")).toBeNull();
   });
 
   it("font size radio: clicking 'large' sets aria-checked and body class", () => {

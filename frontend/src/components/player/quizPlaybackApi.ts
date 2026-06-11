@@ -25,11 +25,17 @@ interface PlaybackListWire {
   quizzes: PlaybackQuiz[];
 }
 
-export async function getPlaybackQuizzes(lectureId: string): Promise<PlaybackQuiz[]> {
+export async function getPlaybackQuizzes(
+  lectureId: string,
+  preview = false,
+): Promise<PlaybackQuiz[]> {
   try {
-    const { data } = await api.get<PlaybackListWire>(
-      `/api/lectures/${lectureId}/quiz/playback`,
-    );
+    // 미리보기(소유 교수자)는 학생 세션이 없으므로 owner 전용 preview 엔드포인트로,
+    // 일반 학생 시청은 학생 전용 엔드포인트로 받는다(둘 다 정답·해설 미포함).
+    const path = preview
+      ? `/api/lectures/${lectureId}/quiz/playback/preview`
+      : `/api/lectures/${lectureId}/quiz/playback`;
+    const { data } = await api.get<PlaybackListWire>(path);
     return (data.quizzes ?? []).filter((q) => q.timestamp_seconds != null);
   } catch {
     // 미배포/404/권한 — 퀴즈 없이 재생.

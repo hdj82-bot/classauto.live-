@@ -42,7 +42,9 @@ interface ContextValue extends State {
 }
 
 const DEFAULT_STATE: State = {
-  captions: false,
+  // 자막은 기본 ON — PlayerV2 가 본 값을 자막 표시의 단일 source 로 쓴다(예전엔
+  // 플레이어 로컬 state 와 분리돼 패널 토글이 영상에 안 닿았다).
+  captions: true,
   fontSize: "normal",
   highContrast: false,
   reduceMotion: false,

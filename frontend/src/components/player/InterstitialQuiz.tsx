@@ -45,6 +45,11 @@ export interface InterstitialQuizProps {
   onSubmit?: (answer: string) => Promise<QuizAnswerOutcome | null>;
   /** 카운트다운 초 (기본 10). */
   countdownSeconds?: number;
+  /**
+   * 교수자 미리보기 — 실제 채점·기록 없이 문제만 확인한다. 답을 고르면 "미리보기라
+   * 채점되지 않는다"는 안내를 띄우고 닫는다(기록 실패 오류 대신).
+   */
+  preview?: boolean;
 }
 
 export default function InterstitialQuiz({
@@ -53,8 +58,10 @@ export default function InterstitialQuiz({
   onClose,
   onSubmit,
   countdownSeconds = 10,
+  preview = false,
 }: InterstitialQuizProps) {
   const { t } = useI18n();
+  const [previewAnswered, setPreviewAnswered] = useState(false);
   const [seconds, setSeconds] = useState(countdownSeconds);
   const [picked, setPicked] = useState<string | null>(null);
   const [shortText, setShortText] = useState("");
@@ -89,6 +96,7 @@ export default function InterstitialQuiz({
       setShortText("");
       setSubmitting(false);
       setOutcome(null);
+      setPreviewAnswered(false);
     };
     if (!open) {
       stopTick();
@@ -122,7 +130,7 @@ export default function InterstitialQuiz({
   if (!open || !question) return null;
 
   const isMultiple = question.questionType === "multiple_choice";
-  const locked = submitting || outcome !== null;
+  const locked = submitting || outcome !== null || previewAnswered;
 
   const finishWithOutcome = (result: QuizAnswerOutcome | null) => {
     setOutcome(result);
@@ -135,6 +143,12 @@ export default function InterstitialQuiz({
   const submit = async (answer: string) => {
     if (locked) return;
     stopTick();
+    // 미리보기: 채점·기록 없이 "미리보기라 채점되지 않음" 안내만 띄우고 닫는다.
+    if (preview) {
+      setPreviewAnswered(true);
+      closeTimerRef.current = window.setTimeout(() => onCloseRef.current(), 2200);
+      return;
+    }
     setSubmitting(true);
     try {
       const result = (await onSubmitRef.current?.(answer)) ?? null;
@@ -157,6 +171,7 @@ export default function InterstitialQuiz({
   };
 
   const mascotText = (() => {
+    if (previewAnswered) return t("student.playerV2.quiz.previewNote");
     if (submitting) return t("student.playerV2.quiz.submitting");
     if (outcome === null && locked) return t("student.playerV2.quiz.recordError");
     if (outcome) {
@@ -196,6 +211,10 @@ export default function InterstitialQuiz({
             {t("student.playerV2.quiz.timer", { sec: String(seconds) })}
           </span>
         </div>
+
+        {/* 리드인 — 영상이 잠시 멈추고 퀴즈로 전환된다는 신호. 학생이 "별도 평가"가
+            아니라 "영상 흐름 속 점검"으로 느끼도록 자연어 멘트를 먼저 보여준다. */}
+        <p className={styles.quizLeadIn}>{t("student.playerV2.quiz.leadIn")}</p>
 
         <h3 className={styles.quizQ}>{question.prompt}</h3>
 
