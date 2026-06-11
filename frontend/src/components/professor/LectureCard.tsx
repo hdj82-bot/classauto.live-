@@ -60,10 +60,11 @@ export default function LectureCard({
   // 완료 강의는 수정 경로가 없어 미리보기를 1차 동작으로 노출(onPreview 제공 시).
   const previewIsPrimary = !isProduction && Boolean(onPreview);
 
-  // 렌더는 끝났지만 아직 미발행인 강의(완료+미공개)는 미리보기가 1차 동작이라
-  // studio 진입 버튼이 사라진다. 발행/추가 작업을 위해 "작업 화면으로 이동"
-  // 보조 버튼을 따로 노출한다(onContinue → /professor/studio/{id}).
-  const showStudioButton = previewIsPrimary && !lecture.is_published;
+  // 완료 강의(미리보기 1차)는 그대로 두면 영상 제작/편집 화면 진입 경로가 없다.
+  // 발행 여부와 무관하게 "스튜디오"(영상 생성·편집) 보조 버튼을 노출한다
+  // (onContinue → /professor/studio/{id}). 교수자 요청: 기존 강의의 영상 생성
+  // 페이지 진입 경로를 카드마다 둔다.
+  const showStudioButton = previewIsPrimary;
 
   // gold primary 버튼 — 제작 중이면 "이어서 제작", 완료+미리보기면 "미리보기",
   // 그 외(미리보기 미제공 완료)면 기존 "강의 열기".
@@ -264,13 +265,19 @@ function LectureTitle({ title }: { title: string }) {
 
   return (
     <h3
-      className="truncate"
       style={{
         margin: 0,
+        // 우상단 "이동" 버튼과 겹치지 않게 우측 여백 + 최대 2줄로 표기(잘림 방지).
+        paddingRight: 56,
         fontSize: 15,
         fontWeight: 700,
         color: "var(--text)",
         letterSpacing: "-0.01em",
+        display: "-webkit-box",
+        WebkitBoxOrient: "vertical",
+        WebkitLineClamp: 2,
+        overflow: "hidden",
+        wordBreak: "break-word",
       }}
     >
       {parts.map((p, i) =>

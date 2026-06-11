@@ -48,8 +48,12 @@ export const professorTokens: CSSProperties = {
   ["--info" as string]: "#3B82F6",
 
   // Shadow (light surface; 다크 surface 는 본 wrapper 범위 밖)
-  ["--shadow-sm" as string]: "0 1px 2px rgba(10, 10, 10, 0.04)",
-  ["--shadow-md" as string]: "0 4px 14px rgba(10, 10, 10, 0.06)",
+  // 라이트 베이지 위에서 카드 입체감이 보이도록 sm/md 를 강화(기존 0.04/0.06 은 거의
+  // 안 보였다). 2단 그림자로 가까운 윤곽 + 넓은 깊이를 동시에 준다.
+  ["--shadow-sm" as string]:
+    "0 1px 2px rgba(10, 10, 10, 0.05), 0 2px 6px rgba(10, 10, 10, 0.06)",
+  ["--shadow-md" as string]:
+    "0 2px 6px rgba(10, 10, 10, 0.06), 0 8px 22px rgba(10, 10, 10, 0.12)",
   ["--shadow-lg" as string]: "0 16px 48px rgba(10, 10, 10, 0.10)",
   ["--shadow-xl" as string]: "0 24px 64px rgba(10, 10, 10, 0.16)",
 
