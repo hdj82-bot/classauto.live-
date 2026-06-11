@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, API_URL } from "@/lib/api";
 import { useSlideshowPlayback } from "./useSlideshowPlayback";
+import { pickActiveCaption } from "./captionTiming";
 import { tokens as tokenStorage } from "@/lib/tokens";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -587,9 +588,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   <KaraokeCaption
                     className={styles.caption}
                     text={currentSlide.subtitle_text || currentSlide.text}
-                    slideStart={currentSlide.start_seconds}
-                    slideEnd={currentSlide.end_seconds}
-                    currentTime={player.currentTime}
+                    sourceText={
+                      currentSlide.subtitle_text ? currentSlide.text : undefined
+                    }
+                    elapsed={player.currentSlideElapsed}
+                    duration={player.currentSlideDuration}
                   />
                 )}
             </div>
@@ -1041,38 +1044,29 @@ function formatClock(sec: number): string {
  * 내 경과 시간 비례로 현재 문장을 고른다(문장별 균등 분배 — 강제정렬 없이도
  * "노래방처럼" 진행되는 근사). 과거 문장은 흐리게, 현재 문장은 강조한다.
  */
-function splitIntoSentences(text: string): string[] {
-  const parts = text
-    .split(/(?<=[。．.!?！？\n])/u)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return parts.length ? parts : [text];
-}
-
+/**
+ * 음성에 맞춰 자막을 문장 단위로 순차 노출한다(노래방식).
+ *
+ * 타이밍은 **실측 음성 기준** `elapsed`/`duration`(슬라이드 내 경과·길이)로 계산한다.
+ * 종전엔 추정 타임라인(start/end_seconds, 5자/초)과 실측 currentTime 을 섞어 비교해
+ * 음성과 자막이 어긋났다. 선택 로직은 captionTiming.pickActiveCaption 에 있다.
+ */
 function KaraokeCaption({
   className,
   text,
-  slideStart,
-  slideEnd,
-  currentTime,
+  sourceText,
+  elapsed,
+  duration,
 }: {
   className?: string;
   text: string;
-  slideStart: number;
-  slideEnd: number;
-  currentTime: number;
+  sourceText?: string;
+  elapsed: number;
+  duration: number;
 }) {
-  const sentences = splitIntoSentences(text);
-  const dur = Math.max(slideEnd - slideStart, 0.001);
-  const progress = Math.min(Math.max((currentTime - slideStart) / dur, 0), 0.9999);
-  const activeIdx = Math.min(
-    Math.floor(progress * sentences.length),
-    sentences.length - 1,
-  );
-  const active = sentences[activeIdx] ?? text;
   return (
     <div className={className} aria-live="off">
-      {active}
+      {pickActiveCaption(text, sourceText, elapsed, duration)}
     </div>
   );
 }

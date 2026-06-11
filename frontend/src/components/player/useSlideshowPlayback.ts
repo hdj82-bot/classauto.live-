@@ -45,6 +45,10 @@ export interface SlideshowPlayback {
   isExpired: boolean;
   currentIndex: number;
   currentSlide: SlideshowSlide | null;
+  /** 현재 슬라이드가 시작된 뒤 흐른 실측 시간(초). 자막 동기화용. */
+  currentSlideElapsed: number;
+  /** 현재 슬라이드의 실측 재생 길이(초). 자막 동기화용(추정 end-start 아님). */
+  currentSlideDuration: number;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
@@ -378,6 +382,13 @@ export function useSlideshowPlayback(
   useEffect(() => () => stopLoop(), [stopLoop]);
 
   const currentSlide = slides[currentIndex] ?? null;
+  // 자막 동기화는 추정 타임라인(start/end_seconds)이 아니라 실측 음성 기반
+  // offsets/durations 로 계산해야 음성과 어긋나지 않는다.
+  const currentSlideDuration = durations[currentIndex] ?? 0;
+  const currentSlideElapsed = Math.max(
+    0,
+    Math.min(currentTime - (offsets[currentIndex] ?? 0), currentSlideDuration),
+  );
 
   return {
     slides,
@@ -386,6 +397,8 @@ export function useSlideshowPlayback(
     isExpired,
     currentIndex,
     currentSlide,
+    currentSlideElapsed,
+    currentSlideDuration,
     isPlaying,
     currentTime,
     duration,
