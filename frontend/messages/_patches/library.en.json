@@ -2,6 +2,7 @@
   "lectureCard": {
     "continueCreating": "Continue",
     "openLecture": "Open lecture",
+    "openStudio": "Open studio",
     "preview": "Preview",
     "openLibrary": "Open library",
     "inProduction": "Rendering",
@@ -16,6 +17,8 @@
   "library": {
     "pageTitle": "Lecture library",
     "pageSubtitle": "Organize every lecture you have created into folders.",
+    "sectionTitle": "My lectures",
+    "sectionSubtitle": "Preview your lectures and organize them into folders. (Finished lectures are preview-only.)",
     "searchPlaceholder": "Search lecture titles…",
     "empty": "No lectures yet.",
     "uncategorized": "Uncategorized",

@@ -38,9 +38,8 @@ import {
   Card,
   MonthlyQuotaMeter,
   displayStyle,
-  tabularStyle,
 } from "@/components/professor/shell";
-import LectureCard from "@/components/professor/LectureCard";
+import LectureLibrarySection from "@/components/professor/LectureLibrarySection";
 
 interface Course {
   id: string;
@@ -176,27 +175,6 @@ export default function ProfessorDashboardPage() {
   const handleProfileSaved = useCallback((profile: InstructorProfileDraft) => {
     setProfileDraft(profile);
   }, []);
-
-  const handleContinueLecture = useCallback(
-    (lectureId: string) => {
-      const lec = lectures.find((l) => l.id === lectureId);
-      if (!lec) return;
-      // 편집 진입점을 studio 하나로 통일. 이전에는 발행/렌더 완료 강의를
-      // 별도의 단순 에디터(/professor/lecture/[id])로 보냈으나, 그 탓에
-      // PPT 미리보기·번역·Q&A 아바타 패널이 "사라진" 것처럼 보였다. studio
-      // 는 승인/렌더 완료 상태도 표시하므로(재승인만 차단) 모두 studio 로 보낸다.
-      router.push(`/professor/studio/${lectureId}`);
-    },
-    [lectures, router],
-  );
-
-  const handleLectureDeleted = useCallback((lectureId: string) => {
-    setLectures((prev) => prev.filter((l) => l.id !== lectureId));
-  }, []);
-
-  const handleOpenLibrary = useCallback(() => {
-    router.push("/professor/lectures");
-  }, [router]);
 
   const [hub, setHub] = useState<DashboardHubData | null>(
     () => getCachedHub<DashboardHubData>(hubCacheKey(lectures)),
@@ -373,15 +351,11 @@ export default function ProfessorDashboardPage() {
 
   return (
     <DashboardHomeView
-      lectures={lectures}
       hub={hub}
       hubLoading={hubLoading}
       onCreateLecture={handleCreateLecture}
       onOpenProfile={() => setProfileModalOpen(true)}
       onJumpToInbox={() => router.push("/professor/inbox")}
-      onContinueLecture={handleContinueLecture}
-      onLectureDeleted={handleLectureDeleted}
-      onOpenLibrary={handleOpenLibrary}
       profileModalOpen={profileModalOpen}
       onCloseProfileModal={() => setProfileModalOpen(false)}
       onProfileSaved={handleProfileSaved}
@@ -397,29 +371,21 @@ export default function ProfessorDashboardPage() {
  * 비용 카드는 hideCostCard 로 숨기고 우측에 MonthlyQuotaMeter 노출.
  */
 function DashboardHomeView({
-  lectures,
   hub,
   hubLoading,
   onCreateLecture,
   onOpenProfile,
   onJumpToInbox,
-  onContinueLecture,
-  onLectureDeleted,
-  onOpenLibrary,
   profileModalOpen,
   onCloseProfileModal,
   onProfileSaved,
   profileDraft,
 }: {
-  lectures: Lecture[];
   hub: DashboardHubData | null;
   hubLoading: boolean;
   onCreateLecture: () => void;
   onOpenProfile: () => void;
   onJumpToInbox: () => void;
-  onContinueLecture: (id: string) => void;
-  onLectureDeleted: (id: string) => void;
-  onOpenLibrary: () => void;
   profileModalOpen: boolean;
   onCloseProfileModal: () => void;
   onProfileSaved: (profile: InstructorProfileDraft) => void;
@@ -577,71 +543,12 @@ function DashboardHomeView({
         </section>
       </div>
 
-      {/* §4.5 최근 강의 영상 그리드 */}
-      <section aria-labelledby="recent-lectures-title">
-        <header
-          className="flex items-center justify-between"
-          style={{ marginBottom: 14 }}
-        >
-          <h2
-            id="recent-lectures-title"
-            style={{
-              ...displayStyle,
-              margin: 0,
-              fontSize: 18,
-              fontWeight: 700,
-            }}
-          >
-            {th("lectureGrid.title")}
-          </h2>
-          {lectures.length > 4 ? (
-            <button
-              type="button"
-              onClick={onOpenLibrary}
-              className="rounded-lg motion-safe:transition"
-              style={{
-                ...tabularStyle,
-                padding: "6px 10px",
-                fontSize: 11.5,
-                fontWeight: 600,
-                color: "var(--gold-on-light, var(--gold))",
-                background: "transparent",
-                border: "1px solid var(--line)",
-                cursor: "pointer",
-              }}
-            >
-              {th("lectureGrid.more", { count: lectures.length - 4 })} →
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onOpenLibrary}
-              className="rounded-lg motion-safe:transition"
-              style={{
-                fontSize: 11.5,
-                fontWeight: 600,
-                color: "var(--text-muted)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                textDecoration: "underline",
-              }}
-            >
-              {t("lectureCard.openLibrary")} →
-            </button>
-          )}
-        </header>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {lectures.slice(0, 4).map((lec) => (
-            <LectureCard
-              key={lec.id}
-              lecture={lec}
-              onContinue={onContinueLecture}
-              onDeleted={onLectureDeleted}
-            />
-          ))}
-        </div>
-      </section>
+      {/* §4.5 내 강의 — 보관함(폴더·검색·미리보기)을 대시보드에 통째로 임베드.
+          교수자가 미리보기를 하려고 매번 보관함으로 이동하던 불편을 없앤다. */}
+      <LectureLibrarySection
+        title={t("library.sectionTitle")}
+        subtitle={t("library.sectionSubtitle")}
+      />
 
       <InstructorProfileModal
         open={profileModalOpen}
