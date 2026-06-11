@@ -24,8 +24,11 @@ interface Props {
   onDeleted: (id: string) => void;
   /**
    * "미리보기" 클릭 시 — 완료된 강의를 학생과 동일한 플레이어로 점검
-   * (/lecture/[slug]?preview=1). 슬러그는 부모가 알기에 콜백으로 위임. 제공되고
-   * 제작 완료(미제작중)된 강의에서만 버튼이 노출된다.
+   * (/lecture/[slug]?preview=1). 슬러그는 부모가 알기에 콜백으로 위임.
+   *
+   * 완료(미제작중) 강의에는 현재 수정 기능이 없으므로, onPreview 가 제공되면
+   * 미리보기가 1차 동작(gold primary)으로 "강의 열기"를 대체한다. 제작 중
+   * 강의는 그대로 "이어서 제작"(studio) 이 1차 동작이다.
    */
   onPreview?: (id: string) => void;
   padding?: number;
@@ -54,9 +57,25 @@ export default function LectureCard({
     !lecture.is_published &&
     (lecture.pipeline_task_id || !lecture.video_url);
 
-  const continueLabel = isProduction
-    ? t("lectureCard.continueCreating")
-    : t("lectureCard.openLecture");
+  // 완료 강의는 수정 경로가 없어 미리보기를 1차 동작으로 노출(onPreview 제공 시).
+  const previewIsPrimary = !isProduction && Boolean(onPreview);
+
+  // 렌더는 끝났지만 아직 미발행인 강의(완료+미공개)는 미리보기가 1차 동작이라
+  // studio 진입 버튼이 사라진다. 발행/추가 작업을 위해 "작업 화면으로 이동"
+  // 보조 버튼을 따로 노출한다(onContinue → /professor/studio/{id}).
+  const showStudioButton = previewIsPrimary && !lecture.is_published;
+
+  // gold primary 버튼 — 제작 중이면 "이어서 제작", 완료+미리보기면 "미리보기",
+  // 그 외(미리보기 미제공 완료)면 기존 "강의 열기".
+  const primaryButtonStyle = {
+    padding: "8px 12px",
+    fontSize: 12,
+    fontWeight: 600 as const,
+    color: "var(--gold)",
+    background: "var(--gold-soft)",
+    border: "1px solid var(--gold-medium)",
+    cursor: "pointer",
+  };
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -117,26 +136,31 @@ export default function LectureCard({
               : t("common.unpublished")}
         </span>
         <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => onContinue(lecture.id)}
-            className="flex-1 rounded-lg motion-safe:transition"
-            style={{
-              padding: "8px 12px",
-              fontSize: 12,
-              fontWeight: 600,
-              color: "var(--gold)",
-              background: "var(--gold-soft)",
-              border: "1px solid var(--gold-medium)",
-              cursor: "pointer",
-            }}
-          >
-            {continueLabel}
-          </button>
-          {onPreview && !isProduction && (
+          {previewIsPrimary ? (
             <button
               type="button"
-              onClick={() => onPreview(lecture.id)}
+              onClick={() => onPreview!(lecture.id)}
+              className="flex-1 rounded-lg motion-safe:transition"
+              style={primaryButtonStyle}
+            >
+              {t("lectureCard.preview")}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onContinue(lecture.id)}
+              className="flex-1 rounded-lg motion-safe:transition"
+              style={primaryButtonStyle}
+            >
+              {isProduction
+                ? t("lectureCard.continueCreating")
+                : t("lectureCard.openLecture")}
+            </button>
+          )}
+          {showStudioButton && (
+            <button
+              type="button"
+              onClick={() => onContinue(lecture.id)}
               className="rounded-lg motion-safe:transition"
               style={{
                 padding: "8px 12px",
@@ -148,7 +172,7 @@ export default function LectureCard({
                 cursor: "pointer",
               }}
             >
-              {t("lectureCard.preview")}
+              {t("lectureCard.openStudio")}
             </button>
           )}
           <button
