@@ -36,7 +36,11 @@ export async function getPlaybackQuizzes(
       ? `/api/lectures/${lectureId}/quiz/playback/preview`
       : `/api/lectures/${lectureId}/quiz/playback`;
     const { data } = await api.get<PlaybackListWire>(path);
-    return (data.quizzes ?? []).filter((q) => q.timestamp_seconds != null);
+    // 슬라이드 anchor(insert_after_slide_index) 또는 타임스탬프가 있는 퀴즈만.
+    // 스튜디오 퀴즈는 슬라이드 경계로 출제되므로 timestamp 가 없어도 포함한다.
+    return (data.quizzes ?? []).filter(
+      (q) => q.timestamp_seconds != null || q.insert_after_slide_index != null,
+    );
   } catch {
     // 미배포/404/권한 — 퀴즈 없이 재생.
     return [];

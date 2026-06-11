@@ -1420,6 +1420,9 @@
         "submit": "Submit",
         "submitting": "Submitting…",
         "shortAnswerPlaceholder": "Type your answer…",
+        "correctAnswerLabel": "Correct answer",
+        "chatShortHint": "Type your answer in the box below and send.",
+        "chatPickHint": "Pick an answer from the options above.",
         "leadIn": "Let's pause for a quick check-in quiz.",
         "previewNote": "Not graded in preview — students respond right here."
       },
