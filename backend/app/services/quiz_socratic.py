@@ -407,15 +407,22 @@ def list_playback(db: Session, lecture_id: uuid.UUID) -> list[Question]:
     정답·해설은 응답 단계에서만(그리고 reveal_answer=true 일 때만) 노출하므로,
     호출부가 PlaybackQuizItem 으로 변환할 때 정답 필드를 제외해야 한다.
     """
+    # 슬라이드 anchor(insert_after_slide_index) 가 있으면 학생 플레이어가 슬라이드 경계로
+    # 출제하므로 timestamp_seconds 가 없어도 포함한다(추정 타임스탬프가 빗나가도 안정적).
+    # AI 형성평가는 anchor 없이 timestamp 만 있으므로 둘 중 하나라도 있으면 포함.
     rows = (
         db.execute(
             select(Question)
             .where(
                 Question.lecture_id == lecture_id,
                 Question.is_active.is_(True),
-                Question.timestamp_seconds.isnot(None),
+                (Question.timestamp_seconds.isnot(None))
+                | (Question.insert_after_slide_index.isnot(None)),
             )
-            .order_by(Question.timestamp_seconds)
+            .order_by(
+                Question.insert_after_slide_index.asc(),
+                Question.timestamp_seconds.asc(),
+            )
         )
         .scalars()
         .all()

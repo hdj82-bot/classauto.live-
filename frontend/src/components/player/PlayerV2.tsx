@@ -14,10 +14,6 @@ import { parseCourseTitle } from "@/components/student/v2/CourseTitle";
 import OnboardingFlowV2 from "@/components/student/v2/OnboardingFlowV2";
 import PlayerSurfaceDark from "./PlayerSurfaceDark";
 import AttentionWarningV2 from "./AttentionWarningV2";
-import InterstitialQuiz, {
-  type QuizAnswerOutcome,
-  type QuizQuestion,
-} from "./InterstitialQuiz";
 import {
   getPlaybackQuizzes,
   submitInterstitialAnswer,
@@ -72,22 +68,12 @@ interface QAMessage {
   /** 교수자 사전 제작 추천 질문의 정답 클립(=이 질문에 대한 정확한 답). 캐시
    *  "비슷한 질문" 안내문을 띄우지 않는다. */
   seed?: boolean;
+  /** 채팅에 출제된 인터스티셜 퀴즈(문제+보기). 학생이 채팅에서 답한다. */
+  quiz?: PlaybackQuiz;
+  /** 그 퀴즈 메시지에 이미 답했는지(보기 버튼 비활성). */
+  quizAnswered?: boolean;
 }
 
-/** PlaybackQuiz → InterstitialQuiz 가 쓰는 QuizQuestion 으로 변환 (보기에 A/B/C/D 부여). */
-function toQuizQuestion(pb: PlaybackQuiz): QuizQuestion {
-  return {
-    id: pb.id,
-    prompt: pb.content,
-    questionType: pb.question_type,
-    options: (pb.options ?? []).map((text, i) => ({
-      letter: String.fromCharCode(65 + i),
-      text,
-    })),
-  };
-}
-
-const letterToIndex = (letter: string): string => String(letter.charCodeAt(0) - 65);
 const indexToLetter = (idx: string): string =>
   String.fromCharCode(65 + Math.max(0, parseInt(idx, 10) || 0));
 
@@ -152,9 +138,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   >([]);
   const qaBottomRef = useRef<HTMLDivElement>(null);
 
-  // 인터스티셜 퀴즈 — 백엔드에서 받은 타임스탬프 퀴즈를 재생 중 자동 출제.
+  // 인터스티셜 퀴즈 — 슬라이드 경계(또는 타임스탬프)에서 우측 Q&A 채팅에 출제.
+  // 학생은 채팅에서 보기 버튼/입력으로 답한다(모달 아님).
   const [playbackQuizzes, setPlaybackQuizzes] = useState<PlaybackQuiz[]>([]);
-  const [activeQuiz, setActiveQuiz] = useState<PlaybackQuiz | null>(null);
+  const [pendingQuiz, setPendingQuiz] = useState<PlaybackQuiz | null>(null);
+  const [quizSubmitting, setQuizSubmitting] = useState(false);
   const quizzesRef = useRef<PlaybackQuiz[]>([]);
   const shownQuizRef = useRef<Set<string>>(new Set());
   const quizOpenRef = useRef(false);
@@ -163,8 +151,8 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     quizzesRef.current = playbackQuizzes;
   }, [playbackQuizzes]);
   useEffect(() => {
-    quizOpenRef.current = activeQuiz !== null;
-  }, [activeQuiz]);
+    quizOpenRef.current = pendingQuiz !== null;
+  }, [pendingQuiz]);
 
   // 첫 진입 온보딩. 서버 onboarded_at("다시 보지 않기")를 우선 확인해 영구 스킵.
   // 확인 전(false)엔 띄우지 않아, 이미 스킵한 사용자에게 깜빡임이 없다.
@@ -319,19 +307,26 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
 
   const attention = useAttention({ sessionId: sessionId || "" });
 
-  // ─── 인터스티셜 퀴즈: 트리거 / 일시정지·재개 / 응답 제출 ───
+  // ─── 인터스티셜 퀴즈: 슬라이드 경계에서 우측 채팅에 출제 → 채팅에서 응답 ───
   const resumeAfterQuiz = () => playPlayer();
 
-  /** 아직 출제되지 않은 다음 퀴즈를 연다. 열었으면 true. */
+  /** 퀴즈를 채팅에 띄운다(이미 출제분 skip). 영상은 답할 때까지 일시정지. */
   const openQuiz = useCallback(
     (quiz: PlaybackQuiz) => {
+      if (shownQuizRef.current.has(quiz.id)) return;
       shownQuizRef.current.add(quiz.id);
       quizOpenRef.current = true;
       pausePlayer();
-      setActiveQuiz(quiz);
+      setPendingQuiz(quiz);
+      setQaMessages((m) => [...m, { role: "assistant", text: "", quiz }]);
+      setTimeout(
+        () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
+        50,
+      );
     },
     [pausePlayer],
   );
+
   const triggerNextQuiz = (): boolean => {
     if (quizOpenRef.current) return false;
     const next = quizzesRef.current.find((q) => !shownQuizRef.current.has(q.id));
@@ -340,14 +335,16 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     return true;
   };
 
-  // 슬라이드쇼 진행 콜백 — 집중도 진행 + 타임스탬프 퀴즈 자동 출제. ref 로 최신
-  // 클로저를 담아 훅의 안정 콜백(handleProgress)이 항상 최신 로직을 부른다.
+  // 진행 콜백 — 집중도 + 슬라이드 anchor 가 없는(AI 형성평가) 퀴즈를 타임스탬프로 출제.
+  // 슬라이드 anchor 가 있는 스튜디오 퀴즈는 아래 currentIndex effect 가 담당한다(추정
+  // 타임스탬프 vs 실측 재생 시간 불일치로 시간 기준은 안 맞음 — slideshow-timeline 축).
   useEffect(() => {
     handleProgressRef.current = (sec: number) => {
       attention.setProgress(sec);
       if (!quizOpenRef.current) {
         const due = quizzesRef.current.find(
           (q) =>
+            q.insert_after_slide_index == null &&
             q.timestamp_seconds != null &&
             sec >= q.timestamp_seconds &&
             !shownQuizRef.current.has(q.id),
@@ -357,17 +354,56 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     };
   }, [attention, openQuiz]);
 
-  const handleQuizClose = () => {
-    setActiveQuiz(null);
+  // 슬라이드 anchor 퀴즈 — 문제가 걸린 슬라이드를 지나면 출제(실측 슬라이드 전환 기준).
+  useEffect(() => {
+    if (quizOpenRef.current) return;
+    const idx = player.currentIndex;
+    const due = quizzesRef.current.find(
+      (q) =>
+        q.insert_after_slide_index != null &&
+        idx > q.insert_after_slide_index &&
+        !shownQuizRef.current.has(q.id),
+    );
+    if (!due) return;
+    const h = requestAnimationFrame(() => openQuiz(due));
+    return () => cancelAnimationFrame(h);
+  }, [player.currentIndex, openQuiz]);
+
+  // 퀴즈 종료 → 영상 재개.
+  const finishQuiz = () => {
+    setPendingQuiz(null);
     quizOpenRef.current = false;
+    setQuizSubmitting(false);
     resumeAfterQuiz();
   };
 
-  const handleQuizSubmit = async (answer: string): Promise<QuizAnswerOutcome | null> => {
-    const quiz = activeQuiz;
-    if (!quiz || !sessionId) return null;
-    const isMultiple = quiz.question_type === "multiple_choice";
-    const userAnswer = isMultiple ? letterToIndex(answer) : answer;
+  /** 채팅에서 퀴즈 응답. userAnswer=객관식 보기 index 문자열 / 주관식 텍스트,
+   *  displayAnswer=채팅에 보일 학생 답. 기록·채점 결과를 채팅에 띄우고 재개한다. */
+  const answerQuiz = async (
+    quiz: PlaybackQuiz,
+    userAnswer: string,
+    displayAnswer: string,
+  ) => {
+    if (quizSubmitting) return;
+    setQaMessages((m) =>
+      m.map((msg) =>
+        msg.quiz?.id === quiz.id ? { ...msg, quizAnswered: true } : msg,
+      ),
+    );
+    setQaMessages((m) => [...m, { role: "user", text: displayAnswer }]);
+
+    // 미리보기(세션 없음): 채점·기록 없이 안내만.
+    if (!sessionId) {
+      setQaMessages((m) => [
+        ...m,
+        { role: "assistant", text: t("student.playerV2.quiz.previewNote") },
+      ]);
+      finishQuiz();
+      return;
+    }
+
+    setQuizSubmitting(true);
+    const isMC = quiz.question_type === "multiple_choice";
     try {
       const res = await submitInterstitialAnswer(lecture!.id, {
         sessionId,
@@ -375,20 +411,39 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         userAnswer,
         videoTimestampSeconds: progressSec,
       });
-      return {
-        recorded: res.recorded,
-        reveal: res.reveal,
-        correct: res.is_correct,
-        correctLetter:
-          res.reveal && isMultiple && res.correct_answer != null
-            ? indexToLetter(res.correct_answer)
-            : null,
-        explanation: res.reveal ? res.explanation : null,
-        modelAnswer: res.reveal && !isMultiple ? res.correct_answer : null,
-      };
+      let resultText: string;
+      if (!res.reveal) {
+        resultText = t("student.playerV2.quiz.recordedFeedback");
+      } else if (isMC) {
+        const head =
+          res.is_correct === true
+            ? t("student.playerV2.quiz.correctFeedback")
+            : t("student.playerV2.quiz.wrongFeedback");
+        const ans =
+          res.correct_answer != null
+            ? `\n${t("student.playerV2.quiz.correctAnswerLabel")}: ${indexToLetter(res.correct_answer)}`
+            : "";
+        const expl = res.explanation ? `\n${res.explanation}` : "";
+        resultText = `${head}${ans}${expl}`;
+      } else {
+        const model = res.correct_answer
+          ? `${t("student.playerV2.quiz.modelAnswerLabel")}: ${res.correct_answer}`
+          : t("student.playerV2.quiz.recordedFeedback");
+        const expl = res.explanation ? `\n${res.explanation}` : "";
+        resultText = `${model}${expl}`;
+      }
+      setQaMessages((m) => [...m, { role: "assistant", text: resultText }]);
     } catch {
-      return null;
+      setQaMessages((m) => [
+        ...m,
+        { role: "assistant", text: t("student.playerV2.quiz.recordError") },
+      ]);
     }
+    finishQuiz();
+    setTimeout(
+      () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
+      50,
+    );
   };
 
   // ─── 재생 컨트롤 (슬라이드쇼 엔진에 위임) ───
@@ -764,7 +819,102 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   <div key={i} className={styles.msg}>
                     <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
                     <div>
-                      {m.text && <div className={styles.bubble}>{m.text}</div>}
+                      {m.text && (
+                        <div
+                          className={styles.bubble}
+                          style={{ whiteSpace: "pre-line" }}
+                        >
+                          {m.text}
+                        </div>
+                      )}
+                      {m.quiz && (
+                        <div
+                          style={{
+                            marginTop: m.text ? 8 : 0,
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 8,
+                          }}
+                        >
+                          <span
+                            className={styles.source}
+                            style={{ alignSelf: "flex-start" }}
+                          >
+                            {t("student.playerV2.quiz.badge")}
+                          </span>
+                          <div
+                            className={styles.bubble}
+                            style={{ fontWeight: 600 }}
+                          >
+                            {m.quiz.content}
+                          </div>
+                          {m.quiz.question_type === "multiple_choice" ? (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 6,
+                              }}
+                            >
+                              {(m.quiz.options ?? []).map((opt, oi) => {
+                                const letter = String.fromCharCode(65 + oi);
+                                const disabled =
+                                  m.quizAnswered || quizSubmitting;
+                                const quiz = m.quiz!;
+                                return (
+                                  <button
+                                    key={oi}
+                                    type="button"
+                                    disabled={disabled}
+                                    onClick={() =>
+                                      answerQuiz(
+                                        quiz,
+                                        String(oi),
+                                        `${letter}. ${opt}`,
+                                      )
+                                    }
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 8,
+                                      textAlign: "left",
+                                      padding: "9px 11px",
+                                      borderRadius: 10,
+                                      border:
+                                        "1px solid var(--line-dark-strong)",
+                                      background: "rgba(255,255,255,0.04)",
+                                      color: "var(--text-dark)",
+                                      font: "inherit",
+                                      fontSize: 13,
+                                      cursor: disabled ? "default" : "pointer",
+                                      opacity: disabled ? 0.55 : 1,
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        fontWeight: 800,
+                                        color: "var(--gold)",
+                                      }}
+                                    >
+                                      {letter}
+                                    </span>
+                                    <span>{opt}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                fontSize: 12,
+                                color: "var(--text-dark-subtle)",
+                              }}
+                            >
+                              {t("student.playerV2.quiz.chatShortHint")}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {m.avatarUrl && !m.seed && (
                         // 투명성(09 §5.2) — 캐시 클립은 비슷한 과거 질문에 렌더된 것.
                         // "권위 있는 답"은 위 텍스트(이 학생 질문에 맞춘 RAG)이고 아바타는
@@ -856,7 +1006,16 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               className={styles.qaInput}
               onSubmit={(e) => {
                 e.preventDefault();
-                sendQuestion();
+                // 주관식 퀴즈 대기 중이면 입력을 답안으로 전송. 객관식 대기 중이면
+                // 보기 버튼으로만 답하므로 무시. 그 외엔 일반 Q&A 질문.
+                if (pendingQuiz?.question_type === "short_answer") {
+                  const text = qaInput.trim();
+                  if (!text || quizSubmitting) return;
+                  setQaInput("");
+                  void answerQuiz(pendingQuiz, text, text);
+                } else if (!pendingQuiz) {
+                  sendQuestion();
+                }
               }}
             >
               <button
@@ -887,16 +1046,28 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                 <input
                   id="qa-input"
                   type="text"
-                  placeholder={t("student.playerV2.qaPlaceholder")}
+                  placeholder={
+                    pendingQuiz?.question_type === "short_answer"
+                      ? t("student.playerV2.quiz.shortAnswerPlaceholder")
+                      : pendingQuiz
+                        ? t("student.playerV2.quiz.chatPickHint")
+                        : t("student.playerV2.qaPlaceholder")
+                  }
                   value={qaInput}
                   maxLength={500}
+                  disabled={pendingQuiz?.question_type === "multiple_choice"}
                   onChange={(e) => setQaInput(e.target.value)}
                 />
               </div>
               <button
                 type="submit"
                 className={styles.sendBtn}
-                disabled={qaSending || !qaInput.trim()}
+                disabled={
+                  qaSending ||
+                  quizSubmitting ||
+                  !qaInput.trim() ||
+                  pendingQuiz?.question_type === "multiple_choice"
+                }
                 aria-label={t("student.playerV2.qaSend")}
               >
                 <svg
@@ -915,14 +1086,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         </div>
       </div>
 
-      {/* Interstitial quiz — 타임스탬프 자동 출제. 정답 공개는 서버(reveal_answer)가 결정. */}
-      <InterstitialQuiz
-        open={activeQuiz !== null}
-        question={activeQuiz ? toQuizQuestion(activeQuiz) : null}
-        onClose={handleQuizClose}
-        onSubmit={handleQuizSubmit}
-        preview={preview}
-      />
+      {/* 인터스티셜 퀴즈는 우측 Q&A 채팅에 출제·응답한다(모달 폐지). */}
 
       {/* Attention warning — useAttention 의 warningLevel 이 1/2/3 일 때만 표시 */}
       {attention.isPaused && attention.warningLevel >= 1 && attention.warningLevel <= 3 && (
