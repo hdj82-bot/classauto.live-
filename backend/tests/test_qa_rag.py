@@ -36,26 +36,46 @@ def test_is_in_scope_respects_explicit_threshold():
     assert is_in_scope([_r(0.85)], threshold=0.8) is True
 
 
-# ── answer_question: 범위 밖이면 Claude 미호출(비용 0) ────────────────────────
+# ── answer_question: 범위 판정은 Claude 가 한다(임베딩은 검색·컨텍스트용) ──────
 
 
-def test_answer_question_out_of_scope_skips_claude():
+def _fake_qa_resp(text: str = "환율은 두 통화의 교환 비율입니다. [슬라이드 1]"):
+    text_block = MagicMock()
+    text_block.type = "text"
+    text_block.text = text
+    fake_resp = MagicMock()
+    fake_resp.content = [text_block]
+    fake_resp.usage.input_tokens = 120
+    fake_resp.usage.output_tokens = 45
+    return fake_resp
+
+
+def test_answer_question_out_of_scope_via_sentinel():
+    """강의 자료는 있으나 Claude 가 무관하다고 판정([[OUT_OF_SCOPE]])하면 거부.
+
+    이제 거부 판정은 Claude 가 한다 — 강의 자료가 있으면 Claude 를 호출하고, 응답
+    센티넬로 범위 밖을 가린다(호출은 했으므로 비용은 기록).
+    """
     db = MagicMock()
+    sentinel = _fake_qa_resp(text="  [[OUT_OF_SCOPE]]  ")  # 앞뒤 공백도 처리되어야
     with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.3)]), \
-         patch("anthropic.Anthropic") as anthropic_cls:
-        result = answer_question(db, "task-1", "sess-1", "강의 범위 밖 잡담")
+         patch.object(qa_svc, "search_similar_script", return_value=[_r(0.2)]), \
+         patch("anthropic.Anthropic") as anthropic_cls, \
+         patch.object(qa_svc, "_claude_qa_call", return_value=sentinel) as call:
+        result = answer_question(db, "task-1", "sess-1", "오늘 점심 뭐 먹지?")
 
     assert result.in_scope is False
-    assert result.cost_usd == 0.0
-    assert result.input_tokens == 0 and result.output_tokens == 0
     assert result.answer == qa_svc.OUT_OF_SCOPE_MESSAGE
-    # 2차 가드레일 — LLM 클라이언트 자체를 만들지 않는다(02 §4.4 비용 0).
-    anthropic_cls.assert_not_called()
+    call.assert_called_once()
+    anthropic_cls.assert_called_once()
+    assert result.cost_usd > 0.0  # 호출했으므로 비용 기록
 
 
-def test_answer_question_no_results_skips_claude():
+def test_answer_question_no_corpus_skips_claude():
+    """슬라이드·스크립트 모두 없으면 관련성 판단 불가 → Claude 미호출·비용 0 거부."""
     db = MagicMock()
     with patch.object(qa_svc, "search_similar_slides", return_value=[]), \
+         patch.object(qa_svc, "search_similar_script", return_value=[]), \
          patch("anthropic.Anthropic") as anthropic_cls:
         result = answer_question(db, "task-1", "sess-1", "관련 자료 없음")
     assert result.in_scope is False
@@ -64,25 +84,37 @@ def test_answer_question_no_results_skips_claude():
 
 
 def test_answer_question_in_scope_calls_claude():
-    """범위 안(>=0.7)이면 Claude 를 호출하고 답변·토큰·비용을 채운다."""
+    """강의 자료가 있고 Claude 가 답하면 답변·토큰·비용을 채운다."""
     db = MagicMock()
-
-    text_block = MagicMock()
-    text_block.type = "text"
-    text_block.text = "환율은 두 통화의 교환 비율입니다. [슬라이드 1]"
-    fake_resp = MagicMock()
-    fake_resp.content = [text_block]
-    fake_resp.usage.input_tokens = 120
-    fake_resp.usage.output_tokens = 45
-
     with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.83)]), \
+         patch.object(qa_svc, "search_similar_script", return_value=[]), \
          patch("anthropic.Anthropic") as anthropic_cls, \
-         patch.object(qa_svc, "_claude_qa_call", return_value=fake_resp) as call:
+         patch.object(qa_svc, "_claude_qa_call", return_value=_fake_qa_resp()) as call:
         result = answer_question(db, "task-1", "sess-1", "환율이란?")
 
     assert result.in_scope is True
     call.assert_called_once()
-    anthropic_cls.assert_called_once()  # 범위 안에서만 클라이언트 생성
+    anthropic_cls.assert_called_once()
     assert "환율" in result.answer
     assert result.input_tokens == 120 and result.output_tokens == 45
     assert result.cost_usd > 0.0
+
+
+def test_answer_question_answers_beyond_embeddings():
+    """임베딩 유사도가 낮아도(0.1) Claude 가 강의 관련으로 판단·답변하면 통과.
+
+    종전 임베딩 하드 게이트(0.4)였다면 거부됐을 질문 — '서술어'처럼 PPT/스크립트
+    텍스트엔 약하지만 강의 주제와 관련된 질문 회귀 방지.
+    """
+    db = MagicMock()
+    expert = _fake_qa_resp(text="서술어는 문장에서 동작·상태를 나타내는 핵심 성분입니다 ...")
+    with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.1)]), \
+         patch.object(qa_svc, "search_similar_script", return_value=[_r(0.12, slide=2)]), \
+         patch("anthropic.Anthropic") as anthropic_cls, \
+         patch.object(qa_svc, "_claude_qa_call", return_value=expert) as call:
+        result = answer_question(db, "task-1", "sess-1", "서술어에 대해 자세히 알려주세요")
+
+    assert result.in_scope is True
+    assert "서술어" in result.answer
+    call.assert_called_once()
+    anthropic_cls.assert_called_once()
