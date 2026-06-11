@@ -117,6 +117,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // 본문은 단일 영상이 아니라 슬라이드쇼(이미지 + 구간 음성 + 타임라인)로 재생한다.
   // 진행 콜백은 ref 로 최신화해 훅(안정 콜백)과 퀴즈/집중도 로직의 순환 의존을 끊는다.
   const stageRef = useRef<HTMLDivElement | null>(null);
+  // 전체화면은 영상 영역만이 아니라 플레이어 전체(영상+Q&A 패널)를 대상으로 한다.
+  // stageRef(.video)만 전체화면하면 우측 채팅이 사라지고 슬라이드가 레터박스된다.
+  const playerRef = useRef<HTMLDivElement | null>(null);
   const handleProgressRef = useRef<(sec: number) => void>(() => {});
   const handleProgress = useCallback(
     (sec: number) => handleProgressRef.current(sec),
@@ -359,7 +362,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const togglePlay = () => player.togglePlay();
   const seekDelta = (delta: number) => player.seekDelta(delta);
   const toggleFullscreen = () => {
-    const el = stageRef.current;
+    const el = playerRef.current;
     if (!el) return;
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
@@ -470,7 +473,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
 
   return (
     <PlayerSurfaceDark>
-      <div className={styles.player}>
+      <div className={styles.player} ref={playerRef}>
         {/* Top bar */}
         <header className={styles.bar}>
           <div className={styles.course}>
