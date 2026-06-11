@@ -13,6 +13,7 @@ from app.core.middleware import RateLimitMiddleware, RequestLoggingMiddleware
 
 # 기존 라우터
 from app.api.v1.auth import router as auth_router
+from app.api.v1.users import router as users_router
 from app.api.v1.courses import router as courses_router
 from app.api.v1.lectures import router as lectures_router
 from app.api.v1.questions import router as questions_router
@@ -87,6 +88,7 @@ app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, **_cors_kwargs)
 
 # 기존 라우터 등록
 app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(courses_router)
 app.include_router(lectures_router)
 app.include_router(questions_router)

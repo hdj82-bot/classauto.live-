@@ -1299,6 +1299,7 @@
     },
     "onboardingV2": {
       "skip": "Skip →",
+      "dontShowAgain": "Don't show again",
       "next": "Next",
       "previous": "Previous",
       "countFormat": "{current} / 4",
