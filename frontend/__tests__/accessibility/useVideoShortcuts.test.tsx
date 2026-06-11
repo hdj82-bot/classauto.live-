@@ -104,11 +104,12 @@ describe("useVideoShortcuts", () => {
       },
       { wrapper: wrap },
     );
-    expect(result.current.captions).toBe(false);
-    act(() => fireKey("c"));
+    // 자막 기본값은 ON(영상 자막의 단일 source) — C 키로 끄고 켠다.
     expect(result.current.captions).toBe(true);
     act(() => fireKey("c"));
     expect(result.current.captions).toBe(false);
+    act(() => fireKey("c"));
+    expect(result.current.captions).toBe(true);
   });
 
   it("? key invokes onShowHelp callback", () => {
