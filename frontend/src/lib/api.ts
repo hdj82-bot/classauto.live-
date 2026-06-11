@@ -172,3 +172,16 @@ export const authApi = {
   // refresh_token 쿠키는 서버가 만료 처리하므로 body 불필요
   logout: () => api.delete("/api/auth/logout"),
 };
+
+export interface MeResponse {
+  id: string;
+  role: "professor" | "student" | "admin";
+  /** 온보딩 안내를 "다시 보지 않기" 한 시각. null = 아직(진입 시 안내 표시). */
+  onboarded_at: string | null;
+}
+
+export const userApi = {
+  getMe: () => api.get<MeResponse>("/api/v1/users/me"),
+  /** 온보딩 안내 영구 스킵(다시 보지 않기). */
+  markOnboarded: () => api.post<MeResponse>("/api/v1/users/me/onboarded"),
+};

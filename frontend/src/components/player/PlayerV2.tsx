@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, API_URL } from "@/lib/api";
+import { api, API_URL, userApi } from "@/lib/api";
 import { useSlideshowPlayback } from "./useSlideshowPlayback";
 import { pickActiveCaption } from "./captionTiming";
 import { tokens as tokenStorage } from "@/lib/tokens";
@@ -166,8 +166,41 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     quizOpenRef.current = activeQuiz !== null;
   }, [activeQuiz]);
 
-  // 첫 진입 온보딩 (sessionStorage 기준)
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  // 첫 진입 온보딩. 서버 onboarded_at("다시 보지 않기")를 우선 확인해 영구 스킵.
+  // 확인 전(false)엔 띄우지 않아, 이미 스킵한 사용자에게 깜빡임이 없다.
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (!user) {
+      // 비로그인(데모 등)은 서버 플래그가 없으니 기존대로 표시(컴포넌트 sessionStorage 가드).
+      // 동기 setState-in-effect 회피 — rAF 로 다음 프레임에.
+      const h = requestAnimationFrame(() => {
+        if (!cancelled) setShowOnboarding(true);
+      });
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(h);
+      };
+    }
+    (async () => {
+      try {
+        const { data } = await userApi.getMe();
+        if (!cancelled) setShowOnboarding(!data.onboarded_at);
+      } catch {
+        // 조회 실패 시 안내는 보여준다(놓치는 것보다 한 번 더 보는 게 안전).
+        if (!cancelled) setShowOnboarding(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  // "다시 보지 않기" — 즉시 숨기고 서버에 영구 스킵 기록(fire-and-forget).
+  const handleDismissOnboardingForever = () => {
+    setShowOnboarding(false);
+    userApi.markOnboarded().catch(() => {});
+  };
 
   // ─── 강의 fetch ───
   useEffect(() => {
@@ -907,11 +940,13 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         />
       )}
 
-      {/* 첫 진입 4슬라이드 온보딩 (라이트→다크 전환). sessionStorage 가드. */}
+      {/* 첫 진입 4슬라이드 온보딩 (라이트→다크 전환). sessionStorage 가드 +
+          서버 onboarded_at 영구 스킵. 우측 하단 "다시 보지 않기" 로 영구 스킵. */}
       {showOnboarding && (
         <OnboardingFlowV2
           onComplete={() => setShowOnboarding(false)}
           onSkip={() => setShowOnboarding(false)}
+          onDismissForever={handleDismissOnboardingForever}
         />
       )}
     </PlayerSurfaceDark>

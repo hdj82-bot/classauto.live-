@@ -23,8 +23,13 @@ import styles from "./OnboardingFlowV2.module.css";
 export interface OnboardingFlowV2Props {
   /** 마지막 슬라이드의 "영상 시작하기" 버튼 핸들러. 기본: 컴포넌트 hide. */
   onComplete?: () => void;
-  /** 우측 상단 "건너뛰기" 핸들러. 기본: 컴포넌트 hide. */
+  /** 우측 상단 "건너뛰기" 핸들러(이번만 건너뛰기). 기본: 컴포넌트 hide. */
   onSkip?: () => void;
+  /**
+   * 우측 하단 "다시 보지 않기" 핸들러. 제공 시 버튼이 노출되며, 클릭하면 영구 스킵
+   * (호출자가 서버 onboarded_at 저장). 미제공이면 버튼을 숨긴다.
+   */
+  onDismissForever?: () => void;
   /** 한 탭당 첫 표시 후 sessionStorage 에 플래그를 저장할지 (기본 true). */
   rememberInSession?: boolean;
 }
@@ -35,6 +40,7 @@ const TIMINGS = [8000, 8000, 8000, 6000] as const;
 export default function OnboardingFlowV2({
   onComplete,
   onSkip,
+  onDismissForever,
   rememberInSession = true,
 }: OnboardingFlowV2Props) {
   const { t } = useI18n();
@@ -89,6 +95,10 @@ export default function OnboardingFlowV2({
   const handleSkip = () => {
     finish();
     onSkip?.();
+  };
+  const handleDismissForever = () => {
+    finish();
+    onDismissForever?.();
   };
 
   const isDark = idx === 4;
@@ -228,6 +238,19 @@ export default function OnboardingFlowV2({
           </svg>
         </button>
       </div>
+
+      {/* 우측 하단 "다시 보지 않기" — 영구 스킵(서버 저장). 상단 "건너뛰기"(이번만)와
+          구분된다. onDismissForever 가 있을 때만 노출. */}
+      {onDismissForever && (
+        <button
+          type="button"
+          className={styles.skip}
+          style={{ position: "absolute", right: 24, bottom: 20, zIndex: 2 }}
+          onClick={handleDismissForever}
+        >
+          {t("student.onboardingV2.dontShowAgain")}
+        </button>
+      )}
     </div>
   );
 }

@@ -82,6 +82,11 @@ class User(Base):
     recent_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 학습자 전용
     student_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # 첫 사용 온보딩(영상 시청 4슬라이드 안내)을 "다시 보지 않기" 한 시각. NULL =
+    # 아직 안 함(진입 시 안내 표시). 값이 있으면 영구 스킵. localStorage 금지라 서버 저장.
+    onboarded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
