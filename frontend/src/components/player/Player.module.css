@@ -9,6 +9,12 @@
   flex: 1;
   min-height: 100vh;
 }
+/* 전체화면 — 플레이어 전체(영상+Q&A)를 화면에 꽉 채운다. */
+.player:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  background: #0a0a0a;
+}
 
 /* Top bar */
 .bar {
