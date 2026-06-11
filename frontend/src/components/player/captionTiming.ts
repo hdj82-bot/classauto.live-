@@ -1,0 +1,53 @@
+/**
+ * 자막 문장 단위 동기화(노래방식)의 순수 타이밍 로직.
+ *
+ * 슬라이드 본문은 슬라이드 1장 = 음성 1파일 = 자막 1블록 구조라, 한 슬라이드 안에
+ * 여러 문장이 있으면 음성은 다음 문장으로 가는데 자막 블록은 그대로 남아 어긋난다.
+ * 여기서는 **실측 음성 기준** 경과 시간(elapsed)·길이(duration)로 현재 문장을 고른다.
+ * 추정 타임라인(start/end_seconds, 5자/초)을 쓰면 실측 재생과 어긋나므로 쓰지 않는다.
+ */
+
+/** 한국어·중국어 종결 부호와 줄바꿈 기준으로 문장 분리(CJK 공백 없음도 처리). */
+export function splitIntoSentences(text: string): string[] {
+  const parts = text
+    .split(/(?<=[。．.!?！？\n])/u)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.length ? parts : [text];
+}
+
+/**
+ * 슬라이드 내 경과 시간에 해당하는 자막 문장을 고른다.
+ *
+ * @param text       표시할 자막(번역 자막 또는 발화 원문).
+ * @param sourceText 발화 원문. 자막과 문장 수가 같으면 음성 속도에 더 가깝게
+ *                   발화 길이로 가중한다. 없으면 자막 자체 길이로 가중.
+ * @param elapsed    현재 슬라이드가 시작된 뒤 흐른 실측 시간(초).
+ * @param duration   현재 슬라이드의 실측 재생 길이(초).
+ */
+export function pickActiveCaption(
+  text: string,
+  sourceText: string | undefined,
+  elapsed: number,
+  duration: number,
+): string {
+  const sentences = splitIntoSentences(text);
+  if (sentences.length <= 1) return sentences[0] ?? text;
+
+  const dur = Math.max(duration, 0.001);
+  const frac = Math.min(Math.max(elapsed / dur, 0), 0.9999);
+
+  // 가중 기준: 발화 원문 문장 수가 자막과 같으면 발화(=음성) 길이, 아니면 자막 길이.
+  // 문장별 표시 시간을 균등이 아니라 글자 수에 비례시켜 짧은/긴 문장을 보정한다.
+  const srcSents = sourceText ? splitIntoSentences(sourceText) : [];
+  const basis = srcSents.length === sentences.length ? srcSents : sentences;
+  const weights = basis.map((s) => Math.max(1, s.length));
+  const totalW = weights.reduce((a, b) => a + b, 0);
+
+  let acc = 0;
+  for (let i = 0; i < sentences.length; i += 1) {
+    acc += weights[i] / totalW;
+    if (frac < acc) return sentences[i];
+  }
+  return sentences[sentences.length - 1];
+}
