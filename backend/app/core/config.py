@@ -258,6 +258,24 @@ class Settings(BaseSettings):
     NOTIFICATION_WEBHOOK_URL: str = ""
     POLLING_INTERVAL_SECONDS: int = 600
 
+    # ── 렌더 신뢰성 (멈춤 자동 복구) ─────────────────────────────
+    # 워커 재시작·크래시·네트워크 단절로 render_slide 가 끝내지 못하면 행이
+    # TTS 진행(또는 pending/uploading) 상태에 갇혀 슬라이드쇼가 영구 멈춘다.
+    # task_acks_late + Redis 라 재전달은 visibility_timeout(기본 1h) 뒤에야 일어나
+    # UX 상 "오류 없이 멈춤"으로 보인다. reaper(아래)가 updated_at 이 이 임계를
+    # 넘긴 비종료 렌더를 pending 으로 되돌려 render_slide 를 재큐잉한다.
+    # 슬라이드 1장 TTS 는 통상 수 초~수십 초라 20분 정체면 확실히 멈춘 것.
+    # rendering(HeyGen 대기)은 poll_pending_renders + HeyGen 24h 타임아웃이
+    # 따로 다루므로 reaper 대상에서 제외한다(이중 제출 방지).
+    RENDER_STUCK_MINUTES: int = 20
+    # render_slide 작업별 시간 제한(초). soft 는 catch 가능한 예외(→ 재시도),
+    # hard 는 워커 자식 프로세스 강제 종료. TTS 클라이언트 타임아웃(120s)+재시도+
+    # 후처리를 덮되 무한 hang 은 끊도록 보수적으로 둔다. 전역(task_time_limit)으로
+    # 두지 않는 이유: mp4 합성·QA 야간 배치 등 정상적으로 긴 태스크를 죽일 수 있어
+    # render_slide 에만 건다.
+    RENDER_SLIDE_SOFT_TIME_LIMIT_SECONDS: int = 300
+    RENDER_SLIDE_TIME_LIMIT_SECONDS: int = 360
+
     # ── 집중 경고 ───────────────────────────────────────────────
     ATTENTION_HEARTBEAT_INTERVAL_SECONDS: int = 10
     ATTENTION_NO_RESPONSE_TIMEOUT_SECONDS: int = 30

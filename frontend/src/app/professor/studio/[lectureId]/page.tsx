@@ -62,6 +62,10 @@ const SCRIPT_POLL_MS = 6000;
 // 자체를 중단(useEffect 내부에서)하므로 정상화 후 네트워크 부담은 없다.
 const SLIDES_POLL_MS = 3000;
 const RENDER_POLL_MS = 5000;
+// 완료(ready) 슬라이드 수가 이 시간 동안 늘지 않으면 "멈춤"으로 간주해 재시도
+// 안내를 띄운다. 한 슬라이드 TTS 의 정상 상한(render_slide soft_time_limit≈5분)
+// 보다 살짝 짧게 둬, 정상 진행 중인 슬라이드를 멈춤으로 오인하지 않게 한다.
+const RENDER_STALL_MS = 240_000; // 4분
 
 /**
  * /professor/studio/[lectureId] — v2 3단 wizard.
@@ -152,6 +156,13 @@ export default function StudioWizardPage() {
   // 쓴다. 원형 막대(genPercent)는 중간 단계 가중치까지 더한 값이라 따로 둔다.
   const [genCompleted, setGenCompleted] = useState(0);
   const [approved, setApproved] = useState(false);
+  // 진행이 오래 정체되면(워커 재시작 등으로 한 슬라이드 렌더 유실) true — 모달에
+  // "다시 시도" 안내를 띄운다. 완료(ready) 슬라이드 수가 늘면 갱신·해제한다.
+  const [genStalled, setGenStalled] = useState(false);
+  const lastProgressRef = useRef<{ completed: number; at: number }>({
+    completed: -1,
+    at: 0,
+  });
   const renderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // "다시 제작" 시 완료돼 멈춘 렌더 폴링을 다시 돌리기 위한 트리거. 증가하면
   // 렌더 폴링 effect 가 재실행돼 interval 을 새로 건다.
@@ -967,6 +978,8 @@ export default function StudioWizardPage() {
           setGenPercent(0);
           setGenStage(1);
           setGenCompleted(0);
+          setGenStalled(false);
+          lastProgressRef.current = { completed: -1, at: 0 };
           setGenOpen(true);
           setRenderPollNonce((n) => n + 1);
         } catch {
@@ -986,6 +999,8 @@ export default function StudioWizardPage() {
       setGenPercent(0);
       setGenStage(1);
       setGenDone(false);
+      setGenStalled(false);
+      lastProgressRef.current = { completed: -1, at: 0 };
 
       // 음성·만료 PATCH (idempotent)
       if (
@@ -1028,6 +1043,24 @@ export default function StudioWizardPage() {
     reloadSeedQuestions,
   ]);
 
+  // 멈춤 시 "다시 시도" — 진행 중(아직 done 아님)에 정체된 렌더를 재가동한다.
+  // rerender 엔드포인트는 rendering 상태도 받으며, 완료(ready)된 슬라이드는
+  // 재사용(비용 0)하고 멈춘 슬라이드만 pending 으로 되돌려 다시 합성한다.
+  const handleRetryRender = useCallback(async () => {
+    if (!videoId) return;
+    setGenStalled(false);
+    lastProgressRef.current = { completed: -1, at: 0 };
+    try {
+      await api.post(`/api/videos/${videoId}/rerender`);
+      // 폴링을 재가동(nonce 증가)해 진척을 다시 채운다. 모달은 열어 둔다.
+      setGenDone(false);
+      setRenderPollNonce((n) => n + 1);
+      toast("멈춘 슬라이드를 다시 합성합니다.", "info");
+    } catch {
+      toast(t("step2.saveError"), "error");
+    }
+  }, [videoId, toast, t]);
+
   // 사전 질문 클립 렌더 진척 폴링 — rendering 인 항목이 있으면 4초마다 상태를 갱신.
   // 키(rendering id 집합)가 그대로면 재실행되지 않아 인터벌은 1개만 유지된다.
   const seedRenderingKey = seedQuestions
@@ -1062,6 +1095,21 @@ export default function StudioWizardPage() {
         const total = data.total || renders.length || slides.length || 1;
         const completed = data.completed;
         setGenCompleted(completed);
+
+        // 멈춤 감지 — 완료(ready) 슬라이드 수가 늘면 진척 시각을 갱신하고 해제,
+        // 그대로면 RENDER_STALL_MS 경과 시 멈춤으로 표시(미완료 + 실패 0 일 때만).
+        const now = Date.now();
+        if (completed !== lastProgressRef.current.completed) {
+          lastProgressRef.current = { completed, at: now };
+          setGenStalled(false);
+        } else if (
+          completed < total &&
+          (data.failed ?? 0) === 0 &&
+          lastProgressRef.current.at > 0 &&
+          now - lastProgressRef.current.at > RENDER_STALL_MS
+        ) {
+          setGenStalled(true);
+        }
 
         // 슬라이드별 진행 가중치 — completed(ready)만 세면 첫 슬라이드가 완전히
         // 끝나기 전까지 막대가 0% 에 멈춰 보인다(슬라이드당 TTS→HeyGen 합성→
@@ -1353,6 +1401,8 @@ export default function StudioWizardPage() {
         slideCount={slides.length}
         processedSlides={Math.min(genCompleted, slides.length)}
         done={genDone}
+        stalled={genStalled}
+        onRetry={handleRetryRender}
         onBackground={() => setGenOpen(false)}
         onViewVideo={handleViewVideo}
         onPreview={() => {

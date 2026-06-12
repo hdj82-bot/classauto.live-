@@ -43,6 +43,14 @@ export interface GenerationModalProps {
   done?: boolean;
   /** 백그라운드로 실행 핸들러. */
   onBackground?: () => void;
+  /**
+   * 진행이 오래 멈춘 것으로 보일 때 true. 워커 재시작 등으로 한 슬라이드 렌더가
+   * 유실되면 진행률이 고착될 수 있어, 이때 "다시 시도" 안내를 노출한다.
+   * (서버 reaper 가 수 분 내 자동 복구하지만, 사용자가 더 빨리 재시도할 수 있게.)
+   */
+  stalled?: boolean;
+  /** 멈춤 시 재시도(rerender) 핸들러 — 완료된 슬라이드는 재사용(비용 0). */
+  onRetry?: () => void;
   /** DEV 핸들러 (시뮬레이션용). */
   onDevAdd?: (delta: number) => void;
   onDevComplete?: () => void;
@@ -100,6 +108,8 @@ export default function GenerationModal({
   monthlyLimit,
   done = false,
   onBackground,
+  stalled = false,
+  onRetry,
   onDevAdd,
   onDevComplete,
   onDevBackground,
@@ -457,6 +467,60 @@ export default function GenerationModal({
                   subtle
                 />
               )}
+            </div>
+          )}
+
+          {/* 멈춤 감지 — 진행이 오래 정체되면 재시도 안내 (done 이전만) */}
+          {!done && stalled && onRetry && (
+            <div
+              style={{
+                border: "1px solid var(--gold-on-light, #B88308)",
+                borderRadius: 12,
+                padding: "14px 18px",
+                marginBottom: 16,
+                background: "var(--gold-soft, #FDF6E3)",
+              }}
+            >
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
+                진행이 멈춘 것 같나요?
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.5 }}>
+                한동안 진척이 없으면 일부 음성 합성이 중단됐을 수 있어요. 다시 시도하면
+                완성된 슬라이드는 그대로 두고 남은 슬라이드만 이어서 합성합니다(완료분 비용 0).
+              </div>
+              <button
+                type="button"
+                onClick={onRetry}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 14px",
+                  border: "none",
+                  borderRadius: 8,
+                  background: "linear-gradient(135deg, #FFB627, #E89E0E)",
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  color: "#0A0A0A",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                다시 시도
+                <svg
+                  viewBox="0 0 24 24"
+                  width="13"
+                  height="13"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2.4}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M23 4v6h-6" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+              </button>
             </div>
           )}
 
