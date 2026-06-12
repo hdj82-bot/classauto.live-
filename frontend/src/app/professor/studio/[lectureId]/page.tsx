@@ -136,6 +136,8 @@ export default function StudioWizardPage() {
   const [voicesLoading, setVoicesLoading] = useState(true);
   const [translatingSubtitle, setTranslatingSubtitle] = useState(false);
   const [savingSubtitle, setSavingSubtitle] = useState(false);
+  // 발화 언어 변경 시 전 슬라이드 재생성 진행 표시(셀렉터 잠금 + 안내).
+  const [voiceLangRegenerating, setVoiceLangRegenerating] = useState(false);
   // 속도 슬라이더 드래그 중 PATCH 폭주 방지용 디바운스 타이머.
   const voiceSpeedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -639,6 +641,36 @@ export default function StudioWizardPage() {
       void persistLecture({ subtitle_lang: lang });
     },
     [persistLecture, subtitleLang],
+  );
+
+  // ── 발화(음성) 언어 변경 → 전 슬라이드를 해당 언어로 네이티브 재생성 ──────────
+  // 서버가 voice_lang 갱신·스크립트 재생성·기존 자막 무효화를 한 번에 처리하므로
+  // 별도 persistLecture 가 필요 없다. 실패하면 이전 언어로 되돌린다.
+  const handleChangeVoiceLang = useCallback(
+    async (lang: LangCode) => {
+      if (lang === voiceLang || !videoId || voiceLangRegenerating) return;
+      const prev = voiceLang;
+      setVoiceLang(lang);
+      setVoiceLangRegenerating(true);
+      // 언어가 바뀌면 기존(이전 언어) 자막은 무효 — 즉시 비워 카드가 새 언어의
+      // "번역 생성" 프롬프트를 보여주게 한다. (서버도 subtitle_segments 를 비운다.)
+      setScript((p) => (p?.subtitle_segments ? { ...p, subtitle_segments: null } : p));
+      try {
+        const { data } = await api.post<ScriptResponse>(
+          `/api/videos/${videoId}/script/language`,
+          undefined,
+          { params: { target_lang: lang } },
+        );
+        setScript(data);
+        toast(`${langLabel(lang)}로 스크립트를 다시 생성했어요.`, "success");
+      } catch {
+        setVoiceLang(prev); // 실패 — 이전 언어로 복원
+        toast("발화 언어 변경 중 오류가 발생했습니다.", "error");
+      } finally {
+        setVoiceLangRegenerating(false);
+      }
+    },
+    [videoId, voiceLang, voiceLangRegenerating, toast],
   );
 
   const handleChangeVoiceId = useCallback(
@@ -1268,8 +1300,10 @@ export default function StudioWizardPage() {
         subtitleLang={subtitleLang}
         voiceId={voiceId}
         voiceSpeed={voiceSpeed}
+        voiceLangRegenerating={voiceLangRegenerating}
         voices={voices}
         voicesLoading={voicesLoading}
+        onChangeVoiceLang={handleChangeVoiceLang}
         onChangeSubtitleLang={handleChangeSubtitleLang}
         onChangeVoiceId={handleChangeVoiceId}
         onChangeVoiceSpeed={handleChangeVoiceSpeed}

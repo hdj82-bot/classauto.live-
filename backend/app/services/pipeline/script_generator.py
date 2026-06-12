@@ -15,6 +15,7 @@ from app.core.retry import retry_external
 from app.services.pipeline.parser import encode_image_base64
 from app.services.pipeline.schemas import SlideContent, SlideScript
 from app.services.pipeline.text_cleanup import strip_pinyin_annotations
+from app.services.pipeline.translator import _lang_name
 
 logger = logging.getLogger(__name__)
 
@@ -122,13 +123,56 @@ _SYSTEM_BLOCKS = [
 ]
 
 
-def generate_scripts(slides: list[SlideContent]) -> list[SlideScript]:
+# ── 다국어 발화 스크립트 ──────────────────────────────────────────────────────
+# voice_lang 이 한국어가 아니면, 슬라이드 내용을 '번역'이 아니라 해당 언어로
+# 처음부터 네이티브 생성한다 (한국어를 거친 번역투·번역 오류 회피 — 교수자
+# 결정 2026-06-12). 한국어 경로는 위 _SYSTEM_BLOCKS 를 그대로 써 기존 파이프라인과
+# 100% 동일하게 유지하고(무회귀), 그 외 언어만 영어 지시문 프롬프트로 분기한다.
+
+
+def _system_prompt_for_lang(lang_name: str) -> str:
+    return f"""\
+You are a professional presentation speaking coach.
+Based on the given slide, write a natural spoken script in {lang_name}.
+
+Rules:
+1. If speaker notes exist, use them as the primary source.
+2. Otherwise, analyze the slide text and images.
+3. Write in a natural, conversational spoken style.
+4. Do not include slide-transition phrases.
+5. Keep it to about 1-2 minutes of speech.
+6. Write the ENTIRE script in {lang_name}; do not mix in other languages except
+   for quoted terms.
+
+Output format (very important):
+The output is plain text spoken verbatim by a TTS engine.
+Never use markdown (**bold**, ## heading, `code`, [link](url), - list, > quote).
+For Chinese words/sentences, write only the Han characters — never annotate pinyin
+or pronunciation in parentheses, because the TTS would read the romanization aloud."""
+
+
+def _system_blocks_for_lang(lang: str | None) -> list[dict]:
+    """언어별 system 블록. ko/None 은 기존 한국어 프롬프트 그대로(무회귀)."""
+    if not lang or lang == "ko":
+        return _SYSTEM_BLOCKS
+    return [
+        {
+            "type": "text",
+            "text": _system_prompt_for_lang(_lang_name(lang)),
+            "cache_control": {"type": "ephemeral"},
+        },
+    ]
+
+
+def generate_scripts(slides: list[SlideContent], lang: str = "ko") -> list[SlideScript]:
     """모든 슬라이드에 대해 발화 스크립트를 병렬 생성.
 
     - 첫 슬라이드는 동기 호출로 먼저 끝내 사용자가 가장 먼저 보는 화면을
       가장 빨리 채운다(첫 호출이 prompt cache 도 적재해준다).
     - 나머지는 SCRIPT_CONCURRENCY 상한의 ThreadPoolExecutor 로 병렬화.
     - slide_number 순서를 보장해 반환.
+    - ``lang`` 은 발화 언어(ko/en/zh/ja). 기본 ko 라 업로드 파이프라인(step3)은
+      종전과 동일하게 한국어로 생성된다.
     """
     # 명시적 timeout 30s — anthropic SDK 의 with_options 로 호출별 한도 부과.
     client = anthropic.Anthropic(
@@ -141,14 +185,14 @@ def generate_scripts(slides: list[SlideContent]) -> list[SlideScript]:
     results: dict[int, str] = {}
 
     first, rest = slides[0], slides[1:]
-    results[first.slide_number] = _generate_single_script(client, first)
+    results[first.slide_number] = _generate_single_script(client, first, lang=lang)
     logger.info("슬라이드 %d 스크립트 생성 완료 (priming)", first.slide_number)
 
     if rest:
         max_workers = max(1, min(settings.SCRIPT_CONCURRENCY, len(rest)))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             future_to_slide: dict[Future, SlideContent] = {
-                pool.submit(_generate_single_script, client, slide): slide
+                pool.submit(_generate_single_script, client, slide, lang=lang): slide
                 for slide in rest
             }
             for fut in future_to_slide:
@@ -164,7 +208,9 @@ def generate_scripts(slides: list[SlideContent]) -> list[SlideScript]:
 
 @track_external_api("claude")
 @retry_external(label="claude.messages.create", extra_retry_on=_RETRY_ON)
-def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) -> str:
+def _generate_single_script(
+    client: anthropic.Anthropic, slide: SlideContent, lang: str = "ko"
+) -> str:
     content_blocks: list[dict] = []
 
     for img_path in slide.image_paths:
@@ -187,7 +233,12 @@ def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) ->
         prompt_parts.append("\n### 슬라이드 텍스트\n" + "\n".join(slide.texts))
     if not slide.speaker_notes and not slide.texts and not slide.image_paths:
         prompt_parts.append("\n(빈 슬라이드입니다. 간단한 전환 멘트만 작성하세요.)")
-    prompt_parts.append("\n위 내용을 바탕으로 발화 스크립트를 작성해주세요.")
+    if not lang or lang == "ko":
+        prompt_parts.append("\n위 내용을 바탕으로 발화 스크립트를 작성해주세요.")
+    else:
+        prompt_parts.append(
+            f"\nBased on the above, write the spoken script in {_lang_name(lang)}."
+        )
 
     content_blocks.append({"type": "text", "text": "\n".join(prompt_parts)})
 
@@ -195,7 +246,7 @@ def _generate_single_script(client: anthropic.Anthropic, slide: SlideContent) ->
         response = client.messages.create(
             model=settings.SCRIPT_MODEL,
             max_tokens=settings.SCRIPT_MAX_TOKENS,
-            system=_SYSTEM_BLOCKS,
+            system=_system_blocks_for_lang(lang),
             messages=[{"role": "user", "content": content_blocks}],
         )
     except anthropic.APIError as exc:

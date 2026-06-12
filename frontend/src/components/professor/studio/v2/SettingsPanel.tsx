@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
-import { LANGUAGES, QUIZ_DIFFICULTY_LABEL } from "../studioTypes";
+import { STUDIO_LANGUAGES, langLabel, QUIZ_DIFFICULTY_LABEL } from "../studioTypes";
 import type {
   LangCode,
   QuizDifficulty,
@@ -38,13 +38,15 @@ export interface SettingsPanelProps {
   subtitleLang: LangCode | null;
   /** @deprecated 보이스 선택은 "Q&A 아바타 선택" 페이지로 이동 — 패널에선 미사용(렌더 시 voice_id 는 강의에 저장된 값 사용). */
   voiceId?: string | null;
-  /** 발화 속도 배율 (1.0 = 기본). 이 패널에 남는 유일한 음성 컨트롤. */
+  /** 발화 속도 배율 (1.0 = 기본). */
   voiceSpeed?: number;
+  /** 발화 언어를 바꾸는 중(전 슬라이드 재생성). true 면 셀렉터를 잠그고 안내를 띄운다. */
+  voiceLangRegenerating?: boolean;
   /** @deprecated 보이스 목록(드롭다운)은 아바타 페이지로 이동 — 패널에선 미사용. */
   voices?: TtsVoice[];
   /** @deprecated 보이스 목록 로딩 — 패널에선 미사용. */
   voicesLoading?: boolean;
-  /** @deprecated 음성 언어 선택 UI 제거됨 — voiceLang 은 자막 "동일" 비교용으로만 유지. */
+  /** 발화(음성) 언어 변경 — 해당 언어로 스크립트를 다시 생성한다. */
   onChangeVoiceLang?: (lang: LangCode) => void;
   /** null 전달 = 자막을 음성과 동일하게. */
   onChangeSubtitleLang?: (lang: LangCode | null) => void;
@@ -297,6 +299,8 @@ export default function SettingsPanel({
   voiceLang,
   subtitleLang,
   voiceSpeed = 1.0,
+  voiceLangRegenerating = false,
+  onChangeVoiceLang,
   onChangeSubtitleLang,
   onChangeVoiceSpeed,
   onChangeAvatar,
@@ -446,16 +450,39 @@ export default function SettingsPanel({
             <span style={summaryValStyle}>{summaryVoiceVal}</span>
           </summary>
           <div style={aBodyStyle}>
-            {/* ── 발화 속도 (음성 선택은 "Q&A 아바타 선택" 페이지로 이동) ── */}
+            {/* ── 발화 언어 (아바타가 말하는 언어) ── */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+              <div style={subSectionLabelStyle}>
+                <span style={subTagStyle("gold")}>음성</span>
+                <span>발화 언어</span>
+              </div>
+              <LangSelect
+                value={voiceLang}
+                onChange={(lang) => onChangeVoiceLang?.(lang)}
+                ariaLabel="발화 언어 선택"
+                disabled={voiceLangRegenerating}
+              />
+              {voiceLangRegenerating ? (
+                <p style={{ margin: 0, fontSize: 11.5, color: "var(--gold-on-light, #B88308)", lineHeight: 1.5, fontWeight: 600 }}>
+                  {langLabel(voiceLang)}로 발화 스크립트를 다시 생성하고 있어요…
+                </p>
+              ) : (
+                <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                  아바타가 이 언어로 말합니다. 바꾸면 스크립트 검토 내용이 해당 언어로
+                  다시 생성됩니다. 목소리는 ‘Q&amp;A 아바타 선택’에서 고른 음성을 그대로
+                  사용합니다.
+                </p>
+              )}
+            </div>
+
+            <div style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />
+
+            {/* ── 발화 속도 ── */}
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               <div style={subSectionLabelStyle}>
                 <span style={subTagStyle("gold")}>음성</span>
                 <span>발화 속도</span>
               </div>
-              <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
-                목소리는 ‘Q&amp;A 아바타 선택’에서 아바타와 함께 정합니다. 여기서는 발화
-                속도만 조절합니다.
-              </p>
               <SpeedSlider
                 value={voiceSpeed}
                 onChange={(v) => onChangeVoiceSpeed?.(v)}
@@ -1271,19 +1298,26 @@ function LangSelect({
   value,
   onChange,
   ariaLabel,
+  disabled = false,
 }: {
   value: LangCode;
   onChange: (lang: LangCode) => void;
   ariaLabel: string;
+  disabled?: boolean;
 }) {
   return (
     <select
       aria-label={ariaLabel}
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value as LangCode)}
-      style={selectStyle}
+      style={{
+        ...selectStyle,
+        opacity: disabled ? 0.6 : 1,
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
     >
-      {LANGUAGES.map((l) => (
+      {STUDIO_LANGUAGES.map((l) => (
         <option key={l.code} value={l.code}>
           {l.label}
         </option>
