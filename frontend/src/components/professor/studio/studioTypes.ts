@@ -56,6 +56,8 @@ export interface Lecture {
   slug: string;
   is_published: boolean;
   video_url: string | null;
+  // 카드 썸네일 — PPT 1번 슬라이드 이미지 URL(서버가 thumbnail_url 로 채워줌). null 이면 placeholder.
+  thumbnail_url?: string | null;
   pipeline_task_id?: string | null;
   expires_at: string | null;
   voice_gender: VoiceGender;

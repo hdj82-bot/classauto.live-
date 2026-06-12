@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, API_URL, userApi } from "@/lib/api";
+import { api, API_URL, userApi, bootstrapAuth } from "@/lib/api";
 import { useSlideshowPlayback } from "./useSlideshowPlayback";
 import { pickActiveCaption } from "./captionTiming";
 import { tokens as tokenStorage } from "@/lib/tokens";
@@ -221,6 +221,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       return;
     }
     (async () => {
+      // 새 탭(교수자 미리보기)·직접 진입은 메모리상 access 토큰이 휘발돼 있다.
+      // /public 은 소유 교수자면 미발행 강의도 내려주는데(owner-bypass), 토큰이
+      // 없으면 viewer=익명으로 처리돼 미발행 강의가 404 → /dashboard 로 튕긴다.
+      // 그래서 fetch 전에 refresh 쿠키로 access 토큰을 선제 복원한다(비로그인은 그냥 통과).
+      await bootstrapAuth();
       try {
         const { data } = await api.get<LectureData>(`/api/lectures/${slug}/public`);
         if (data.is_expired) {

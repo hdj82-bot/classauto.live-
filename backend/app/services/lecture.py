@@ -88,6 +88,9 @@ async def list_my_lectures(db: AsyncSession, professor: User) -> list[Lecture]:
     프론트가 ``GET /api/courses`` 후 강좌별 ``GET /api/courses/{id}/lectures`` 를
     N번 호출하던 fan-out 워터폴을 단일 JOIN 쿼리로 대체한다. 소유 범위는
     Course.instructor_id 로 한정(미게시 포함 — 본인 소유라서). 최신순 정렬.
+
+    카드 썸네일용으로 ``thumbnail_url`` 이 비어 있으면 PPT 1번 슬라이드 이미지로
+    채운다(아래 ``_attach_slide_thumbnails``). 메모리상 세팅이며 commit 하지 않는다.
     """
     stmt = (
         select(Lecture)
@@ -96,7 +99,41 @@ async def list_my_lectures(db: AsyncSession, professor: User) -> list[Lecture]:
         .order_by(Lecture.created_at.desc())
     )
     result = await db.execute(stmt)
-    return list(result.scalars().all())
+    lectures = list(result.scalars().all())
+    await _attach_slide_thumbnails(db, lectures)
+    return lectures
+
+
+async def _attach_slide_thumbnails(
+    db: AsyncSession, lectures: list[Lecture]
+) -> None:
+    """``thumbnail_url`` 이 없는 강의에 1번 슬라이드 PNG URL 을 메모리상 채운다.
+
+    슬라이드 이미지는 ``thumbnails/*`` (public-read) prefix 에 올라가므로 presign
+    없이 영구 URL 을 그대로 쓴다. get_db 는 commit 하지 않으므로 이 세팅은
+    응답 직렬화에만 쓰이고 DB 에는 영구 저장되지 않는다(만료 URL 오염 없음).
+    N+1 회피 — task_id IN (...) 한 번으로 일괄 조회.
+    """
+    from app.models.embedding import SlideEmbedding  # noqa: PLC0415
+
+    targets: dict[str, Lecture] = {
+        lec.pipeline_task_id: lec
+        for lec in lectures
+        if not lec.thumbnail_url and getattr(lec, "pipeline_task_id", None)
+    }
+    if not targets:
+        return
+    rows = (
+        await db.execute(
+            select(SlideEmbedding.task_id, SlideEmbedding.slide_image_url).where(
+                SlideEmbedding.task_id.in_(list(targets.keys())),
+                SlideEmbedding.slide_number == 1,
+            )
+        )
+    ).all()
+    for task_id, image_url in rows:
+        if image_url and task_id in targets:
+            targets[task_id].thumbnail_url = image_url
 
 
 async def get_lecture_or_404(db: AsyncSession, lecture_id: uuid.UUID) -> Lecture:
