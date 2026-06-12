@@ -6,10 +6,12 @@
 .player {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  /* 뷰포트 높이로 고정해 내부 패널만 스크롤되게 한다. 종전엔 min-height: 100vh 라
-   * 채팅 로그가 길어지면 플레이어 전체가 커지며 화면이 위로 밀렸다 — 이제 .qaBody
-   * 만 내부 스크롤된다. (모바일은 아래 미디어쿼리에서 문서 스크롤로 되돌린다.) */
+  /* 뷰포트 높이로 고정해 내부 패널만 스크롤되게 한다. 종전엔 flex:1 + min-height:100vh
+   * 라 채팅 로그가 길어지면 flex-basis(0%)가 height 를 눌러 플레이어가 콘텐츠만큼
+   * 커지며 화면이 위로 밀렸다. flex:1 을 제거(flex:0 0 auto)해 height:100vh 가 실제로
+   * 적용되게 하고, .qaBody 만 내부 스크롤되게 한다. (모바일은 아래 미디어쿼리에서
+   * 문서 스크롤로 되돌린다.) */
+  flex: 0 0 auto;
   height: 100vh;
   overflow: hidden;
 }
