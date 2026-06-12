@@ -79,8 +79,6 @@ export interface SettingsPanelProps {
   ) => void;
   /** ready 클립 점검(미리보기 재생) — preview_url 을 받아 부모가 모달로 연다. */
   onPreviewSeed?: (url: string) => void;
-  /** 카드별 "AI 답변 자동 생성" — index 질문으로 RAG 답변을 만들어 사전 대답에 채운다. */
-  onGenerateSeedAnswer?: (index: number) => Promise<void>;
   /** "질문과 답변 자동 생성" — 스크립트에서 핵심 질문 3개 + 답변을 자동 생성해 카드를 채운다. */
   onAutoGenerateSeedQuestions?: () => Promise<void>;
   /** 하단 "AI 질문 승인" — 저장된 사전 질문을 즉시 아바타 클립으로 렌더 시작. */
@@ -319,7 +317,6 @@ export default function SettingsPanel({
   onRemoveSeedQuestion,
   onChangeSeedQuestion,
   onPreviewSeed,
-  onGenerateSeedAnswer,
   onAutoGenerateSeedQuestions,
   onApproveSeedQuestions,
 }: SettingsPanelProps) {
@@ -679,11 +676,6 @@ export default function SettingsPanel({
                 onChange={(patch) => onChangeSeedQuestion?.(i, patch)}
                 onRemove={() => onRemoveSeedQuestion?.(i)}
                 onPreview={onPreviewSeed}
-                onGenerate={
-                  onGenerateSeedAnswer
-                    ? () => onGenerateSeedAnswer(i)
-                    : undefined
-                }
               />
             ))}
 
@@ -1036,31 +1028,16 @@ function SeedQuestionCard({
   onChange,
   onRemove,
   onPreview,
-  onGenerate,
 }: {
   item: SeedQuestionDraft;
   index: number;
   onChange: (patch: { question?: string; answer?: string }) => void;
   onRemove: () => void;
   onPreview?: (url: string) => void;
-  /** "AI 답변 자동 생성" — RAG 로 답변을 만들어 사전 대답 칸을 채운다. */
-  onGenerate?: () => Promise<void>;
 }) {
   const badge = item.status ? SEED_STATUS_BADGE[item.status] : null;
   const canPreview =
     item.status === "ready" && !!item.preview_url && !!onPreview;
-  const [generating, setGenerating] = useState(false);
-  const canGenerate = !!onGenerate && item.question.trim() !== "" && !generating;
-
-  const handleGenerate = async () => {
-    if (!onGenerate || generating) return;
-    setGenerating(true);
-    try {
-      await onGenerate();
-    } finally {
-      setGenerating(false);
-    }
-  };
 
   return (
     <div
@@ -1135,44 +1112,9 @@ function SeedQuestionCard({
 
       {/* 사전 대답 (선택 — 비우면 영상 생성 시 강의 자료 기반 RAG 로 자동 생성) */}
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <div className="flex items-center justify-between">
-          <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
-            사전 대답
-          </label>
-          {onGenerate && (
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              aria-label={`예상 질문 ${index + 1} AI 답변 자동 생성`}
-              title={
-                item.question.trim() === ""
-                  ? "질문을 먼저 입력하세요"
-                  : "강의 자료로 답변 자동 생성"
-              }
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 4,
-                padding: "3px 8px",
-                borderRadius: 7,
-                border: "1px solid var(--gold-medium, #E0B65C)",
-                background: "var(--gold-soft)",
-                fontSize: 11,
-                fontWeight: 700,
-                cursor: canGenerate ? "pointer" : "not-allowed",
-                opacity: canGenerate ? 1 : 0.55,
-                color: "var(--gold-on-light, #B88308)",
-                fontFamily: "inherit",
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
-              </svg>
-              {generating ? "생성 중…" : "AI 답변 자동 생성"}
-            </button>
-          )}
-        </div>
+        <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
+          사전 대답
+        </label>
         <textarea
           value={item.answer}
           onChange={(e) => onChange({ answer: e.target.value })}
