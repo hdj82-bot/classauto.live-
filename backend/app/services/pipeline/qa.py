@@ -50,6 +50,28 @@ OUT_OF_SCOPE_MESSAGE = (
 # 출력하도록 프롬프트로 지시하고, 응답에 이 토큰이 있으면 거부로 처리한다.
 OUT_OF_SCOPE_SENTINEL = "[[OUT_OF_SCOPE]]"
 
+
+# 채팅 말풍선(PlayerV2)·아바타 TTS 는 마크다운을 렌더링하지 않고 텍스트 그대로 표시·
+# 발화한다. Claude 가 **굵게**·## 제목 같은 마크다운을 쓰면 기호(`**`, `#`)가 그대로
+# 노출돼 거슬린다(교수자 요청 2026-06-12: 모든 채팅에서 `**` 가 보이지 않게). 프롬프트로
+# 금지하되, 모델이 어겨도 안전하도록 생성 직후 기호를 제거한다(소스 단일 처리 → 플레이어·
+# 캐시·인박스 등 모든 소비처가 한 번에 깨끗해진다).
+_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s*", re.MULTILINE)
+
+
+def _strip_markdown(text: str) -> str:
+    """답변에서 거슬리는 마크다운 서식 기호를 제거한다(내용은 보존).
+
+    - ``**굵게**`` / ``__강조__`` → 내용만 남기고 기호 제거.
+    - 줄머리 ``#`` ``##`` ``###`` 제목 표시 제거.
+    `-` 목록·줄바꿈 등 텍스트로 자연스럽게 읽히는 구조는 그대로 둔다.
+    """
+    if not text:
+        return text
+    text = text.replace("**", "").replace("__", "")
+    text = _HEADING_RE.sub("", text)
+    return text.strip()
+
 QA_SYSTEM_PROMPT = """\
 당신은 이 강의의 전문가 조교입니다. 학습자의 질문에 전문가 수준으로 매우 자세하고
 정확하게 답변하는 것이 목표입니다.
@@ -64,7 +86,9 @@ QA_SYSTEM_PROMPT = """\
    깊이 있게 보충해 전문가 수준으로 설명합니다.
 2. 강의 스크립트에 근거가 있으면 우선 활용하고 정확히 인용합니다. 자료를 넘어서는
    설명을 더할 때도 반드시 사실에 근거해 정확하게 합니다(불확실하면 단정하지 않습니다).
-3. 한국어로 자연스럽고 체계적으로(필요하면 소제목·목록으로 구조화해) 답변합니다.
+3. 한국어로 자연스럽고 체계적으로 답변합니다. 단, 마크다운 서식 기호를 쓰지 않습니다.
+   별표(`**`, `*`)로 굵게/기울임 표시하거나 `#`·`##`·`###` 로 제목을 달지 마세요.
+   구조가 필요하면 줄바꿈과 `-` 목록 정도만 사용해 일반 텍스트로 작성합니다.
 4. 근거가 된 슬라이드 번호가 있으면 답변 끝에 표기합니다. (예: [슬라이드 3, 7])
 """
 
@@ -193,7 +217,7 @@ def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str,
         return "", True
 
     text_block = next((b for b in response.content if b.type == "text"), None)
-    return (text_block.text.strip() if text_block else ""), True
+    return _strip_markdown(text_block.text.strip() if text_block else ""), True
 
 
 # ── 핵심 질문 + 사전 답변 자동 생성 ("질문과 답변 자동 생성" 버튼) ────────────────
@@ -242,8 +266,8 @@ def _parse_seed_questions_json(raw: str, n: int) -> list[dict]:
     for item in arr if isinstance(arr, list) else []:
         if not isinstance(item, dict):
             continue
-        q = str(item.get("question", "")).strip()
-        a = str(item.get("answer", "")).strip()
+        q = _strip_markdown(str(item.get("question", "")).strip())
+        a = _strip_markdown(str(item.get("answer", "")).strip())
         if q:
             out.append({"question": q, "answer": a})
         if len(out) >= n:
@@ -345,7 +369,7 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
         )
 
     text_block = next((b for b in response.content if b.type == "text"), None)
-    answer = (text_block.text if text_block else "").strip()
+    answer = _strip_markdown((text_block.text if text_block else "").strip())
 
     input_tokens = response.usage.input_tokens
     output_tokens = response.usage.output_tokens
