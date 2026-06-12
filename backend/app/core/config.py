@@ -53,10 +53,11 @@ class Settings(BaseSettings):
     SCRIPT_MODEL: str = "claude-haiku-4-5"        # 발화 스크립트 생성 (스튜디오)
     QUESTION_MODEL: str = "claude-haiku-4-5"      # 평가 문제 생성 (스튜디오)
     QA_MODEL: str = "claude-haiku-4-5"            # 학생 RAG Q&A
-    # 소크라테스식 인터랙티브 퀴즈 저작 대화 — 다중 턴 추론 품질이 중요해 예외적으로
-    # 상위 모델(Sonnet)을 쓴다. 영상당 1회성 대화라 비용 영향은 작다. 비용은
-    # CostLog(LLM_ASSESSMENT)에 서버 기록만 하고 교수자 UI에는 노출하지 않는다.
-    SOCRATIC_MODEL: str = "claude-sonnet-4-6"     # 퀴즈 저작 소크라테스 대화 (스튜디오)
+    # 소크라테스식 인터랙티브 퀴즈 저작 대화. 다중 턴 추론 품질을 위해 Sonnet 을
+    # 쓰던 경로지만, 비용/잔액 운영 단순화를 위해 다른 과정과 동일하게 Haiku 로
+    # 통일한다(2026-06-12). 품질이 부족하면 env(SOCRATIC_MODEL)로 즉시 상향 가능.
+    # 비용은 CostLog(LLM_ASSESSMENT)에 서버 기록만 하고 교수자 UI엔 노출하지 않는다.
+    SOCRATIC_MODEL: str = "claude-haiku-4-5"      # 퀴즈 저작 소크라테스 대화 (스튜디오)
     SOCRATIC_MAX_TOKENS: int = 2048
     # 자막 번역 전용 — 텍스트→텍스트라 가장 빠르고 저렴한 Haiku 로 충분.
     # 슬라이드별로 1회씩 병렬 호출한다(전체를 1회로 묶으면 출력이 커져 30s
