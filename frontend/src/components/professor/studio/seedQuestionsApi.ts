@@ -17,14 +17,14 @@ import { api } from "@/lib/api";
  * - PUT  /api/lectures/{id}/seed-questions
  *     body { questions: [{ question, answer }] }   (전량 교체 = replace-all, 최대 3)
  *     → 위와 동일 shape (서버가 id·status·preview_url 부여)
- * - POST /api/lectures/{id}/seed-questions/generate-answer
- *     body { question }   → { answer, in_scope }   (RAG 답변 1건만 생성, 렌더 X)
+ * - POST /api/lectures/{id}/seed-questions/generate
+ *     본문 없음 → { questions: [{ question, answer }] }   (핵심 질문 3개+답변 자동 생성, 저장 X)
  * - POST /api/lectures/{id}/seed-questions/render
  *     본문 없음 → 위 GET/PUT 과 동일 shape (저장된 사전 질문을 즉시 렌더 시작)
  *
  * 퀴즈 저작과 달리 개별 항목 POST/DELETE 가 없다 — 패널의 현재 목록 전체를 PUT 으로
  * 통째 저장하는 단일 자원이다. getSeedQuestions 는 백엔드 미배포/404 시 quizApi 와
- * 동일하게 빈 목록으로 degrade 한다. generateSeedAnswer·renderSeedQuestions 는
+ * 동일하게 빈 목록으로 degrade 한다. generateSeedQuestions·renderSeedQuestions 는
  * 버튼 액션이므로 throw 하고, 호출부(page.tsx)가 toast 로 graceful 처리한다.
  */
 
@@ -120,28 +120,6 @@ export async function putSeedQuestions(
     { questions },
   );
   return _parse(data, false);
-}
-
-/** generate-answer 응답. in_scope=false 면 강의 자료 범위 밖이라 답변을 만들지 않는다. */
-export interface GeneratedSeedAnswer {
-  answer: string;
-  inScope: boolean;
-}
-
-/**
- * 사전 질문 1건의 답변을 강의 자료(RAG)로 자동 생성한다(렌더하지 않음).
- * 교수자가 카드별 "AI 답변 자동 생성" 버튼으로 호출 → 받은 answer 를 사전 대답
- * 칸에 채워 검토·수정 후 저장하게 한다. 미배포/404 시 throw → 호출부가 toast.
- */
-export async function generateSeedAnswer(
-  lectureId: string,
-  question: string,
-): Promise<GeneratedSeedAnswer> {
-  const { data } = await api.post<{ answer: string; in_scope: boolean }>(
-    `/api/lectures/${lectureId}/seed-questions/generate-answer`,
-    { question },
-  );
-  return { answer: data.answer ?? "", inScope: data.in_scope ?? false };
 }
 
 /** "질문과 답변 자동 생성" 결과 — AI 가 고른 핵심 질문 + 사전 답변(발화 언어). */

@@ -21,7 +21,6 @@ import {
   listAuthoredQuizzes,
 } from "@/components/professor/studio/quizApi";
 import {
-  generateSeedAnswer,
   generateSeedQuestions,
   getSeedQuestions,
   putSeedQuestions,
@@ -852,35 +851,6 @@ export default function StudioWizardPage() {
     [scheduleSeedSave],
   );
 
-  // 카드별 "AI 답변 자동 생성" — 질문 1건을 강의 자료(RAG)로 답변 생성해 사전 대답을
-  // 채운다(저장은 디바운스). 범위 밖이면 채우지 않고 안내. 미배포/404 는 toast 로 graceful.
-  const handleGenerateSeedAnswer = useCallback(
-    async (index: number) => {
-      if (!lectureId) return;
-      const question = seedQuestions[index]?.question.trim() ?? "";
-      if (!question) {
-        toast("질문을 먼저 입력해주세요.", "error");
-        return;
-      }
-      try {
-        const { answer, inScope } = await generateSeedAnswer(lectureId, question);
-        if (!inScope) {
-          toast("강의 자료가 아직 준비되지 않아 답변을 만들 수 없어요.", "error");
-          return;
-        }
-        setSeedQuestions((prev) => {
-          const next = prev.map((q, i) => (i === index ? { ...q, answer } : q));
-          scheduleSeedSave(next);
-          return next;
-        });
-        toast("AI 답변을 생성했어요. 검토 후 수정할 수 있어요.", "success");
-      } catch {
-        toast("아직 답변 자동 생성을 사용할 수 없어요. 잠시 후 다시 시도해주세요.", "error");
-      }
-    },
-    [lectureId, seedQuestions, scheduleSeedSave, toast],
-  );
-
   // "질문과 답변 자동 생성" — AI 가 스크립트에서 핵심 질문 3개를 고르고 각 사전 답변까지
   // 생성해 카드를 채운다(발화 언어로). 교수자가 보고 그대로 두거나 수정한다. 기존 카드는
   // 자동 선정 결과로 대체된다(명시적 버튼 클릭). 저장은 디바운스, 미배포/404 는 graceful.
@@ -1349,7 +1319,6 @@ export default function StudioWizardPage() {
         onRemoveSeedQuestion={handleRemoveSeedQuestion}
         onChangeSeedQuestion={handleChangeSeedQuestion}
         onPreviewSeed={handlePreviewSeed}
-        onGenerateSeedAnswer={handleGenerateSeedAnswer}
         onAutoGenerateSeedQuestions={handleAutoGenerateSeedQuestions}
         onApproveSeedQuestions={handleApproveSeedQuestions}
       />
