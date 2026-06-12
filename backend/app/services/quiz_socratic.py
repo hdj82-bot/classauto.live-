@@ -29,6 +29,7 @@ from app.models.embedding import SlideEmbedding
 from app.models.lecture import Lecture
 from app.models.question import AssessmentType, Difficulty, Question, QuestionType
 from app.models.video import Video
+from app.services.pipeline.translator import _lang_name
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +73,21 @@ def _build_system_prompt(
     question_type: str,
     difficulty: str,
     current_draft: dict | None = None,
+    lang: str = "ko",
 ) -> str:
     qtype_ko = _QTYPE_KO.get(question_type, _QTYPE_KO["multiple_choice"])
     diff_ko = _DIFFICULTY_KO.get(difficulty, _DIFFICULTY_KO["medium"])
+    # 발화(강의) 언어. 학생에게 노출되는 문제(draft)는 이 언어로 작성한다 — 영어
+    # 강의면 퀴즈도 영어. 교수자와의 대화 메시지는 한국어로 유지(교수자 UI 언어).
+    if not lang or lang == "ko":
+        lang_rule = "- 문제(draft)와 교수자 대화 모두 한국어로 작성합니다."
+    else:
+        lang_name = _lang_name(lang)
+        lang_rule = (
+            f"- 교수자에게 보이는 자연어 메시지는 한국어로 작성합니다. 단, draft 안의 "
+            f"학생 노출 내용(content·options·correct_answer·explanation)은 강의 발화 "
+            f"언어인 {lang_name}(으)로 작성합니다."
+        )
     edit_block = ""
     if current_draft and current_draft.get("content"):
         edit_block = (
@@ -113,7 +126,7 @@ def _build_system_prompt(
 - 아직 초안을 제시하기 이르면 draft 를 null 로 두어도 됩니다.
 - 자연어 메시지에는 코드블록이나 JSON 을 노출하지 말고, 사람에게 말하듯 자연스럽게 작성하세요.
 - 자연어 메시지에는 마크다운 강조 기호(**, __, ##, 백틱 등)를 절대 쓰지 말고, 굵게/제목 없이 일반 문장으로만 작성하세요.
-- 항상 한국어로 대화합니다.
+{lang_rule}
 """
 
 
@@ -228,8 +241,11 @@ def socratic_turn(
 ) -> SocraticResult:
     """대화 1턴 실행. messages 가 비어 있으면 클로드가 먼저 초안을 제시한다."""
     context = _slide_context(db, lecture_id, insert_after_slide_index)
+    lecture = db.get(Lecture, lecture_id)
+    voice_lang = (lecture.voice_lang if lecture else None) or "ko"
     system = _build_system_prompt(
         context, insert_after_slide_index, question_type, difficulty, current_draft,
+        lang=voice_lang,
     )
 
     # 숨은 kickoff(user) 를 항상 맨 앞에 붙인다. 프론트는 화면에 보이는 턴만 보관하므로

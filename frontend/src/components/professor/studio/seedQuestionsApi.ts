@@ -144,6 +144,30 @@ export async function generateSeedAnswer(
   return { answer: data.answer ?? "", inScope: data.in_scope ?? false };
 }
 
+/** "질문과 답변 자동 생성" 결과 — AI 가 고른 핵심 질문 + 사전 답변(발화 언어). */
+export interface GeneratedSeedQuestion {
+  question: string;
+  answer: string;
+}
+
+/**
+ * 강의 스크립트에서 학생이 자주 물을 핵심 질문 3개와 각 사전 답변을 자동 생성한다
+ * (저장·렌더하지 않음). 교수자가 "질문과 답변 자동 생성" 버튼으로 호출 → 받은
+ * 질문·답변을 카드에 채워 검토·수정 후 저장한다. 발화 언어로 작성된다. 미배포/404
+ * 시 throw → 호출부가 toast.
+ */
+export async function generateSeedQuestions(
+  lectureId: string,
+): Promise<GeneratedSeedQuestion[]> {
+  const { data } = await api.post<{
+    questions?: { question: string; answer: string }[];
+  }>(`/api/lectures/${lectureId}/seed-questions/generate`);
+  return (data.questions ?? []).map((q) => ({
+    question: q.question ?? "",
+    answer: q.answer ?? "",
+  }));
+}
+
 /**
  * 저장된 사전 질문들을 즉시 아바타 클립으로 렌더 시작한다(영상 전체 approve 불필요).
  * 응답은 GET/PUT 과 동일 shape — 항목 status 가 rendering 으로 바뀌어 돌아오며,

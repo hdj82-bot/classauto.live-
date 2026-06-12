@@ -22,6 +22,7 @@ import {
 } from "@/components/professor/studio/quizApi";
 import {
   generateSeedAnswer,
+  generateSeedQuestions,
   getSeedQuestions,
   putSeedQuestions,
   renderSeedQuestions,
@@ -880,6 +881,31 @@ export default function StudioWizardPage() {
     [lectureId, seedQuestions, scheduleSeedSave, toast],
   );
 
+  // "질문과 답변 자동 생성" — AI 가 스크립트에서 핵심 질문 3개를 고르고 각 사전 답변까지
+  // 생성해 카드를 채운다(발화 언어로). 교수자가 보고 그대로 두거나 수정한다. 기존 카드는
+  // 자동 선정 결과로 대체된다(명시적 버튼 클릭). 저장은 디바운스, 미배포/404 는 graceful.
+  const handleAutoGenerateSeedQuestions = useCallback(async () => {
+    if (!lectureId) return;
+    try {
+      const generated = await generateSeedQuestions(lectureId);
+      if (generated.length === 0) {
+        toast("강의 자료가 아직 준비되지 않아 질문을 만들 수 없어요.", "error");
+        return;
+      }
+      const next: SeedQuestionDraft[] = generated
+        .slice(0, 3)
+        .map((g) => ({ id: null, question: g.question, answer: g.answer }));
+      setSeedQuestions(next);
+      scheduleSeedSave(next);
+      toast(
+        `핵심 질문 ${next.length}개와 답변을 생성했어요. 검토 후 수정할 수 있어요.`,
+        "success",
+      );
+    } catch {
+      toast("아직 질문과 답변 자동 생성을 사용할 수 없어요. 잠시 후 다시 시도해주세요.", "error");
+    }
+  }, [lectureId, scheduleSeedSave, toast]);
+
   // 하단 "AI 질문 승인" — 대기 중 편집을 flush 한 뒤, 저장된 사전 질문을 즉시 아바타
   // 클립으로 렌더 시작한다(영상 전체 approve 불필요). 응답에 status=rendering 이 담겨
   // 오면 기존 seedRenderingKey 폴링이 ready 까지 자동 갱신한다. 미배포/404 는 graceful.
@@ -1324,6 +1350,7 @@ export default function StudioWizardPage() {
         onChangeSeedQuestion={handleChangeSeedQuestion}
         onPreviewSeed={handlePreviewSeed}
         onGenerateSeedAnswer={handleGenerateSeedAnswer}
+        onAutoGenerateSeedQuestions={handleAutoGenerateSeedQuestions}
         onApproveSeedQuestions={handleApproveSeedQuestions}
       />
 

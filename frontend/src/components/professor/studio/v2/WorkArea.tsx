@@ -627,7 +627,7 @@ export default function WorkArea({
                     color: "var(--text-faint)",
                   }}
                 >
-                  하두진 교수 톤 학습 모델
+                  {voiceName ?? "기본 성우"}
                 </span>
                 <VoicePreviewButton
                   enabled={!!onRequestVoicePreview && aiText.trim().length > 0}
