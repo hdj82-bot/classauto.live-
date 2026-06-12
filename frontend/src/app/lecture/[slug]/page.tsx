@@ -2,7 +2,6 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import PlayerV2 from "@/components/player/PlayerV2";
-import ProtectedRoute from "@/components/ProtectedRoute";
 import AccessibilityPanel from "@/components/student/accessibility/AccessibilityPanel";
 import { A11yProvider } from "@/components/student/accessibility/A11yContext";
 
@@ -17,6 +16,11 @@ import { A11yProvider } from "@/components/student/accessibility/A11yContext";
  * AccessibilityPanel 과 PlayerV2 는 **하나의 `A11yProvider`** 아래 둔다 — 예전엔
  * 패널이 자체 provider 를 들고 있어 토글이 플레이어(자막·글씨크기·고대비)에
  * 전혀 닿지 않았다. provider 를 여기로 올려 패널 토글이 곧 영상 설정이 되도록 한다.
+ *
+ * 로그인 게이트(ProtectedRoute) 없음 — 배포 링크로 들어온 누구나 진입 게이트 없이
+ * 바로 발행 강의를 시청할 수 있게 한다(익명 시청 허용, 교수자 결정 2026-06-12).
+ * 백엔드 /public·/slideshow 가 인증 없이 발행 강의를 내려주고, 비로그인 시 PlayerV2
+ * 는 세션·집중도 추적만 건너뛴다(시청은 그대로). 로그인 학생은 기존대로 세션·출석 추적.
  */
 export default function LectureViewerPage() {
   const params = useParams<{ slug: string | string[] }>();
@@ -30,11 +34,9 @@ export default function LectureViewerPage() {
   }
 
   return (
-    <ProtectedRoute>
-      <A11yProvider>
-        <PlayerV2 slug={slug} preview={preview} />
-        <AccessibilityPanel />
-      </A11yProvider>
-    </ProtectedRoute>
+    <A11yProvider>
+      <PlayerV2 slug={slug} preview={preview} />
+      <AccessibilityPanel />
+    </A11yProvider>
   );
 }

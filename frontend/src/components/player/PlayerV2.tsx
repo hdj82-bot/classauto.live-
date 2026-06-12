@@ -485,16 +485,19 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     try {
       // 미리보기(교수자)는 세션이 없으므로 소유 교수자 전용 /qa/preview 로,
       // 일반 학생 시청은 세션 기반 /qa 로 호출한다.
+      // 요청 타임아웃(75초) — 백엔드/외부 API 가 멈춰도 "..."가 무한 대기하지 않도록.
+      // 초과하면 axios 가 reject → 아래 catch 가 오류 답변을 띄운다.
       const { data } = preview
-        ? await api.post(`/api/v1/qa/preview`, {
-            lecture_id: lecture?.id,
-            question,
-          })
-        : await api.post(`/api/v1/qa`, {
-            session_id: sessionId,
-            lecture_id: lecture?.id,
-            question,
-          });
+        ? await api.post(
+            `/api/v1/qa/preview`,
+            { lecture_id: lecture?.id, question },
+            { timeout: 75000 },
+          )
+        : await api.post(
+            `/api/v1/qa`,
+            { session_id: sessionId, lecture_id: lecture?.id, question },
+            { timeout: 75000 },
+          );
       setQaMessages((m) => [
         ...m,
         {
@@ -1191,9 +1194,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                 </p>
                 <ShareLinks
                   url={
+                    // 학생이 링크를 열면 진입 게이트 없이 바로 강의 영상이 나오도록
+                    // 플레이어로 직행한다(발행 강의는 익명 시청 허용 — 교수자 결정 2026-06-12).
                     typeof window !== "undefined"
-                      ? `${window.location.origin}/v/${lecture.slug}`
-                      : `/v/${lecture.slug}`
+                      ? `${window.location.origin}/lecture/${lecture.slug}`
+                      : `/lecture/${lecture.slug}`
                   }
                   classCode={null}
                   lectureTitle={lecture.title}

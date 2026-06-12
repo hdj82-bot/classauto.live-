@@ -19,6 +19,10 @@ export interface ActionBarProps {
   generating?: boolean;
   /** 기본 "슬라이드 쇼 제작". 필요 시 호출부에서 교체. */
   ctaLabel?: string;
+  /** "미리보기" — 제작된 강의를 학생과 동일한 플레이어로 새 탭에서 검토. */
+  onPreview?: () => void;
+  /** 제작된(viewable) 강의가 있을 때만 미리보기 버튼 활성화. */
+  canPreview?: boolean;
 }
 
 const barStyle: CSSProperties = {
@@ -58,6 +62,8 @@ export default function ActionBar({
   onGenerate,
   generating = false,
   ctaLabel,
+  onPreview,
+  canPreview = false,
 }: ActionBarProps) {
   return (
     <div style={barStyle}>
@@ -91,6 +97,29 @@ export default function ActionBar({
         <b style={{ color: "var(--text)", fontWeight: 700 }}>{acceptedCount}</b>개 채택
       </div>
       <div className="justify-self-end flex gap-2">
+        {onPreview && (
+          <button
+            type="button"
+            onClick={onPreview}
+            disabled={!canPreview}
+            title={
+              canPreview
+                ? "제작한 강의를 학생 화면으로 미리보기"
+                : "아직 제작된 강의가 없습니다"
+            }
+            style={{
+              ...ghostBtnStyle,
+              opacity: canPreview ? 1 : 0.45,
+              cursor: canPreview ? "pointer" : "not-allowed",
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            미리보기
+          </button>
+        )}
         <PrimaryButton
           type="button"
           variant="primary"
