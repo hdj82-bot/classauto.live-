@@ -84,16 +84,17 @@ def test_answer_question_no_corpus_skips_claude():
 
 
 def test_answer_question_in_scope_calls_claude():
-    """강의 자료가 있고 Claude 가 답하면 답변·토큰·비용을 채운다."""
+    """스크립트 유사도 ≥ 0.4 면 관련 확정 → Claude 호출·답변·토큰·비용을 채운다."""
     db = MagicMock()
-    with patch.object(qa_svc, "search_similar_slides", return_value=[_r(0.83)]), \
-         patch.object(qa_svc, "search_similar_script", return_value=[]), \
+    with patch.object(qa_svc, "search_similar_script", return_value=[_r(0.83)]), \
          patch("anthropic.Anthropic") as anthropic_cls, \
          patch.object(qa_svc, "_claude_qa_call", return_value=_fake_qa_resp()) as call:
         result = answer_question(db, "task-1", "sess-1", "환율이란?")
 
     assert result.in_scope is True
     call.assert_called_once()
+    # ≥ 0.4 경로는 거부 불가(allow_refusal=False)로 호출돼야 한다.
+    assert call.call_args.kwargs.get("allow_refusal") is False
     anthropic_cls.assert_called_once()
     assert "환율" in result.answer
     assert result.input_tokens == 120 and result.output_tokens == 45

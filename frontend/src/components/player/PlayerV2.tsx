@@ -14,6 +14,7 @@ import { parseCourseTitle } from "@/components/student/v2/CourseTitle";
 import OnboardingFlowV2 from "@/components/student/v2/OnboardingFlowV2";
 import PlayerSurfaceDark from "./PlayerSurfaceDark";
 import AttentionWarningV2 from "./AttentionWarningV2";
+import ShareLinks from "@/components/professor/studio/ShareLinks";
 import {
   getPlaybackQuizzes,
   submitInterstitialAnswer,
@@ -68,10 +69,6 @@ interface QAMessage {
   /** 교수자 사전 제작 추천 질문의 정답 클립(=이 질문에 대한 정확한 답). 캐시
    *  "비슷한 질문" 안내문을 띄우지 않는다. */
   seed?: boolean;
-  /** 채팅에 출제된 인터스티셜 퀴즈(문제+보기). 학생이 채팅에서 답한다. */
-  quiz?: PlaybackQuiz;
-  /** 그 퀴즈 메시지에 이미 답했는지(보기 버튼 비활성). */
-  quizAnswered?: boolean;
 }
 
 const indexToLetter = (idx: string): string =>
@@ -143,9 +140,23 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const [playbackQuizzes, setPlaybackQuizzes] = useState<PlaybackQuiz[]>([]);
   const [pendingQuiz, setPendingQuiz] = useState<PlaybackQuiz | null>(null);
   const [quizSubmitting, setQuizSubmitting] = useState(false);
+  // 퀴즈는 우측 채팅이 아니라 좌측 영상 화면 위 오버레이로 출제·응답한다. 응답 후
+  // 결과(정/오답·모범답안 등)를 오버레이에 보여주고, "계속"으로 영상을 재개한다.
+  const [quizResult, setQuizResult] = useState<string | null>(null);
+  const [quizAnswerInput, setQuizAnswerInput] = useState("");
   const quizzesRef = useRef<PlaybackQuiz[]>([]);
   const shownQuizRef = useRef<Set<string>>(new Set());
   const quizOpenRef = useRef(false);
+
+  // 배포하기 모달(교수자 미리보기 전용) — 강의를 발행하고 학생 링크·QR 을 보여준다.
+  const [deployOpen, setDeployOpen] = useState(false);
+  const [deployStatus, setDeployStatus] = useState<
+    "publishing" | "published" | "error"
+  >("publishing");
+
+  // 아바타 Q&A 영상과 강의(슬라이드쇼)는 음성이 겹치지 않도록 상호 배타로 재생한다.
+  // 아바타가 재생되면 강의를 멈추고, 강의가 재생되면 아바타를 멈춘다.
+  const activeAvatarRef = useRef<HTMLVideoElement | null>(null);
   // timeupdate 클로저가 최신 값을 읽도록 ref 동기화.
   useEffect(() => {
     quizzesRef.current = playbackQuizzes;
@@ -310,19 +321,17 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // ─── 인터스티셜 퀴즈: 슬라이드 경계에서 우측 채팅에 출제 → 채팅에서 응답 ───
   const resumeAfterQuiz = () => playPlayer();
 
-  /** 퀴즈를 채팅에 띄운다(이미 출제분 skip). 영상은 답할 때까지 일시정지. */
+  /** 퀴즈를 좌측 영상 화면 위 오버레이로 띄운다(이미 출제분 skip). 영상은 답할 때까지
+   *  일시정지. 채팅이 아니라 영상 화면에 출제된다. */
   const openQuiz = useCallback(
     (quiz: PlaybackQuiz) => {
       if (shownQuizRef.current.has(quiz.id)) return;
       shownQuizRef.current.add(quiz.id);
       quizOpenRef.current = true;
       pausePlayer();
+      setQuizResult(null);
+      setQuizAnswerInput("");
       setPendingQuiz(quiz);
-      setQaMessages((m) => [...m, { role: "assistant", text: "", quiz }]);
-      setTimeout(
-        () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
-        50,
-      );
     },
     [pausePlayer],
   );
@@ -369,36 +378,24 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     return () => cancelAnimationFrame(h);
   }, [player.currentIndex, openQuiz]);
 
-  // 퀴즈 종료 → 영상 재개.
+  // 퀴즈 종료(오버레이 닫기) → 영상 재개.
   const finishQuiz = () => {
     setPendingQuiz(null);
+    setQuizResult(null);
+    setQuizAnswerInput("");
     quizOpenRef.current = false;
     setQuizSubmitting(false);
     resumeAfterQuiz();
   };
 
-  /** 채팅에서 퀴즈 응답. userAnswer=객관식 보기 index 문자열 / 주관식 텍스트,
-   *  displayAnswer=채팅에 보일 학생 답. 기록·채점 결과를 채팅에 띄우고 재개한다. */
-  const answerQuiz = async (
-    quiz: PlaybackQuiz,
-    userAnswer: string,
-    displayAnswer: string,
-  ) => {
-    if (quizSubmitting) return;
-    setQaMessages((m) =>
-      m.map((msg) =>
-        msg.quiz?.id === quiz.id ? { ...msg, quizAnswered: true } : msg,
-      ),
-    );
-    setQaMessages((m) => [...m, { role: "user", text: displayAnswer }]);
+  /** 영상 오버레이에서 퀴즈 응답. userAnswer=객관식 보기 index 문자열 / 주관식 텍스트.
+   *  기록·채점 결과를 같은 오버레이에 표시하고, 학생이 "계속"을 누르면 영상을 재개한다. */
+  const answerQuiz = async (quiz: PlaybackQuiz, userAnswer: string) => {
+    if (quizSubmitting || quizResult !== null) return;
 
-    // 미리보기(세션 없음): 채점·기록 없이 안내만.
+    // 미리보기(세션 없음): 채점·기록 없이 안내만 오버레이에 표시.
     if (!sessionId) {
-      setQaMessages((m) => [
-        ...m,
-        { role: "assistant", text: t("student.playerV2.quiz.previewNote") },
-      ]);
-      finishQuiz();
+      setQuizResult(t("student.playerV2.quiz.previewNote"));
       return;
     }
 
@@ -432,19 +429,22 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         const expl = res.explanation ? `\n${res.explanation}` : "";
         resultText = `${model}${expl}`;
       }
-      setQaMessages((m) => [...m, { role: "assistant", text: resultText }]);
+      setQuizResult(resultText);
     } catch {
-      setQaMessages((m) => [
-        ...m,
-        { role: "assistant", text: t("student.playerV2.quiz.recordError") },
-      ]);
+      setQuizResult(t("student.playerV2.quiz.recordError"));
     }
-    finishQuiz();
-    setTimeout(
-      () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
-      50,
-    );
+    setQuizSubmitting(false);
   };
+
+  // ─── 아바타 Q&A ↔ 강의영상 상호 배타 재생 ───
+  // 강의(슬라이드쇼)가 재생되기 시작하면, 재생 중이던 아바타 Q&A 영상을 멈춰
+  // 음성이 겹치지 않게 한다. (반대 방향 — 아바타 재생 시 강의 멈춤 — 은 아바타
+  // <video> 의 onPlay 에서 pausePlayer() 로 처리.)
+  useEffect(() => {
+    if (isPlaying && activeAvatarRef.current) {
+      activeAvatarRef.current.pause();
+    }
+  }, [isPlaying]);
 
   // ─── 재생 컨트롤 (슬라이드쇼 엔진에 위임) ───
   const togglePlay = () => player.togglePlay();
@@ -456,6 +456,21 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       document.exitFullscreen().catch(() => {});
     } else {
       el.requestFullscreen?.().catch(() => {});
+    }
+  };
+
+  // ─── 배포하기(미리보기 전용) — 강의 발행 후 학생 링크·QR 모달 표시 ───
+  const openDeploy = async () => {
+    if (!lecture) return;
+    pausePlayer();
+    setDeployStatus("publishing");
+    setDeployOpen(true);
+    try {
+      // 미발행 강의를 발행해 학생이 /v/[slug] 링크로 접속할 수 있게 한다.
+      await api.patch(`/api/lectures/${lecture.id}`, { is_published: true });
+      setDeployStatus("published");
+    } catch {
+      setDeployStatus("error");
     }
   };
 
@@ -674,6 +689,94 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     highContrast={a11y.highContrast}
                   />
                 )}
+
+              {/* 인터스티셜 퀴즈 — 좌측 영상 화면 위 오버레이로 출제·응답(채팅 아님). */}
+              {pendingQuiz && (
+                <div
+                  className={styles.quizStage}
+                  role="dialog"
+                  aria-label={t("student.playerV2.quiz.badge")}
+                >
+                  <div className={styles.quizCard}>
+                    <div className={styles.quizTop}>
+                      <span className={styles.quizBadge}>
+                        {t("student.playerV2.quiz.badge")}
+                      </span>
+                    </div>
+                    {quizResult === null ? (
+                      <>
+                        <p className={styles.quizQ}>{pendingQuiz.content}</p>
+                        {pendingQuiz.question_type === "multiple_choice" ? (
+                          <div className={styles.quizOpts}>
+                            {(pendingQuiz.options ?? []).map((opt, oi) => {
+                              const letter = String.fromCharCode(65 + oi);
+                              const quiz = pendingQuiz;
+                              return (
+                                <button
+                                  key={oi}
+                                  type="button"
+                                  className={styles.quizOpt}
+                                  disabled={quizSubmitting}
+                                  onClick={() => answerQuiz(quiz, String(oi))}
+                                >
+                                  <span className={styles.letter}>{letter}</span>
+                                  <span>{opt}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <form
+                            className={styles.quizShortForm}
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const txt = quizAnswerInput.trim();
+                              if (!txt || quizSubmitting) return;
+                              void answerQuiz(pendingQuiz, txt);
+                            }}
+                          >
+                            <input
+                              className={styles.quizShortInput}
+                              value={quizAnswerInput}
+                              onChange={(e) => setQuizAnswerInput(e.target.value)}
+                              placeholder={t(
+                                "student.playerV2.quiz.shortAnswerPlaceholder",
+                              )}
+                              maxLength={500}
+                              autoFocus
+                            />
+                            <button
+                              type="submit"
+                              className={styles.quizSubmit}
+                              disabled={quizSubmitting || !quizAnswerInput.trim()}
+                            >
+                              {quizSubmitting
+                                ? t("student.playerV2.quiz.submitting")
+                                : t("student.playerV2.quiz.submit")}
+                            </button>
+                          </form>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <p
+                          className={styles.quizResult}
+                          style={{ whiteSpace: "pre-line" }}
+                        >
+                          {quizResult}
+                        </p>
+                        <button
+                          type="button"
+                          className={styles.quizContinue}
+                          onClick={finishQuiz}
+                        >
+                          {t("student.playerV2.quiz.continue")}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Bottom controls */}
@@ -764,6 +867,26 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   </span>
                 </div>
                 <div className={styles.controlsRight}>
+                  {preview && (
+                    <button
+                      type="button"
+                      className={styles.deployBtn}
+                      onClick={openDeploy}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M3 11l19-9-9 19-2-8-8-2z" />
+                      </svg>
+                      {t("student.playerV2.deploy.button")}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={styles.ctrl}
@@ -827,94 +950,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                           {m.text}
                         </div>
                       )}
-                      {m.quiz && (
-                        <div
-                          style={{
-                            marginTop: m.text ? 8 : 0,
-                            display: "flex",
-                            flexDirection: "column",
-                            gap: 8,
-                          }}
-                        >
-                          <span
-                            className={styles.source}
-                            style={{ alignSelf: "flex-start" }}
-                          >
-                            {t("student.playerV2.quiz.badge")}
-                          </span>
-                          <div
-                            className={styles.bubble}
-                            style={{ fontWeight: 600 }}
-                          >
-                            {m.quiz.content}
-                          </div>
-                          {m.quiz.question_type === "multiple_choice" ? (
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: 6,
-                              }}
-                            >
-                              {(m.quiz.options ?? []).map((opt, oi) => {
-                                const letter = String.fromCharCode(65 + oi);
-                                const disabled =
-                                  m.quizAnswered || quizSubmitting;
-                                const quiz = m.quiz!;
-                                return (
-                                  <button
-                                    key={oi}
-                                    type="button"
-                                    disabled={disabled}
-                                    onClick={() =>
-                                      answerQuiz(
-                                        quiz,
-                                        String(oi),
-                                        `${letter}. ${opt}`,
-                                      )
-                                    }
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: 8,
-                                      textAlign: "left",
-                                      padding: "9px 11px",
-                                      borderRadius: 10,
-                                      border:
-                                        "1px solid var(--line-dark-strong)",
-                                      background: "rgba(255,255,255,0.04)",
-                                      color: "var(--text-dark)",
-                                      font: "inherit",
-                                      fontSize: 13,
-                                      cursor: disabled ? "default" : "pointer",
-                                      opacity: disabled ? 0.55 : 1,
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        fontWeight: 800,
-                                        color: "var(--gold)",
-                                      }}
-                                    >
-                                      {letter}
-                                    </span>
-                                    <span>{opt}</span>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div
-                              style={{
-                                fontSize: 12,
-                                color: "var(--text-dark-subtle)",
-                              }}
-                            >
-                              {t("student.playerV2.quiz.chatShortHint")}
-                            </div>
-                          )}
-                        </div>
-                      )}
                       {m.avatarUrl && !m.seed && (
                         // 투명성(09 §5.2) — 캐시 클립은 비슷한 과거 질문에 렌더된 것.
                         // "권위 있는 답"은 위 텍스트(이 학생 질문에 맞춘 RAG)이고 아바타는
@@ -934,12 +969,29 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                       {m.avatarUrl && (
                         // 캐시 적중 시 부가되는 아바타 답변 클립. 텍스트가 본답이고
                         // 영상은 전달 보조 — 로드 실패해도 텍스트 답변은 그대로 남는다.
+                        // 아바타가 재생되면 강의(슬라이드쇼)를 멈춰 음성이 겹치지 않게
+                        // 하고, 멈추면 활성 아바타 추적을 해제한다(강의 재개 시 강의가
+                        // 이 아바타를 다시 멈추지 않도록).
                         <video
                           src={m.avatarUrl}
                           autoPlay
                           playsInline
                           controls
                           aria-label="AI 아바타 답변"
+                          onPlay={(e) => {
+                            pausePlayer();
+                            activeAvatarRef.current = e.currentTarget;
+                          }}
+                          onPause={(e) => {
+                            if (activeAvatarRef.current === e.currentTarget) {
+                              activeAvatarRef.current = null;
+                            }
+                          }}
+                          onEnded={(e) => {
+                            if (activeAvatarRef.current === e.currentTarget) {
+                              activeAvatarRef.current = null;
+                            }
+                          }}
                           style={{
                             marginTop: 8,
                             width: "100%",
@@ -1006,16 +1058,8 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               className={styles.qaInput}
               onSubmit={(e) => {
                 e.preventDefault();
-                // 주관식 퀴즈 대기 중이면 입력을 답안으로 전송. 객관식 대기 중이면
-                // 보기 버튼으로만 답하므로 무시. 그 외엔 일반 Q&A 질문.
-                if (pendingQuiz?.question_type === "short_answer") {
-                  const text = qaInput.trim();
-                  if (!text || quizSubmitting) return;
-                  setQaInput("");
-                  void answerQuiz(pendingQuiz, text, text);
-                } else if (!pendingQuiz) {
-                  sendQuestion();
-                }
+                // 퀴즈는 좌측 영상 오버레이에서 응답한다 — 채팅 입력은 일반 Q&A 전용.
+                sendQuestion();
               }}
             >
               <button
@@ -1046,28 +1090,16 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                 <input
                   id="qa-input"
                   type="text"
-                  placeholder={
-                    pendingQuiz?.question_type === "short_answer"
-                      ? t("student.playerV2.quiz.shortAnswerPlaceholder")
-                      : pendingQuiz
-                        ? t("student.playerV2.quiz.chatPickHint")
-                        : t("student.playerV2.qaPlaceholder")
-                  }
+                  placeholder={t("student.playerV2.qaPlaceholder")}
                   value={qaInput}
                   maxLength={500}
-                  disabled={pendingQuiz?.question_type === "multiple_choice"}
                   onChange={(e) => setQaInput(e.target.value)}
                 />
               </div>
               <button
                 type="submit"
                 className={styles.sendBtn}
-                disabled={
-                  qaSending ||
-                  quizSubmitting ||
-                  !qaInput.trim() ||
-                  pendingQuiz?.question_type === "multiple_choice"
-                }
+                disabled={qaSending || !qaInput.trim()}
                 aria-label={t("student.playerV2.qaSend")}
               >
                 <svg
@@ -1112,6 +1144,64 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
           onSkip={() => setShowOnboarding(false)}
           onDismissForever={handleDismissOnboardingForever}
         />
+      )}
+
+      {/* 배포하기 모달(미리보기 전용) — 강의 발행 후 학생 링크·QR 표시. 라이트 카드. */}
+      {deployOpen && (
+        <div
+          className={styles.deployScrim}
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("student.playerV2.deploy.title")}
+          onClick={() => setDeployOpen(false)}
+        >
+          <div
+            className={styles.deployCard}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.deployHead}>
+              <h3>{t("student.playerV2.deploy.title")}</h3>
+              <button
+                type="button"
+                className={styles.deployClose}
+                onClick={() => setDeployOpen(false)}
+                aria-label={t("student.playerV2.deploy.close")}
+              >
+                ✕
+              </button>
+            </div>
+
+            {deployStatus === "publishing" && (
+              <p className={styles.deployHint}>
+                {t("student.playerV2.deploy.publishing")}
+              </p>
+            )}
+            {deployStatus === "error" && (
+              <p className={styles.deployError}>
+                {t("student.playerV2.deploy.error")}
+              </p>
+            )}
+            {deployStatus === "published" && (
+              <>
+                <p className={styles.deployPublished}>
+                  {t("student.playerV2.deploy.published")}
+                </p>
+                <p className={styles.deployDesc}>
+                  {t("student.playerV2.deploy.desc")}
+                </p>
+                <ShareLinks
+                  url={
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/v/${lecture.slug}`
+                      : `/v/${lecture.slug}`
+                  }
+                  classCode={null}
+                  lectureTitle={lecture.title}
+                />
+              </>
+            )}
+          </div>
+        </div>
       )}
     </PlayerSurfaceDark>
   );

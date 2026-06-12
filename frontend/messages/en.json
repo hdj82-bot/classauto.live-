@@ -1424,7 +1424,17 @@
         "chatShortHint": "Type your answer in the box below and send.",
         "chatPickHint": "Pick an answer from the options above.",
         "leadIn": "Let's pause for a quick check-in quiz.",
-        "previewNote": "Not graded in preview — students respond right here."
+        "previewNote": "Not graded in preview — students respond right here.",
+        "continue": "Continue"
+      },
+      "deploy": {
+        "button": "Deploy",
+        "title": "Publish lecture",
+        "desc": "Link and QR code to share with students. Anyone with this link can watch the lecture.",
+        "publishing": "Publishing…",
+        "published": "Published · students can now access it",
+        "error": "Something went wrong while publishing. Please try again.",
+        "close": "Close"
       },
       "warning": {
         "pausedKicker": "Session paused",
