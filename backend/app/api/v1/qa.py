@@ -12,7 +12,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_professor, require_student
+from app.api.deps import (
+    get_current_user_optional,
+    require_professor,
+    require_student,
+)
 from app.db.session import SyncSessionLocal, get_db
 from app.models.course import Course
 from app.models.lecture import Lecture
@@ -164,6 +168,62 @@ async def preview_question(
             # session_id 자리에 합성 키 — 로그/세션 없이 RAG 답변만 받는다.
             return answer_question(
                 db, lecture.pipeline_task_id, f"preview-{user.id}", body.question
+            )
+
+    try:
+        result = await loop.run_in_executor(None, _run)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
+
+    return {
+        "answer": result.answer,
+        "in_scope": result.in_scope,
+        "avatar": None,
+        "cost_usd": result.cost_usd,
+    }
+
+
+# ── 공개 Q&A (인증 불필요, 발행 강의 한정) ───────────────────────────────────
+#
+# 배포 링크로 로그인 없이 들어온 익명 시청자도 Q&A 를 쓸 수 있게 하는 경로
+# (교수자 결정 2026-06-12: 익명 시청 + 익명 Q&A 허용). 세션·QALog·아바타 큐가
+# 없다(로그·비용 오염 방지) — RAG 답변만. 남용·비용은 전역 RateLimitMiddleware
+# 가 IP 당 분당 30회로 제한한다(RATE_LIMITS["/api/v1/qa"]).
+
+
+class QAPublicRequest(BaseModel):
+    lecture_id: uuid.UUID
+    question: str = Field(..., min_length=1, max_length=500)
+
+
+@router.post("/public", summary="공개 Q&A (발행 강의, 인증 불필요)")
+async def public_question(
+    body: QAPublicRequest,
+    viewer: User | None = Depends(get_current_user_optional),
+):
+    loop = asyncio.get_event_loop()
+
+    def _run():
+        with SyncSessionLocal() as db:
+            lecture = db.execute(
+                select(Lecture).where(Lecture.id == body.lecture_id)
+            ).scalar_one_or_none()
+            if not lecture or not lecture.pipeline_task_id:
+                raise LookupError("강의 파이프라인이 아직 처리되지 않았습니다.")
+            # 익명/비소유자는 발행 강의에만 질문 가능. 소유 교수자는 미발행도 허용.
+            if not lecture.is_published:
+                instructor_id = db.execute(
+                    select(Course.instructor_id).where(Course.id == lecture.course_id)
+                ).scalar_one_or_none()
+                if viewer is None or instructor_id != viewer.id:
+                    raise PermissionError("아직 발행되지 않은 강의입니다.")
+            # session_id 자리에 합성 키 — 로그/세션 없이 RAG 답변만 받는다.
+            return answer_question(
+                db, lecture.pipeline_task_id, "public", body.question
             )
 
     try:
