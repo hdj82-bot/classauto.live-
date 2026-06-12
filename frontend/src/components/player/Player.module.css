@@ -846,9 +846,56 @@
   backdrop-filter: blur(8px);
   animation: quiz-in 240ms var(--ease-out);
 }
+/* 밝고 화사한 톤(교수자 요청) — 다크 영상 위에 흰 카드가 떠오르도록. */
 .quizStage .quizCard {
   width: 100%;
   max-width: 480px;
+  background: #ffffff;
+  border: 1px solid #ececec;
+  color: #14110f;
+  box-shadow: 0 26px 64px rgba(0, 0, 0, 0.4);
+}
+.quizStage .quizBadge {
+  background: rgba(124, 92, 250, 0.12);
+  border-color: rgba(124, 92, 250, 0.32);
+  color: #6d28d9;
+}
+.quizStage .quizQ {
+  color: #14110f;
+}
+.quizStage .quizOpt {
+  background: #f7f7fb;
+  border: 1px solid #e6e6ef;
+  color: #2a2a2a;
+  /* 호버 시 떠오르는 볼륨감 — 확대 + 그림자(교수자 요청). */
+  transition:
+    transform 160ms var(--ease-spring),
+    box-shadow 160ms var(--ease-out),
+    border-color 160ms,
+    background 160ms,
+    color 160ms;
+}
+.quizStage .quizOpt:hover {
+  border-color: var(--gold-on-light);
+  background: #fff8e8;
+  color: #14110f;
+  transform: translateY(-3px) scale(1.03);
+  box-shadow: 0 12px 26px rgba(20, 17, 15, 0.22);
+}
+.quizStage .quizOpt .letter {
+  background: rgba(124, 92, 250, 0.14);
+  color: #6d28d9;
+}
+.quizStage .quizShortInput {
+  background: #f7f7fb;
+  border: 1px solid #e6e6ef;
+  color: #14110f;
+}
+.quizStage .quizShortInput::placeholder {
+  color: #9a9a9a;
+}
+.quizStage .quizResult {
+  color: #14110f;
 }
 .quizShortForm {
   display: flex;

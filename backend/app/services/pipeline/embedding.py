@@ -23,7 +23,10 @@ def get_embeddings(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
 
-    client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    # 명시적 타임아웃 — 기본값(600초)이면 OpenAI 가 응답을 안 주는 순간 Q&A 요청이
+    # 사실상 무한 대기("..." 멈춤)에 빠진다. 20초로 제한해, 장애 시 빠르게 예외를 내고
+    # 호출부(search_similar_script 등)가 폴백·거부로 넘어가게 한다.
+    client = openai.OpenAI(api_key=settings.OPENAI_API_KEY, timeout=20.0)
 
     # 빈 텍스트 필터링 + 배치 분할
     all_embeddings: list[list[float]] = []

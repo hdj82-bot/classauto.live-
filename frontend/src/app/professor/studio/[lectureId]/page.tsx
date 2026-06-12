@@ -147,6 +147,8 @@ export default function StudioWizardPage() {
   const [genPercent, setGenPercent] = useState(0);
   const [genStage, setGenStage] = useState<1 | 2 | 3 | 4>(1);
   const [genDone, setGenDone] = useState(false);
+  // 제작 완료(viewable) 여부 — 재방문 시에도 미리보기 버튼을 켜기 위해 video 상태를 보관.
+  const [videoStatus, setVideoStatus] = useState<string | null>(null);
   // 실제로 ready 까지 끝난 슬라이드 수 — 진행 정보 박스의 "X / N 슬라이드" 에
   // 쓴다. 원형 막대(genPercent)는 중간 단계 가중치까지 더한 값이라 따로 둔다.
   const [genCompleted, setGenCompleted] = useState(0);
@@ -221,6 +223,7 @@ export default function StudioWizardPage() {
           );
           if (!cancelled) {
             setVideoId(data.id);
+            setVideoStatus(data.status ?? null);
             // 이미 승인(생성 시작/완료)된 강의는 재승인 불가(approve 는 pending_review
             // 에서만 → 아니면 409). approved 로 표시해 재approve 를 막고 진행/완료를 폴링.
             if (data.status === "rendering" || data.status === "done") {
@@ -270,6 +273,7 @@ export default function StudioWizardPage() {
         );
         if (!cancelled) {
           setVideoId(data.id);
+          setVideoStatus(data.status ?? null);
           if (data.status === "rendering" || data.status === "done") {
             setApproved(true);
           }
@@ -1363,6 +1367,12 @@ export default function StudioWizardPage() {
           onPrev={handlePrev}
           onGenerate={handleGenerate}
           ctaLabel={genDone ? "다시 제작" : "슬라이드 쇼 제작"}
+          onPreview={() => {
+            // 제작된 강의를 학생과 동일한 플레이어로 새 탭에서 검토(미발행도 소유자는 조회 가능).
+            if (lecture?.slug)
+              window.open(`/lecture/${lecture.slug}?preview=1`, "_blank");
+          }}
+          canPreview={genDone || videoStatus === "done"}
         />
       </div>
 

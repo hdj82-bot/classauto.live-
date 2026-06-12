@@ -27,6 +27,13 @@ export default function ShareLinks({
   const { t } = useStudioI18n();
   const [copied, setCopied] = useState<"url" | "code" | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  // QR 다운로드/공유는 브라우저가 조용히 처리(다운로드 폴더 저장·클립보드 복사)해
+  // "아무 반응 없음"처럼 보였다. 클릭 직후 짧게 ✓ 피드백을 띄워 동작을 알린다.
+  const [qrMsg, setQrMsg] = useState<"downloaded" | "shared" | null>(null);
+  const flashQr = (m: "downloaded" | "shared") => {
+    setQrMsg(m);
+    setTimeout(() => setQrMsg(null), 1800);
+  };
 
   // 학생 링크 → QR PNG dataURL. url 이 바뀌면 재생성.
   useEffect(() => {
@@ -64,6 +71,7 @@ export default function ShareLinks({
     document.body.appendChild(a);
     a.click();
     a.remove();
+    flashQr("downloaded");
   };
 
   const shareQr = async () => {
@@ -78,19 +86,22 @@ export default function ShareLinks({
         };
         if (navAny.canShare?.({ files: [file] }) && navigator.share) {
           await navigator.share({ files: [file], title: lectureTitle, text: url });
+          flashQr("shared");
           return;
         }
       }
       // 2순위: 링크만 공유.
       if (navigator.share) {
         await navigator.share({ title: lectureTitle, text: lectureTitle, url });
+        flashQr("shared");
         return;
       }
     } catch {
       // 사용자가 공유 취소했거나 미지원 — 링크 복사로 폴백.
     }
-    // 3순위: 링크 복사.
+    // 3순위(데스크톱 등 Web Share 미지원): 링크 복사 + ✓ 피드백.
     await copy(url, "url");
+    flashQr("shared");
   };
 
   const encoded = encodeURIComponent(url);
@@ -154,14 +165,16 @@ export default function ShareLinks({
         </h4>
         <div className="flex items-center gap-4">
           {qrDataUrl ? (
-            // 학생 링크 QR (PNG dataURL) — 원격 최적화 불필요해 plain img.
+            // 학생 링크 QR (PNG dataURL) — 클릭하면 바로 다운로드(이미지 클릭도 동작).
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={qrDataUrl}
               alt={t("step5.qrLabel")}
               width={120}
               height={120}
-              className="rounded-lg border border-gray-200 bg-white p-2"
+              onClick={downloadQr}
+              title={t("step5.qrDownload")}
+              className="rounded-lg border border-gray-200 bg-white p-2 cursor-pointer hover:border-gray-400 transition"
             />
           ) : (
             <div className="w-[120px] h-[120px] rounded-lg border border-gray-200 bg-gray-50 animate-pulse" />
@@ -173,7 +186,7 @@ export default function ShareLinks({
               disabled={!qrDataUrl}
               className="text-xs text-center bg-gray-900 text-white rounded-xl px-4 py-2.5 hover:bg-gray-800 transition disabled:opacity-50"
             >
-              {t("step5.qrDownload")}
+              {qrMsg === "downloaded" ? `✓ ${t("step5.qrDownload")}` : t("step5.qrDownload")}
             </button>
             <button
               type="button"
@@ -181,7 +194,7 @@ export default function ShareLinks({
               disabled={!qrDataUrl}
               className="text-xs text-center border border-gray-300 rounded-xl px-4 py-2.5 hover:bg-gray-50 transition disabled:opacity-50"
             >
-              {t("step5.qrShare")}
+              {qrMsg === "shared" ? `✓ ${t("step5.qrShare")}` : t("step5.qrShare")}
             </button>
           </div>
         </div>
