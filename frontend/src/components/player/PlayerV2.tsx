@@ -23,6 +23,19 @@ import {
 import styles from "./Player.module.css";
 
 /**
+ * 채팅 말풍선은 마크다운을 렌더링하지 않고 텍스트 그대로 보여준다(아래 bubble).
+ * 답변에 섞인 마크다운 기호(`**굵게**`, `##`/`###` 제목)가 글자 그대로 노출돼
+ * 거슬리는 문제를 막는다. 백엔드가 생성 시점에 이미 제거하지만(qa.py _strip_markdown),
+ * 이 fix 이전에 캐시·저장된 옛 답변까지 깨끗하게 보이도록 표시 직전 동일한 안전망을 둔다.
+ */
+function stripChatMarkdown(text: string): string {
+  return text
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "");
+}
+
+/**
  * PlayerV2 — /lecture/[slug] 영상 시청 페이지의 다크 톤 UI.
  *
  * 출처: docs/prototypes/06-student-flow.extracted.html SCREEN 4
@@ -957,7 +970,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                           className={styles.bubble}
                           style={{ whiteSpace: "pre-line" }}
                         >
-                          {m.text}
+                          {stripChatMarkdown(m.text)}
                         </div>
                       )}
                       {m.avatarUrl && !m.seed && (
