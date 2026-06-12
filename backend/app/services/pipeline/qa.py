@@ -1,7 +1,9 @@
 """RAG 기반 Q&A 서비스."""
 from __future__ import annotations
 
+import json
 import logging
+import re
 from dataclasses import dataclass
 
 import anthropic
@@ -16,6 +18,7 @@ from app.services.pipeline.retriever import (
     search_similar_script,
     search_similar_slides,
 )
+from app.services.pipeline.translator import _lang_name
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +194,93 @@ def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str,
 
     text_block = next((b for b in response.content if b.type == "text"), None)
     return (text_block.text.strip() if text_block else ""), True
+
+
+# ── 핵심 질문 + 사전 답변 자동 생성 ("질문과 답변 자동 생성" 버튼) ────────────────
+# 교수자가 질문을 직접 적지 않아도, 강의 스크립트에서 학생이 자주 물을 핵심 질문 N개를
+# AI 가 고르고 각 사전 답변까지 함께 만든다. 발화 언어(lecture.voice_lang)로 작성한다 —
+# 영어 강의면 질문·답변도 영어. 교수자는 결과를 보고 그대로 두거나 수정한다.
+
+
+def _seed_questions_system_prompt(lang_name: str) -> str:
+    return f"""\
+당신은 강의 자료를 바탕으로 학생이 가장 궁금해할 핵심 질문과 그 모범 사전 답변을 만드는 보조자입니다.
+제공된 강의 스크립트(교수자 발화)를 분석해, 학생이 실제로 자주 물을 법한 핵심 질문과 각 질문의 답변을 만듭니다.
+
+규칙:
+1. 질문과 답변 모두 {lang_name}(으)로 작성합니다(강의 발화 언어).
+2. 질문은 강의 핵심 개념을 짚는, 학생이 실제로 물을 만한 자연스러운 것이어야 합니다. 서로 다른 개념을 다루도록 겹치지 않게 고릅니다.
+3. 답변은 아바타가 음성으로 읽습니다. 슬라이드 번호 등 출처 표기를 넣지 않고, 말하듯 자연스럽게 작성합니다.
+4. 중국어/한자 용어에 괄호로 음·뜻을 병기하지 않습니다. 예: '大学生(대학생)'(X) → '大学生'(O).
+5. "좋은 질문이네요" 같은 상투적 칭찬 도입부를 쓰지 않습니다. 핵심부터 자연스럽게 시작합니다.
+6. 강의 자료에 근거해 정확히 답합니다. 자료에 없는 내용은 추측하지 않습니다.
+
+출력은 아래 형식의 JSON 배열 하나만, 다른 텍스트 없이 출력합니다:
+[{{"question": "질문", "answer": "사전 답변"}}, ...]
+"""
+
+
+@track_external_api("claude")
+@retry_external(label="claude.seed_questions.create", extra_retry_on=_CLAUDE_RETRY_ON)
+def _claude_seed_questions_call(client, system: str, user_content: str):
+    return client.messages.create(
+        model=settings.QA_MODEL, max_tokens=2048, system=system,
+        messages=[{"role": "user", "content": user_content}],
+    )
+
+
+def _parse_seed_questions_json(raw: str, n: int) -> list[dict]:
+    """Claude 응답에서 첫 JSON 배열을 뽑아 [{question, answer}] 로 정규화(최대 n개)."""
+    match = re.search(r"\[.*\]", raw, re.DOTALL)
+    if not match:
+        return []
+    try:
+        arr = json.loads(match.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return []
+    out: list[dict] = []
+    for item in arr if isinstance(arr, list) else []:
+        if not isinstance(item, dict):
+            continue
+        q = str(item.get("question", "")).strip()
+        a = str(item.get("answer", "")).strip()
+        if q:
+            out.append({"question": q, "answer": a})
+        if len(out) >= n:
+            break
+    return out
+
+
+def generate_seed_questions(
+    db: Session, task_id: str, n: int = 3, lang: str = "ko"
+) -> list[dict]:
+    """강의 스크립트에서 핵심 질문 n개와 각 사전 답변을 ``lang`` 으로 생성.
+
+    반환 ``[{"question": ..., "answer": ...}]`` (최대 n개). 스크립트가 없거나
+    Claude 오류/파싱 실패면 빈 리스트(프론트는 빈 결과를 토스트로 안내).
+    발화 언어(lecture.voice_lang)로 작성하므로 영어 강의는 질문·답변도 영어.
+    """
+    context = _script_context_for_task(db, task_id)
+    if not context:
+        return []
+
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=60.0)
+    try:
+        response = _claude_seed_questions_call(
+            client,
+            _seed_questions_system_prompt(_lang_name(lang)),
+            f"## 강의 스크립트\n{context}\n\n"
+            f"위 강의에서 학생이 가장 궁금해할 핵심 질문 {n}개와 각 사전 답변을 "
+            f"만들어 주세요. 정확히 {n}개의 항목을 JSON 배열로 출력하세요.",
+        )
+    except anthropic.APIError as exc:
+        logger.error("사전 질문 자동 생성 Claude 호출 실패: %s", exc)
+        return []
+
+    if not response.content:
+        return []
+    text_block = next((b for b in response.content if b.type == "text"), None)
+    return _parse_seed_questions_json(text_block.text if text_block else "", n)
 
 
 @dataclass

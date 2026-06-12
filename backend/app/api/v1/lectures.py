@@ -26,8 +26,10 @@ from app.schemas.lecture import (
     SlideshowResponse,
 )
 from app.schemas.seed_question import (
+    GeneratedSeedQuestion,
     GenerateSeedAnswerRequest,
     GenerateSeedAnswerResponse,
+    GenerateSeedQuestionsResponse,
     SeedQuestionItem,
     SeedQuestionsRequest,
     SeedQuestionsResponse,
@@ -332,6 +334,47 @@ async def generate_seed_answer_endpoint(
         with SyncSessionLocal() as sdb:
             answer, in_scope = generate_seed_answer(sdb, task_id, question)
             return GenerateSeedAnswerResponse(answer=answer, in_scope=in_scope)
+
+    return await loop.run_in_executor(None, _work)
+
+
+@router.post(
+    "/api/lectures/{lecture_id}/seed-questions/generate",
+    response_model=GenerateSeedQuestionsResponse,
+    summary="핵심 질문 + 사전 답변 자동 생성 (검토용, 소유 교수자 전용)",
+)
+async def generate_seed_questions_endpoint(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """강의 스크립트에서 학생이 자주 물을 핵심 질문 3개와 각 사전 답변을 자동 생성한다.
+
+    "질문과 답변 자동 생성" 버튼이 호출 → 교수자가 받은 질문·답변을 검토·수정 후
+    PUT 으로 저장한다(여기서는 저장하지 않음). 발화 언어(`lecture.voice_lang`)로
+    작성되므로 영어 강의면 질문·답변도 영어. 비소유 404, 파이프라인 미처리면 400.
+    """
+    from app.models.lecture import Lecture  # noqa: PLC0415
+    from app.services.pipeline.qa import generate_seed_questions  # noqa: PLC0415
+
+    await assert_professor_owns_lecture(db, lecture_id, professor.id)
+
+    lecture = await db.get(Lecture, lecture_id)
+    task_id = lecture.pipeline_task_id if lecture else None
+    if not task_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="강의 파이프라인이 아직 처리되지 않았습니다.",
+        )
+    voice_lang = (lecture.voice_lang if lecture else None) or "ko"
+    loop = asyncio.get_event_loop()
+
+    def _work() -> GenerateSeedQuestionsResponse:
+        with SyncSessionLocal() as sdb:
+            pairs = generate_seed_questions(sdb, task_id, n=3, lang=voice_lang)
+            return GenerateSeedQuestionsResponse(
+                questions=[GeneratedSeedQuestion(**p) for p in pairs]
+            )
 
     return await loop.run_in_executor(None, _work)
 

@@ -240,7 +240,7 @@ export const PROTOTYPE_HTML = String.raw`
                 <div class="script-block ai">
                   <div class="b-head">
                     AI 다듬은 스크립트
-                    <span class="src">하두진 교수 톤 학습 모델</span>
+                    <span class="src">선택한 성우</span>
                   </div>
                   <div class="b-text" id="ai-text"></div>
                 </div>

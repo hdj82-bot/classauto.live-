@@ -82,3 +82,21 @@ class GenerateSeedAnswerResponse(BaseModel):
 
     answer: str = Field(..., description="PPT 기반 생성 답변(범위 밖이면 빈 문자열)")
     in_scope: bool = Field(..., description="강의 자료 범위 안 질문 여부")
+
+
+class GeneratedSeedQuestion(BaseModel):
+    """AI 가 자동 선정한 핵심 질문 1건 + 사전 답변."""
+
+    question: str = Field(..., description="자동 선정된 핵심 질문")
+    answer: str = Field("", description="해당 질문의 사전 답변(강의 자료 기반)")
+
+
+class GenerateSeedQuestionsResponse(BaseModel):
+    """"질문과 답변 자동 생성" 결과 — 교수자가 검토·수정 후 저장한다.
+
+    질문·답변은 강의 발화 언어(lecture.voice_lang)로 작성된다.
+    """
+
+    questions: list[GeneratedSeedQuestion] = Field(
+        default_factory=list, description="자동 생성된 핵심 질문 + 사전 답변(최대 3개)"
+    )

@@ -81,6 +81,8 @@ export interface SettingsPanelProps {
   onPreviewSeed?: (url: string) => void;
   /** 카드별 "AI 답변 자동 생성" — index 질문으로 RAG 답변을 만들어 사전 대답에 채운다. */
   onGenerateSeedAnswer?: (index: number) => Promise<void>;
+  /** "질문과 답변 자동 생성" — 스크립트에서 핵심 질문 3개 + 답변을 자동 생성해 카드를 채운다. */
+  onAutoGenerateSeedQuestions?: () => Promise<void>;
   /** 하단 "AI 질문 승인" — 저장된 사전 질문을 즉시 아바타 클립으로 렌더 시작. */
   onApproveSeedQuestions?: () => Promise<void>;
 }
@@ -318,6 +320,7 @@ export default function SettingsPanel({
   onChangeSeedQuestion,
   onPreviewSeed,
   onGenerateSeedAnswer,
+  onAutoGenerateSeedQuestions,
   onApproveSeedQuestions,
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
@@ -642,6 +645,11 @@ export default function SettingsPanel({
               학생이 비슷한 질문을 하면 첫 질문부터 아바타가 바로 답합니다. 강의당 최대 3개.
             </p>
 
+            {/* 질문과 답변 자동 생성 — 스크립트에서 핵심 질문 3개 + 답변을 한 번에 채운다. */}
+            {onAutoGenerateSeedQuestions && (
+              <AutoGenerateSeedButton onGenerate={onAutoGenerateSeedQuestions} />
+            )}
+
             {/* 렌더 진척 — HeyGen 작업 중일 때 % 바. (영상 생성 후 폴링으로 갱신) */}
             {seedSaved.length > 0 && (seedRendering || (seedDone > 0 && seedDone < seedSaved.length)) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -902,6 +910,61 @@ const SEED_STATUS_BADGE: Record<SeedQuestionStatus, { label: string; fg: string;
   ready: { label: "준비됨", fg: "#1B7F4B", bg: "rgba(27,127,75,0.10)" },
   failed: { label: "실패", fg: "#B42318", bg: "rgba(180,35,24,0.10)" },
 };
+
+/**
+ * "질문과 답변 자동 생성" — 스크립트에서 핵심 질문 3개 + 사전 답변을 한 번에 만들어
+ * 카드를 채운다. 자체 busy 상태로 중복 클릭을 막는다.
+ */
+function AutoGenerateSeedButton({
+  onGenerate,
+}: {
+  onGenerate: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  const handleClick = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onGenerate();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={busy}
+      style={{
+        width: "100%",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        padding: "9px 12px",
+        borderRadius: 9,
+        border: "none",
+        background: busy
+          ? "var(--gold-soft)"
+          : "linear-gradient(135deg, #FFB627, #E89E0E)",
+        fontSize: 12.5,
+        fontWeight: 700,
+        cursor: busy ? "not-allowed" : "pointer",
+        opacity: busy ? 0.7 : 1,
+        color: busy ? "var(--gold-on-light, #B88308)" : "#0A0A0A",
+        fontFamily: "inherit",
+      }}
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+      </svg>
+      {busy ? "생성 중… (질문·답변 만드는 중)" : "질문과 답변 자동 생성"}
+    </button>
+  );
+}
+
 
 /**
  * "AI 질문 승인" — 저장된 사전 질문을 영상 전체 생성 없이 즉시 아바타 클립으로
