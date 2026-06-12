@@ -37,6 +37,13 @@ export const LANGUAGES: { code: LangCode; label: string }[] = [
   { code: "ru", label: "러시아어" },
 ];
 
+// 스튜디오 음성·자막 셀렉터에 노출하는 언어 — 일단 4개만 (교수자 결정 2026-06-12).
+// 백엔드 regenerate_script_language 의 _VOICE_LANGS 와 1:1 로 맞춘다.
+export const STUDIO_LANG_CODES: LangCode[] = ["ko", "en", "zh", "ja"];
+
+export const STUDIO_LANGUAGES: { code: LangCode; label: string }[] =
+  LANGUAGES.filter((l) => STUDIO_LANG_CODES.includes(l.code));
+
 export function langLabel(code: string | null | undefined): string {
   return LANGUAGES.find((l) => l.code === code)?.label ?? "한국어";
 }

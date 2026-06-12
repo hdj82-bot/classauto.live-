@@ -124,6 +124,35 @@ async def regenerate_slide(
     return _build_script_response(video, script)
 
 
+# ── POST /api/videos/{id}/script/language ────────────────────────────────────
+
+@router.post(
+    "/{video_id}/script/language",
+    response_model=VideoScriptResponse,
+    summary="발화 언어 변경 → 해당 언어로 전 슬라이드 네이티브 재생성 (교수자 전용)",
+)
+async def relanguage_script(
+    video_id: uuid.UUID,
+    target_lang: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_professor),
+):
+    """발화(음성) 언어를 ``target_lang`` (ko/en/zh/ja) 으로 바꾸고, 전 슬라이드
+    스크립트를 그 언어로 처음부터 재생성합니다.
+
+    - 한국어를 거친 번역이 아니라 슬라이드 원본 기준 네이티브 생성(교수자 결정)
+    - `lecture.voice_lang` 가 갱신되고 기존 자막(`subtitle_segments`)은 무효화됨
+    - `pending_review` 상태에서만 가능. "언어 선택" 변경 1회당 1회 호출
+    """
+    video, script = await video_svc.regenerate_script_language(
+        db=db,
+        video_id=video_id,
+        professor_id=current_user.id,
+        target_lang=target_lang,
+    )
+    return _build_script_response(video, script)
+
+
 # ── POST /api/videos/{id}/script/reset ───────────────────────────────────────
 
 @router.post(

@@ -292,6 +292,129 @@ async def regenerate_slide_segment(
     return video, script
 
 
+# ── 발화 언어 변경 → 전 슬라이드 네이티브 재생성 ──────────────────────────────
+
+_VOICE_LANGS = {"ko", "en", "zh", "ja"}
+
+
+async def regenerate_script_language(
+    db: AsyncSession,
+    video_id: uuid.UUID,
+    professor_id: uuid.UUID,
+    target_lang: str,
+) -> tuple[Video, VideoScript]:
+    """발화 언어를 ``target_lang`` 으로 바꾸고 전 슬라이드를 그 언어로 네이티브
+    재생성한다(한국어를 거친 번역이 아니라 처음부터 — 교수자 결정 2026-06-12).
+
+    - SlideEmbedding 원본 텍스트를 입력으로 `_generate_single_script(lang=)` 호출.
+      `generate_scripts` 와 동일한 ThreadPoolExecutor 병렬 패턴을 thread 로 돌려
+      이벤트 루프를 막지 않는다.
+    - 타임스탬프·톤·질문 핀은 보존하고 발화 text 만 교체. ai_segments 도 새 언어로
+      갱신해 "기본값 복원"이 새 언어 기준이 되게 한다.
+    - `lecture.voice_lang` 갱신 + 기존 `subtitle_segments` 무효화(번역 source 가
+      바뀌었으므로). 프론트는 변경 즉시 자막을 다시 생성하도록 안내한다.
+    - `pending_review` 상태에서만 가능.
+    """
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    import anthropic
+
+    from app.core.config import settings
+    from app.models.embedding import SlideEmbedding
+    from app.models.lecture import Lecture
+    from app.services.pipeline.schemas import SlideContent
+    from app.services.pipeline.script_generator import _generate_single_script
+
+    if target_lang not in _VOICE_LANGS:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"지원하지 않는 발화 언어입니다: {target_lang}",
+        )
+
+    video, script = await get_script(db, video_id)
+    await assert_professor_owns_video(db, video, professor_id)
+
+    if video.status != VideoStatus.pending_review:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"'{video.status.value}' 상태에서는 발화 언어를 바꿀 수 없습니다.",
+        )
+
+    segments = _dict_to_segments(script.segments)
+    if not segments:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="재생성할 발화 스크립트가 없습니다.",
+        )
+
+    lecture = await db.get(Lecture, video.lecture_id)
+    task_id = lecture.pipeline_task_id if lecture else None
+
+    # 슬라이드 원본 텍스트 일괄 조회 ({slide_number(1-based): text_content})
+    text_by_slide: dict[int, str] = {}
+    if task_id:
+        emb_result = await db.execute(
+            select(
+                SlideEmbedding.slide_number, SlideEmbedding.text_content
+            ).where(SlideEmbedding.task_id == task_id)
+        )
+        text_by_slide = {row[0]: row[1] or "" for row in emb_result.all()}
+
+    # 입력 텍스트 — 원본이 없으면 현재 발화 text 를 입력으로(재다듬기 폴백).
+    slide_inputs = [
+        SlideContent(
+            slide_number=seg.slide_index + 1,
+            texts=[text_by_slide.get(seg.slide_index + 1) or seg.text],
+            speaker_notes="",
+            image_paths=[],
+        )
+        for seg in segments
+    ]
+
+    def _regenerate_all() -> list[str]:
+        client = anthropic.Anthropic(
+            api_key=settings.ANTHROPIC_API_KEY, timeout=30.0
+        )
+        out: list[str] = [""] * len(slide_inputs)
+        max_workers = max(1, min(settings.SCRIPT_CONCURRENCY, len(slide_inputs)))
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(
+                    _generate_single_script, client, sc, lang=target_lang
+                ): i
+                for i, sc in enumerate(slide_inputs)
+            }
+            for fut in futures:
+                out[futures[fut]] = fut.result().strip()
+        return out
+
+    new_texts = await asyncio.to_thread(_regenerate_all)
+
+    new_segments = [
+        ScriptSegment(
+            slide_index=seg.slide_index,
+            text=new_texts[i] or seg.text,
+            start_seconds=seg.start_seconds,
+            end_seconds=seg.end_seconds,
+            tone=seg.tone,
+            question_pin_seconds=seg.question_pin_seconds,
+        )
+        for i, seg in enumerate(segments)
+    ]
+    script.segments = _segments_to_dict(new_segments)
+    script.ai_segments = _segments_to_dict(new_segments)
+    script.subtitle_segments = None  # 번역 source 가 바뀜 — 기존 자막 무효화
+    if lecture is not None:
+        lecture.voice_lang = target_lang
+    await db.commit()
+    await db.refresh(script)
+    return video, script
+
+
 # ── 기본값 복원 (AI 원본 사용) ────────────────────────────────────────────────
 
 async def reset_to_ai_script(
