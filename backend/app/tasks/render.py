@@ -5,6 +5,7 @@ import logging
 import uuid
 
 from app.celery_app import celery
+from app.core.config import settings
 from app.db.session import SyncSessionLocal
 from app.models.video_render import RenderStatus, VideoRender
 from app.services.pipeline import cost_log, s3 as s3_svc
@@ -46,7 +47,17 @@ def _audio_s3_key(render_id: str, ext: str = "mp3") -> str:
     return f"{settings.S3_PREFIX}audio/{render_id}.{ext}"
 
 
-@celery.task(bind=True, max_retries=2, default_retry_delay=30)
+@celery.task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=30,
+    # 작업별 시간 제한 — 무한 hang(예: TTS 네트워크 정체) 시 슬롯을 영구 점유하지
+    # 않도록 끊는다. soft 는 SoftTimeLimitExceeded(아래 except Exception 이 잡아
+    # 재시도)로, hard 는 워커 자식 프로세스 강제 종료로 동작. 전역이 아닌
+    # render_slide 한정 — 정상적으로 긴 다른 태스크(mp4 합성 등)를 죽이지 않기 위함.
+    soft_time_limit=settings.RENDER_SLIDE_SOFT_TIME_LIMIT_SECONDS,
+    time_limit=settings.RENDER_SLIDE_TIME_LIMIT_SECONDS,
+)
 def render_slide(
     self,
     render_id: str,
@@ -296,3 +307,71 @@ def render_slide(
     finally:
         loop.close()
         db.close()
+
+
+# reaper 대상 — 비종료 상태 중 'TTS 측'에서 멈출 수 있는 것들. rendering(HeyGen
+# 대기)은 poll_pending_renders + HeyGen 24h 타임아웃이 따로 다루므로 제외해
+# 진행 중 HeyGen 작업을 이중 제출하지 않는다.
+_REAPABLE_STATUSES: tuple[RenderStatus, ...] = (
+    RenderStatus.pending,
+    RenderStatus.tts_processing,
+    RenderStatus.uploading,
+)
+
+
+@celery.task
+def reap_stuck_renders() -> dict:
+    """오래 멈춘 슬라이드 렌더를 pending 으로 되돌려 render_slide 를 재큐잉한다.
+
+    워커 재시작·크래시·네트워크 단절로 render_slide 가 끝내 완료하지 못하면 행이
+    pending/tts_processing/uploading 에 남는다. task_acks_late + Redis 라 유실된
+    작업의 재전달은 브로커 visibility_timeout(기본 1h) 뒤에야 일어나, 그 사이
+    슬라이드쇼가 "오류 없이" 영구 멈춘 것처럼 보인다(진행률 ~94% 고착).
+
+    updated_at(상태 변경 시 onupdate 갱신)이 RENDER_STUCK_MINUTES 임계를 넘긴
+    비종료 렌더를 pending 으로 리셋하고 render_slide 를 다시 enqueue 해 자가
+    회복시킨다. render_slide 의 TTS idempotency(audio_url+S3 존재 시 skip) 덕에
+    이미 합성된 슬라이드를 재큐잉해도 재과금되지 않는다.
+
+    임계는 슬라이드 1장 정상 합성 소요(수 초~수십 초)보다 넉넉히 크게 둬 실제
+    진행 중인 작업을 죽이지 않는다.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    db = SyncSessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            minutes=settings.RENDER_STUCK_MINUTES
+        )
+        stuck = (
+            db.query(VideoRender)
+            .filter(
+                VideoRender.status.in_(_REAPABLE_STATUSES),
+                VideoRender.updated_at < cutoff,
+            )
+            .all()
+        )
+        # 커밋 전 enqueue 인자를 모아 둔다(커밋 후 enqueue — 워커가 pending 을 보게).
+        to_enqueue: list[tuple[str, str, str]] = []
+        for r in stuck:
+            r.status = RenderStatus.pending
+            to_enqueue.append(
+                (str(r.id), r.script_text or "", str(r.instructor_id))
+            )
+        if not to_enqueue:
+            return {"reaped": 0}
+        db.commit()
+    except Exception as exc:  # noqa: BLE001 — reaper 실패가 워커를 죽이지 않게.
+        db.rollback()
+        logger.warning("reap_stuck_renders 실패(무시): %s", exc)
+        return {"reaped": 0, "error": str(exc)}
+    finally:
+        db.close()
+
+    for rid, text, instructor_id in to_enqueue:
+        render_slide.delay(rid, text, instructor_id)
+    logger.warning(
+        "정체된 렌더 %d건을 pending 으로 되돌려 재큐잉(임계=%d분 초과)",
+        len(to_enqueue), settings.RENDER_STUCK_MINUTES,
+    )
+    return {"reaped": len(to_enqueue)}
