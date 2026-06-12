@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.core.metrics import track_external_api
 from app.core.retry import retry_external
 from app.services.pipeline.retriever import (
+    SIMILARITY_THRESHOLD,
     RetrievalResult,
     search_similar_script,
     search_similar_slides,
@@ -28,9 +29,12 @@ _CLAUDE_RETRY_ON = (
 
 @track_external_api("claude")
 @retry_external(label="claude.qa.create", extra_retry_on=_CLAUDE_RETRY_ON)
-def _claude_qa_call(client, user_content: str):
+def _claude_qa_call(client, user_content: str, allow_refusal: bool = False):
+    # allow_refusal=True(스크립트 유사도 < 0.4)일 때만 Claude 가 범위 밖을 거부할 수 있다.
+    # 유사도 ≥ 0.4 면 관련성이 확정된 것으로 보고 반드시 답변하게 한다(교수자 결정).
+    system = QA_SYSTEM_PROMPT_GATED if allow_refusal else QA_SYSTEM_PROMPT
     return client.messages.create(
-        model=settings.QA_MODEL, max_tokens=2048, system=QA_SYSTEM_PROMPT,
+        model=settings.QA_MODEL, max_tokens=2048, system=system,
         messages=[{"role": "user", "content": user_content}],
     )
 
@@ -47,19 +51,29 @@ QA_SYSTEM_PROMPT = """\
 당신은 이 강의의 전문가 조교입니다. 학습자의 질문에 전문가 수준으로 매우 자세하고
 정확하게 답변하는 것이 목표입니다.
 
-아래에 강의 자료 일부(슬라이드 PPT + 강의 스크립트(교수자 발화))가 제공됩니다.
+아래에 강의 스크립트(교수자가 강의에서 실제로 발화한 내용) 일부가 제공됩니다.
 이는 이 강의의 주제를 보여주는 표본입니다(강의 전체가 아닐 수 있습니다).
 
-판단과 답변 규칙:
-1. 질문이 이 강의의 주제·분야와 관련 있으면, 제공된 자료에 직접 나오지 않더라도
-   답변합니다. 제공된 강의 자료를 1차 근거로 삼되, 강의 주제 범위 안에서 당신의
-   전문 지식으로 배경·예시·비교·심화까지 깊이 있게 보충해 전문가 수준으로 설명합니다.
-2. 강의 자료에 근거가 있으면 우선 활용하고 정확히 인용합니다. 자료를 넘어서는 설명을
-   더할 때도 반드시 사실에 근거해 정확하게 합니다(불확실하면 단정하지 않습니다).
-3. 질문이 이 강의의 주제와 명백히 무관하면(강의와 상관없는 잡담, 전혀 다른 분야 등),
-   다른 어떤 텍스트도 출력하지 말고 정확히 다음 한 줄만 출력합니다: [[OUT_OF_SCOPE]]
-4. 한국어로 자연스럽고 체계적으로(필요하면 소제목·목록으로 구조화해) 답변합니다.
-5. 근거가 된 슬라이드 번호가 있으면 답변 끝에 표기합니다. (예: [슬라이드 3, 7])
+답변 규칙:
+1. 질문은 이미 이 강의의 주제와 관련 있다고 판정되어 전달됩니다. 따라서 제공된
+   스크립트에 직접 나오지 않더라도 반드시 답변합니다. 제공된 강의 스크립트를 1차
+   근거로 삼되, 강의 주제 범위 안에서 당신의 전문 지식으로 배경·예시·비교·심화까지
+   깊이 있게 보충해 전문가 수준으로 설명합니다.
+2. 강의 스크립트에 근거가 있으면 우선 활용하고 정확히 인용합니다. 자료를 넘어서는
+   설명을 더할 때도 반드시 사실에 근거해 정확하게 합니다(불확실하면 단정하지 않습니다).
+3. 한국어로 자연스럽고 체계적으로(필요하면 소제목·목록으로 구조화해) 답변합니다.
+4. 근거가 된 슬라이드 번호가 있으면 답변 끝에 표기합니다. (예: [슬라이드 3, 7])
+"""
+
+# 스크립트 유사도가 낮을 때(< 0.4)만 쓰는 변형 — 관련성이 약해 Claude 가 최종 판정한다.
+# 강의 주제와 명백히 무관하면 거부(센티넬), 관련 있으면(표현만 달라 유사도가 낮은 경우 등)
+# 전문가 수준으로 답변한다. 유사도 ≥ 0.4 경로는 위 QA_SYSTEM_PROMPT 로 항상 답변한다.
+QA_SYSTEM_PROMPT_GATED = QA_SYSTEM_PROMPT + """
+추가 판정 규칙(중요):
+- 위 질문은 강의 스크립트와의 유사도가 낮게 측정되었습니다. 표현이 달라 유사도만 낮을
+  뿐 강의 주제와 관련 있을 수 있으니, 관련 있다면 평소대로 전문가 수준으로 답변합니다.
+- 다만 이 강의의 주제·분야와 명백히 무관하면(강의와 상관없는 잡담, 전혀 다른 분야 등),
+  다른 어떤 텍스트도 출력하지 말고 정확히 다음 한 줄만 출력합니다: [[OUT_OF_SCOPE]]
 """
 
 
@@ -190,39 +204,45 @@ class QAResult:
 
 
 def answer_question(db: Session, task_id: str, session_id: str, question: str) -> QAResult:
-    """RAG 파이프라인 — 범위 판정은 Claude 가 한다(임베딩은 검색·컨텍스트 구성용).
+    """RAG 파이프라인 — **발화 스크립트만** 근거로 쓰고, 0.4 임계값으로 범위를 가른다.
 
-    강의 자료(슬라이드 PPT + 스크립트(발화))를 1차 근거로 제공하고, 질문이 강의 주제와
-    관련 있으면 자료에 직접 없더라도 Claude 가 전문 지식으로 보충해 전문가 수준으로 자세히
-    답한다(교수자 결정 2026-06-11). 강의 주제와 **명백히 무관**할 때만 Claude 가
-    ``[[OUT_OF_SCOPE]]`` 를 출력하고, 이 경우에만 범위 밖으로 거부한다.
+    근거(컨텍스트)는 슬라이드 PPT 가 아니라 강의 스크립트(교수자가 실제 발화한 내용)만
+    사용한다(교수자 결정 2026-06-12). 강의 슬라이드가 이미지 위주라 PPT 텍스트 추출이
+    빈약해 PPT 기반 검색이 정상 강의 질문도 못 잡던 문제 때문 — 스크립트엔 실제 강의
+    내용이 풍부히 들어 있다.
 
-    종전의 임베딩 유사도 하드 게이트(0.4)는 제거했다 — PPT 불릿/스크립트에 단어가 없다는
-    이유로 정상 강의 질문이 거부되던 문제 때문(교수자 반복 보고). 강의 자료 자체가 전혀
-    없으면(슬라이드·스크립트 모두 없음) 판단 근거가 없으므로 Claude 호출 없이 거부한다.
+    범위 판정(교수자 결정 2026-06-12):
+    - 스크립트 최고 유사도 ≥ 0.4 → 관련 확정. **반드시 답변**(거부 없음).
+    - 스크립트 최고 유사도 < 0.4 → 표현만 달라 낮을 수 있으니 Claude 가 최종 판정
+      (관련이면 답변, 명백히 무관할 때만 ``[[OUT_OF_SCOPE]]`` 거부).
+    - 스크립트가 전혀 없음 → 판단 근거 없음. Claude 호출 없이 비용 0 으로 거부.
     """
-    slide_results = search_similar_slides(db, task_id, question, top_k=3)
     script_results = search_similar_script(db, task_id, question, top_k=3)
-    context = _build_combined_context(slide_results, script_results)
+    context = _build_script_context(script_results)
 
     if not context:
-        # 강의 자료가 전혀 없음 → 관련성 판단 불가. 비용 0 으로 거부.
+        # 강의 스크립트가 없음 → 관련성 판단 불가. 비용 0 으로 거부.
         return QAResult(
-            answer=OUT_OF_SCOPE_MESSAGE, in_scope=False, top_slides=slide_results,
+            answer=OUT_OF_SCOPE_MESSAGE, in_scope=False, top_slides=script_results,
             input_tokens=0, output_tokens=0, cost_usd=0.0,
         )
+
+    best_sim = script_results[0].similarity if script_results else 0.0
+    # ≥ 0.4: 관련 확정 → 항상 답변. < 0.4: Claude 가 관련성 최종 판정(거부 허용).
+    allow_refusal = best_sim < SIMILARITY_THRESHOLD
 
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
     try:
         response = _claude_qa_call(
             client,
-            f"## 강의 자료(표본)\n{context}\n\n## 학습자 질문\n{question}",
+            f"## 강의 스크립트(발화)\n{context}\n\n## 학습자 질문\n{question}",
+            allow_refusal=allow_refusal,
         )
     except anthropic.APIError as exc:
         logger.error("Q&A Claude API 호출 실패: %s", exc)
         return QAResult(
             answer="죄송합니다. 일시적인 오류로 답변을 생성하지 못했습니다. 잠시 후 다시 시도해주세요.",
-            in_scope=True, top_slides=slide_results,
+            in_scope=True, top_slides=script_results,
             input_tokens=0, output_tokens=0, cost_usd=0.0,
         )
 
@@ -230,7 +250,7 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
         logger.warning("Q&A: Claude API가 빈 응답을 반환")
         return QAResult(
             answer="답변을 생성하지 못했습니다. 질문을 다시 작성해주세요.",
-            in_scope=True, top_slides=slide_results,
+            in_scope=True, top_slides=script_results,
             input_tokens=0, output_tokens=0, cost_usd=0.0,
         )
 
@@ -241,10 +261,10 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
     output_tokens = response.usage.output_tokens
     cost = (input_tokens * settings.CLAUDE_INPUT_COST_PER_M + output_tokens * settings.CLAUDE_OUTPUT_COST_PER_M) / 1_000_000
 
-    # Claude 가 강의 주제와 무관하다고 판정 → 거부(센티넬). 호출은 했으므로 비용은 기록.
-    if OUT_OF_SCOPE_SENTINEL in answer:
+    # < 0.4 경로에서만 Claude 가 거부할 수 있다(센티넬). 호출은 했으므로 비용은 기록.
+    if allow_refusal and OUT_OF_SCOPE_SENTINEL in answer:
         return QAResult(
-            answer=OUT_OF_SCOPE_MESSAGE, in_scope=False, top_slides=slide_results,
+            answer=OUT_OF_SCOPE_MESSAGE, in_scope=False, top_slides=script_results,
             input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=round(cost, 6),
         )
 
@@ -252,7 +272,7 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
         answer = "답변을 생성하지 못했습니다. 질문을 다시 작성해주세요."
 
     return QAResult(
-        answer=answer, in_scope=True, top_slides=slide_results,
+        answer=answer, in_scope=True, top_slides=script_results,
         input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=round(cost, 6),
     )
 
@@ -262,21 +282,14 @@ def _build_context(results: list[RetrievalResult]) -> str:
     return "\n\n".join(parts)
 
 
-def _build_combined_context(
-    slide_results: list[RetrievalResult],
-    script_results: list[RetrievalResult],
-) -> str:
-    """슬라이드(PPT)와 강의 스크립트(발화) 검색 결과를 하나의 RAG 컨텍스트로 합친다.
+def _build_script_context(script_results: list[RetrievalResult]) -> str:
+    """강의 스크립트(발화) 검색 결과만으로 RAG 컨텍스트를 만든다.
 
-    교수자 요청대로 답변 근거에 PPT 텍스트와 발화 스크립트를 모두 포함한다.
+    교수자 결정(2026-06-12)대로 답변 근거에 PPT 는 제외하고 발화 스크립트만 쓴다.
     """
-    parts: list[str] = []
-    if slide_results:
-        parts.append("## 슬라이드(PPT)\n" + _build_context(slide_results))
-    if script_results:
-        seg = "\n\n".join(
-            f"### 슬라이드 {r.slide_number} 발화 (유사도: {r.similarity:.4f})\n{r.text_content}"
-            for r in script_results
-        )
-        parts.append("## 강의 스크립트(발화)\n" + seg)
-    return "\n\n".join(parts)
+    if not script_results:
+        return ""
+    return "\n\n".join(
+        f"### 슬라이드 {r.slide_number} 발화 (유사도: {r.similarity:.4f})\n{r.text_content}"
+        for r in script_results
+    )
