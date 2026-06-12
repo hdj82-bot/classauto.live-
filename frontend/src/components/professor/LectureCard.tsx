@@ -14,6 +14,8 @@ export interface LectureCardData {
   is_published: boolean;
   video_url?: string | null;
   pipeline_task_id?: string | null;
+  /** PPT 1번 슬라이드 이미지 URL(카드 썸네일). null 이면 placeholder. */
+  thumbnail_url?: string | null;
 }
 
 interface Props {
@@ -31,6 +33,8 @@ interface Props {
    * 강의는 그대로 "이어서 제작"(studio) 이 1차 동작이다.
    */
   onPreview?: (id: string) => void;
+  /** 공개/비공개 전환 성공 후 — 부모가 목록 state 의 is_published 를 갱신. */
+  onVisibilityChanged?: (id: string, isPublished: boolean) => void;
   padding?: number;
 }
 
@@ -46,12 +50,14 @@ export default function LectureCard({
   onContinue,
   onDeleted,
   onPreview,
+  onVisibilityChanged,
   padding = 20,
 }: Props) {
   const { t } = useI18n();
   const { toast } = useToast();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const isProduction =
     !lecture.is_published &&
@@ -78,6 +84,31 @@ export default function LectureCard({
     cursor: "pointer",
   };
 
+  // 썸네일 클릭 시 동작 — 미리보기 가능하면 학생 플레이어(새 탭), 아니면 스튜디오.
+  // (미발행이어도 소유 교수자는 owner-bypass 로 미리보기 가능 — 무한 루프 해소.)
+  const handleThumbnailClick = () => {
+    if (onPreview) onPreview(lecture.id);
+    else onContinue(lecture.id);
+  };
+
+  // 공개/비공개 전환 — PATCH is_published. 기본은 비공개(학생 데이터 보호 정책),
+  // 교수자가 직접 공개를 선택할 수 있게 한다. 성공 시 부모 목록 state 갱신.
+  const handleToggleVisibility = async () => {
+    if (publishing) return;
+    const next = !lecture.is_published;
+    setPublishing(true);
+    try {
+      await api.patch(`/api/lectures/${lecture.id}`, { is_published: next });
+      invalidateProfessorData();
+      onVisibilityChanged?.(lecture.id, next);
+      toast(next ? "공개로 전환했습니다." : "비공개로 전환했습니다.", "success");
+    } catch {
+      toast("공개 설정 변경에 실패했습니다.", "error");
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const handleDelete = async () => {
     setDeleting(true);
     try {
@@ -97,6 +128,50 @@ export default function LectureCard({
   return (
     <>
       <Card padding={padding} radius={14} interactive role="article">
+        {/* 썸네일 — PPT 1번 슬라이드. 클릭 시 미리보기(또는 스튜디오). 16:9. */}
+        <button
+          type="button"
+          onClick={handleThumbnailClick}
+          aria-label={t("lectureCard.preview")}
+          style={{
+            display: "block",
+            width: "100%",
+            aspectRatio: "16 / 9",
+            marginBottom: 12,
+            border: "1px solid var(--line)",
+            borderRadius: 10,
+            overflow: "hidden",
+            padding: 0,
+            cursor: "pointer",
+            background: "var(--bg-subtle)",
+            position: "relative",
+          }}
+        >
+          {lecture.thumbnail_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={lecture.thumbnail_url}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+            />
+          ) : (
+            <span
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "grid",
+                placeItems: "center",
+                color: "var(--text-faint)",
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="9 7 17 12 9 17 9 7" fill="currentColor" stroke="none" />
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+              </svg>
+            </span>
+          )}
+        </button>
         <LectureTitle title={lecture.title} />
         <span
           className="inline-flex items-center gap-1.5 rounded-full"
@@ -176,6 +251,28 @@ export default function LectureCard({
               {t("lectureCard.openStudio")}
             </button>
           )}
+          <button
+            type="button"
+            onClick={handleToggleVisibility}
+            disabled={publishing}
+            className="rounded-lg motion-safe:transition"
+            aria-label={lecture.is_published ? "비공개로 전환" : "공개로 전환"}
+            style={{
+              padding: "8px 12px",
+              fontSize: 12,
+              fontWeight: 600,
+              color: lecture.is_published ? "var(--text-muted)" : "var(--success)",
+              background: lecture.is_published ? "var(--bg-card)" : "rgba(16, 185, 129, 0.10)",
+              border: lecture.is_published
+                ? "1px solid var(--line-strong)"
+                : "1px solid var(--success)",
+              cursor: publishing ? "not-allowed" : "pointer",
+              opacity: publishing ? 0.6 : 1,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {publishing ? "…" : lecture.is_published ? "비공개로" : "공개"}
+          </button>
           <button
             type="button"
             onClick={() => setConfirmOpen(true)}

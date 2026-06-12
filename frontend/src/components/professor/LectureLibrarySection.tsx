@@ -171,6 +171,16 @@ export default function LectureLibrarySection({
     [lectures],
   );
 
+  // 공개/비공개 전환 후 — 목록 state 의 해당 강의 is_published 를 즉시 갱신(배지·버튼 반영).
+  const handleVisibilityChanged = useCallback(
+    (id: string, isPublished: boolean) => {
+      setLectures((ls) =>
+        ls.map((l) => (l.id === id ? { ...l, is_published: isPublished } : l)),
+      );
+    },
+    [],
+  );
+
   const handleDeleted = useCallback(
     (id: string) => {
       // 삭제된 강의가 폴더에 속해 있었다면 해당 폴더의 lecture_count 를 1 감소.
@@ -426,6 +436,7 @@ export default function LectureLibrarySection({
                       onContinue={handleContinue}
                       onDeleted={handleDeleted}
                       onPreview={handlePreview}
+                      onVisibilityChanged={handleVisibilityChanged}
                     />
                     <button
                       type="button"
