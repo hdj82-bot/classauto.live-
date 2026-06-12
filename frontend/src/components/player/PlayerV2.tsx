@@ -979,8 +979,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                       {m.avatarUrl && (
                         // 캐시 적중 시 부가되는 아바타 답변 클립. 텍스트가 본답이고
                         // 영상은 전달 보조 — 로드 실패해도 텍스트 답변은 그대로 남는다.
-                        // 아바타가 재생되면 강의(슬라이드쇼)를 멈춰 음성이 겹치지 않게
-                        // 하고, 멈추면 활성 아바타 추적을 해제한다(강의 재개 시 강의가
+                        // 음성이 겹치지 않도록 재생은 상호 배타다: 어떤 아바타가 재생되면
+                        // (1) 강의(슬라이드쇼)를 멈추고 (2) 먼저 재생 중이던 다른 아바타도
+                        // 멈춘다. 멈추면 활성 아바타 추적을 해제한다(강의 재개 시 강의가
                         // 이 아바타를 다시 멈추지 않도록).
                         <video
                           src={m.avatarUrl}
@@ -990,6 +991,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                           aria-label="AI 아바타 답변"
                           onPlay={(e) => {
                             pausePlayer();
+                            // 다른 아바타가 재생 중이면 멈춰 동시 재생을 막는다.
+                            const prev = activeAvatarRef.current;
+                            if (prev && prev !== e.currentTarget) {
+                              prev.pause();
+                            }
                             activeAvatarRef.current = e.currentTarget;
                           }}
                           onPause={(e) => {
