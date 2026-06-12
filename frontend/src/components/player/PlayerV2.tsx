@@ -477,14 +477,15 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // ─── Q&A 전송 ───
   const sendQuestion = async (text?: string) => {
     const question = (text ?? qaInput).trim();
-    // 일반 시청은 세션이 필요하고, 미리보기(교수자)는 세션 없이 RAG 답변만 받는다.
-    if (!question || (!sessionId && !preview)) return;
+    if (!question) return;
     setQaInput("");
     setQaMessages((m) => [...m, { role: "user", text: question }]);
     setQaSending(true);
     try {
-      // 미리보기(교수자)는 세션이 없으므로 소유 교수자 전용 /qa/preview 로,
-      // 일반 학생 시청은 세션 기반 /qa 로 호출한다.
+      // 호출 경로 3종:
+      //  - 미리보기(교수자): 소유 교수자 전용 /qa/preview (세션 없음)
+      //  - 로그인 학생(세션 보유): 세션 기반 /qa (로그·아바타 캐시)
+      //  - 익명 시청(세션 없음): 공개 /qa/public (발행 강의, 인증 불필요)
       // 요청 타임아웃(75초) — 백엔드/외부 API 가 멈춰도 "..."가 무한 대기하지 않도록.
       // 초과하면 axios 가 reject → 아래 catch 가 오류 답변을 띄운다.
       const { data } = preview
@@ -493,11 +494,17 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
             { lecture_id: lecture?.id, question },
             { timeout: 75000 },
           )
-        : await api.post(
-            `/api/v1/qa`,
-            { session_id: sessionId, lecture_id: lecture?.id, question },
-            { timeout: 75000 },
-          );
+        : sessionId
+          ? await api.post(
+              `/api/v1/qa`,
+              { session_id: sessionId, lecture_id: lecture?.id, question },
+              { timeout: 75000 },
+            )
+          : await api.post(
+              `/api/v1/qa/public`,
+              { lecture_id: lecture?.id, question },
+              { timeout: 75000 },
+            );
       setQaMessages((m) => [
         ...m,
         {
