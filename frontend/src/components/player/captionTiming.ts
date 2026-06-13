@@ -45,7 +45,7 @@ export function splitIntoSentences(text: string): string[] {
  * 잡다 보니(실제 발성 속도와 완전히 같지 않음) 자막이 음성보다 한 박자 늦게
  * 느껴진다. 전환 시점을 이만큼 앞당겨 체감 동기화를 맞춘다.
  */
-const CAPTION_LEAD_SECONDS = 0.45;
+const CAPTION_LEAD_SECONDS = 0.2;
 
 /**
  * 슬라이드 내 경과 시간에 해당하는 자막 문장을 고른다.
