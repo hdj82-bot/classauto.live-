@@ -107,36 +107,53 @@ async def list_my_lectures(db: AsyncSession, professor: User) -> list[Lecture]:
 async def _attach_slide_thumbnails(
     db: AsyncSession, lectures: list[Lecture]
 ) -> None:
-    """``thumbnail_url`` 이 없는 강의에 1번 슬라이드 PNG URL 을 메모리상 채운다.
+    """카드 썸네일을 PPT 1쪽 슬라이드 이미지로 통일하고 presign 해서 내려준다.
 
-    슬라이드 이미지는 ``thumbnails/slides/*`` 키로 올라가지만 운영 버킷이 이 prefix
-    에 public-read 를 주지 않아 **원본 URL 은 익명 GET 시 403** → 대시보드 카드가
-    깨진 이미지(x)로 보였다. slideshow/slides 엔드포인트와 동일하게 조회 시점에
-    presign(서명·시간제한) URL 로 변환해 내려준다. get_db 는 commit 하지 않으므로
-    이 세팅은 응답 직렬화에만 쓰이고 DB 에는 영구 저장되지 않는다(만료 URL 오염 없음).
-    N+1 회피 — task_id IN (...) 한 번으로 일괄 조회.
+    슬라이드 PNG(``thumbnails/slides/*``)·기존 ``thumbnail_url``(옛 HeyGen 포스터
+    ``thumbnails/{lecture_id}/*``) 모두 운영 버킷의 비공개 prefix 라 **원본 URL 은
+    익명 GET 시 403** → 카드가 깨졌다. 조회 시점에 presign(서명·시간제한) URL 로
+    변환한다.
+
+    우선순위(교수자 요구 2026-06-13 — "카드에 PPT 1p 가 뜨게"):
+      1. 슬라이드 1쪽 이미지가 있으면 그것을 쓴다(옛 HeyGen 포스터보다 우선).
+      2. 없으면 기존 thumbnail_url 을 presign 해서 쓴다(403 해소).
+    둘 다 없으면 null — 프론트가 placeholder 를 그린다(슬라이드 미생성 초안 등).
+
+    get_db 는 commit 하지 않으므로 이 세팅은 응답 직렬화에만 쓰이고 DB 에는 영구
+    저장되지 않는다(만료 URL 오염 없음). N+1 회피 — task_id IN (...) 일괄 조회.
     """
     from app.models.embedding import SlideEmbedding  # noqa: PLC0415
     from app.services.pipeline.s3 import presign_stored_s3_url  # noqa: PLC0415
 
-    targets: dict[str, Lecture] = {
-        lec.pipeline_task_id: lec
+    # 1) 강의별 1쪽 슬라이드 이미지 일괄 조회(pipeline_task_id 있는 것만).
+    task_ids = [
+        lec.pipeline_task_id
         for lec in lectures
-        if not lec.thumbnail_url and getattr(lec, "pipeline_task_id", None)
-    }
-    if not targets:
-        return
-    rows = (
-        await db.execute(
-            select(SlideEmbedding.task_id, SlideEmbedding.slide_image_url).where(
-                SlideEmbedding.task_id.in_(list(targets.keys())),
-                SlideEmbedding.slide_number == 1,
+        if getattr(lec, "pipeline_task_id", None)
+    ]
+    slide1_by_task: dict[str, str] = {}
+    if task_ids:
+        rows = (
+            await db.execute(
+                select(
+                    SlideEmbedding.task_id, SlideEmbedding.slide_image_url
+                ).where(
+                    SlideEmbedding.task_id.in_(task_ids),
+                    SlideEmbedding.slide_number == 1,
+                )
             )
-        )
-    ).all()
-    for task_id, image_url in rows:
-        if image_url and task_id in targets:
-            targets[task_id].thumbnail_url = presign_stored_s3_url(image_url)
+        ).all()
+        for task_id, image_url in rows:
+            if image_url:
+                slide1_by_task[task_id] = image_url
+
+    # 2) 썸네일 결정 — 슬라이드 1쪽 우선, 없으면 기존 썸네일. 둘 다 presign.
+    for lec in lectures:
+        slide1 = slide1_by_task.get(getattr(lec, "pipeline_task_id", None) or "")
+        if slide1:
+            lec.thumbnail_url = presign_stored_s3_url(slide1)
+        elif lec.thumbnail_url:
+            lec.thumbnail_url = presign_stored_s3_url(lec.thumbnail_url)
 
 
 async def get_lecture_or_404(db: AsyncSession, lecture_id: uuid.UUID) -> Lecture:
