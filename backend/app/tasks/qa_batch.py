@@ -649,7 +649,30 @@ def render_seed_questions(lecture_id, instructor_id) -> dict:
             except Exception as exc:  # noqa: BLE001
                 db.rollback()
                 logger.error("Q&A 사전질문 렌더 실패: lecture=%s, %s", lecture_id, exc)
-                return {"submitted": 0, "failed": 0, "error": str(exc)}
+                # 렌더가 예외로 중단되면 seed 가 pending/rendering 으로 영원히 남아
+                # 프론트가 무한 "생성 중"이 된다. 종료 상태(failed)로 전이해 즉시
+                # 피드백을 준다(사용자는 '다시 시도'로 재렌더 가능).
+                failed_n = 0
+                try:
+                    stuck = (
+                        db.query(QAAnswerCache)
+                        .filter(
+                            QAAnswerCache.lecture_id == lecture_id,
+                            QAAnswerCache.origin == qa_avatar.ORIGIN_SEED,
+                            QAAnswerCache.status.in_(
+                                [qa_avatar.STATUS_PENDING, qa_avatar.STATUS_RENDERING]
+                            ),
+                        )
+                        .all()
+                    )
+                    for r in stuck:
+                        r.status = qa_avatar.STATUS_FAILED
+                        r.error_message = "아바타 생성 중 오류가 발생했어요. 다시 시도해 주세요."
+                    db.commit()
+                    failed_n = len(stuck)
+                except Exception:  # noqa: BLE001
+                    db.rollback()
+                return {"submitted": 0, "failed": failed_n, "error": str(exc)}
             still_rendering = _seed_still_rendering(db, lecture_id)
         if still_rendering:
             poll_seed_renders.apply_async((lecture_id,), countdown=30)
