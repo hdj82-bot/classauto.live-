@@ -69,12 +69,13 @@ def mock_render(monkeypatch):
 def _patch_answer(monkeypatch, *, in_scope: bool, answer: str = "사전 답변입니다."):
     """app.services.pipeline.qa.generate_seed_answer 를 결정적으로 대체(RAG·Claude 차단).
 
-    _render_seed_questions 가 빈 답변 폴백에서 generate_seed_answer(db, task_id, question)
-    → (answer, in_scope) 를 호출하므로 원본 모듈 속성을 패치한다.
+    _render_seed_questions 가 빈 답변 폴백에서
+    generate_seed_answer(db, task_id, question, lang=...) → (answer, in_scope) 를
+    호출하므로 원본 모듈 속성을 패치한다.
     """
     import app.services.pipeline.qa as qa_mod
 
-    def _fake(db, task_id, question):
+    def _fake(db, task_id, question, lang="ko"):
         return (answer if in_scope else "", in_scope)
 
     monkeypatch.setattr(qa_mod, "generate_seed_answer", _fake)
