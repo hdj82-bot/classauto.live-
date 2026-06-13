@@ -109,32 +109,35 @@ QA_SYSTEM_PROMPT_GATED = QA_SYSTEM_PROMPT + """
 # - 중국어/한자 용어에 괄호 병기(예: 대학생(大学生))를 절대 넣지 않는다(교수자 요청).
 # - 도입부가 매번 "좋은 질문이네요"로 시작해 AI 티가 나는 문제를 막기 위해, 상투적
 #   도입부를 금지하고 자연스러운 시작을 다양화하도록 명시한다(교수자 요청).
-SEED_ANSWER_SYSTEM_PROMPT = """\
+def _seed_answer_system_prompt(lang_name: str) -> str:
+    """사전 답변 생성 시스템 프롬프트. 답변 언어를 ``lang_name``(강의 발화 언어)으로
+    강제한다 — 아바타 발화 내용과 같은 언어로 답해야 하기 때문(영어 강의면 영어).
+    """
+    return f"""\
 당신은 강의 자료(PPT) 기반 Q&A 아바타의 답변 작성기입니다.
 제공된 슬라이드 내용만을 근거로, 아바타가 학생에게 음성으로 전달할 답변을 작성하세요.
 
 규칙:
 1. 제공된 슬라이드 내용에 기반해 정확하게 답합니다. 슬라이드에 없는 내용은 추측하지 않습니다.
-2. 한국어로 자연스럽게, 말하듯이 작성합니다(아바타가 음성으로 읽습니다).
+2. 답변은 반드시 {lang_name}(으)로 작성합니다(강의 발화 언어 = 아바타 발화 내용과 동일 언어).
+   자연스럽게, 말하듯이 작성합니다(아바타가 음성으로 읽습니다).
 3. 슬라이드 번호 등 출처 표기를 답변에 넣지 않습니다(음성으로 읽히면 어색함).
 4. 중국어/한자 용어에 괄호로 음·뜻을 병기하지 않습니다.
    예: '대학생(大学生)'(X), '大学生(대학생)'(X) → '大学生'(O). 해당 용어만 그대로 씁니다.
 5. 도입부를 다양하게, 자연스럽게 엽니다. 다음을 반드시 지키세요.
-   - "좋은 질문이네요", "좋은 질문이에요", "좋은 질문입니다" 같은 상투적 칭찬 도입부를
+   - "좋은 질문이네요"(또는 해당 언어의 "Great question!" 류) 같은 상투적 칭찬 도입부를
      절대 쓰지 않습니다. 이런 정형화된 시작은 AI 답변처럼 들립니다.
    - 가능하면 핵심 내용부터 바로 들어가거나, 질문의 키워드를 자연스럽게 받아 시작합니다.
    - 매 답변이 똑같은 패턴으로 시작하지 않도록, 실제 교수자가 수업에서 말하듯
-     변화를 줍니다. 예시(그대로 복사하지 말고 맥락에 맞게): "이 부분은 ~", "사실 ~",
-     "정리하자면 ~", "핵심은 ~", "여기서 중요한 건 ~", "~를 먼저 짚어 보면", 또는
-     도입 없이 곧바로 설명을 시작하기.
+     변화를 줍니다.
 """
 
 
 @track_external_api("claude")
 @retry_external(label="claude.seed.create", extra_retry_on=_CLAUDE_RETRY_ON)
-def _claude_seed_call(client, user_content: str):
+def _claude_seed_call(client, system: str, user_content: str):
     return client.messages.create(
-        model=settings.QA_MODEL, max_tokens=1024, system=SEED_ANSWER_SYSTEM_PROMPT,
+        model=settings.QA_MODEL, max_tokens=1024, system=system,
         messages=[{"role": "user", "content": user_content}],
     )
 
@@ -171,8 +174,13 @@ def _script_context_for_task(db: Session, task_id: str) -> str:
     return "\n\n".join(parts).strip()
 
 
-def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str, bool]:
+def generate_seed_answer(
+    db: Session, task_id: str, question: str, lang: str = "ko"
+) -> tuple[str, bool]:
     """교수자 사전 질문 1건에 대한 답변을 PPT(강의 자료) 기반으로 생성.
+
+    답변은 ``lang``(강의 발화 언어 = lecture.voice_lang)으로 작성한다 — 아바타 발화
+    내용과 같은 언어여야 하므로(영어 강의면 영어). 호출부가 voice_lang 을 넘긴다.
 
     반환 ``(answer, in_scope)``:
     - 슬라이드 임베딩도 없고 생성된 스크립트도 없으면 ``("", False)``.
@@ -190,8 +198,8 @@ def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str,
     정상 질문도 자주 거부됐다(유사도 0.5~0.65). 학생용 범위 제한 가드레일은
     answer_question 에 그대로 유지된다.
 
-    "AI 답변 자동 생성" 버튼(즉시 검토)과 렌더 시 빈 답변 폴백이 공유한다. 중국어
-    괄호 병기 금지 등 표기 규칙은 SEED_ANSWER_SYSTEM_PROMPT 가 강제한다.
+    "AI 답변 자동 생성" 버튼(즉시 검토)과 렌더 시 빈 답변 폴백이 공유한다. 답변 언어·
+    중국어 괄호 병기 금지 등 표기 규칙은 _seed_answer_system_prompt 가 강제한다.
     """
     # 생성된 스크립트(발화 텍스트)를 우선 컨텍스트로 쓴다. 슬라이드 임베딩 검색을
     # 먼저 돌리던 과거 방식은 (1) 매 호출마다 OpenAI 임베딩(최대 20s) + pgvector
@@ -211,6 +219,7 @@ def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str,
     try:
         response = _claude_seed_call(
             client,
+            _seed_answer_system_prompt(_lang_name(lang)),
             f"## 참고 슬라이드 내용\n{context}\n\n## 학생 질문\n{question}",
         )
     except anthropic.APIError as exc:
