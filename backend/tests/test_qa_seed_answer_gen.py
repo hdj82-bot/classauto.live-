@@ -71,7 +71,10 @@ def test_generate_seed_answer_falls_back_to_scripts(monkeypatch):
 def test_generate_seed_answer_low_similarity_still_generates(monkeypatch):
     # ★ 핵심 회귀: 유사도가 0.7 미만(학생 게이트라면 거부)이라도 슬라이드가 있으면
     #    교수자 사전 답변은 생성돼야 한다(스코프 게이트 제거).
+    # 스크립트가 아직 없을 때(생성 전) 슬라이드 임베딩으로 폴백하는 경로를 검증한다 —
+    # 스크립트 컨텍스트를 비워 슬라이드 검색 폴백을 타게 한다.
     low = RetrievalResult(slide_number=1, text_content="문법 차이", similarity=0.55)
+    monkeypatch.setattr(qa_mod, "_script_context_for_task", lambda db, t: "")
     monkeypatch.setattr(qa_mod, "search_similar_slides", lambda db, t, q, top_k=3: [low])
     monkeypatch.setattr(qa_mod, "_build_context", lambda results: "슬라이드 내용")
     monkeypatch.setattr("anthropic.Anthropic", lambda **k: object())

@@ -193,12 +193,17 @@ def generate_seed_answer(db: Session, task_id: str, question: str) -> tuple[str,
     "AI 답변 자동 생성" 버튼(즉시 검토)과 렌더 시 빈 답변 폴백이 공유한다. 중국어
     괄호 병기 금지 등 표기 규칙은 SEED_ANSWER_SYSTEM_PROMPT 가 강제한다.
     """
-    results = search_similar_slides(db, task_id, question, top_k=3)
-    if results:
-        context = _build_context(results)
-    else:
-        # 슬라이드 임베딩이 비었다(PPT 텍스트 빈약/미생성) → 생성된 스크립트로 폴백.
-        context = _script_context_for_task(db, task_id)
+    # 생성된 스크립트(발화 텍스트)를 우선 컨텍스트로 쓴다. 슬라이드 임베딩 검색을
+    # 먼저 돌리던 과거 방식은 (1) 매 호출마다 OpenAI 임베딩(최대 20s) + pgvector
+    # 왕복을 더해 Claude 호출과 합쳐 프록시/엣지 타임아웃을 넘겨 응답이 끊기는
+    # ("서버에 연결할 수 없습니다") 원인이 됐고, (2) PPT 텍스트가 빈약해 어차피
+    # 스크립트로 폴백되는 일이 잦았다. "질문과 답변 자동 생성"(batch)이 스크립트만
+    # 쓰는 것과도 일치시키고, Q&A 는 스크립트만 근거로 한다는 정책(2026-06-12)에도
+    # 맞다. 스크립트가 아직 없을 때만(생성 전) 슬라이드 임베딩으로 폴백한다.
+    context = _script_context_for_task(db, task_id)
+    if not context:
+        results = search_similar_slides(db, task_id, question, top_k=3)
+        context = _build_context(results) if results else ""
         if not context:
             return "", False
 
