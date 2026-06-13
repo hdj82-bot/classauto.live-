@@ -58,6 +58,8 @@ export default function LectureCard({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  // 썸네일 로드 실패(만료·권한 등) 시 깨진 이미지(x) 대신 placeholder 로 폴백.
+  const [thumbFailed, setThumbFailed] = useState(false);
 
   const isProduction =
     !lecture.is_published &&
@@ -147,11 +149,12 @@ export default function LectureCard({
             position: "relative",
           }}
         >
-          {lecture.thumbnail_url ? (
+          {lecture.thumbnail_url && !thumbFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={lecture.thumbnail_url}
               alt=""
+              onError={() => setThumbFailed(true)}
               style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
             />
           ) : (
