@@ -84,4 +84,11 @@ describe("pickActiveCaption", () => {
     // 균등 길이 자막 3문장, 0.5 시점 ⇒ 둘째.
     expect(pickActiveCaption(zh, koTwo, 6, 12)).toBe("第二句。");
   });
+
+  it("applies an explicit lead to advance captions earlier", () => {
+    // 미리보기 '자막 빠르기' 슬라이더가 넘기는 leadSeconds 인자.
+    // 경계(0.333) 직전 시점이라도 큰 리드를 주면 다음 문장으로 넘어간다.
+    expect(pickActiveCaption(zh, ko, 3.9, 12, 0)).toBe("第一句。");
+    expect(pickActiveCaption(zh, ko, 3.9, 12, 1.5)).toBe("第二句。");
+  });
 });

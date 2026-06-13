@@ -41,11 +41,14 @@ export function splitIntoSentences(text: string): string[] {
 }
 
 /**
- * 자막 전환을 음성보다 살짝 앞당기는 리드(초). 문장/절 경계를 글자 수 비례로
+ * 자막 전환을 음성보다 살짝 앞당기는 기본 리드(초). 문장/절 경계를 글자 수 비례로
  * 잡다 보니(실제 발성 속도와 완전히 같지 않음) 자막이 음성보다 한 박자 늦게
  * 느껴진다. 전환 시점을 이만큼 앞당겨 체감 동기화를 맞춘다.
+ *
+ * 음성/자막 언어 조합·TTS 마다 체감이 달라, 미리보기 설정 패널에서 사용자가
+ * ``leadSeconds`` 로 직접 조절한다. 이 상수는 그 기본값이다.
  */
-const CAPTION_LEAD_SECONDS = 0.2;
+export const DEFAULT_CAPTION_LEAD_SECONDS = 0.2;
 
 /**
  * 슬라이드 내 경과 시간에 해당하는 자막 문장을 고른다.
@@ -55,12 +58,15 @@ const CAPTION_LEAD_SECONDS = 0.2;
  *                   발화 길이로 가중한다. 없으면 자막 자체 길이로 가중.
  * @param elapsed    현재 슬라이드가 시작된 뒤 흐른 실측 시간(초).
  * @param duration   현재 슬라이드의 실측 재생 길이(초).
+ * @param leadSeconds 자막을 음성보다 앞당기는 리드(초). 양수=자막이 빨라짐,
+ *                    음수=느려짐. 기본 ``DEFAULT_CAPTION_LEAD_SECONDS``.
  */
 export function pickActiveCaption(
   text: string,
   sourceText: string | undefined,
   elapsed: number,
   duration: number,
+  leadSeconds: number = DEFAULT_CAPTION_LEAD_SECONDS,
 ): string {
   const sentences = splitIntoSentences(text);
   if (sentences.length <= 1) return sentences[0] ?? text;
@@ -68,7 +74,7 @@ export function pickActiveCaption(
   const dur = Math.max(duration, 0.001);
   // 리드만큼 앞당겨(=경과를 더 준 셈) 자막이 음성보다 살짝 먼저 넘어가게 한다.
   const frac = Math.min(
-    Math.max((elapsed + CAPTION_LEAD_SECONDS) / dur, 0),
+    Math.max((elapsed + leadSeconds) / dur, 0),
     0.9999,
   );
 

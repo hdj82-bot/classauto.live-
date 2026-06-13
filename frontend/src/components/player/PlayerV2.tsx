@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, API_URL, userApi, bootstrapAuth } from "@/lib/api";
 import { useSlideshowPlayback } from "./useSlideshowPlayback";
-import { pickActiveCaption } from "./captionTiming";
+import { pickActiveCaption, DEFAULT_CAPTION_LEAD_SECONDS } from "./captionTiming";
 import { tokens as tokenStorage } from "@/lib/tokens";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -87,6 +87,9 @@ interface QAMessage {
 const indexToLetter = (idx: string): string =>
   String.fromCharCode(65 + Math.max(0, parseInt(idx, 10) || 0));
 
+// 자막 색 팔레트 — 다크 자막 배경 위에서 잘 보이는 색들.
+const CAPTION_COLORS = ["#ffffff", "#ffe14d", "#8fd3ff", "#9affc0", "#ffb3c7"];
+
 export interface PlayerV2Props {
   slug: string;
   /**
@@ -105,6 +108,15 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // 크기·고대비가 곧 영상 설정이 되도록 본 컨텍스트를 단일 source 로 쓴다.
   const a11y = useA11y();
   const captionsOn = a11y.captions;
+
+  // ── 미리보기 자막·속도 사용자 조절 (재생성 없이 즉시 반영) ──────────────────
+  // 음성/자막 언어·TTS 마다 체감 동기가 달라, 교수자가 미리보기에서 직접 맞춘다.
+  const [avSettingsOpen, setAvSettingsOpen] = useState(false);
+  const [capFont, setCapFont] = useState<"sans" | "serif">("sans");
+  const [capColor, setCapColor] = useState<string>("#ffffff");
+  const [capScale, setCapScale] = useState(1); // 0.7 ~ 1.6
+  const [voiceRate, setVoiceRate] = useState(1); // 0.5 ~ 2.0 (음성 빠르기)
+  const [capLead, setCapLead] = useState(DEFAULT_CAPTION_LEAD_SECONDS); // 자막 빠르기(초)
 
   const [lecture, setLecture] = useState<LectureData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -134,6 +146,24 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const isPlaying = player.isPlaying;
   const progressSec = Math.floor(player.currentTime);
   const durationSec = player.duration;
+
+  // 음성 빠르기 — 본문 슬라이드쇼 <audio> 의 playbackRate 를 즉시 바꾼다. 슬라이드가
+  // 넘어가면 src 가 바뀌며 rate 가 1.0 으로 초기화되므로 loadeddata/play 에 재적용한다.
+  // currentTime 은 배속과 무관한 미디어 시각이라 자막·슬라이드 동기는 그대로 유지된다.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.playbackRate = voiceRate;
+    const reapply = () => {
+      if (audioRef.current) audioRef.current.playbackRate = voiceRate;
+    };
+    a.addEventListener("loadeddata", reapply);
+    a.addEventListener("play", reapply);
+    return () => {
+      a.removeEventListener("loadeddata", reapply);
+      a.removeEventListener("play", reapply);
+    };
+  }, [voiceRate, audioRef]);
 
   // Q&A
   const [qaMessages, setQaMessages] = useState<QAMessage[]>([
@@ -739,6 +769,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     duration={player.currentSlideDuration}
                     fontSize={a11y.fontSize}
                     highContrast={a11y.highContrast}
+                    userScale={capScale}
+                    userColor={capColor}
+                    userFont={capFont}
+                    leadSeconds={capLead}
                   />
                 )}
 
@@ -919,6 +953,157 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   </span>
                 </div>
                 <div className={styles.controlsRight}>
+                  {preview && (
+                    <div className={styles.avSettingsWrap}>
+                      <button
+                        type="button"
+                        className={styles.ctrl}
+                        aria-label="자막·속도 설정"
+                        aria-expanded={avSettingsOpen}
+                        onClick={() => setAvSettingsOpen((v) => !v)}
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                        >
+                          <line x1="4" y1="7" x2="20" y2="7" />
+                          <circle cx="9" cy="7" r="2.4" fill="currentColor" stroke="none" />
+                          <line x1="4" y1="17" x2="20" y2="17" />
+                          <circle cx="15" cy="17" r="2.4" fill="currentColor" stroke="none" />
+                        </svg>
+                      </button>
+                      {avSettingsOpen && (
+                        <>
+                          <div
+                            className={styles.avBackdrop}
+                            onClick={() => setAvSettingsOpen(false)}
+                            aria-hidden="true"
+                          />
+                          <div
+                            className={styles.avPanel}
+                            role="dialog"
+                            aria-label="자막·속도 설정"
+                          >
+                            {/* 자막 — 폰트/색깔/크기 */}
+                            <div className={styles.avSection}>
+                              <span className={styles.avTitle}>자막</span>
+                              <div className={styles.avField}>
+                                <span className={styles.avLabel}>폰트</span>
+                                <div className={styles.avBtns}>
+                                  <button
+                                    type="button"
+                                    className={`${styles.avChip} ${capFont === "sans" ? styles.avChipOn : ""}`}
+                                    onClick={() => setCapFont("sans")}
+                                  >
+                                    고딕
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`${styles.avChip} ${capFont === "serif" ? styles.avChipOn : ""}`}
+                                    onClick={() => setCapFont("serif")}
+                                  >
+                                    명조
+                                  </button>
+                                </div>
+                              </div>
+                              <div className={styles.avField}>
+                                <span className={styles.avLabel}>색깔</span>
+                                <div className={styles.avBtns}>
+                                  {CAPTION_COLORS.map((c) => (
+                                    <button
+                                      key={c}
+                                      type="button"
+                                      className={`${styles.avSwatch} ${capColor === c ? styles.avSwatchOn : ""}`}
+                                      style={{ background: c }}
+                                      aria-label={`자막 색 ${c}`}
+                                      aria-pressed={capColor === c}
+                                      onClick={() => setCapColor(c)}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                              <div className={styles.avSliderTop}>
+                                <span className={styles.avLabel}>크기</span>
+                                <span className={styles.avVal}>
+                                  {Math.round(capScale * 100)}%
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                className="slider-rb"
+                                min={0.7}
+                                max={1.6}
+                                step={0.05}
+                                value={capScale}
+                                aria-label="자막 크기"
+                                onChange={(e) =>
+                                  setCapScale(Number(parseFloat(e.target.value).toFixed(2)))
+                                }
+                              />
+                            </div>
+
+                            {/* 음성 빠르기 */}
+                            <div className={styles.avSection}>
+                              <div className={styles.avSliderTop}>
+                                <span className={styles.avTitle}>음성 빠르기</span>
+                                <span className={styles.avVal}>
+                                  {voiceRate.toFixed(2)}×
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                className="slider-rb"
+                                min={0.5}
+                                max={2}
+                                step={0.05}
+                                value={voiceRate}
+                                aria-label="음성 빠르기"
+                                onChange={(e) =>
+                                  setVoiceRate(Number(parseFloat(e.target.value).toFixed(2)))
+                                }
+                              />
+                              <div className={styles.avEnds}>
+                                <span>느리게</span>
+                                <span>원배속</span>
+                                <span>빠르게</span>
+                              </div>
+                            </div>
+
+                            {/* 자막 빠르기 (리드) */}
+                            <div className={styles.avSection}>
+                              <div className={styles.avSliderTop}>
+                                <span className={styles.avTitle}>자막 빠르기</span>
+                                <span className={styles.avVal}>
+                                  {capLead > 0 ? "+" : ""}
+                                  {capLead.toFixed(2)}s
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                className="slider-rb"
+                                min={-0.5}
+                                max={1.5}
+                                step={0.05}
+                                value={capLead}
+                                aria-label="자막 빠르기"
+                                onChange={(e) =>
+                                  setCapLead(Number(parseFloat(e.target.value).toFixed(2)))
+                                }
+                              />
+                              <div className={styles.avEnds}>
+                                <span>느리게</span>
+                                <span>맞춤</span>
+                                <span>빠르게</span>
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
                   {preview && (
                     <button
                       type="button"
@@ -1297,6 +1482,10 @@ function KaraokeCaption({
   duration,
   fontSize = "normal",
   highContrast = false,
+  userScale = 1,
+  userColor,
+  userFont,
+  leadSeconds,
 }: {
   className?: string;
   text: string;
@@ -1307,12 +1496,29 @@ function KaraokeCaption({
   fontSize?: FontSize;
   /** 접근성 고대비 — 자막 배경을 불투명 검정 + 굵게로 강화한다. */
   highContrast?: boolean;
+  /** 미리보기 설정의 사용자 크기 배율(접근성 배율과 곱해진다). */
+  userScale?: number;
+  /** 미리보기 설정의 사용자 글자색(고대비 모드면 무시). */
+  userColor?: string;
+  /** 미리보기 설정의 사용자 폰트(고딕/명조). */
+  userFont?: "sans" | "serif";
+  /** 미리보기 '자막 빠르기' 리드(초). 양수=빨라짐. */
+  leadSeconds?: number;
 }) {
   // 자막은 다크 surface 위 CSS 모듈 고정 크기라 body 클래스(globals)에 안 닿는다.
-  // 접근성 토글이 자막에 직접 반영되도록 인라인 style 로 덮어쓴다.
-  const scale = fontSize === "x-large" ? 1.5 : fontSize === "large" ? 1.25 : 1;
+  // 접근성 토글·미리보기 설정이 자막에 직접 반영되도록 인라인 style 로 덮어쓴다.
+  const a11yScale = fontSize === "x-large" ? 1.5 : fontSize === "large" ? 1.25 : 1;
+  const scale = a11yScale * (userScale || 1);
   const style: React.CSSProperties = {
     fontSize: scale === 1 ? undefined : `calc(1em * ${scale})`,
+    ...(userFont
+      ? {
+          fontFamily:
+            userFont === "serif"
+              ? "var(--font-han, Georgia, serif)"
+              : "var(--font-body, sans-serif)",
+        }
+      : null),
     ...(highContrast
       ? {
           background: "#000",
@@ -1322,11 +1528,13 @@ function KaraokeCaption({
           borderRadius: 8,
           outline: "2px solid #fff",
         }
-      : null),
+      : userColor
+        ? { color: userColor }
+        : null),
   };
   return (
     <div className={className} style={style} aria-live="off">
-      {pickActiveCaption(text, sourceText, elapsed, duration)}
+      {pickActiveCaption(text, sourceText, elapsed, duration, leadSeconds)}
     </div>
   );
 }
