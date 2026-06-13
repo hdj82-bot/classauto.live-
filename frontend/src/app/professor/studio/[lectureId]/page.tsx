@@ -25,7 +25,6 @@ import {
   generateSeedQuestions,
   getSeedQuestions,
   putSeedQuestions,
-  renderSeedQuestions,
   type SeedQuestionDraft,
 } from "@/components/professor/studio/seedQuestionsApi";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
@@ -936,40 +935,6 @@ export default function StudioWizardPage() {
     [lectureId, seedQuestions, scheduleSeedSave, toast],
   );
 
-  // 하단 "AI 질문 승인" — 대기 중 편집을 flush 한 뒤, 저장된 사전 질문을 즉시 아바타
-  // 클립으로 렌더 시작한다(영상 전체 approve 불필요). 응답에 status=rendering 이 담겨
-  // 오면 기존 seedRenderingKey 폴링이 ready 까지 자동 갱신한다. 미배포/404 는 graceful.
-  const handleApproveSeedQuestions = useCallback(async () => {
-    if (!lectureId) return;
-    if (seedSaveRef.current) {
-      clearTimeout(seedSaveRef.current);
-      seedSaveRef.current = null;
-    }
-    await persistSeedQuestions(seedQuestions);
-    try {
-      const { seedQuestions: fresh } = await renderSeedQuestions(lectureId);
-      setSeedQuestions(
-        fresh.map((q) => ({
-          id: q.id,
-          question: q.question,
-          answer: q.answer,
-          // 렌더는 celery 비동기라 이 응답 시점엔 아직 pending 이다. 낙관적으로
-          // pending → rendering 으로 표시해 seedRenderingKey 폴링을 즉시 시동한다.
-          // 4초 뒤 reloadSeedQuestions 가 서버 실제 상태(rendering/ready/failed)로 정정한다.
-          status: q.status === "pending" ? "rendering" : q.status,
-          has_clip: q.has_clip,
-          preview_url: q.preview_url,
-        })),
-      );
-      // 렌더가 끝(ready/failed)날 때까지 폴링·진행 표시를 유지한다. 완료 시
-      // 아래 effect 가 성공 토스트를 띄우고 플래그를 내린다.
-      setSeedAwaitingRender(true);
-      toast("아바타 생성을 시작했어요. 완료되면 각 질문에서 미리보기로 확인할 수 있어요.", "success");
-    } catch {
-      toast("아직 아바타 미리 생성을 사용할 수 없어요. 잠시 후 다시 시도해주세요.", "error");
-    }
-  }, [lectureId, seedQuestions, persistSeedQuestions, toast]);
-
   // 렌더 완료 감지 — 승인 후(seedAwaitingRender) 저장된 클립이 모두 종료(ready/failed)
   // 되면 플래그를 내리고 결과를 한 번 안내한다. ready 가 하나라도 있으면 성공 토스트.
   useEffect(() => {
@@ -1104,8 +1069,13 @@ export default function StudioWizardPage() {
 
       await api.post(`/api/videos/${videoId}/approve`);
       setApproved(true);
-      // 사전 질문 클립 렌더가 막 시작됐다 — 상태를 받아와 진척 폴링을 시동.
+      // "슬라이드 쇼 제작"(approve)이 슬라이드 렌더와 함께 사전 질문 아바타 클립
+      // 렌더도 시작한다(백엔드 approve_video → render_seed_questions, 병렬). 입력된
+      // 예상 질문이 있으면 완료까지 폴링·표시한다(별도 '승인' 단계 없이 한 번에).
       void reloadSeedQuestions();
+      if (seedQuestions.some((q) => q.question.trim())) {
+        setSeedAwaitingRender(true);
+      }
     } catch (err) {
       // 409 = 이미 승인됨(동시 클릭·상태 불일치). 에러 대신 현황 모달 유지.
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -1477,7 +1447,6 @@ export default function StudioWizardPage() {
         onChangeSeedQuestion={handleChangeSeedQuestion}
         onPreviewSeed={handlePreviewSeed}
         onAutoGenerateSeedQuestion={handleAutoGenerateSeedQuestion}
-        onApproveSeedQuestions={handleApproveSeedQuestions}
       />
 
       <div style={{ gridColumn: "1 / -1" }}>
