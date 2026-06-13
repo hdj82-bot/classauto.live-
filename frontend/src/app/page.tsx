@@ -1,12 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useCallback } from "react";
 import IconDefs from "@/components/landing/IconDefs";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
 import { useLandingI18n } from "@/components/landing/useLandingI18n";
 import { useMarketingI18n } from "@/components/marketing/useMarketingI18n";
+import FieldSelectCard from "@/components/demo/FieldSelectCard";
 import GradientDefs from "@/components/demo/GradientDefs";
+import HeroFlowStage from "@/components/demo/HeroFlowStage";
 import { buildDemoHeroFlowLabels } from "@/components/demo/labels";
+import type { DemoField } from "@/components/demo/demoTypes";
 import "./demo/demo-v3.css";
 
 /**
@@ -34,14 +39,38 @@ import "./demo/demo-v3.css";
  *   - docs/planning/04-demo-page.md — /demo 스펙 (히어로 카피 정합)
  *   - docs/design-system/colors.md §1 — light beige + gold dual-surface
  */
-// 대문 "시작하기" CTA — 교수자가 미리 만들어 공개한 시연용 강의(중국어번역작문
-// 2주차)의 학생 시청 화면으로 직행한다. 이 강의가 비공개/삭제되면 링크가 깨지므로,
-// 데모 강의를 바꾸면 이 슬러그도 함께 갱신한다.
-const DEMO_LECTURE_HREF = "/lecture/중국어-필수-문장성분-f7dda164";
+// 대문 좌측 인문계열 카드 = 교수자가 실제 제작·공개한 강의(중국어번역작문 2주차).
+// 이 강의가 비공개/삭제되면 링크가 깨지므로, 데모 강의를 바꾸면 슬러그·텍스트도
+// 함께 갱신한다. (우측 자연계열 카드는 종전대로 /demo mock 유지.)
+const SOCIAL_DEMO_LECTURE_HREF = "/lecture/중국어-필수-문장성분-f7dda164";
+const SOCIAL_DEMO_LECTURE_CARD = {
+  tagline: "A · Liberal Arts",
+  metaLine: "실제 강의 · 영어 음성 + 한국어 자막",
+  title: "중국어 필수 문장성분",
+  subtitle:
+    "한국어와 중국어의 문장성분 차이를 다루는 실제 제작 강의입니다. 학생 화면 그대로 영어 음성·한국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
+  statSlides: "12 슬라이드",
+  statSecondary: "AI 아바타 Q&A",
+};
 
 export default function LandingPage() {
   const { t: tHub } = useLandingI18n();
   const { t: tCommon } = useMarketingI18n();
+  const router = useRouter();
+
+  // 분야 카드 선택. 좌측 인문계열(social)은 교수자가 실제 제작·공개한 강의
+  // (중국어번역작문 2주차) 학생 화면으로 직행한다. 우측 자연계열(natural)은
+  // 종전대로 /demo mock 으로 deep-link 한다(?field=X 자동 진입).
+  const handleSelectField = useCallback(
+    (f: DemoField) => {
+      if (f === "social") {
+        router.push(SOCIAL_DEMO_LECTURE_HREF);
+      } else {
+        router.push(`/demo?field=${f}`);
+      }
+    },
+    [router],
+  );
 
   // standalone /demo hero 와 동일 컴포넌트를 / 에서도 재사용 — 텍스트만 landingHub
   // i18n 에서 주입한다 (의미상 marketing 도메인 i18n 분리 유지).
@@ -151,7 +180,7 @@ export default function LandingPage() {
                     아래 ca-field-grid 의 첫 카드와 일치하도록 'social' 선택.
                     분야는 학생 화면 상단 ↺ "분야 바꾸기" 버튼으로 즉시 전환 가능. */}
                 <Link
-                  href={DEMO_LECTURE_HREF}
+                  href="/demo?field=social"
                   className="ca-btn-primary"
                   data-testid="landing-hero-start"
                 >
@@ -215,9 +244,35 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* 분야 선택(2-field 데모 쇼케이스)은 제거됨 — 대문은 미리 공개한 단일
-            시연 강의(중국어번역작문 2주차)를 hero "시작하기" 로 직접 안내한다
-            (교수자 요청 2026-06-13). 두 분야 카드는 /demo 페이지에 그대로 남아 있다. */}
+        {/* 분야 선택 — 디자인의 fields 그대로. 클릭 시 /demo?field=X 로 라우팅.
+            본 섹션이 메인 사이트의 마지막 콘텐츠 (사용자 결정 2026-05-13). */}
+        <section
+          id="landing-field-select"
+          className="ca-fields"
+          aria-labelledby="landing-field-heading"
+        >
+          <div className="ca-fields-inner">
+            <div className="ca-fields-header">
+              <div>
+                <h2 className="ca-fields-title" id="landing-field-heading">
+                  {tHub("demoFieldShowcase.title")}
+                </h2>
+                <p className="ca-fields-subtitle">
+                  {tHub("demoFieldShowcase.subtitle")}
+                </p>
+              </div>
+            </div>
+
+            <div className="ca-field-grid">
+              <FieldSelectCard
+                field="social"
+                onSelect={handleSelectField}
+                override={SOCIAL_DEMO_LECTURE_CARD}
+              />
+              <FieldSelectCard field="natural" onSelect={handleSelectField} />
+            </div>
+          </div>
+        </section>
       </div>
 
       {/* (Footer 는 LightMarketingShell 이 처리) */}

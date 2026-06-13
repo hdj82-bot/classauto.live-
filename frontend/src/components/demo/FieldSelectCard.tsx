@@ -4,9 +4,24 @@ import { type ReactNode } from "react";
 import { type DemoField } from "./demoTypes";
 import { useDemoI18n } from "./useDemoI18n";
 
+/**
+ * 카드 텍스트를 i18n mock 대신 실제 값으로 덮어쓰는 옵션. 대문(/)에서 좌측
+ * 인문계열 카드를 교수자가 실제 제작한 공개 강의로 교체할 때 쓴다(클릭 라우팅은
+ * 호출자 onSelect 가 처리). /demo 등 override 미지정 시 기존 mock 그대로.
+ */
+export interface FieldCardOverride {
+  tagline?: string;
+  metaLine?: string;
+  title?: string;
+  subtitle?: string;
+  statSlides?: string;
+  statSecondary?: string;
+}
+
 interface Props {
   field: DemoField;
   onSelect: (field: DemoField) => void;
+  override?: FieldCardOverride;
 }
 
 /**
@@ -22,7 +37,7 @@ interface Props {
  * 를 입히기 위해 `{placeholder}` 자리에서 분할 후 `<span>` 으로 감싼다 — 다른
  * 페이지에서도 같은 패턴을 쓰면 헬퍼로 승격할 수 있다.
  */
-export default function FieldSelectCard({ field, onSelect }: Props) {
+export default function FieldSelectCard({ field, onSelect, override }: Props) {
   const { t } = useDemoI18n();
 
   const meta =
@@ -71,28 +86,32 @@ export default function FieldSelectCard({ field, onSelect }: Props) {
         <div className="ca-field-icon" aria-hidden="true">
           {meta.glyph}
         </div>
-        <span className="ca-field-tag">{t(meta.taglineKey)}</span>
+        <span className="ca-field-tag">
+          {override?.tagline ?? t(meta.taglineKey)}
+        </span>
       </div>
 
       <div>
         <p className="ca-field-meta-line">
-          {renderWithSpan(t(meta.metaLineKey), "{minutes}", t(meta.minutesKey), "num")}
+          {override?.metaLine ??
+            renderWithSpan(t(meta.metaLineKey), "{minutes}", t(meta.minutesKey), "num")}
         </p>
-        <h3 className="ca-field-name">{t(meta.titleKey)}</h3>
-        <p className="ca-field-desc">{t(meta.subtitleKey)}</p>
+        <h3 className="ca-field-name">{override?.title ?? t(meta.titleKey)}</h3>
+        <p className="ca-field-desc">{override?.subtitle ?? t(meta.subtitleKey)}</p>
       </div>
 
       <div className="ca-field-card-bottom">
         <div className="ca-field-stats">
           <span>
-            {renderWithSpan(
-              t(meta.statSlidesKey),
-              "{count}",
-              t(meta.statSlidesCountKey),
-              "ca-field-stat-num num",
-            )}
+            {override?.statSlides ??
+              renderWithSpan(
+                t(meta.statSlidesKey),
+                "{count}",
+                t(meta.statSlidesCountKey),
+                "ca-field-stat-num num",
+              )}
           </span>
-          <span>{t(meta.statSecondaryKey)}</span>
+          <span>{override?.statSecondary ?? t(meta.statSecondaryKey)}</span>
         </div>
         <span className="ca-field-go">
           {t(meta.startKey)}

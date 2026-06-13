@@ -18,20 +18,20 @@ describe("LandingPage 통합", () => {
   // + Features 6 + Steps 3 + "지금 바로 시작하세요" CTA 구조는 v3.1 짧은
   // 게이트웨이(hero + 분야 카드만)로 전면 교체됐다. v2 의 실제 hero/필드
   // 카피·구조를 회귀 가드한다.
-  it("hero 시연 강의 카피가 정상 마운트된다(분야 쇼케이스 제거됨)", () => {
+  it("v2 hero + 분야 쇼케이스 카피·카드가 정상 마운트된다", () => {
     renderPage(<LandingPage />);
     // homeHero — / 전용 카피 (헤딩 level 1)
     const h1 = screen.getByRole("heading", { level: 1 });
-    expect(h1.textContent).toContain("중국어 번역작문 강의,");
-    expect(h1.textContent).toContain("학생처럼 체험해보세요.");
+    expect(h1.textContent).toContain("학생과 상호작용하는");
+    expect(h1.textContent).toContain("AI 교육영상");
     // 관찰자 eyebrow (landingHub.heroV3.observerBadge)
     expect(
-      screen.getByText(/중국어번역작문 2주차 · AI 강의 데모/),
+      screen.getByText(/교수자의 의도가 모든 결정에 반영되는 AI 강의 플랫폼/),
     ).toBeTruthy();
-    // 2-field 데모 쇼케이스는 제거되어 더 이상 렌더되지 않는다(단일 강의 안내).
-    expect(screen.queryByText("두 분야 중 하나를 골라주세요")).toBeNull();
-    expect(screen.queryByTestId("demo-field-social")).toBeNull();
-    expect(screen.queryByTestId("demo-field-natural")).toBeNull();
+    // 분야 쇼케이스 헤딩 + 카드 2장
+    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
+    expect(screen.getByTestId("demo-field-social")).toBeTruthy();
+    expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
     // v1 시그니처 카피는 회귀하지 않아야 한다
     expect(screen.queryByText("인터랙티브 플립드 러닝")).toBeNull();
     expect(screen.queryByText("지금 바로 시작하세요")).toBeNull();
@@ -43,17 +43,14 @@ describe("LandingPage 통합", () => {
   // (제거된 콘텐츠를 위한 테스트는 존재 의미가 없음).
 
   // v2 회귀 (후속 정리 ③): v1 의 hero CTA 2개가 /auth/login 으로 가던 구조는
-  // 폐기됐다. hero 의 primary 는 시연 강의 학생 화면(/lecture/{slug}, "시작하기"),
+  // 폐기됐다. v3.1 hero 의 primary 는 /demo?field=social (학생 화면 미리보기),
   // secondary 는 /features.
   // 정책 변경 2026-05-18 (01-pricing-policy.md §5.3): 헤더에 로그인 진입점을
   // 노출하므로 /auth/login 링크는 hero 가 아니라 헤더에 1개 이상 존재한다.
-  it("v2 hero CTA — primary=시연 강의(/lecture/...), secondary=/features", () => {
+  it("v2 hero CTA — primary=/demo?field=social, secondary=/features", () => {
     renderPage(<LandingPage />);
     const primary = screen.getByTestId("landing-hero-start");
-    // 시작하기 → 미리 공개한 시연 강의 학생 화면으로 직행(중국어번역작문 2주차).
-    expect(primary.getAttribute("href")).toBe(
-      "/lecture/중국어-필수-문장성분-f7dda164",
-    );
+    expect(primary.getAttribute("href")).toBe("/demo?field=social");
     const featureLinks = screen
       .getAllByRole("link")
       .filter((el) => el.getAttribute("href") === "/features");
@@ -82,12 +79,15 @@ describe("LandingPage 통합", () => {
   // v3.1 (2026-05-13 PM): 새 구조 — hero + fields 두 섹션만, 그 이후는 모두 제거.
   // 핵심 회귀 가드: 분야 카드 2장이 보이고, 제거되어야 할 섹션이 다시 들어오지
   // 않는지를 함께 검증.
-  it("짧은 게이트웨이 — hero 만 마운트, 분야/후속 섹션은 없다", () => {
+  it("v3.1 짧은 게이트웨이 — hero + fields 만 마운트, 후속 섹션은 없다", () => {
     renderPage(<LandingPage />);
-    // hero h1 만 존재
+    // hero
     expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
-    // 2-field 분야 쇼케이스(유일한 h2)는 제거됨 — 단일 시연 강의 안내로 일원화.
-    expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+    // 분야 카드 2장 — testid 또는 라벨로 식별 (FieldSelectCard 는 button 또는
+    // link 역할로 분야명을 노출한다)
+    const headings = screen.getAllByRole("heading", { level: 2 });
+    // h2 가 최소 1개 (분야 선택 섹션 헤딩) 존재
+    expect(headings.length).toBeGreaterThanOrEqual(1);
 
     // 제거되어야 할 섹션의 시그니처 텍스트가 없는지 확인 (회귀 가드)
     expect(screen.queryByText("교수자가 이미 사용 중")).toBeNull(); // Stats

@@ -18,24 +18,22 @@ describe("LandingPage (v2 — 짧은 게이트웨이)", () => {
   it("renders the v2 hero heading copy", () => {
     renderWithI18n(<LandingPage />);
     const h1 = screen.getByRole("heading", { level: 1 });
-    expect(h1.textContent).toContain("중국어 번역작문 강의,");
-    expect(h1.textContent).toContain("학생처럼 체험해보세요.");
+    expect(h1.textContent).toContain("학생과 상호작용하는");
+    expect(h1.textContent).toContain("AI 교육영상");
   });
 
-  it("renders the primary hero CTA → 시연 강의(/lecture/...)", () => {
+  it("renders the primary hero CTA → /demo?field=social", () => {
     renderWithI18n(<LandingPage />);
     const primary = screen.getByTestId("landing-hero-start");
-    expect(primary.getAttribute("href")).toBe(
-      "/lecture/중국어-필수-문장성분-f7dda164",
-    );
-    expect(primary.textContent).toContain("시작하기");
+    expect(primary.getAttribute("href")).toBe("/demo?field=social");
+    expect(primary.textContent).toContain("학생 화면 미리보기");
   });
 
-  it("no longer renders the 2-field demo showcase (single-lecture landing)", () => {
+  it("renders the field showcase with both demo cards", () => {
     renderWithI18n(<LandingPage />);
-    expect(screen.queryByText("두 분야 중 하나를 골라주세요")).toBeNull();
-    expect(screen.queryByTestId("demo-field-social")).toBeNull();
-    expect(screen.queryByTestId("demo-field-natural")).toBeNull();
+    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
+    expect(screen.getByTestId("demo-field-social")).toBeTruthy();
+    expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
   });
 
   it("renders the LightMarketingShell footer with a /beta-apply link", () => {
