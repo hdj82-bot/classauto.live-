@@ -31,11 +31,11 @@ describe("LandingPage (v2 — 짧은 게이트웨이)", () => {
     expect(primary.textContent).toContain("시작하기");
   });
 
-  it("renders the field showcase with both demo cards", () => {
+  it("no longer renders the 2-field demo showcase (single-lecture landing)", () => {
     renderWithI18n(<LandingPage />);
-    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
-    expect(screen.getByTestId("demo-field-social")).toBeTruthy();
-    expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
+    expect(screen.queryByText("두 분야 중 하나를 골라주세요")).toBeNull();
+    expect(screen.queryByTestId("demo-field-social")).toBeNull();
+    expect(screen.queryByTestId("demo-field-natural")).toBeNull();
   });
 
   it("renders the LightMarketingShell footer with a /beta-apply link", () => {

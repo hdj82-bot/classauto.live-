@@ -18,7 +18,7 @@ describe("LandingPage 통합", () => {
   // + Features 6 + Steps 3 + "지금 바로 시작하세요" CTA 구조는 v3.1 짧은
   // 게이트웨이(hero + 분야 카드만)로 전면 교체됐다. v2 의 실제 hero/필드
   // 카피·구조를 회귀 가드한다.
-  it("v2 hero + 분야 쇼케이스 카피·카드가 정상 마운트된다", () => {
+  it("hero 시연 강의 카피가 정상 마운트된다(분야 쇼케이스 제거됨)", () => {
     renderPage(<LandingPage />);
     // homeHero — / 전용 카피 (헤딩 level 1)
     const h1 = screen.getByRole("heading", { level: 1 });
@@ -28,10 +28,10 @@ describe("LandingPage 통합", () => {
     expect(
       screen.getByText(/중국어번역작문 2주차 · AI 강의 데모/),
     ).toBeTruthy();
-    // 분야 쇼케이스 헤딩 + 카드 2장
-    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
-    expect(screen.getByTestId("demo-field-social")).toBeTruthy();
-    expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
+    // 2-field 데모 쇼케이스는 제거되어 더 이상 렌더되지 않는다(단일 강의 안내).
+    expect(screen.queryByText("두 분야 중 하나를 골라주세요")).toBeNull();
+    expect(screen.queryByTestId("demo-field-social")).toBeNull();
+    expect(screen.queryByTestId("demo-field-natural")).toBeNull();
     // v1 시그니처 카피는 회귀하지 않아야 한다
     expect(screen.queryByText("인터랙티브 플립드 러닝")).toBeNull();
     expect(screen.queryByText("지금 바로 시작하세요")).toBeNull();
@@ -82,15 +82,12 @@ describe("LandingPage 통합", () => {
   // v3.1 (2026-05-13 PM): 새 구조 — hero + fields 두 섹션만, 그 이후는 모두 제거.
   // 핵심 회귀 가드: 분야 카드 2장이 보이고, 제거되어야 할 섹션이 다시 들어오지
   // 않는지를 함께 검증.
-  it("v3.1 짧은 게이트웨이 — hero + fields 만 마운트, 후속 섹션은 없다", () => {
+  it("짧은 게이트웨이 — hero 만 마운트, 분야/후속 섹션은 없다", () => {
     renderPage(<LandingPage />);
-    // hero
+    // hero h1 만 존재
     expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
-    // 분야 카드 2장 — testid 또는 라벨로 식별 (FieldSelectCard 는 button 또는
-    // link 역할로 분야명을 노출한다)
-    const headings = screen.getAllByRole("heading", { level: 2 });
-    // h2 가 최소 1개 (분야 선택 섹션 헤딩) 존재
-    expect(headings.length).toBeGreaterThanOrEqual(1);
+    // 2-field 분야 쇼케이스(유일한 h2)는 제거됨 — 단일 시연 강의 안내로 일원화.
+    expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
 
     // 제거되어야 할 섹션의 시그니처 텍스트가 없는지 확인 (회귀 가드)
     expect(screen.queryByText("교수자가 이미 사용 중")).toBeNull(); // Stats
