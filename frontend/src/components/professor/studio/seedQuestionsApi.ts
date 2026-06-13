@@ -146,6 +146,29 @@ export async function generateSeedQuestions(
   }));
 }
 
+/** "답변 자동 생성" 결과 — 교수자가 입력한 질문 1건의 강의 자료 기반 답변. */
+export interface GeneratedSeedAnswer {
+  answer: string;
+  /** 강의 자료 범위 안 질문인지(밖이면 answer 가 빈 문자열일 수 있다). */
+  inScope: boolean;
+}
+
+/**
+ * 교수자가 입력한 질문 1건에 대해 강의 자료(스크립트) 기반 사전 답변만 생성한다
+ * (질문은 그대로 두고 답변만 채울 때 사용 — 카드별 '답변 자동 생성'). 저장·렌더 X.
+ * 파이프라인 미처리(400)·미배포(404) 시 throw → 호출부가 toast 로 graceful 처리.
+ */
+export async function generateSeedAnswer(
+  lectureId: string,
+  question: string,
+): Promise<GeneratedSeedAnswer> {
+  const { data } = await api.post<{ answer?: string; in_scope?: boolean }>(
+    `/api/lectures/${lectureId}/seed-questions/generate-answer`,
+    { question },
+  );
+  return { answer: data.answer ?? "", inScope: !!data.in_scope };
+}
+
 /**
  * 저장된 사전 질문들을 즉시 아바타 클립으로 렌더 시작한다(영상 전체 approve 불필요).
  * 응답은 GET/PUT 과 동일 shape — 항목 status 가 rendering 으로 바뀌어 돌아오며,
