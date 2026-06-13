@@ -562,13 +562,16 @@ export default function AvatarsPage() {
 
   // ── 내 아바타(룩 + 음성 조합) 갤러리 핸들러 ─────────────────────────────────
 
-  // look_id → 룩 썸네일(저장된 룩 우선, 표준 아바타 차선). 없으면 이니셜 폴백.
+  // look_id → 룩 썸네일(저장된 룩 → 등록 표준 아바타 → 본인 talking photo 순).
+  // 표준 아바타는 look_id 가 heygen avatar_id 라 standardAvatars 에서 매칭해야 한다
+  // (이게 빠져 있어 표준 아바타 카드가 이니셜 'S' 로만 보였다). 없으면 이니셜 폴백.
   const resolveLookImage = useCallback(
     (lookId: string): string | null =>
       looks.find((l) => l.id === lookId)?.preview_image_url ??
+      standardAvatars.find((s) => s.avatar_id === lookId)?.preview_image_url ??
       avatars.find((a) => a.id === lookId)?.preview_image_url ??
       null,
-    [looks, avatars],
+    [looks, standardAvatars, avatars],
   );
 
   // voice_id → 표시 이름. 본인 클론이면 그 이름(없으면 "내 목소리"), 아니면 카탈로그.
