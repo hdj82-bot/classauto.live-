@@ -1037,6 +1037,114 @@
   height: 15px;
 }
 
+/* ── 미리보기 자막·속도 조절 패널 (배포하기 좌측 톱니/슬라이더 버튼) ────────── */
+.avSettingsWrap {
+  position: relative;
+  display: inline-flex;
+}
+/* 패널 바깥 클릭 시 닫히도록 전체를 덮는 투명 레이어(패널보다 아래). */
+.avBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.avPanel {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  z-index: 41;
+  width: 300px;
+  max-width: 86vw;
+  padding: 16px;
+  background: var(--bg-card-dark, #15151b);
+  border: 1px solid var(--line-dark);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+  cursor: default;
+}
+.avSection {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.avTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+.avField {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.avSliderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.avLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dark-subtle);
+}
+.avVal {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dark);
+  font-variant-numeric: tabular-nums;
+}
+.avBtns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.avChip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-dark-strong, rgba(255, 255, 255, 0.16));
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dark-muted, #cfcfcf);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms, border-color 140ms, color 140ms;
+}
+.avChipOn {
+  background: linear-gradient(135deg, #ffb627, #e89e0e);
+  border-color: transparent;
+  color: #0a0a0a;
+}
+.avSwatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  padding: 0;
+  cursor: pointer;
+  transition: transform 140ms, box-shadow 140ms, border-color 140ms;
+}
+.avSwatch:hover {
+  transform: scale(1.08);
+}
+.avSwatchOn {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(255, 182, 39, 0.35);
+}
+.avEnds {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-dark-faint, #8a8a8a);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 배포하기 모달 — 학생 링크·QR. 라이트 카드(공유 채널 UI 가 라이트 톤이라 통일). */
 .deployScrim {
   position: fixed;
