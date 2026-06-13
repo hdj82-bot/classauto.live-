@@ -620,24 +620,24 @@
       "identityNote": "A tool built by scholars, for scholars"
     },
     "heroV3": {
-      "observerBadge": "An AI lecture platform where the instructor's intent shapes every decision",
+      "observerBadge": "Chinese Translation & Writing · Week 2 · AI lecture demo",
       "headlineLead": "Script it once,",
       "headlineTail": "with students —",
       "headlineAccent": "endless conversation",
-      "subtitle": "Upload a PPT — the AI talks with you to shape the lecture concept, then generates the video. The finished video interacts with students both ways, and you refine in-person teaching from the learning data.",
-      "subtitleLine1": "Upload a PPT — the AI talks with you to shape the lecture concept, then generates the video.",
-      "subtitleLine2": "The finished video interacts with students both ways,",
-      "subtitleLine3": "and you refine in-person teaching from the learning data.",
+      "subtitle": "Experience a real Chinese Translation & Writing lecture exactly as a student does. Learn Korean–Chinese sentence-structure differences with English audio and Korean subtitles, and ask the AI avatar anything along the way.",
+      "subtitleLine1": "Experience a real Chinese Translation & Writing lecture exactly as a student does.",
+      "subtitleLine2": "Learn Korean–Chinese sentence-structure differences with English audio and Korean subtitles,",
+      "subtitleLine3": "and ask the AI avatar anything along the way.",
       "subTag": "Start with the screen your students actually see.",
-      "metaTime": "~3 minutes",
-      "metaQuestions": "3 free questions",
+      "metaTime": "English audio · Korean subtitles",
+      "metaQuestions": "AI avatar Q&A",
       "metaMobile": "Mobile-friendly",
-      "primaryCta": "Preview the student screen",
+      "primaryCta": "Get started",
       "secondaryCta": "Browse the features"
     },
     "homeHero": {
-      "headlineLead": "Interactive with students",
-      "headlineAccent": "AI educational videos"
+      "headlineLead": "A Chinese Translation & Writing lecture,",
+      "headlineAccent": "experience it like a student."
     },
     "demoFlow": {
       "topStatus": "Demo preview · flow summary",

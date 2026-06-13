@@ -18,15 +18,17 @@ describe("LandingPage (v2 — 짧은 게이트웨이)", () => {
   it("renders the v2 hero heading copy", () => {
     renderWithI18n(<LandingPage />);
     const h1 = screen.getByRole("heading", { level: 1 });
-    expect(h1.textContent).toContain("학생과 상호작용하는");
-    expect(h1.textContent).toContain("AI 교육영상");
+    expect(h1.textContent).toContain("중국어 번역작문 강의,");
+    expect(h1.textContent).toContain("학생처럼 체험해보세요.");
   });
 
-  it("renders the primary hero CTA → /demo?field=social", () => {
+  it("renders the primary hero CTA → 시연 강의(/lecture/...)", () => {
     renderWithI18n(<LandingPage />);
     const primary = screen.getByTestId("landing-hero-start");
-    expect(primary.getAttribute("href")).toBe("/demo?field=social");
-    expect(primary.textContent).toContain("학생 화면 미리보기");
+    expect(primary.getAttribute("href")).toBe(
+      "/lecture/중국어-필수-문장성분-f7dda164",
+    );
+    expect(primary.textContent).toContain("시작하기");
   });
 
   it("renders the field showcase with both demo cards", () => {

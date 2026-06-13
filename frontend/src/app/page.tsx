@@ -39,6 +39,11 @@ import "./demo/demo-v3.css";
  *   - docs/planning/04-demo-page.md — /demo 스펙 (히어로 카피 정합)
  *   - docs/design-system/colors.md §1 — light beige + gold dual-surface
  */
+// 대문 "시작하기" CTA — 교수자가 미리 만들어 공개한 시연용 강의(중국어번역작문
+// 2주차)의 학생 시청 화면으로 직행한다. 이 강의가 비공개/삭제되면 링크가 깨지므로,
+// 데모 강의를 바꾸면 이 슬러그도 함께 갱신한다.
+const DEMO_LECTURE_HREF = "/lecture/중국어-필수-문장성분-f7dda164";
+
 export default function LandingPage() {
   const { t: tHub } = useLandingI18n();
   const { t: tCommon } = useMarketingI18n();
@@ -160,7 +165,7 @@ export default function LandingPage() {
                     아래 ca-field-grid 의 첫 카드와 일치하도록 'social' 선택.
                     분야는 학생 화면 상단 ↺ "분야 바꾸기" 버튼으로 즉시 전환 가능. */}
                 <Link
-                  href="/demo?field=social"
+                  href={DEMO_LECTURE_HREF}
                   className="ca-btn-primary"
                   data-testid="landing-hero-start"
                 >
