@@ -7,7 +7,7 @@ import IconDefs from "@/components/landing/IconDefs";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
 import { useLandingI18n } from "@/components/landing/useLandingI18n";
 import { useMarketingI18n } from "@/components/marketing/useMarketingI18n";
-import FieldSelectCard from "@/components/demo/FieldSelectCard";
+import FieldSelectCard, { BookGlyph } from "@/components/demo/FieldSelectCard";
 import GradientDefs from "@/components/demo/GradientDefs";
 import HeroFlowStage from "@/components/demo/HeroFlowStage";
 import { buildDemoHeroFlowLabels } from "@/components/demo/labels";
@@ -267,7 +267,7 @@ export default function LandingPage() {
               <FieldSelectCard
                 field="social"
                 onSelect={handleSelectField}
-                override={SOCIAL_DEMO_LECTURE_CARD}
+                override={{ ...SOCIAL_DEMO_LECTURE_CARD, glyph: <BookGlyph /> }}
               />
               <FieldSelectCard field="natural" onSelect={handleSelectField} />
             </div>
