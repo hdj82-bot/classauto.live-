@@ -571,13 +571,16 @@
   background: var(--bg-card);
   border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow:
-    0 -12px 28px rgba(0, 0, 0, 0.45),
-    0 8px 20px rgba(0, 0, 0, 0.28);
+    0 -4px 12px rgba(0, 0, 0, 0.18),
+    0 6px 16px rgba(0, 0, 0, 0.22);
   position: relative;
   z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  /* 추천 카드가 길어져도 채팅 영역을 잠식하지 않도록 높이를 제한하고 자체 스크롤. */
+  max-height: 42%;
+  overflow-y: auto;
 }
 .suggestLabel {
   font-size: 10.5px;

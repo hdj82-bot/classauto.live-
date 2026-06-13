@@ -1053,7 +1053,8 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                           style={{
                             marginTop: 8,
                             width: "100%",
-                            maxWidth: 220,
+                            maxWidth: 160,
+                            maxHeight: 120,
                             borderRadius: 10,
                             display: "block",
                           }}
