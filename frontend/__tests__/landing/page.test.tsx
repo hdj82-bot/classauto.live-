@@ -82,15 +82,12 @@ describe("LandingPage 통합", () => {
   // v3.1 (2026-05-13 PM): 새 구조 — hero + fields 두 섹션만, 그 이후는 모두 제거.
   // 핵심 회귀 가드: 분야 카드 2장이 보이고, 제거되어야 할 섹션이 다시 들어오지
   // 않는지를 함께 검증.
-  it("v3.1 짧은 게이트웨이 — hero + fields 만 마운트, 후속 섹션은 없다", () => {
+  it("짧은 게이트웨이 — hero 만 마운트, 분야/후속 섹션은 없다", () => {
     renderPage(<LandingPage />);
-    // hero
+    // hero h1 만 존재
     expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
-    // 분야 카드 2장 — testid 또는 라벨로 식별 (FieldSelectCard 는 button 또는
-    // link 역할로 분야명을 노출한다)
-    const headings = screen.getAllByRole("heading", { level: 2 });
-    // h2 가 최소 1개 (분야 선택 섹션 헤딩) 존재
-    expect(headings.length).toBeGreaterThanOrEqual(1);
+    // 2-field 분야 쇼케이스(유일한 h2)는 제거됨 — 단일 시연 강의 안내로 일원화.
+    expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
 
     // 제거되어야 할 섹션의 시그니처 텍스트가 없는지 확인 (회귀 가드)
     expect(screen.queryByText("교수자가 이미 사용 중")).toBeNull(); // Stats
