@@ -63,6 +63,10 @@ const SCRIPT_POLL_MS = 6000;
 // 자체를 중단(useEffect 내부에서)하므로 정상화 후 네트워크 부담은 없다.
 const SLIDES_POLL_MS = 3000;
 const RENDER_POLL_MS = 5000;
+// 사전 질문 아바타 클립 렌더 폴링 최대 횟수(4초 간격). 백엔드 자체 폴링이
+// 30초×20회(+초기 30초)≈10.5분이므로, 프론트는 그보다 길게(≈11분=165회) 잡아
+// 정상 완료를 놓치지 않게 한다. 초과 시 무한 "생성 중"을 막고 안내로 전환한다.
+const SEED_RENDER_POLL_MAX = 165;
 
 // 사전 질문 자동 생성 실패 토스트 — 백엔드가 준 detail(예: "강의 파이프라인이 아직
 // 처리되지 않았습니다.")을 그대로 보여줘 원인을 알 수 있게 한다. detail 이 없으면
@@ -1163,15 +1167,27 @@ export default function StudioWizardPage() {
     if (!seedRenderingKey) return;
     let attempts = 0;
     const id = setInterval(() => {
-      if (attempts >= 90) {
+      attempts += 1;
+      // 한도 초과 — 무한 "생성 중" 방지. 백엔드 폴링 한도(~11분)를 넘겨도 완료가
+      // 안 오면 대기 상태를 풀고 안내한다(이미 완료됐다면 완료 effect 가 awaiting 을
+      // 먼저 내려둔다). 사용자는 새로고침/재시도로 이어갈 수 있다.
+      if (attempts > SEED_RENDER_POLL_MAX) {
         clearInterval(id);
+        setSeedAwaitingRender((awaiting) => {
+          if (awaiting) {
+            toast(
+              "아바타 생성이 예상보다 오래 걸리고 있어요. 잠시 후 새로고침해 상태를 확인하거나, 다시 시도해 주세요.",
+              "error",
+            );
+          }
+          return false;
+        });
         return;
       }
-      attempts += 1;
       void reloadSeedQuestions();
     }, 4000);
     return () => clearInterval(id);
-  }, [seedRenderingKey, reloadSeedQuestions]);
+  }, [seedRenderingKey, reloadSeedQuestions, toast]);
 
   // 렌더 진행 폴링 (approved 인 동안)
   useEffect(() => {
