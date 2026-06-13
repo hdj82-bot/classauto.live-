@@ -278,7 +278,11 @@
   background: linear-gradient(180deg, transparent, rgba(10, 10, 10, 0.85) 40%);
   margin-top: -64px;
   position: relative;
-  z-index: 2;
+  /* 자막(.caption z-index:3) 위로 올려, 컨트롤바의 설정 팝오버(.avPanel)가 자막에
+     가리지 않게 한다. 인터스티셜 퀴즈(.quizStage)는 이보다 더 위로 둬 가리지 않는다.
+     controls 와 caption 은 화면상 겹치지 않아(자막 bottom 72px > 컨트롤 상단) 자막이
+     컨트롤 그라데이션에 묻히지 않는다. */
+  z-index: 6;
 }
 .progress {
   position: relative;
@@ -927,11 +931,12 @@
   color: var(--text-dark-muted);
 }
 
-/* Interstitial quiz — 좌측 영상 화면 위 오버레이(채팅 아님). .video 안에 absolute. */
+/* Interstitial quiz — 좌측 영상 화면 위 오버레이(채팅 아님). .video 안에 absolute.
+   컨트롤바(z-index:6)보다 위에 둬, 퀴즈 중 하단 컨트롤(탐색·스킵)을 가린다. */
 .quizStage {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 8;
   display: grid;
   place-items: center;
   padding: 24px;
