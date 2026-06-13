@@ -33,6 +33,11 @@ interface Props {
    * 강의는 그대로 "이어서 제작"(studio) 이 1차 동작이다.
    */
   onPreview?: (id: string) => void;
+  /**
+   * "배포" 클릭 시 — 완료 강의를 "강의 배포" 페이지(/professor/lecture/{id}/share)로
+   * 바로 보낸다. 미리보기→배포하기를 거치지 않고 공유 링크·QR·게시 토글에 직행.
+   */
+  onShare?: (id: string) => void;
   /** 공개/비공개 전환 성공 후 — 부모가 목록 state 의 is_published 를 갱신. */
   onVisibilityChanged?: (id: string, isPublished: boolean) => void;
   padding?: number;
@@ -50,6 +55,7 @@ export default function LectureCard({
   onContinue,
   onDeleted,
   onPreview,
+  onShare,
   onVisibilityChanged,
   padding = 20,
 }: Props) {
@@ -243,7 +249,7 @@ export default function LectureCard({
               ? t("lectureCard.inProduction")
               : t("common.unpublished")}
         </span>
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-wrap gap-2">
           {previewIsPrimary ? (
             <button
               type="button"
@@ -263,6 +269,27 @@ export default function LectureCard({
               {isProduction
                 ? t("lectureCard.continueCreating")
                 : t("lectureCard.openLecture")}
+            </button>
+          )}
+          {/* 배포 — 완료 강의를 "강의 배포" 페이지로 직행(공유 링크·QR·게시 토글).
+              미리보기→배포하기 단계를 건너뛴다. 제작 중 강의에는 노출하지 않는다. */}
+          {!isProduction && onShare && (
+            <button
+              type="button"
+              onClick={() => onShare(lecture.id)}
+              className="rounded-lg motion-safe:transition"
+              style={{
+                padding: "8px 12px",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "var(--gold-on-light)",
+                background: "var(--gold-soft)",
+                border: "1px solid var(--gold-on-light)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              배포
             </button>
           )}
           {showStudioButton && (
