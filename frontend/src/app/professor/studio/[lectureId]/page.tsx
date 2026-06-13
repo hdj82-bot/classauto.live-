@@ -135,10 +135,6 @@ export default function StudioWizardPage() {
     Record<number, SlideReviewStatus>
   >({});
   const [voiceGender, setVoiceGender] = useState<VoiceGender>("male");
-  // 영상 아바타 크기 배율 (1.0 = 기본). SettingsPanel 슬라이더 + WorkArea PiP +
-  // 렌더(HeyGen scale)에 함께 반영. 슬라이더 드래그 중 PATCH 폭주는 디바운스.
-  const [avatarScale, setAvatarScale] = useState<number>(1.0);
-  const avatarScaleSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // expires_at 은 UI 에서 제거됐지만(강의 설정 섹션 삭제) 음성/만료 저장 effect 가
   // voice_gender 와 함께 보내므로 강의의 기존 값을 보존하기 위해 상태는 유지한다.
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -234,7 +230,6 @@ export default function StudioWizardPage() {
               setSubtitleLang(found.subtitle_lang ?? null);
               setVoiceId(found.voice_id ?? null);
               setVoiceSpeed(found.voice_speed ?? 1.0);
-              setAvatarScale(found.avatar_scale ?? 1.0);
             }
             break;
           }
@@ -721,24 +716,10 @@ export default function StudioWizardPage() {
     [persistLecture],
   );
 
-  // 아바타 크기도 슬라이더 드래그 중 연속으로 바뀌므로 로컬 state 는 즉시,
-  // 서버 PATCH 는 마지막 값으로 디바운스(500ms)해 호출 폭주를 막는다.
-  const handleChangeAvatarScale = useCallback(
-    (scale: number) => {
-      setAvatarScale(scale);
-      if (avatarScaleSaveRef.current) clearTimeout(avatarScaleSaveRef.current);
-      avatarScaleSaveRef.current = setTimeout(() => {
-        void persistLecture({ avatar_scale: scale });
-      }, 500);
-    },
-    [persistLecture],
-  );
-
-  // 언마운트 시 대기 중인 속도·크기 저장 타이머 정리.
+  // 언마운트 시 대기 중인 속도 저장 타이머 정리.
   useEffect(() => {
     return () => {
       if (voiceSpeedSaveRef.current) clearTimeout(voiceSpeedSaveRef.current);
-      if (avatarScaleSaveRef.current) clearTimeout(avatarScaleSaveRef.current);
       if (seedSaveRef.current) clearTimeout(seedSaveRef.current);
     };
   }, []);
@@ -1422,8 +1403,6 @@ export default function StudioWizardPage() {
         onChangeAvatar={() =>
           router.push(`/professor/avatars?lecture=${lectureId}`)
         }
-        avatarScale={avatarScale}
-        onChangeAvatarScale={handleChangeAvatarScale}
         slideCount={slides.length}
         quizPoints={quizPoints}
         onAddQuizPoint={handleAddQuizPoint}
