@@ -68,6 +68,12 @@ export interface SettingsPanelProps {
   // ── 예상 질문 (Q&A 사전 답변) ────────────────────────────────────────────────
   /** 등록된 사전 질문들 (최대 3). 비면 빈 배열. 질문 + (선택) 사전 대답을 입력한다. */
   seedQuestions?: SeedQuestionDraft[];
+  /**
+   * "AI 질문 승인" 클릭 후 렌더 완료 대기 중인지. 클립이 서버에서 pending 으로
+   * 보일 때도 "생성 중"으로 표시해, 버튼이 idle 로 되돌아가 "실패했나?" 오해를
+   * 주지 않게 한다.
+   */
+  seedRenderingActive?: boolean;
   onAddSeedQuestion?: () => void;
   onRemoveSeedQuestion?: (index: number) => void;
   onChangeSeedQuestion?: (
@@ -312,6 +318,7 @@ export default function SettingsPanel({
   onChangeQuizPoint,
   onOpenSocratic,
   seedQuestions = [],
+  seedRenderingActive = false,
   onAddSeedQuestion,
   onRemoveSeedQuestion,
   onChangeSeedQuestion,
@@ -334,10 +341,15 @@ export default function SettingsPanel({
   // 기준으로 집계한다. failed 도 "처리 끝남"으로 본다(영원히 0%에 머무는 것 방지).
   const seedSaved = seedQuestions.filter((q) => !!q.status);
   const seedReadyCount = seedQuestions.filter((q) => q.status === "ready").length;
-  const seedRendering = seedQuestions.some((q) => q.status === "rendering");
+  // 승인 직후(seedRenderingActive)엔 클립이 잠시 pending 으로 보여도 "생성 중"으로 본다.
+  const seedRendering =
+    seedRenderingActive || seedQuestions.some((q) => q.status === "rendering");
   const seedDone = seedQuestions.filter(
     (q) => q.status === "ready" || q.status === "failed",
   ).length;
+  // 저장된 클립이 모두 준비됨 → 생성 완료(성공 상태로 표시).
+  const seedAllReady =
+    seedSaved.length > 0 && seedSaved.every((q) => q.status === "ready");
   const seedProgressPct =
     seedSaved.length > 0 ? Math.round((seedDone / seedSaved.length) * 100) : 0;
   // "AI 질문 승인" 가능 여부 — 저장됐고 아직 렌더 안 한(pending/failed) 항목이 있고,
@@ -350,7 +362,9 @@ export default function SettingsPanel({
       ? "없음"
       : seedRendering
         ? `${seedQuestions.length}개 · 생성 중 ${seedProgressPct}%`
-        : `${seedQuestions.length}개${seedReadyCount > 0 ? ` · ${seedReadyCount} 준비됨` : ""}`;
+        : seedAllReady
+          ? `${seedQuestions.length}개 · 생성 완료`
+          : `${seedQuestions.length}개${seedReadyCount > 0 ? ` · ${seedReadyCount} 준비됨` : ""}`;
 
   return (
     <aside style={settingsStyle} aria-label="강의 설정">
@@ -654,6 +668,7 @@ export default function SettingsPanel({
                 key={sq.id ?? `new-${i}`}
                 item={sq}
                 index={i}
+                renderingActive={seedRenderingActive}
                 onChange={(patch) => onChangeSeedQuestion?.(i, patch)}
                 onRemove={() => onRemoveSeedQuestion?.(i)}
                 onPreview={onPreviewSeed}
@@ -703,6 +718,7 @@ export default function SettingsPanel({
                 onApprove={onApproveSeedQuestions}
                 disabled={!seedApprovable}
                 rendering={seedRendering}
+                done={seedAllReady}
               />
             )}
           </div>
@@ -897,13 +913,16 @@ function SeedApproveButton({
   onApprove,
   disabled,
   rendering,
+  done,
 }: {
   onApprove: () => Promise<void>;
   disabled: boolean;
   rendering: boolean;
+  /** 저장된 클립이 모두 ready — 생성 완료(성공) 상태. */
+  done: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  const blocked = disabled || busy || rendering;
+  const blocked = disabled || busy || rendering || done;
 
   const handleClick = async () => {
     if (blocked) return;
@@ -914,6 +933,35 @@ function SeedApproveButton({
       setBusy(false);
     }
   };
+
+  // 완료(done) 상태는 초록 성공 칩으로 — "각 질문 미리보기로 확인"을 안내한다.
+  if (done) {
+    return (
+      <div
+        role="status"
+        style={{
+          width: "100%",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 6,
+          padding: "9px 12px",
+          borderRadius: 9,
+          border: "1px solid rgba(27,127,75,0.35)",
+          background: "rgba(27,127,75,0.10)",
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: "#1B7F4B",
+          fontFamily: "inherit",
+        }}
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+        AI 아바타 생성 완료 — 각 질문 ‘미리보기’로 확인
+      </div>
+    );
+  }
 
   const label = busy
     ? "승인 중…"
@@ -944,9 +992,15 @@ function SeedApproveButton({
         fontFamily: "inherit",
       }}
     >
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 6 9 17l-5-5" />
-      </svg>
+      {rendering ? (
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 12a9 9 0 1 1-6.2-8.6" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      )}
       {label}
     </button>
   );
@@ -956,6 +1010,7 @@ function SeedApproveButton({
 function SeedQuestionCard({
   item,
   index,
+  renderingActive = false,
   onChange,
   onRemove,
   onPreview,
@@ -963,13 +1018,18 @@ function SeedQuestionCard({
 }: {
   item: SeedQuestionDraft;
   index: number;
+  /** 승인 후 렌더 대기 중 — pending 도 "생성 중"으로 보여 idle 처럼 보이지 않게 한다. */
+  renderingActive?: boolean;
   onChange: (patch: { question?: string; answer?: string }) => void;
   onRemove: () => void;
   onPreview?: (url: string) => void;
   /** 이 카드 자동 채우기 — 질문 비면 질문+답변, 입력돼 있으면 답변만(부모가 분기). */
   onAutoGenerate?: () => Promise<void>;
 }) {
-  const badge = item.status ? SEED_STATUS_BADGE[item.status] : null;
+  // 승인 직후엔 클립이 잠시 pending 으로 보여도 "생성 중"으로 표시한다.
+  const badgeStatus =
+    renderingActive && item.status === "pending" ? "rendering" : item.status;
+  const badge = badgeStatus ? SEED_STATUS_BADGE[badgeStatus] : null;
   const canPreview =
     item.status === "ready" && !!item.preview_url && !!onPreview;
 
@@ -1112,31 +1172,33 @@ function SeedQuestionCard({
         </button>
       )}
 
-      {/* 점검 — ready 클립 미리보기 재생 */}
+      {/* 미리보기 — ready 클립(생성된 아바타 답변 영상) 재생 */}
       {canPreview && (
         <button
           type="button"
           onClick={() => onPreview!(item.preview_url!)}
+          aria-label={`예상 질문 ${index + 1} 아바타 답변 영상 미리보기`}
           style={{
-            alignSelf: "flex-start",
+            width: "100%",
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 6,
-            padding: "6px 12px",
+            padding: "8px 12px",
             borderRadius: 8,
-            border: "1px solid var(--gold-medium, #E0B65C)",
-            background: "var(--gold-soft)",
-            fontSize: 12,
+            border: "1px solid #1B7F4B",
+            background: "rgba(27,127,75,0.10)",
+            fontSize: 12.5,
             fontWeight: 700,
             cursor: "pointer",
-            color: "var(--gold-on-light, #B88308)",
+            color: "#1B7F4B",
             fontFamily: "inherit",
           }}
         >
           <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true">
             <path d="M8 5v14l11-7z" />
           </svg>
-          미리보기로 점검
+          미리보기
         </button>
       )}
       {item.status === "failed" && (

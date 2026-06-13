@@ -190,6 +190,11 @@ export default function StudioWizardPage() {
   // 우측 "예상 질문" 패널의 사전 질문·답변 목록. 로드 시 GET, 변경 시 디바운스
   // PUT(전량 교체), 생성 직전 flush. 백엔드 미배포/404 시 빈 목록으로 degrade.
   const [seedQuestions, setSeedQuestions] = useState<SeedQuestionDraft[]>([]);
+  // "AI 질문 승인 — 아바타 미리 생성" 클릭 후 렌더가 끝날 때까지 true. 렌더는 celery
+  // 비동기라 클립이 pending→rendering→ready 로 가는데, 폴링을 'rendering' 에만 걸면
+  // pending 구간에서 폴링이 멈춰 버튼이 idle 로 되돌아가 "실패했나?" 오해를 준다.
+  // 이 플래그가 켜진 동안은 모든 클립이 ready/failed(종료)가 될 때까지 계속 폴링한다.
+  const [seedAwaitingRender, setSeedAwaitingRender] = useState(false);
   // 입력 중 PUT 폭주 방지용 디바운스 타이머.
   const seedSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 점검(미리보기) 모달에 띄울 클립 URL. null 이면 닫힘.
@@ -952,11 +957,45 @@ export default function StudioWizardPage() {
           preview_url: q.preview_url,
         })),
       );
-      toast("사전 답변 아바타 생성을 시작했어요.", "success");
+      // 렌더가 끝(ready/failed)날 때까지 폴링·진행 표시를 유지한다. 완료 시
+      // 아래 effect 가 성공 토스트를 띄우고 플래그를 내린다.
+      setSeedAwaitingRender(true);
+      toast("아바타 생성을 시작했어요. 완료되면 각 질문에서 미리보기로 확인할 수 있어요.", "success");
     } catch {
       toast("아직 아바타 미리 생성을 사용할 수 없어요. 잠시 후 다시 시도해주세요.", "error");
     }
   }, [lectureId, seedQuestions, persistSeedQuestions, toast]);
+
+  // 렌더 완료 감지 — 승인 후(seedAwaitingRender) 저장된 클립이 모두 종료(ready/failed)
+  // 되면 플래그를 내리고 결과를 한 번 안내한다. ready 가 하나라도 있으면 성공 토스트.
+  useEffect(() => {
+    if (!seedAwaitingRender) return;
+    const saved = seedQuestions.filter((q) => !!q.status);
+    if (saved.length === 0) return;
+    const allDone = saved.every(
+      (q) => q.status === "ready" || q.status === "failed",
+    );
+    if (!allDone) return;
+    setSeedAwaitingRender(false);
+    const ready = saved.filter((q) => q.status === "ready").length;
+    const failed = saved.filter((q) => q.status === "failed").length;
+    if (ready > 0 && failed === 0) {
+      toast(
+        `AI 아바타 생성 성공! 질문 ${ready}개의 답변 영상이 준비됐어요. 각 질문의 ‘미리보기’로 확인하세요.`,
+        "success",
+      );
+    } else if (ready > 0) {
+      toast(
+        `아바타 ${ready}개 생성 완료, ${failed}개 실패. 준비된 질문은 ‘미리보기’로 확인하세요.`,
+        "success",
+      );
+    } else {
+      toast(
+        "아바타 생성에 실패했어요. 질문이 강의 범위 밖이거나 한도를 초과했을 수 있어요.",
+        "error",
+      );
+    }
+  }, [seedAwaitingRender, seedQuestions, toast]);
 
   // ── 전체 생성 시작 ───────────────────────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
@@ -1106,19 +1145,25 @@ export default function StudioWizardPage() {
     }
   }, [videoId, toast, t]);
 
-  // 사전 질문 클립 렌더 진척 폴링 — rendering 인 항목이 있으면 4초마다 상태를 갱신.
-  // 키(rendering id 집합)가 그대로면 재실행되지 않아 인터벌은 1개만 유지된다.
-  const seedRenderingKey = seedQuestions
-    .filter((q) => q.status === "rendering")
-    .map((q) => q.id)
-    .filter(Boolean)
-    .sort()
-    .join(",");
+  // 사전 질문 클립 렌더 진척 폴링 — 4초마다 상태 갱신.
+  //  · 승인 직후(seedAwaitingRender): 클립이 pending→rendering→ready 로 가므로,
+  //    'rendering' 에만 걸면 pending 구간에서 폴링이 끊긴다. 승인 동안은 무조건 폴링.
+  //  · 재방문 등으로 이미 rendering 인 항목만 있을 때도(awaiting=false) 폴링 유지.
+  // 키가 그대로면 effect 가 재실행되지 않아 인터벌은 1개만 유지된다. 종료 시
+  // (모두 ready/failed) awaiting 이 내려가고 rendering 도 없어 폴링이 멈춘다.
+  const seedRenderingKey = seedAwaitingRender
+    ? "awaiting"
+    : seedQuestions
+        .filter((q) => q.status === "rendering")
+        .map((q) => q.id)
+        .filter(Boolean)
+        .sort()
+        .join(",");
   useEffect(() => {
     if (!seedRenderingKey) return;
     let attempts = 0;
     const id = setInterval(() => {
-      if (attempts >= 40) {
+      if (attempts >= 90) {
         clearInterval(id);
         return;
       }
@@ -1410,6 +1455,7 @@ export default function StudioWizardPage() {
         onChangeQuizPoint={handleChangeQuizPoint}
         onOpenSocratic={setSocraticOpenIndex}
         seedQuestions={seedQuestions}
+        seedRenderingActive={seedAwaitingRender}
         onAddSeedQuestion={handleAddSeedQuestion}
         onRemoveSeedQuestion={handleRemoveSeedQuestion}
         onChangeSeedQuestion={handleChangeSeedQuestion}
