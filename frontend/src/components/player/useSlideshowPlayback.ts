@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, bootstrapAuth } from "@/lib/api";
 
 /**
  * 본문 슬라이드쇼 재생 엔진 (docs/planning/08-cost-optimization.md).
@@ -160,6 +160,13 @@ export function useSlideshowPlayback(
     let cancelled = false;
     (async () => {
       setReady(false);
+      // access 토큰은 메모리 전용이라 새 탭(교수자 미리보기 window.open)·직접 URL
+      // 진입 시 휘발된다. slideshow 는 미발행 강의를 소유 교수자에게만 보여주는데,
+      // 토큰 없이(익명) 호출하면 404(401 아님 → refresh 인터셉터가 못 잡음)로 떨어져
+      // "영상이 준비되지 않았습니다"에 갇힌다. 호출 전에 refresh 쿠키로 토큰을
+      // 선제 복원한다. 발행 강의(학생)는 쿠키가 없어 즉시 false 로 빠지고 익명 호출.
+      await bootstrapAuth();
+      if (cancelled) return;
       try {
         const { data } = await api.get<SlideshowWire>(
           `/api/lectures/${slug}/slideshow`,
