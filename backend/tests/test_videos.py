@@ -294,6 +294,99 @@ async def test_archive_student_forbidden(client, student, video_pending):
     assert resp.status_code == 403
 
 
+# ── POST /api/videos/{id}/rerender — 갇힌 Video 자가 회복 ──────────────────────
+
+@pytest.mark.asyncio
+async def test_rerender_heals_stuck_rendering_video(
+    client, professor, lecture, db
+):
+    """모든 슬라이드 음성이 ready 인데 rendering 에 갇힌 Video 를 done 으로 승격.
+
+    재현: 마지막 슬라이드 finalize 누락으로 Video 가 rendering 에 고착(미리보기는
+    '준비 중', rerender 는 변경 없음). rerender 가 이를 감지해 done 으로 풀어준다.
+    """
+    from app.models.video import Video, VideoScript
+    from app.models.video_render import RenderStatus, VideoRender
+
+    segments = [
+        {"slide_index": 0, "text": "첫 슬라이드 발화", "start_seconds": 0, "end_seconds": 10},
+        {"slide_index": 1, "text": "둘째 슬라이드 발화", "start_seconds": 10, "end_seconds": 20},
+    ]
+    video = Video(
+        id=uuid.uuid4(), lecture_id=lecture.id, status=VideoStatus.rendering,
+    )
+    db.add(video)
+    await db.flush()
+    db.add(VideoScript(
+        id=uuid.uuid4(), video_id=video.id,
+        ai_segments=segments, segments=list(segments),
+    ))
+    # 두 슬라이드 모두 ready + 음성 보유 + 텍스트 일치 → 재합성할 게 없음.
+    for seg in segments:
+        db.add(VideoRender(
+            id=uuid.uuid4(),
+            lecture_id=lecture.id,
+            instructor_id=professor.id,
+            avatar_id="avatar-x",
+            status=RenderStatus.ready,
+            audio_url=f"https://s3/audio/{seg['slide_index']}.mp3",
+            script_text=seg["text"],
+            slide_number=seg["slide_index"],
+        ))
+    await db.flush()
+
+    resp = await client.post(
+        f"/api/videos/{video.id}/rerender",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    # 재합성 대상은 0(비용 0)이지만 갇혀 있던 Video 는 done 으로 회복된다.
+    assert data["rerendered_segments"] == 0
+    assert data["status"] == "done"
+
+    await db.refresh(video)
+    assert video.status == VideoStatus.done
+
+
+@pytest.mark.asyncio
+async def test_rerender_done_video_no_changes_stays_done(
+    client, professor, lecture, db
+):
+    """이미 done + 변경 없음 → 0 을 반환하고 상태 불변(불필요한 승격 없음)."""
+    from app.models.video import Video, VideoScript
+    from app.models.video_render import RenderStatus, VideoRender
+
+    segments = [
+        {"slide_index": 0, "text": "그대로인 발화", "start_seconds": 0, "end_seconds": 10},
+    ]
+    video = Video(
+        id=uuid.uuid4(), lecture_id=lecture.id, status=VideoStatus.done,
+    )
+    db.add(video)
+    await db.flush()
+    db.add(VideoScript(
+        id=uuid.uuid4(), video_id=video.id,
+        ai_segments=segments, segments=list(segments),
+    ))
+    db.add(VideoRender(
+        id=uuid.uuid4(), lecture_id=lecture.id, instructor_id=professor.id,
+        avatar_id="avatar-x", status=RenderStatus.ready,
+        audio_url="https://s3/audio/0.mp3", script_text="그대로인 발화",
+        slide_number=0,
+    ))
+    await db.flush()
+
+    resp = await client.post(
+        f"/api/videos/{video.id}/rerender",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["rerendered_segments"] == 0
+    assert data["status"] == "done"
+
+
 # ── 헬퍼 ─────────────────────────────────────────────────────────────────────
 
 def _make_other_professor():
