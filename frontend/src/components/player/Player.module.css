@@ -203,16 +203,16 @@
 .caption {
   position: absolute;
   left: 50%;
-  bottom: 84px;
+  bottom: 72px;
   transform: translateX(-50%);
-  max-width: 90%;
-  padding: 10px 20px;
-  border-radius: 12px;
+  max-width: min(82%, 620px);
+  padding: 6px 14px;
+  border-radius: 10px;
   background: rgba(10, 10, 10, 0.78);
   color: #fff;
-  font-size: 24px;
+  font-size: clamp(15px, 1.55vw, 19px);
   font-weight: 600;
-  line-height: 1.45;
+  line-height: 1.4;
   text-align: center;
   backdrop-filter: blur(4px);
   z-index: 3;
@@ -220,8 +220,8 @@
 }
 @media (max-width: 900px) {
   .caption {
-    bottom: 72px;
-    font-size: 19px;
+    bottom: 62px;
+    font-size: 15px;
   }
 }
 .video::before {

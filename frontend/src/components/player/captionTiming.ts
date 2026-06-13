@@ -7,13 +7,37 @@
  * 추정 타임라인(start/end_seconds, 5자/초)을 쓰면 실측 재생과 어긋나므로 쓰지 않는다.
  */
 
-/** 한국어·중국어 종결 부호와 줄바꿈 기준으로 문장 분리(CJK 공백 없음도 처리). */
+/** 절(clause) 단위로 더 쪼갤 때의 최소 길이 — 이보다 짧으면 그대로 둔다. */
+const CLAUSE_SPLIT_MIN = 28;
+/** 절 경계 — 한국어·중국어 쉼표/구분점/세미콜론 뒤에서 끊는다. */
+const CLAUSE_BOUNDARY = /(?<=[,，、;；·])\s*/u;
+
+/**
+ * 한국어·중국어 종결 부호와 줄바꿈 기준으로 문장 분리(CJK 공백 없음도 처리).
+ *
+ * 한 슬라이드 자막이 마침표 없는 **긴 한 문장**이면(번역 자막에서 흔함) 노래방식
+ * 진행이 멈춰 통째로 떠 PPT 를 가린다. 그래서 길이가 ``CLAUSE_SPLIT_MIN`` 이상인
+ * 문장은 쉼표 등 절 경계에서 한 번 더 쪼개 음성 진행에 맞춰 촘촘히 넘어가게 한다.
+ */
 export function splitIntoSentences(text: string): string[] {
-  const parts = text
+  const sentences = text
     .split(/(?<=[。．.!?！？\n])/u)
     .map((s) => s.trim())
     .filter(Boolean);
-  return parts.length ? parts : [text];
+  const base = sentences.length ? sentences : [text];
+  const out: string[] = [];
+  for (const s of base) {
+    if (s.length < CLAUSE_SPLIT_MIN) {
+      out.push(s);
+      continue;
+    }
+    const clauses = s
+      .split(CLAUSE_BOUNDARY)
+      .map((c) => c.trim())
+      .filter(Boolean);
+    out.push(...(clauses.length ? clauses : [s]));
+  }
+  return out.length ? out : [text];
 }
 
 /**

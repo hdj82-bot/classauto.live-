@@ -25,6 +25,23 @@ describe("splitIntoSentences", () => {
       "종결부호 없는 한 문장",
     ]);
   });
+
+  it("splits a long single sentence at clause(comma) boundaries", () => {
+    // 마침표 하나뿐인 긴 문장(번역 자막에서 흔함)을 쉼표 절 경계에서 더 쪼갠다.
+    expect(
+      splitIntoSentences(
+        "이 두 언어는 겉으로는 비슷해 보일 수 있지만, 실제로는 상당히 중대한 구조적 차이를 가지고 있습니다.",
+      ),
+    ).toEqual([
+      "이 두 언어는 겉으로는 비슷해 보일 수 있지만,",
+      "실제로는 상당히 중대한 구조적 차이를 가지고 있습니다.",
+    ]);
+  });
+
+  it("keeps short comma sentences intact (below split threshold)", () => {
+    // 짧은 문장은 쉼표가 있어도 쪼개지 않아 과도한 깜빡임을 막는다.
+    expect(splitIntoSentences("짧고, 단순.")).toEqual(["짧고, 단순."]);
+  });
 });
 
 describe("pickActiveCaption", () => {

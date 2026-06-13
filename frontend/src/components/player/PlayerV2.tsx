@@ -281,6 +281,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     if (!slug) return;
     let cancelled = false;
     (async () => {
+      // slideshow 와 동일 — 미발행 강의의 사전 질문은 소유 교수자에게만 보인다.
+      // 새 탭(미리보기)엔 토큰이 없어 익명 호출 시 404(401 아님)로 떨어져 추천이
+      // 안 뜬다. 호출 전 refresh 쿠키로 토큰을 선제 복원한다(학생/발행 강의엔 무영향).
+      await bootstrapAuth();
+      if (cancelled) return;
       try {
         const { data } = await api.get<{
           questions: { id: string; question: string; video_url: string }[];
