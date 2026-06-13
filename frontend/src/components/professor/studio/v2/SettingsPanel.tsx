@@ -79,8 +79,12 @@ export interface SettingsPanelProps {
   ) => void;
   /** ready 클립 점검(미리보기 재생) — preview_url 을 받아 부모가 모달로 연다. */
   onPreviewSeed?: (url: string) => void;
-  /** "질문과 답변 자동 생성" — 스크립트에서 핵심 질문 3개 + 답변을 자동 생성해 카드를 채운다. */
-  onAutoGenerateSeedQuestions?: () => Promise<void>;
+  /**
+   * 카드별 "질문과 답변 자동 생성" — 해당 카드를 자동으로 채운다. 질문이 비었으면
+   * 질문+답변을, 질문이 입력돼 있으면 답변만 생성한다(부모가 분기). 교수자가 카드마다
+   * 직접 입력/자동 생성을 고를 수 있다.
+   */
+  onAutoGenerateSeedQuestion?: (index: number) => Promise<void>;
   /** 하단 "AI 질문 승인" — 저장된 사전 질문을 즉시 아바타 클립으로 렌더 시작. */
   onApproveSeedQuestions?: () => Promise<void>;
 }
@@ -317,7 +321,7 @@ export default function SettingsPanel({
   onRemoveSeedQuestion,
   onChangeSeedQuestion,
   onPreviewSeed,
-  onAutoGenerateSeedQuestions,
+  onAutoGenerateSeedQuestion,
   onApproveSeedQuestions,
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
@@ -642,11 +646,6 @@ export default function SettingsPanel({
               학생이 비슷한 질문을 하면 첫 질문부터 아바타가 바로 답합니다. 강의당 최대 3개.
             </p>
 
-            {/* 질문과 답변 자동 생성 — 스크립트에서 핵심 질문 3개 + 답변을 한 번에 채운다. */}
-            {onAutoGenerateSeedQuestions && (
-              <AutoGenerateSeedButton onGenerate={onAutoGenerateSeedQuestions} />
-            )}
-
             {/* 렌더 진척 — HeyGen 작업 중일 때 % 바. (영상 생성 후 폴링으로 갱신) */}
             {seedSaved.length > 0 && (seedRendering || (seedDone > 0 && seedDone < seedSaved.length)) && (
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -676,6 +675,11 @@ export default function SettingsPanel({
                 onChange={(patch) => onChangeSeedQuestion?.(i, patch)}
                 onRemove={() => onRemoveSeedQuestion?.(i)}
                 onPreview={onPreviewSeed}
+                onAutoGenerate={
+                  onAutoGenerateSeedQuestion
+                    ? () => onAutoGenerateSeedQuestion(i)
+                    : undefined
+                }
               />
             ))}
 
@@ -904,61 +908,6 @@ const SEED_STATUS_BADGE: Record<SeedQuestionStatus, { label: string; fg: string;
 };
 
 /**
- * "질문과 답변 자동 생성" — 스크립트에서 핵심 질문 3개 + 사전 답변을 한 번에 만들어
- * 카드를 채운다. 자체 busy 상태로 중복 클릭을 막는다.
- */
-function AutoGenerateSeedButton({
-  onGenerate,
-}: {
-  onGenerate: () => Promise<void>;
-}) {
-  const [busy, setBusy] = useState(false);
-
-  const handleClick = async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      await onGenerate();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={busy}
-      style={{
-        width: "100%",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 6,
-        padding: "9px 12px",
-        borderRadius: 9,
-        border: "none",
-        background: busy
-          ? "var(--gold-soft)"
-          : "linear-gradient(135deg, #FFB627, #E89E0E)",
-        fontSize: 12.5,
-        fontWeight: 700,
-        cursor: busy ? "not-allowed" : "pointer",
-        opacity: busy ? 0.7 : 1,
-        color: busy ? "var(--gold-on-light, #B88308)" : "#0A0A0A",
-        fontFamily: "inherit",
-      }}
-    >
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
-      </svg>
-      {busy ? "생성 중… (질문·답변 만드는 중)" : "질문과 답변 자동 생성"}
-    </button>
-  );
-}
-
-
-/**
  * "AI 질문 승인" — 저장된 사전 질문을 영상 전체 생성 없이 즉시 아바타 클립으로
  * 렌더 시작한다. 렌더 중/대상 없음이면 비활성. 자체 busy 상태로 중복 클릭 차단.
  */
@@ -1028,16 +977,33 @@ function SeedQuestionCard({
   onChange,
   onRemove,
   onPreview,
+  onAutoGenerate,
 }: {
   item: SeedQuestionDraft;
   index: number;
   onChange: (patch: { question?: string; answer?: string }) => void;
   onRemove: () => void;
   onPreview?: (url: string) => void;
+  /** 이 카드 자동 채우기 — 질문 비면 질문+답변, 입력돼 있으면 답변만(부모가 분기). */
+  onAutoGenerate?: () => Promise<void>;
 }) {
   const badge = item.status ? SEED_STATUS_BADGE[item.status] : null;
   const canPreview =
     item.status === "ready" && !!item.preview_url && !!onPreview;
+
+  // 자동 생성 진행 상태(중복 클릭 차단). 라벨은 질문 입력 여부로 바뀐다 —
+  // 질문이 있으면 답변만 생성하므로 "답변", 비었으면 "질문과 답변".
+  const [genBusy, setGenBusy] = useState(false);
+  const hasQuestion = item.question.trim().length > 0;
+  const handleAutoGenerate = async () => {
+    if (genBusy || !onAutoGenerate) return;
+    setGenBusy(true);
+    try {
+      await onAutoGenerate();
+    } finally {
+      setGenBusy(false);
+    }
+  };
 
   return (
     <div
@@ -1124,6 +1090,45 @@ function SeedQuestionCard({
           style={textareaStyle}
         />
       </div>
+
+      {/* 카드별 자동 생성 — 직접 입력 대신 AI 로 채울 수 있다. 질문이 있으면 답변만,
+          비었으면 질문+답변을 생성한다(부모가 분기). */}
+      {onAutoGenerate && (
+        <button
+          type="button"
+          onClick={handleAutoGenerate}
+          disabled={genBusy}
+          aria-label={`예상 질문 ${index + 1} ${hasQuestion ? "답변" : "질문과 답변"} 자동 생성`}
+          style={{
+            width: "100%",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            padding: "8px 12px",
+            borderRadius: 8,
+            border: "none",
+            background: genBusy
+              ? "var(--gold-soft)"
+              : "linear-gradient(135deg, #FFB627, #E89E0E)",
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: genBusy ? "not-allowed" : "pointer",
+            opacity: genBusy ? 0.7 : 1,
+            color: genBusy ? "var(--gold-on-light, #B88308)" : "#0A0A0A",
+            fontFamily: "inherit",
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 3v3M12 18v3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M3 12h3M18 12h3M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1" />
+          </svg>
+          {genBusy
+            ? "생성 중…"
+            : hasQuestion
+              ? "답변 자동 생성"
+              : "질문과 답변 자동 생성"}
+        </button>
+      )}
 
       {/* 점검 — ready 클립 미리보기 재생 */}
       {canPreview && (

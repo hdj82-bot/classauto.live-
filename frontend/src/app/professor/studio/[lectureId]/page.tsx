@@ -21,6 +21,7 @@ import {
   listAuthoredQuizzes,
 } from "@/components/professor/studio/quizApi";
 import {
+  generateSeedAnswer,
   generateSeedQuestions,
   getSeedQuestions,
   putSeedQuestions,
@@ -62,6 +63,17 @@ const SCRIPT_POLL_MS = 6000;
 // 자체를 중단(useEffect 내부에서)하므로 정상화 후 네트워크 부담은 없다.
 const SLIDES_POLL_MS = 3000;
 const RENDER_POLL_MS = 5000;
+
+// 사전 질문 자동 생성 실패 토스트 — 백엔드가 준 detail(예: "강의 파이프라인이 아직
+// 처리되지 않았습니다.")을 그대로 보여줘 원인을 알 수 있게 한다. detail 이 없으면
+// (네트워크/5xx) 일반 안내로 폴백한다.
+function seedAutoGenErrorMessage(err: unknown): string {
+  const detail = (
+    err as { response?: { data?: { detail?: unknown } } } | undefined
+  )?.response?.data?.detail;
+  if (typeof detail === "string" && detail.trim()) return detail;
+  return "아직 질문과 답변 자동 생성을 사용할 수 없어요. 잠시 후 다시 시도해주세요.";
+}
 // 완료(ready) 슬라이드 수가 이 시간 동안 늘지 않으면 "멈춤"으로 간주해 재시도
 // 안내를 띄운다. 한 슬라이드 TTS 의 정상 상한(render_slide soft_time_limit≈5분)
 // 보다 살짝 짧게 둬, 정상 진행 중인 슬라이드를 멈춤으로 오인하지 않게 한다.
@@ -866,30 +878,73 @@ export default function StudioWizardPage() {
     [scheduleSeedSave],
   );
 
-  // "질문과 답변 자동 생성" — AI 가 스크립트에서 핵심 질문 3개를 고르고 각 사전 답변까지
-  // 생성해 카드를 채운다(발화 언어로). 교수자가 보고 그대로 두거나 수정한다. 기존 카드는
-  // 자동 선정 결과로 대체된다(명시적 버튼 클릭). 저장은 디바운스, 미배포/404 는 graceful.
-  const handleAutoGenerateSeedQuestions = useCallback(async () => {
-    if (!lectureId) return;
-    try {
-      const generated = await generateSeedQuestions(lectureId);
-      if (generated.length === 0) {
-        toast("강의 자료가 아직 준비되지 않아 질문을 만들 수 없어요.", "error");
-        return;
+  // 카드별 "질문과 답변 자동 생성" — 교수자가 카드마다 직접 입력 또는 자동 생성을
+  // 선택할 수 있게 한다(상단 일괄 버튼 폐기). 동작은 카드 상태에 따라 둘로 갈린다:
+  //  - 질문이 비어 있으면: 핵심 질문 후보를 받아 다른 카드와 겹치지 않는 1개로 질문+답변
+  //    을 채운다.
+  //  - 질문이 이미 입력돼 있으면: 그 질문은 보존하고 답변만 생성한다(교수자 입력 존중).
+  // 저장은 디바운스. 실패는 백엔드 detail(예: "강의 파이프라인이 아직 처리되지
+  // 않았습니다.")을 그대로 노출해 원인을 알 수 있게 한다.
+  const handleAutoGenerateSeedQuestion = useCallback(
+    async (index: number) => {
+      if (!lectureId) return;
+      const card = seedQuestions[index];
+      if (!card) return;
+      const typed = card.question.trim();
+      try {
+        if (typed) {
+          const { answer, inScope } = await generateSeedAnswer(lectureId, typed);
+          if (!answer) {
+            toast(
+              "이 질문은 강의 자료 범위 밖이라 답변을 만들지 못했어요. 질문을 강의 내용에 맞게 다듬어 보세요.",
+              "error",
+            );
+            return;
+          }
+          setSeedQuestions((prev) => {
+            const next = prev.map((q, i) => (i === index ? { ...q, answer } : q));
+            scheduleSeedSave(next);
+            return next;
+          });
+          toast(
+            inScope
+              ? "답변을 생성했어요. 검토 후 수정할 수 있어요."
+              : "답변을 생성했어요(강의 자료 밖 질문일 수 있어요). 검토해 주세요.",
+            "success",
+          );
+          return;
+        }
+
+        const generated = await generateSeedQuestions(lectureId);
+        if (generated.length === 0) {
+          toast("강의 자료가 아직 준비되지 않아 질문을 만들 수 없어요.", "error");
+          return;
+        }
+        const used = new Set(
+          seedQuestions
+            .filter((_, i) => i !== index)
+            .map((q) => q.question.trim().toLowerCase())
+            .filter(Boolean),
+        );
+        const pick =
+          generated.find((g) => !used.has(g.question.trim().toLowerCase())) ??
+          generated[0];
+        setSeedQuestions((prev) => {
+          const next = prev.map((q, i) =>
+            i === index
+              ? { ...q, question: pick.question, answer: pick.answer }
+              : q,
+          );
+          scheduleSeedSave(next);
+          return next;
+        });
+        toast("질문과 답변을 생성했어요. 검토 후 수정할 수 있어요.", "success");
+      } catch (err) {
+        toast(seedAutoGenErrorMessage(err), "error");
       }
-      const next: SeedQuestionDraft[] = generated
-        .slice(0, 3)
-        .map((g) => ({ id: null, question: g.question, answer: g.answer }));
-      setSeedQuestions(next);
-      scheduleSeedSave(next);
-      toast(
-        `핵심 질문 ${next.length}개와 답변을 생성했어요. 검토 후 수정할 수 있어요.`,
-        "success",
-      );
-    } catch {
-      toast("아직 질문과 답변 자동 생성을 사용할 수 없어요. 잠시 후 다시 시도해주세요.", "error");
-    }
-  }, [lectureId, scheduleSeedSave, toast]);
+    },
+    [lectureId, seedQuestions, scheduleSeedSave, toast],
+  );
 
   // 하단 "AI 질문 승인" — 대기 중 편집을 flush 한 뒤, 저장된 사전 질문을 즉시 아바타
   // 클립으로 렌더 시작한다(영상 전체 approve 불필요). 응답에 status=rendering 이 담겨
@@ -1380,7 +1435,7 @@ export default function StudioWizardPage() {
         onRemoveSeedQuestion={handleRemoveSeedQuestion}
         onChangeSeedQuestion={handleChangeSeedQuestion}
         onPreviewSeed={handlePreviewSeed}
-        onAutoGenerateSeedQuestions={handleAutoGenerateSeedQuestions}
+        onAutoGenerateSeedQuestion={handleAutoGenerateSeedQuestion}
         onApproveSeedQuestions={handleApproveSeedQuestions}
       />
 
