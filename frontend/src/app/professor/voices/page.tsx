@@ -8,6 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PageContainer, PageHeader } from "@/components/professor/shell";
 import { useToast } from "@/components/ui/Toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -118,12 +119,18 @@ function parseKoreanVoiceQuery(input: string): {
 
 export default function VoicesPage() {
   const { toast } = useToast();
+  const router = useRouter();
   const { supported, play, stop } = useVoicePreview();
   const reduced = useReducedMotion();
 
   const [mode, setMode] = useState<Mode>("mine");
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [lectureId, setLectureId] = useState<string | null>(null);
+  // 아바타 제작 화면(SampleVoicePicker '더 많은 음성')에서 ``?return=avatars`` 로
+  // 진입하면 '이 음성으로 선택' 버튼을 노출한다 — 누르면 그 음성을 들고 아바타
+  // 제작 화면으로 복귀한다(?voice=).
+  const [returnTo, setReturnTo] = useState<string | null>(null);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
 
   // ── 내 보이스 ──
   const [voices, setVoices] = useState<VoiceOption[]>([]);
@@ -141,10 +148,11 @@ export default function VoicesPage() {
   const [added, setAdded] = useState<Set<string>>(new Set());
   const [adding, setAdding] = useState<string | null>(null);
 
-  // 진입 시 ?lecture= 읽기 (client-only — useSearchParams Suspense 요구 회피).
+  // 진입 시 ?lecture= / ?return= 읽기 (client-only — useSearchParams Suspense 요구 회피).
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("lecture");
-    setLectureId(id);
+    const sp = new URLSearchParams(window.location.search);
+    setLectureId(sp.get("lecture"));
+    setReturnTo(sp.get("return"));
   }, []);
 
   const mergeLibFavorites = useCallback((list: LibraryVoice[]) => {
@@ -283,6 +291,40 @@ export default function VoicesPage() {
     }
   };
 
+  // '이 음성으로 선택' — 고른 음성을 들고 아바타 제작 화면으로 복귀한다(?voice=).
+  // 거기서 selectedVoiceId 로 복원되어 룩과 함께 '강의에 적용' 된다.
+  const returnToAvatarsWith = (voiceId: string) => {
+    const params = new URLSearchParams();
+    if (lectureId) params.set("lecture", lectureId);
+    params.set("voice", voiceId);
+    router.push(`/professor/avatars?${params.toString()}`);
+  };
+
+  // 내 보이스: 계정 음성이라 바로 들고 복귀.
+  const selectMine = (opt: VoiceOption) => {
+    if (selectingId) return;
+    returnToAvatarsWith(opt.id);
+  };
+
+  // 라이브러리: 공유 음성은 계정에 없으므로 먼저 추가(+즐겨찾기) → 새 계정 voice_id 로 복귀.
+  const selectLibrary = async (v: LibraryVoice) => {
+    if (selectingId) return;
+    setSelectingId(v.voiceId);
+    try {
+      const newId = await addLibraryVoice(v.publicOwnerId, v.voiceId, v.name);
+      await setVoiceFavorite(newId, true);
+      returnToAvatarsWith(newId);
+    } catch {
+      toast(
+        "선택에 실패했어요. 요금제의 보이스 수 한도를 초과했을 수 있어요.",
+        "error",
+      );
+      setSelectingId(null);
+    }
+  };
+
+  const canSelect = returnTo === "avatars";
+
   if (loading) {
     return <LoadingSpinner fullScreen label="음성 목록을 불러오는 중…" />;
   }
@@ -375,6 +417,8 @@ export default function VoicesPage() {
                   favorite={favIds.has(v.id)}
                   canFavorite={!isFallbackVoice(v.id)}
                   onToggleFavorite={() => toggleFavorite(v.id, isFallbackVoice(v.id))}
+                  canSelect={canSelect}
+                  onSelect={() => selectMine(v)}
                 />
               ))}
             </div>
@@ -472,6 +516,9 @@ export default function VoicesPage() {
                             : "idle"
                       }
                       onAddFavorite={() => onAddFavorite(v)}
+                      canSelect={canSelect}
+                      selecting={selectingId === v.voiceId}
+                      onSelect={() => selectLibrary(v)}
                     />
                   );
                 })}
@@ -518,6 +565,9 @@ function VoiceCard({
   onToggleFavorite,
   addState,
   onAddFavorite,
+  canSelect,
+  selecting,
+  onSelect,
 }: {
   reduced: boolean;
   title: string;
@@ -533,6 +583,10 @@ function VoiceCard({
   // 라이브러리 모드: ★ = 추가 + 즐겨찾기
   addState?: AddState;
   onAddFavorite?: () => void;
+  // 아바타 제작에서 진입(?return=avatars) 시: 이 음성으로 바로 선택하고 복귀.
+  canSelect?: boolean;
+  selecting?: boolean;
+  onSelect?: () => void;
 }) {
   const [hover, setHover] = useState(false);
   const lifted = hover && !reduced;
@@ -672,6 +726,28 @@ function VoiceCard({
           </button>
         )}
       </div>
+
+      {canSelect && (
+        <button
+          type="button"
+          onClick={onSelect}
+          disabled={selecting}
+          style={{
+            width: "100%",
+            padding: "9px 12px",
+            borderRadius: 9,
+            border: "1px solid var(--gold)",
+            background: selecting ? "var(--gold-soft)" : "var(--gold)",
+            color: selecting ? "var(--gold-on-light, #B88308)" : "#0A0A0A",
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: selecting ? "wait" : "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          {selecting ? "선택 중…" : "✓ 이 음성으로 선택"}
+        </button>
+      )}
     </div>
   );
 }

@@ -427,6 +427,20 @@ export default function AvatarsPage() {
     router.replace(`/professor/avatars${lectureId ? `?lecture=${lectureId}` : ""}`);
   }, [searchParams, handleSelect, refreshAvatars, router, lectureId]);
 
+  // 음성 라이브러리('음성 고르기')에서 '이 음성으로 선택' 후 복귀 — ?voice=<voice_id>
+  // 가 있으면 그 음성을 제작용 샘플 음성으로 지정하고(상호 배타), 목록을 새로고침해
+  // (라이브러리에서 새로 추가된 음성 포함) 카드에 반영한 뒤 파라미터를 정리한다.
+  const voiceSelDoneRef = useRef<string | null>(null);
+  useEffect(() => {
+    const v = searchParams?.get("voice");
+    if (!v || voiceSelDoneRef.current === v) return;
+    voiceSelDoneRef.current = v;
+    setSelectedVoiceId(v);
+    void reloadVoices();
+    toast(t("voiceUseForBuildDone"), "success");
+    router.replace(`/professor/avatars${lectureId ? `?lecture=${lectureId}` : ""}`);
+  }, [searchParams, reloadVoices, router, lectureId, toast, t]);
+
   // 카드/최근 박스 클릭 — 큰 보기(뷰어)를 열고, 동시에 선택(최근/미리보기 반영)한다.
   const handleOpen = useCallback(
     (avatar: Avatar) => {
@@ -965,6 +979,7 @@ export default function AvatarsPage() {
           selectedId={selectedVoiceId}
           onSelect={handleToggleSampleVoice}
           ownVoiceId={ownVoiceId}
+          moreVoicesHref={`/professor/voices?return=avatars${lectureId ? `&lecture=${lectureId}` : ""}`}
           t={t}
         />
 

@@ -15,6 +15,12 @@ interface SampleVoicePickerProps {
   onSelect: (id: string) => void;
   /** 본인 클론 음성 id — 위 "내 목소리" 박스와 중복이므로 목록에서 제외한다. */
   ownVoiceId?: string | null;
+  /**
+   * '더 많은 음성' 링크의 목적지. 아바타 제작 컨텍스트(?return=avatars&lecture=…)를
+   * 실어 보내면, 음성 라이브러리에서 '이 음성으로 선택' 시 그 음성을 들고 이 화면으로
+   * 복귀한다. 미지정 시 기본 라이브러리로만 이동.
+   */
+  moreVoicesHref?: string;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
@@ -38,6 +44,7 @@ export default function SampleVoicePicker({
   selectedId,
   onSelect,
   ownVoiceId,
+  moreVoicesHref = "/professor/voices",
   t,
 }: SampleVoicePickerProps) {
   const [query, setQuery] = useState("");
@@ -194,7 +201,7 @@ export default function SampleVoicePicker({
         }}
       >
         <h2 style={headingStyle}>{t("sampleVoiceTitle")}</h2>
-        <Link href="/professor/voices" style={moreLinkStyle}>
+        <Link href={moreVoicesHref} style={moreLinkStyle}>
           {t("moreVoices")}
         </Link>
       </div>
