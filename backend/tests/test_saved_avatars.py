@@ -90,6 +90,50 @@ async def test_create_rejects_unknown_look(client, professor):
 
 
 @pytest.mark.asyncio
+async def test_create_accepts_registered_standard_avatar(client, professor, db):
+    """사진 룩이 아니라 본인이 등록한 표준 Video Avatar(heygen avatar_id)도 저장 가능.
+
+    프론트는 표준 아바타의 id 로 heygen avatar_id 를 보낸다. 표준은 항상 ready.
+    """
+    from app.models.standard_avatar import StandardAvatar
+
+    db.add(
+        StandardAvatar(
+            id=uuid.uuid4(),
+            user_id=professor.id,
+            heygen_avatar_id="Sabine_Office_Front_2",
+            name="Sabine",
+        )
+    )
+    await db.flush()
+
+    resp = await client.post(
+        "/api/avatars/me/saved",
+        json={
+            "name": "중국어 표준 아바타",
+            "look_id": "Sabine_Office_Front_2",
+            "voice_id": "vc_helen",
+        },
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 201, resp.text
+    item = resp.json()
+    assert item["look_id"] == "Sabine_Office_Front_2"
+    assert item["voice_id"] == "vc_helen"
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_unregistered_standard_avatar(client, professor):
+    """등록하지 않은 표준 avatar_id(룩도 표준도 아님)는 404."""
+    resp = await client.post(
+        "/api/avatars/me/saved",
+        json={"name": "x", "look_id": "Unregistered_Avatar_999"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_create_enforces_cap(client, professor, db):
     look = await _make_look(db, professor)
     # 상한까지 채운다.

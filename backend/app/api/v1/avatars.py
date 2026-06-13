@@ -1598,6 +1598,26 @@ async def _resolve_look(
     return row
 
 
+async def _resolve_standard_avatar(
+    user: User, db: AsyncSession, look_id: str
+) -> StandardAvatar | None:
+    """본인이 등록한 표준 Video Avatar 를 heygen_avatar_id 로 찾는다.
+
+    저장 아바타(룩+음성)는 본래 사진 룩(PhotoAvatarLook)만 대상이었으나, 교수자가
+    표준 Video Avatar + 음성 조합도 '이 아바타 저장'으로 보관·재사용하려 한다
+    (프론트는 표준 아바타의 id 로 heygen avatar_id 를 보낸다). 표준 아바타는 항상
+    ready 이고 렌더 character 로 avatar_id 가 그대로 쓰인다.
+    """
+    return (
+        await db.execute(
+            select(StandardAvatar).where(
+                StandardAvatar.user_id == user.id,
+                StandardAvatar.heygen_avatar_id == look_id,
+            )
+        )
+    ).scalar_one_or_none()
+
+
 async def _get_saved(user: User, db: AsyncSession, saved_id: str) -> SavedAvatar:
     """본인 소유의 saved_avatar 행을 가져온다(없으면 404)."""
     try:
@@ -1742,14 +1762,21 @@ async def create_saved_avatar(
     룩은 본인 소유 + ready 여야 한다. 저장 수는 ``PHOTO_AVATAR_SAVED_MAX`` 로 상한.
     """
     look = await _resolve_look(user, db, payload.look_id)
-    if look is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="해당 룩을 찾을 수 없습니다."
-        )
-    if look.status != LookStatus.ready.value:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="아직 준비되지 않은 룩입니다."
-        )
+    if look is not None:
+        if look.status != LookStatus.ready.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="아직 준비되지 않은 룩입니다.",
+            )
+    else:
+        # 사진 룩이 아니면 본인이 등록한 표준 Video Avatar 인지 확인한다(표준은 항상
+        # ready). 둘 다 아니면 404. 이로써 표준 아바타+음성 조합도 저장할 수 있다.
+        std = await _resolve_standard_avatar(user, db, payload.look_id)
+        if std is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="해당 룩/아바타를 찾을 수 없습니다.",
+            )
 
     saved_count = (
         await db.execute(
@@ -1850,7 +1877,14 @@ async def render_saved_avatar_preview(
     payload = payload or SavedAvatarPreviewRequest()
     row = await _get_saved(user, db, saved_id)
     look = await _resolve_look(user, db, row.look_id)
-    if look is None or look.status != LookStatus.ready.value:
+    if look is not None:
+        if look.status != LookStatus.ready.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="이 아바타의 룩을 사용할 수 없습니다.",
+            )
+    elif await _resolve_standard_avatar(user, db, row.look_id) is None:
+        # 사진 룩도, 본인이 등록한 표준 아바타도 아니면 렌더 불가.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="이 아바타의 룩을 사용할 수 없습니다.",
@@ -1874,9 +1908,13 @@ async def render_saved_avatar_preview(
     from app.services.pipeline import tts
     from app.services.pipeline.heygen import HeyGenError, create_video
 
-    avatar_id, talking_photo_id = await _renderable_character_for_look(
-        look, keep_id=user.photo_avatar_id
-    )
+    if look is not None:
+        avatar_id, talking_photo_id = await _renderable_character_for_look(
+            look, keep_id=user.photo_avatar_id
+        )
+    else:
+        # 표준 Video Avatar — heygen avatar_id 로 그대로 렌더(talking photo 아님).
+        avatar_id, talking_photo_id = row.look_id, None
     is_cloned = bool(
         row.voice_id and user.cloned_voice_id and row.voice_id == user.cloned_voice_id
     )
