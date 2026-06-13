@@ -158,21 +158,50 @@ export default function LectureCard({
               style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
             />
           ) : (
-            <span
+            // 슬라이드 1쪽 이미지가 없는 강의(미생성 초안·렌더 실패) — 빈 박스 대신
+            // 제목 기반 브랜드 카드(슬라이드 표지 느낌)로 채운다.
+            <div
               aria-hidden="true"
               style={{
                 position: "absolute",
                 inset: 0,
-                display: "grid",
-                placeItems: "center",
-                color: "var(--text-faint)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                padding: "16px 18px",
+                textAlign: "center",
+                background:
+                  "linear-gradient(135deg, var(--gold-soft, #faf3e0) 0%, var(--bg-card, #ffffff) 100%)",
               }}
             >
-              <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="9 7 17 12 9 17 9 7" fill="currentColor" stroke="none" />
-                <rect x="3" y="3" width="18" height="18" rx="3" />
-              </svg>
-            </span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  letterSpacing: "0.14em",
+                  textTransform: "uppercase",
+                  color: "var(--gold-on-light, #b88308)",
+                }}
+              >
+                Lesson
+              </span>
+              <span
+                style={{
+                  fontSize: 15,
+                  fontWeight: 700,
+                  lineHeight: 1.4,
+                  color: "var(--text, #1a1a1a)",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: "vertical",
+                  overflow: "hidden",
+                }}
+              >
+                {lecture.title}
+              </span>
+            </div>
           )}
         </button>
         <LectureTitle title={lecture.title} />
