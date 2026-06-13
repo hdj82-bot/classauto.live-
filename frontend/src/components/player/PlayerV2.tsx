@@ -176,6 +176,8 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const [seedSuggestions, setSeedSuggestions] = useState<
     { id: string; question: string; video_url: string }[]
   >([]);
+  // 추천 질문은 기본 접힘 — 채팅 영역을 잠식하지 않게 버튼으로 펼친다.
+  const [seedOpen, setSeedOpen] = useState(false);
   const qaBottomRef = useRef<HTMLDivElement>(null);
 
   // 인터스티셜 퀴즈 — 슬라이드 경계(또는 타임스탬프)에서 우측 Q&A 채팅에 출제.
@@ -1282,19 +1284,45 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                 실시간 RAG 가 아니라 미리 만든 Q&A 영상을 재생한다. */}
             {seedSuggestions.length > 0 && (
               <div className={styles.suggest}>
-                <span className={styles.suggestLabel}>
-                  {t("student.playerV2.qaSuggestLabel")}
-                </span>
-                {seedSuggestions.map((q) => (
-                  <button
-                    key={q.id}
-                    type="button"
-                    className={styles.chip}
-                    onClick={() => playSeedQuestion(q)}
+                <button
+                  type="button"
+                  className={styles.suggestToggle}
+                  aria-expanded={seedOpen}
+                  onClick={() => setSeedOpen((v) => !v)}
+                >
+                  <span className={styles.suggestLabel}>
+                    {t("student.playerV2.qaSuggestLabel")}
+                    <span className={styles.suggestCount}>
+                      {seedSuggestions.length}
+                    </span>
+                  </span>
+                  <svg
+                    className={`${styles.suggestChevron} ${seedOpen ? styles.suggestChevronOpen : ""}`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
                   >
-                    {q.question}
-                  </button>
-                ))}
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {seedOpen && (
+                  <div className={styles.suggestList}>
+                    {seedSuggestions.map((q) => (
+                      <button
+                        key={q.id}
+                        type="button"
+                        className={styles.chip}
+                        onClick={() => playSeedQuestion(q)}
+                      >
+                        {q.question}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
