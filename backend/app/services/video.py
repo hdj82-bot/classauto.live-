@@ -1,4 +1,5 @@
 """Video / Script 서비스."""
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -9,6 +10,8 @@ from sqlalchemy.orm import selectinload
 from app.celery_app import celery
 from app.models.video import Video, VideoScript, VideoStatus
 from app.schemas.video import ScriptSegment, SubtitleSegment
+
+logger = logging.getLogger(__name__)
 
 
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
@@ -613,6 +616,7 @@ async def rerender_video(
     # 텍스트가 바뀐 슬라이드만 audio_url 을 비워 TTS 를 새로 합성한다.
     # (주의: 음성/속도 변경은 render 행에 기록이 없어 텍스트 기준으로만 감지한다.)
     to_enqueue: list[tuple[str, str]] = []
+    reused_ready = 0  # 변경 없이 재사용된(이미 ready+음성) 슬라이드 수
     for seg in segments:
         if not isinstance(seg, dict):
             continue
@@ -630,6 +634,7 @@ async def rerender_video(
             and render.audio_url
             and (render.script_text or "") == script_text
         ):
+            reused_ready += 1
             continue
         if render is None:
             # 세그먼트가 늘었거나 매칭 렌더 없음 → 새 행.
@@ -652,8 +657,21 @@ async def rerender_video(
             render.heygen_job_id = None
         to_enqueue.append((str(render.id), script_text))
 
-    # 바뀐 구간이 없으면 재제작할 게 없다 — 상태도 그대로 두고 0 을 반환한다.
+    # 바뀐 구간이 없으면 재합성할 게 없다. 다만 **모든 슬라이드 음성이 이미 ready**
+    # 인데도 Video 가 rendering 에 갇혀 있으면(마지막 슬라이드의 finalize 누락·레이스로
+    # done 전환이 빠진 경우) 여기서 done 으로 승격해 미리보기·재생을 풀어준다.
+    # 이게 없으면 "다시 제작"은 0(변경 없음)을 돌려주고 미리보기는 계속 '준비 중'이라
+    # (slideshow is_ready = status==done) 교수자가 어느 쪽으로도 빠져나갈 수 없다.
     if not to_enqueue:
+        if reused_ready > 0 and video.status == VideoStatus.rendering:
+            video.status = VideoStatus.done
+            await db.commit()
+            await db.refresh(video)
+            logger.info(
+                "rerender: 모든 슬라이드 ready 인데 rendering 에 갇힌 Video 를 done 으로 승격 "
+                "(video_id=%s, slides=%d)",
+                video.id, reused_ready,
+            )
         return video, 0
 
     video.status = VideoStatus.rendering

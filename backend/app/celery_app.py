@@ -56,6 +56,10 @@ celery.conf.beat_schedule = {
         "task": "app.tasks.render.reap_stuck_renders",
         "schedule": 300,  # 5분 간격 — 워커 재시작 등으로 멈춘 슬라이드 렌더 자가 회복
     },
+    "reap-stuck-videos": {
+        "task": "app.tasks.render.reap_stuck_videos",
+        "schedule": 300,  # 5분 간격 — 전 슬라이드 ready 인데 rendering 에 갇힌 Video 회복
+    },
     # 아바타 Q&A 야간 배치 — pending 질문 클러스터링 → 상위 클러스터 렌더 (08/09 §5).
     # 실시간 렌더 금지이므로 하루 1회. 기본 18:00 UTC = KST 03:00.
     "qa-avatar-nightly-batch": {

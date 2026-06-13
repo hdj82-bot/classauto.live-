@@ -964,12 +964,21 @@ export default function StudioWizardPage() {
         );
         if (!ok) return;
         try {
-          const { data } = await api.post<{ rerendered_segments?: number }>(
-            `/api/videos/${videoId}/rerender`,
-          );
+          const { data } = await api.post<{
+            rerendered_segments?: number;
+            status?: string;
+          }>(`/api/videos/${videoId}/rerender`);
           // 바뀐 구간이 없으면 재합성할 게 없다 — 모달을 열지 않고 안내만.
           if (!data?.rerendered_segments) {
-            toast("변경된 내용이 없어 다시 제작할 슬라이드가 없습니다.", "info");
+            // 백엔드가 rendering 에 갇혀 있던 Video 를 done 으로 풀어준 경우
+            // (모든 슬라이드는 이미 완성). 미리보기를 바로 열 수 있게 상태를 맞춘다.
+            if (data?.status === "done") {
+              setVideoStatus("done");
+              setGenDone(true);
+              toast("이미 모든 슬라이드가 완성되어 있어요. 미리보기로 확인하세요.", "success");
+            } else {
+              toast("변경된 내용이 없어 다시 제작할 슬라이드가 없습니다.", "info");
+            }
             return;
           }
           // 모달을 진행 상태로 되돌리고(완료 표시 제거), 멈춰 있던 렌더 폴링을

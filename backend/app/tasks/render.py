@@ -375,3 +375,52 @@ def reap_stuck_renders() -> dict:
         len(to_enqueue), settings.RENDER_STUCK_MINUTES,
     )
     return {"reaped": len(to_enqueue)}
+
+
+@celery.task
+def reap_stuck_videos() -> dict:
+    """모든 슬라이드 음성이 ready 인데 done 으로 전환되지 못한 Video 를 자가 회복한다.
+
+    슬라이드쇼 모드에서 Video 는 마지막 슬라이드 render_slide 가 끝나며 호출하는
+    finalize_video_if_all_ready 로만 done 이 된다. 그 한 번의 호출이 DB 일시 오류·
+    레이스·워커 크래시로 누락되면(render.py 에서 예외를 삼킴) 모든 VideoRender 는
+    ready 인데 Video 만 rendering 에 영구히 갇힌다. 이 경우:
+      - 학생/교수 미리보기(slideshow is_ready = status==done)는 계속 '준비 중',
+      - "다시 제작"(rerender)도 자체 heal 을 누르지 않으면 0(변경 없음)을 반환.
+    이 reaper 가 rendering Video 마다 finalize 를 재시도해 done 으로 끌어올린다.
+    finalize 는 멱등이며 미완료 렌더가 하나라도 있으면 전환하지 않으므로 진행 중인
+    제작을 건드리지 않는다.
+    """
+    from sqlalchemy import select
+
+    from app.models.video import Video, VideoStatus
+    from app.services.video_status import finalize_video_if_all_ready
+
+    db = SyncSessionLocal()
+    healed = 0
+    try:
+        lecture_ids = db.execute(
+            select(Video.lecture_id)
+            .where(Video.status == VideoStatus.rendering)
+            .distinct()
+        ).scalars().all()
+        for lecture_id in lecture_ids:
+            try:
+                if finalize_video_if_all_ready(db, lecture_id):
+                    healed += 1
+            except Exception as exc:  # noqa: BLE001 — 한 건 실패가 나머지를 막지 않게.
+                db.rollback()
+                logger.warning(
+                    "reap_stuck_videos finalize 실패(무시): lecture_id=%s, error=%s",
+                    lecture_id, exc,
+                )
+    except Exception as exc:  # noqa: BLE001 — reaper 실패가 워커를 죽이지 않게.
+        db.rollback()
+        logger.warning("reap_stuck_videos 실패(무시): %s", exc)
+        return {"healed": 0, "error": str(exc)}
+    finally:
+        db.close()
+
+    if healed:
+        logger.warning("rendering 에 갇힌 Video %d건을 done 으로 자가 회복", healed)
+    return {"healed": healed}
