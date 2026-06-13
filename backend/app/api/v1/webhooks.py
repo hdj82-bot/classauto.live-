@@ -81,6 +81,15 @@ async def heygen_webhook(
         )
         render = result.scalar_one_or_none()
         if not render:
+            # 슬라이드(VideoRender)가 아니면 사전 질문(Q&A 아바타) 클립일 수 있다.
+            # 슬라이드와 달리 seed 클립은 웹훅이 없어 폴링 한도(10분) 후 'rendering'
+            # 으로 고착됐다. 같은 웹훅으로 seed 도 완료 처리한다.
+            seed_result = await _handle_seed_clip_webhook(
+                db, video_id, event_type, event_data
+            )
+            if seed_result is not None:
+                db.commit()
+                return seed_result
             logger.warning("HeyGen 웹훅: 매칭되는 render 없음 job_id=%s, event_type=%s", video_id, event_type)
             db.commit()
             return {"status": "ignored", "reason": "unknown video_id"}
@@ -173,3 +182,61 @@ async def heygen_webhook(
         return {"status": "processed", "render_id": str(render.id)}
     finally:
         db.close()
+
+
+async def _handle_seed_clip_webhook(
+    db, video_id: str, event_type: str, event_data: dict
+) -> dict | None:
+    """사전 질문(Q&A 아바타) 클립 완료를 웹훅으로 처리한다.
+
+    ``QAAnswerCache.heygen_job_id == video_id`` 로 매칭. 매칭이 없으면 None 을 돌려
+    호출부가 "unknown video_id" 로 흘려보낸다(= 이 웹훅은 seed 가 아님).
+
+    성공: HeyGen url 을 S3 로 올린 뒤 ready 로 전이(폴링 경로 _mark_cluster_ready 와
+    동일 상태). 실패/URL 없음: failed. 비용 기록은 기존 폴링 완료 경로(_poll_inflight)
+    와 동일하게 생략한다. 멱등성은 호출부의 WebhookEventLog + 여기 종료상태 가드로 보장.
+    """
+    from app.models.qa_answer_cache import QAAnswerCache
+    from app.services.pipeline import qa_avatar
+    from app.tasks.qa_batch import _mark_cluster_failed, _mark_cluster_ready
+
+    rep = db.execute(
+        select(QAAnswerCache).where(QAAnswerCache.heygen_job_id == video_id)
+    ).scalar_one_or_none()
+    if rep is None:
+        return None
+
+    if rep.status in (qa_avatar.STATUS_READY, qa_avatar.STATUS_FAILED):
+        logger.info(
+            "이미 처리된 Q&A 클립에 대한 %s 이벤트 무시: seed_id=%s, status=%s",
+            event_type, rep.id, rep.status,
+        )
+        return {"status": "already_processed", "seed_id": str(rep.id)}
+
+    logger.info(
+        "HeyGen 웹훅 수신(Q&A 클립): job_id=%s, seed_id=%s, event_type=%s",
+        video_id, rep.id, event_type,
+    )
+
+    if event_type == "avatar_video.success":
+        heygen_url = event_data.get("url", "")
+        duration = event_data.get("duration")
+        s3_url = None
+        if heygen_url:
+            try:
+                s3_url, _ = await s3_svc.upload_from_url(heygen_url, str(rep.lecture_id))
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Q&A 클립 S3 업로드 실패: seed_id=%s, error=%s", rep.id, exc)
+                _mark_cluster_failed(db, rep.cluster_key, f"S3 업로드 실패: {exc}")
+                return {"status": "error", "reason": "s3_upload_failed"}
+        if not s3_url:
+            _mark_cluster_failed(db, rep.cluster_key, "HeyGen 응답에 영상 URL 이 없습니다.")
+            return {"status": "error", "reason": "no_video_url"}
+        _mark_cluster_ready(db, rep, s3_url, duration)
+        return {"status": "processed", "seed_id": str(rep.id)}
+
+    # avatar_video.fail
+    _mark_cluster_failed(
+        db, rep.cluster_key, event_data.get("error", "HeyGen Q&A 렌더 실패")
+    )
+    return {"status": "processed", "seed_id": str(rep.id)}

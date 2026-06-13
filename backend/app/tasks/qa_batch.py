@@ -628,10 +628,27 @@ def _poll_seed_renders(db, loop, lecture_id) -> dict:
 
     _poll_inflight 는 status=rendering 인 모든 대표 행을 폴링하므로 seed/student 를
     가리지 않지만, 같은 클립을 ready 로 굳히는 동작이 동일해 그대로 재사용한다.
+
+    덤으로, heygen_job_id 가 없는 채 rendering 으로 남은 '고아' seed 를 failed 로
+    정리한다 — 제출 직전 크래시 등으로 생기며, 웹훅·폴링 어디서도 회수가 안 돼
+    무한 'rendering' 이 된다.
     """
     completed, failed = _poll_inflight(loop, db)
+    orphaned = (
+        db.query(QAAnswerCache)
+        .filter(
+            QAAnswerCache.lecture_id == lecture_id,
+            QAAnswerCache.origin == qa_avatar.ORIGIN_SEED,
+            QAAnswerCache.status == qa_avatar.STATUS_RENDERING,
+            QAAnswerCache.heygen_job_id.is_(None),
+        )
+        .all()
+    )
+    for r in orphaned:
+        r.status = qa_avatar.STATUS_FAILED
+        r.error_message = "아바타 생성 제출에 실패했어요. 다시 시도해 주세요."
     db.commit()
-    return {"completed": completed, "failed": failed}
+    return {"completed": completed, "failed": failed + len(orphaned)}
 
 
 @celery.task(name="app.tasks.qa_batch.render_seed_questions")
@@ -683,7 +700,11 @@ def render_seed_questions(lecture_id, instructor_id) -> dict:
 
 @celery.task(name="app.tasks.qa_batch.poll_seed_renders")
 def poll_seed_renders(lecture_id, attempt: int = 0) -> dict:
-    """render_seed_questions 가 예약하는 자체 폴링. 완료될 때까지 30초 간격 재예약(최대 20회)."""
+    """render_seed_questions 가 예약하는 자체 폴링(웹훅 누락 대비 폴백).
+
+    완료될 때까지 30초 간격 재예약(최대 40회=20분). 1차 완료 경로는 HeyGen 웹훅
+    (webhooks._handle_seed_clip_webhook)이고, 이 폴링은 웹훅이 유실됐을 때의 안전망.
+    """
     loop = asyncio.new_event_loop()
     try:
         with SyncSessionLocal() as db:
@@ -694,7 +715,7 @@ def poll_seed_renders(lecture_id, attempt: int = 0) -> dict:
                 logger.error("Q&A 사전질문 폴링 실패: lecture=%s, %s", lecture_id, exc)
                 return {"completed": 0, "failed": 0, "error": str(exc)}
             still_rendering = _seed_still_rendering(db, lecture_id)
-        if still_rendering and attempt < 20:
+        if still_rendering and attempt < 40:
             poll_seed_renders.apply_async((lecture_id, attempt + 1), countdown=30)
         return result
     finally:

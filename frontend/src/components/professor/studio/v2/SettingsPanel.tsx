@@ -88,8 +88,6 @@ export interface SettingsPanelProps {
    * 직접 입력/자동 생성을 고를 수 있다.
    */
   onAutoGenerateSeedQuestion?: (index: number) => Promise<void>;
-  /** 하단 "AI 질문 승인" — 저장된 사전 질문을 즉시 아바타 클립으로 렌더 시작. */
-  onApproveSeedQuestions?: () => Promise<void>;
 }
 
 const settingsStyle: CSSProperties = {
@@ -324,7 +322,6 @@ export default function SettingsPanel({
   onChangeSeedQuestion,
   onPreviewSeed,
   onAutoGenerateSeedQuestion,
-  onApproveSeedQuestions,
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
@@ -352,11 +349,6 @@ export default function SettingsPanel({
     seedSaved.length > 0 && seedSaved.every((q) => q.status === "ready");
   const seedProgressPct =
     seedSaved.length > 0 ? Math.round((seedDone / seedSaved.length) * 100) : 0;
-  // "AI 질문 승인" 가능 여부 — 저장됐고 아직 렌더 안 한(pending/failed) 항목이 있고,
-  // 현재 렌더 진행 중이 아닐 때만. (ready 항목은 이미 클립이 있어 재렌더 불필요.)
-  const seedApprovable =
-    !seedRendering &&
-    seedSaved.some((q) => q.status === "pending" || q.status === "failed");
   const summarySeedVal =
     seedQuestions.length === 0
       ? "없음"
@@ -637,8 +629,9 @@ export default function SettingsPanel({
           </summary>
           <div style={aBodyStyle}>
             <p style={{ margin: 0, fontSize: 11.5, color: "var(--text-subtle)", lineHeight: 1.5 }}>
-              학생이 자주 물을 법한 질문과 사전 대답을 적어 두세요. 답변을 비우면 영상 생성 시
-              강의 자료 기반으로 자동 생성합니다. 영상 생성 시 아바타 클립으로 미리 만들어,
+              학생이 자주 물을 법한 질문과 사전 대답을 적어 두세요. 답변을 비우면 강의 자료
+              기반으로 자동 생성됩니다. <strong>‘슬라이드 쇼 제작’을 누르면</strong> 슬라이드
+              영상과 함께 이 질문들의 답변 아바타 영상도 같이 만들어집니다(별도 단계 없음).
               학생이 비슷한 질문을 하면 첫 질문부터 아바타가 바로 답합니다. 강의당 최대 3개.
             </p>
 
@@ -712,14 +705,29 @@ export default function SettingsPanel({
               </p>
             )}
 
-            {/* AI 질문 승인 — 저장된 사전 질문을 영상 전체 생성 없이 즉시 아바타로 렌더. */}
-            {onApproveSeedQuestions && seedSaved.length > 0 && (
-              <SeedApproveButton
-                onApprove={onApproveSeedQuestions}
-                disabled={!seedApprovable}
-                rendering={seedRendering}
-                done={seedAllReady}
-              />
+            {/* 생성 완료 — 모든 클립이 ready 면 안내(별도 승인 단계 없이 '슬라이드 쇼
+                제작'으로 함께 만들어진다). */}
+            {seedAllReady && (
+              <div
+                role="status"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "8px 12px",
+                  borderRadius: 9,
+                  border: "1px solid rgba(27,127,75,0.35)",
+                  background: "rgba(27,127,75,0.10)",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "#1B7F4B",
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6 9 17l-5-5" />
+                </svg>
+                아바타 답변 영상 준비 완료 — 각 질문 ‘미리보기’로 확인
+              </div>
             )}
           </div>
         </details>
@@ -904,107 +912,6 @@ const SEED_STATUS_BADGE: Record<SeedQuestionStatus, { label: string; fg: string;
   ready: { label: "준비됨", fg: "#1B7F4B", bg: "rgba(27,127,75,0.10)" },
   failed: { label: "실패", fg: "#B42318", bg: "rgba(180,35,24,0.10)" },
 };
-
-/**
- * "AI 질문 승인" — 저장된 사전 질문을 영상 전체 생성 없이 즉시 아바타 클립으로
- * 렌더 시작한다. 렌더 중/대상 없음이면 비활성. 자체 busy 상태로 중복 클릭 차단.
- */
-function SeedApproveButton({
-  onApprove,
-  disabled,
-  rendering,
-  done,
-}: {
-  onApprove: () => Promise<void>;
-  disabled: boolean;
-  rendering: boolean;
-  /** 저장된 클립이 모두 ready — 생성 완료(성공) 상태. */
-  done: boolean;
-}) {
-  const [busy, setBusy] = useState(false);
-  const blocked = disabled || busy || rendering || done;
-
-  const handleClick = async () => {
-    if (blocked) return;
-    setBusy(true);
-    try {
-      await onApprove();
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // 완료(done) 상태는 초록 성공 칩으로 — "각 질문 미리보기로 확인"을 안내한다.
-  if (done) {
-    return (
-      <div
-        role="status"
-        style={{
-          width: "100%",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-          padding: "9px 12px",
-          borderRadius: 9,
-          border: "1px solid rgba(27,127,75,0.35)",
-          background: "rgba(27,127,75,0.10)",
-          fontSize: 12.5,
-          fontWeight: 700,
-          color: "#1B7F4B",
-          fontFamily: "inherit",
-        }}
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
-        AI 아바타 생성 완료 — 각 질문 ‘미리보기’로 확인
-      </div>
-    );
-  }
-
-  const label = busy
-    ? "승인 중…"
-    : rendering
-      ? "아바타 생성 중…"
-      : "AI 질문 승인 — 아바타 미리 생성";
-
-  return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={blocked}
-      style={{
-        width: "100%",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 6,
-        padding: "9px 12px",
-        borderRadius: 9,
-        border: "1px solid var(--gold-on-light, #B88308)",
-        background: blocked ? "var(--gold-soft)" : "var(--gold-on-light, #B88308)",
-        fontSize: 12.5,
-        fontWeight: 700,
-        cursor: blocked ? "not-allowed" : "pointer",
-        opacity: blocked ? 0.6 : 1,
-        color: blocked ? "var(--gold-on-light, #B88308)" : "#fff",
-        fontFamily: "inherit",
-      }}
-    >
-      {rendering ? (
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 12a9 9 0 1 1-6.2-8.6" />
-        </svg>
-      ) : (
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20 6 9 17l-5-5" />
-        </svg>
-      )}
-      {label}
-    </button>
-  );
-}
 
 /** 예상 질문 1개 카드 — 질문 + (선택) 사전 대답 입력. ready 면 미리보기 재생. */
 function SeedQuestionCard({

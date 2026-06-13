@@ -338,3 +338,87 @@ def test_nightly_batch_skips_seed(sync_db, mock_render):
     assert s1.status == qa_avatar.STATUS_PENDING
     assert s2.status == qa_avatar.STATUS_PENDING
     assert s1.heygen_job_id is None and s2.heygen_job_id is None
+
+
+# ── 웹훅으로 사전 질문 클립 완료(슬라이드와 동일 경로) ─────────────────────────
+
+
+def _rendering_seed(db, lec, prof, job_id: str) -> QAAnswerCache:
+    row = QAAnswerCache(
+        lecture_id=lec.id, instructor_id=prof.id,
+        question_text="이 강의의 핵심 개념은?", answer_text="사전 답변.",
+        question_embedding=None, status=qa_avatar.STATUS_RENDERING,
+        origin=qa_avatar.ORIGIN_SEED, heygen_job_id=job_id,
+        cluster_key=uuid.uuid4().hex,
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def test_seed_webhook_success_marks_ready(sync_db, monkeypatch):
+    from app.api.v1 import webhooks
+
+    async def _fake_upload(url, lecture_id, *a):  # noqa: ANN001
+        return ("s3://qa/clip.mp4", 0.0)
+
+    monkeypatch.setattr(webhooks.s3_svc, "upload_from_url", _fake_upload)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    row = _rendering_seed(sync_db, lec, prof, "heygen-seed-1")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        out = loop.run_until_complete(
+            webhooks._handle_seed_clip_webhook(
+                sync_db, "heygen-seed-1", "avatar_video.success",
+                {"url": "https://heygen/clip.mp4", "duration": 5.0},
+            )
+        )
+    finally:
+        loop.close()
+
+    assert out is not None and out["status"] == "processed"
+    sync_db.refresh(row)
+    assert row.status == qa_avatar.STATUS_READY
+    assert row.s3_video_url == "s3://qa/clip.mp4"
+
+
+def test_seed_webhook_fail_marks_failed(sync_db, monkeypatch):
+    from app.api.v1 import webhooks
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    row = _rendering_seed(sync_db, lec, prof, "heygen-seed-2")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        out = loop.run_until_complete(
+            webhooks._handle_seed_clip_webhook(
+                sync_db, "heygen-seed-2", "avatar_video.fail",
+                {"error": "HeyGen 오류"},
+            )
+        )
+    finally:
+        loop.close()
+
+    assert out is not None and out["status"] == "processed"
+    sync_db.refresh(row)
+    assert row.status == qa_avatar.STATUS_FAILED
+
+
+def test_seed_webhook_unknown_job_returns_none(sync_db):
+    from app.api.v1 import webhooks
+
+    loop = asyncio.new_event_loop()
+    try:
+        out = loop.run_until_complete(
+            webhooks._handle_seed_clip_webhook(
+                sync_db, "no-such-job", "avatar_video.success", {"url": "x"},
+            )
+        )
+    finally:
+        loop.close()
+    # 매칭되는 seed 가 없으면 None → 호출부가 'unknown video_id' 로 흘려보낸다.
+    assert out is None
