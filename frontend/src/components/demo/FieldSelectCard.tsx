@@ -16,6 +16,8 @@ export interface FieldCardOverride {
   subtitle?: string;
   statSlides?: string;
   statSecondary?: string;
+  /** 카드 아이콘 교체(미지정 시 분야 기본 글리프). 예: 실제 강의 카드 = 책. */
+  glyph?: ReactNode;
 }
 
 interface Props {
@@ -84,7 +86,7 @@ export default function FieldSelectCard({ field, onSelect, override }: Props) {
 
       <div className="ca-field-card-top">
         <div className="ca-field-icon" aria-hidden="true">
-          {meta.glyph}
+          {override?.glyph ?? meta.glyph}
         </div>
         <span className="ca-field-tag">
           {override?.tagline ?? t(meta.taglineKey)}
@@ -153,6 +155,24 @@ function renderWithSpan(
       <span className={spanClass}>{value}</span>
       {parts[1]}
     </>
+  );
+}
+
+/** 책 글리프 — 펼친 책(grad-globe 그라데이션 재사용). 실제 강의 카드용. */
+export function BookGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="url(#ca-grad-globe)"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 6.5C10.4 5.1 7.6 4.6 4 5.2v12.6c3.6-.6 6.4-.1 8 1.3" />
+      <path d="M12 6.5c1.6-1.4 4.4-1.9 8-1.3v12.6c-3.6-.6-6.4-.1-8 1.3" />
+      <path d="M12 6.5v12.9" />
+    </svg>
   );
 }
 
