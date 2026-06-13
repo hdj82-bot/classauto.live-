@@ -171,6 +171,15 @@ export default function LectureLibrarySection({
     [lectures],
   );
 
+  // 카드에서 바로 "강의 배포" 페이지로 — 미리보기·배포하기를 거치지 않고
+  // 공유 링크·QR·게시 토글 화면(/professor/lecture/{id}/share)으로 직행한다.
+  const handleShare = useCallback(
+    (id: string) => {
+      router.push(`/professor/lecture/${id}/share`);
+    },
+    [router],
+  );
+
   // 공개/비공개 전환 후 — 목록 state 의 해당 강의 is_published 를 즉시 갱신(배지·버튼 반영).
   const handleVisibilityChanged = useCallback(
     (id: string, isPublished: boolean) => {
@@ -436,25 +445,9 @@ export default function LectureLibrarySection({
                       onContinue={handleContinue}
                       onDeleted={handleDeleted}
                       onPreview={handlePreview}
+                      onShare={handleShare}
                       onVisibilityChanged={handleVisibilityChanged}
                     />
-                    <button
-                      type="button"
-                      onClick={() => setMovingLecture(lec)}
-                      aria-label={t("library.moveTo")}
-                      className="absolute top-3 right-3 rounded-md motion-safe:transition"
-                      style={{
-                        padding: "4px 8px",
-                        fontSize: 11,
-                        fontWeight: 500,
-                        color: "var(--text-muted)",
-                        background: "var(--bg-subtle)",
-                        border: "1px solid var(--line)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {t("library.moveTo")}
-                    </button>
                   </div>
                 ))}
               </div>
