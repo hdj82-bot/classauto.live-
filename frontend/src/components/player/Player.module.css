@@ -164,6 +164,41 @@
   object-fit: contain;
   display: block;
 }
+/* 슬라이드 PNG 가 없을 때(LibreOffice 렌더 실패·미생성)의 대체 슬라이드.
+   본문(음성)은 준비됐으므로 막지 않고 발화 텍스트를 슬라이드로 보여 재생을 잇는다. */
+.slideFallback {
+  width: 100%;
+  height: 100%;
+  border: none;
+  margin: 0;
+  padding: 7% 9%;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  text-align: center;
+  z-index: 1;
+}
+.slideFallbackNum {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--gold);
+  opacity: 0.85;
+}
+.slideFallbackText {
+  font-size: clamp(18px, 2.4vw, 30px);
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text-dark, #f5f5f5);
+  max-height: 70%;
+  overflow-y: auto;
+  max-width: 90%;
+}
 /* 자막 — 슬라이드 하단 중앙. 컨트롤바(하단 ~64px 그라데이션 오버레이) 위로 띄운다. */
 .caption {
   position: absolute;
