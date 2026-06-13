@@ -620,24 +620,24 @@
       "identityNote": "학자가 학자를 위해 만든 도구"
     },
     "heroV3": {
-      "observerBadge": "교수자의 의도가 모든 결정에 반영되는 AI 강의 플랫폼",
+      "observerBadge": "중국어번역작문 2주차 · AI 강의 데모",
       "headlineLead": "대본 한 번,",
       "headlineTail": "학생과는",
       "headlineAccent": "끝없는 대화",
-      "subtitle": "PPT를 올리면 AI가 교수자와 대화하며 강의 컨셉을 잡고 영상을 생성합니다. 완성된 영상은 학생과 양방향으로 상호작용하며, 교수자는 학습 데이터로 대면 수업을 다듬습니다.",
-      "subtitleLine1": "PPT를 올리면 AI가 교수자와 대화하며 강의 컨셉을 잡고 영상을 생성합니다.",
-      "subtitleLine2": "완성된 영상은 학생과 양방향으로 상호작용하며,",
-      "subtitleLine3": "교수자는 학습 데이터로 대면 수업을 다듬습니다.",
+      "subtitle": "실제 중국어번역작문 강의를 학생 화면 그대로 체험해보세요. 영어 음성과 한국어 자막으로 한·중 문장성분의 차이를 익히고, 궁금한 점은 AI 아바타에게 바로 질문할 수 있습니다.",
+      "subtitleLine1": "실제 중국어번역작문 강의를 학생 화면 그대로 체험해보세요.",
+      "subtitleLine2": "영어 음성과 한국어 자막으로 한·중 문장성분의 차이를 익히고,",
+      "subtitleLine3": "궁금한 점은 AI 아바타에게 바로 질문할 수 있습니다.",
       "subTag": "학생이 만나는 화면을 먼저 확인해보세요.",
-      "metaTime": "약 3분 소요",
-      "metaQuestions": "질문 3건 무료",
+      "metaTime": "영어 음성 · 한국어 자막",
+      "metaQuestions": "AI 아바타 Q&A",
       "metaMobile": "모바일 가능",
-      "primaryCta": "학생 화면 미리보기",
+      "primaryCta": "시작하기",
       "secondaryCta": "기능 자세히 보기"
     },
     "homeHero": {
-      "headlineLead": "학생과 상호작용하는",
-      "headlineAccent": "AI 교육영상"
+      "headlineLead": "중국어 번역작문 강의,",
+      "headlineAccent": "학생처럼 체험해보세요."
     },
     "demoFlow": {
       "topStatus": "데모 미리보기 · 흐름 요약",

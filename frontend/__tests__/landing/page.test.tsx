@@ -22,11 +22,11 @@ describe("LandingPage 통합", () => {
     renderPage(<LandingPage />);
     // homeHero — / 전용 카피 (헤딩 level 1)
     const h1 = screen.getByRole("heading", { level: 1 });
-    expect(h1.textContent).toContain("학생과 상호작용하는");
-    expect(h1.textContent).toContain("AI 교육영상");
+    expect(h1.textContent).toContain("중국어 번역작문 강의,");
+    expect(h1.textContent).toContain("학생처럼 체험해보세요.");
     // 관찰자 eyebrow (landingHub.heroV3.observerBadge)
     expect(
-      screen.getByText(/교수자의 의도가 모든 결정에 반영되는 AI 강의 플랫폼/),
+      screen.getByText(/중국어번역작문 2주차 · AI 강의 데모/),
     ).toBeTruthy();
     // 분야 쇼케이스 헤딩 + 카드 2장
     expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
@@ -43,14 +43,17 @@ describe("LandingPage 통합", () => {
   // (제거된 콘텐츠를 위한 테스트는 존재 의미가 없음).
 
   // v2 회귀 (후속 정리 ③): v1 의 hero CTA 2개가 /auth/login 으로 가던 구조는
-  // 폐기됐다. v3.1 hero 의 primary 는 /demo?field=social (학생 화면 미리보기),
+  // 폐기됐다. hero 의 primary 는 시연 강의 학생 화면(/lecture/{slug}, "시작하기"),
   // secondary 는 /features.
   // 정책 변경 2026-05-18 (01-pricing-policy.md §5.3): 헤더에 로그인 진입점을
   // 노출하므로 /auth/login 링크는 hero 가 아니라 헤더에 1개 이상 존재한다.
-  it("v2 hero CTA — primary=/demo?field=social, secondary=/features", () => {
+  it("v2 hero CTA — primary=시연 강의(/lecture/...), secondary=/features", () => {
     renderPage(<LandingPage />);
     const primary = screen.getByTestId("landing-hero-start");
-    expect(primary.getAttribute("href")).toBe("/demo?field=social");
+    // 시작하기 → 미리 공개한 시연 강의 학생 화면으로 직행(중국어번역작문 2주차).
+    expect(primary.getAttribute("href")).toBe(
+      "/lecture/중국어-필수-문장성분-f7dda164",
+    );
     const featureLinks = screen
       .getAllByRole("link")
       .filter((el) => el.getAttribute("href") === "/features");
