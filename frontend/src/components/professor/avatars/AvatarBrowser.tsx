@@ -488,7 +488,6 @@ function Lightbox({
             <video
               src={avatar.preview_video_url}
               autoPlay
-              muted
               loop
               controls
               playsInline
