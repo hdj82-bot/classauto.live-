@@ -578,7 +578,11 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         # 표기 규칙(출처 미표기·중국어 괄호 금지)을 적용한다.
         answer = (row.answer_text or "").strip()
         if not answer:
-            generated, in_scope = generate_seed_answer(db, task_id, row.question_text)
+            # 답변은 강의 발화 언어(아바타 발화 내용과 동일)로 생성한다.
+            _voice_lang = (lecture.voice_lang if lecture else None) or "ko"
+            generated, in_scope = generate_seed_answer(
+                db, task_id, row.question_text, lang=_voice_lang
+            )
             if not in_scope:
                 # 슬라이드/임베딩이 없어 답변을 만들 수 없음(파이프라인 미완 등).
                 row.status = qa_avatar.STATUS_FAILED

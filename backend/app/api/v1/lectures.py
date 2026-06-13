@@ -332,12 +332,14 @@ async def generate_seed_answer_endpoint(
             detail="강의 파이프라인이 아직 처리되지 않았습니다.",
         )
 
+    # 답변은 강의 발화 언어(아바타 발화 내용과 동일)로 생성한다 — 영어 강의면 영어.
+    voice_lang = (lecture.voice_lang if lecture else None) or "ko"
     question = body.question
     loop = asyncio.get_event_loop()
 
     def _work() -> GenerateSeedAnswerResponse:
         with SyncSessionLocal() as sdb:
-            answer, in_scope = generate_seed_answer(sdb, task_id, question)
+            answer, in_scope = generate_seed_answer(sdb, task_id, question, lang=voice_lang)
             return GenerateSeedAnswerResponse(answer=answer, in_scope=in_scope)
 
     return await loop.run_in_executor(None, _work)

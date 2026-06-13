@@ -27,9 +27,15 @@ from tests.conftest import _patch_jsonb_columns, make_auth_header
 
 def test_seed_system_prompt_forbids_chinese_parenthesis():
     # 교수자 요청: 중국어/한자 용어 괄호 병기 금지가 프롬프트에 명시돼야 한다.
-    p = qa_mod.SEED_ANSWER_SYSTEM_PROMPT
+    p = qa_mod._seed_answer_system_prompt("한국어")
     assert "괄호" in p
     assert "大学生" in p  # 예시로 규칙을 못박았는지
+
+
+def test_seed_answer_prompt_uses_lecture_language():
+    # 답변은 강의 발화 언어로 작성하도록 프롬프트에 언어명이 박혀야 한다(영어 강의→English).
+    assert "English" in qa_mod._seed_answer_system_prompt("English")
+    assert "Chinese" in qa_mod._seed_answer_system_prompt("Chinese (Simplified)")
 
 
 def test_generate_seed_answer_no_slides_no_scripts(monkeypatch):
@@ -55,17 +61,22 @@ def test_generate_seed_answer_falls_back_to_scripts(monkeypatch):
     )
     captured = {}
 
-    def _call(client, content):
+    def _call(client, system, content):
+        captured["system"] = system
         captured["content"] = content
         return fake
 
     monkeypatch.setattr(qa_mod, "_claude_seed_call", _call)
 
-    answer, in_scope = qa_mod.generate_seed_answer(None, "task-1", "어순 차이는 왜 생기나요?")
+    answer, in_scope = qa_mod.generate_seed_answer(
+        None, "task-1", "어순 차이는 왜 생기나요?", lang="en"
+    )
     assert in_scope is True
     assert answer == "한국어와 중국어는 어순이 다릅니다."
     # 스크립트 컨텍스트가 프롬프트에 실렸는지.
     assert "어순 차이 설명" in captured["content"]
+    # 답변 언어가 강의 발화 언어(en→English)로 시스템 프롬프트에 박혔는지.
+    assert "English" in captured["system"]
 
 
 def test_generate_seed_answer_low_similarity_still_generates(monkeypatch):
@@ -82,7 +93,7 @@ def test_generate_seed_answer_low_similarity_still_generates(monkeypatch):
     fake = types.SimpleNamespace(
         content=[types.SimpleNamespace(type="text", text="  大学生은 대학에 다니는 학생입니다.  ")]
     )
-    monkeypatch.setattr(qa_mod, "_claude_seed_call", lambda client, content: fake)
+    monkeypatch.setattr(qa_mod, "_claude_seed_call", lambda client, system, content: fake)
 
     answer, in_scope = qa_mod.generate_seed_answer(None, "task-1", "어순 차이는 왜 생기나요?")
     assert in_scope is True
