@@ -41,6 +41,13 @@ export function splitIntoSentences(text: string): string[] {
 }
 
 /**
+ * 자막 전환을 음성보다 살짝 앞당기는 리드(초). 문장/절 경계를 글자 수 비례로
+ * 잡다 보니(실제 발성 속도와 완전히 같지 않음) 자막이 음성보다 한 박자 늦게
+ * 느껴진다. 전환 시점을 이만큼 앞당겨 체감 동기화를 맞춘다.
+ */
+const CAPTION_LEAD_SECONDS = 0.45;
+
+/**
  * 슬라이드 내 경과 시간에 해당하는 자막 문장을 고른다.
  *
  * @param text       표시할 자막(번역 자막 또는 발화 원문).
@@ -59,7 +66,11 @@ export function pickActiveCaption(
   if (sentences.length <= 1) return sentences[0] ?? text;
 
   const dur = Math.max(duration, 0.001);
-  const frac = Math.min(Math.max(elapsed / dur, 0), 0.9999);
+  // 리드만큼 앞당겨(=경과를 더 준 셈) 자막이 음성보다 살짝 먼저 넘어가게 한다.
+  const frac = Math.min(
+    Math.max((elapsed + CAPTION_LEAD_SECONDS) / dur, 0),
+    0.9999,
+  );
 
   // 가중 기준: 발화 원문 문장 수가 자막과 같으면 발화(=음성) 길이, 아니면 자막 길이.
   // 문장별 표시 시간을 균등이 아니라 글자 수에 비례시켜 짧은/긴 문장을 보정한다.
