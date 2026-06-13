@@ -667,20 +667,39 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               {/* 본문 렌더가 끝났고(bodyReady) 슬라이드 이미지가 있을 때만 재생면을
                   보여준다. 공개됐지만 아직 렌더 중(bodyReady=false)이면 무음으로
                   슬라이드만 넘기는 대신 "준비 중" 안내를 띄운다. */}
-              {bodyReady && currentSlide?.image_url ? (
-                <button
-                  type="button"
-                  className={styles.slideClick}
-                  onClick={togglePlay}
-                  aria-label={t("student.playerV2.controlPlay")}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={currentSlide.image_url}
-                    alt={lecture.title}
-                    className={styles.slideImg}
-                  />
-                </button>
+              {bodyReady && currentSlide ? (
+                currentSlide.image_url ? (
+                  <button
+                    type="button"
+                    className={styles.slideClick}
+                    onClick={togglePlay}
+                    aria-label={t("student.playerV2.controlPlay")}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={currentSlide.image_url}
+                      alt={lecture.title}
+                      className={styles.slideImg}
+                    />
+                  </button>
+                ) : (
+                  /* 슬라이드 PNG 가 없는 경우(LibreOffice 렌더 실패·미생성). 본문 음성은
+                     준비됐으므로 "준비 안 됨"으로 막지 않고 발화 텍스트를 슬라이드로
+                     대체해 재생을 잇는다(자막도 함께 노출). */
+                  <button
+                    type="button"
+                    className={styles.slideFallback}
+                    onClick={togglePlay}
+                    aria-label={t("student.playerV2.controlPlay")}
+                  >
+                    <span className={styles.slideFallbackNum}>
+                      {currentSlide.slide_index + 1}
+                    </span>
+                    <span className={styles.slideFallbackText}>
+                      {currentSlide.text}
+                    </span>
+                  </button>
+                )
               ) : (
                 <div className={styles.placeholder}>
                   <div className={styles.playOrb}>
@@ -703,7 +722,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
 
               {/* 자막 — 한국어 음성에 맞춰 외국어 번역 자막을 문장 단위로 순차
                   노출(노래방식). 구간 내 경과 시간 비례로 현재 문장을 보여준다. */}
-              {captionsOn && currentSlide?.image_url &&
+              {captionsOn && currentSlide &&
                 (currentSlide.subtitle_text || currentSlide.text) && (
                   <KaraokeCaption
                     className={styles.caption}

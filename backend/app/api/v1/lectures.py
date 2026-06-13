@@ -185,8 +185,13 @@ async def get_lecture_video(
 ):
     """lecture_id로 연결된 Video의 id·status를 반환합니다."""
     await assert_professor_owns_lecture(db, lecture_id, professor.id)
+    # 최신 Video 를 고른다 — 슬라이드쇼(get_lecture_slideshow_by_slug)와 동일 기준.
+    # order_by 가 없으면 강의에 Video 가 둘 이상일 때 studio 가 가리키는 영상과
+    # 학생 플레이어가 읽는 영상이 달라질 수 있다.
     result = await db.execute(
-        select(Video).where(Video.lecture_id == lecture_id)
+        select(Video)
+        .where(Video.lecture_id == lecture_id)
+        .order_by(Video.created_at.desc())
     )
     video = result.scalars().first()
     if video is None:
