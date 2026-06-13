@@ -92,8 +92,13 @@ describe("ProfessorDashboardPage", () => {
 
     renderPage(<ProfessorDashboardPage />);
 
+    // 슬라이드 이미지 없는 강의는 제목 기반 대체 카드를 그려, 제목이 카드 표지와
+    // 하단 라벨 두 곳에 나타날 수 있다(실제 슬라이드 카드와 동일한 모양). 그리드가
+    // 떴는지(=empty-state 아님)만 확인하므로 getAllByText 로 1개 이상이면 통과.
     await waitFor(() =>
-      expect(screen.getByText("현대중국사회의이해 1주차")).toBeTruthy(),
+      expect(
+        screen.getAllByText("현대중국사회의이해 1주차").length,
+      ).toBeGreaterThan(0),
     );
     // empty-state 는 노출되지 않아야 한다
     expect(screen.queryByTestId("professor-empty-dashboard")).toBeNull();
