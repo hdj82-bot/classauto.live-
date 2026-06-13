@@ -143,13 +143,23 @@ export default function SavedAvatarCard({
               </span>
             </button>
           ) : lookImageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={lookImageUrl}
-              alt={avatar.name}
-              loading="lazy"
-              style={fillStyle}
-            />
+            // 미리보기 영상이 아직 없어도(표준 아바타 등) 정지 이미지를 클릭하면
+            // 크게 볼 수 있게 한다(클릭해서 확인이 안 되던 문제).
+            <button
+              type="button"
+              onClick={() => setZoom(true)}
+              aria-label={t("playPreviewLarge")}
+              data-testid={`saved-avatar-open-${avatar.id}`}
+              style={mediaButtonStyle}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={lookImageUrl}
+                alt={avatar.name}
+                loading="lazy"
+                style={fillStyle}
+              />
+            </button>
           ) : (
             <span aria-hidden="true" style={initialStyle}>
               {avatar.name.slice(0, 1)}
@@ -295,10 +305,12 @@ export default function SavedAvatarCard({
       </div>
 
       {/* 크게 보기 — ready 영상을 큰 화면에서 소리와 함께 재생(룩 + 음성 확인). */}
-      {zoom && ready && (
+      {zoom && (ready || lookImageUrl) && (
+        // ready 면 미리보기 영상을, 아니면(표준 아바타 정지 이미지 등) videoUrl="" 로
+        // 두어 poster(룩 이미지)만 크게 보여 준다.
         <SavedAvatarLightbox
           name={avatar.name}
-          videoUrl={avatar.preview_video_url ?? ""}
+          videoUrl={ready ? avatar.preview_video_url ?? "" : ""}
           poster={lookImageUrl ?? undefined}
           voiceName={voiceName || t("savedDefaultVoice")}
           onClose={() => setZoom(false)}
@@ -344,14 +356,20 @@ function SavedAvatarLightbox({
       <div style={lightboxInnerStyle} onClick={(e) => e.stopPropagation()}>
         <div style={lightboxMediaStyle}>
           {/* 모달에선 컨트롤 + 자동재생(소리 포함) — 클릭이 사용자 제스처라 재생 허용. */}
-          <video
-            src={videoUrl}
-            poster={poster}
-            controls
-            autoPlay
-            playsInline
-            style={lightboxFillStyle}
-          />
+          {videoUrl ? (
+            <video
+              src={videoUrl}
+              poster={poster}
+              controls
+              autoPlay
+              playsInline
+              style={lightboxFillStyle}
+            />
+          ) : (
+            // 미리보기 영상이 없으면(표준 아바타 정지 이미지) 이미지를 크게 보여 준다.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={poster} alt={name} style={lightboxFillStyle} />
+          )}
         </div>
         <div style={lightboxBarStyle}>
           <span style={lightboxNameStyle} title={name}>
