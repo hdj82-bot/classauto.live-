@@ -1,7 +1,7 @@
 """Add subtitle_cues to video_renders (precise subtitle sync).
 
-Revision ID: 0045
-Revises: 0044
+Revision ID: 0047
+Revises: 0046
 Create Date: 2026-06-14
 
 변경 내용:
@@ -20,8 +20,8 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 
-revision: str = "0045"
-down_revision: Union[str, None] = "0044"
+revision: str = "0047"
+down_revision: Union[str, None] = "0046"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
