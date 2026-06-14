@@ -284,3 +284,11 @@ class LecturePublicResponse(BaseModel):
         ),
         examples=[312],
     )
+    avatar_image_url: str | None = Field(
+        default=None,
+        description=(
+            "이 강의 아바타의 얼굴 이미지(presigned). 학생 Q&A 채팅의 답변자 아이콘에 "
+            "쓴다. 표준 아바타 preview → 사진 아바타 룩 → 교수자 프로필 순으로 해석하고 "
+            "없으면 None(프론트는 'AI' 텍스트로 폴백)."
+        ),
+    )

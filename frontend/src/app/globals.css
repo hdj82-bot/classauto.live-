@@ -330,6 +330,24 @@ input[type="range"].slider-rb::-moz-range-thumb {
   border: 2px solid var(--text, #0a0a0a);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
+/* 음량 슬라이더 변형 — 트랙이 "현재 음량"을 나타낸다(노브 왼쪽=골드 채움, 오른쪽=
+   비움/검정). slider-rb 의 고정 빨강→파랑 그라데이션을 덮어쓴다(두 클래스라 우선순위
+   우위). 채움 비율은 인라인 CSS 변수 --vol(예: "70%")로 전달한다. 0% 면 전부 비어
+   검정에 가깝게 보인다(음량 0). */
+input[type="range"].slider-rb.slider-vol::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--gold, #ffb627) 0 var(--vol, 100%),
+    rgba(255, 255, 255, 0.14) var(--vol, 100%) 100%
+  );
+}
+input[type="range"].slider-rb.slider-vol::-moz-range-track {
+  background: linear-gradient(
+    to right,
+    var(--gold, #ffb627) 0 var(--vol, 100%),
+    rgba(255, 255, 255, 0.14) var(--vol, 100%) 100%
+  );
+}
 input[type="range"].slider-rb:focus {
   outline: none;
 }

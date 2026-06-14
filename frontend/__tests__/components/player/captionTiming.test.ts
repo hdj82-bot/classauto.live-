@@ -150,10 +150,33 @@ describe("pickActiveCaptionWithCues", () => {
     );
   });
 
-  it("falls back to char-weight when translated counts differ from cues", () => {
-    const koTwo = "한 문장. 두 문장."; // 2문장 ≠ cue 3개 → 검증된 글자수 폴백
-    expect(pickActiveCaptionWithCues(koTwo, zh, cues, 6, 12)).toBe(
-      pickActiveCaption(koTwo, zh, 6, 12),
+  it("uses cue timeline (not char-weight) when translated counts differ", () => {
+    // 핵심 수정: 번역 문장 수(2) ≠ cue 수(3) 여도 cue 의 실제 발성 타임라인을 쓴다.
+    // cue 글자수는 동일(4자)이라 발화 진행률 f 는 시간에 따라 0→1 로 고르게 흐른다.
+    // 두 문장(길이 동일)이므로 f<0.5 면 첫째, 이상이면 둘째.
+    const koTwo = "한 문장입니다. 두 문장입니다."; // 2문장 ≠ cue 3개
+    // 첫 cue(0–7s) 안 초반(2s): f ≈ (2/7)*(1/3) ≈ 0.095 → 첫째
+    expect(pickActiveCaptionWithCues(koTwo, zh, cues, 2, 12, 0)).toBe(
+      "한 문장입니다.",
+    );
+    // 세 번째 cue(9–12s) 후반(11s): f ≈ 2/3 + (2/3)*(1/3) ≈ 0.89 → 둘째
+    expect(pickActiveCaptionWithCues(koTwo, zh, cues, 11, 12, 0)).toBe(
+      "두 문장입니다.",
+    );
+  });
+
+  it("translated mismatch still reflects real (non-uniform) cue timing", () => {
+    // cue 글자수가 비대칭이면 발화 진행률도 비대칭 — 첫 cue 가 긴 발화를 담으면
+    // 그 구간 동안 번역도 앞쪽 문장에 더 오래 머문다(균등 elapsed/dur 과 다름).
+    const cuesSkew: SubtitleCue[] = [
+      { start: 0, end: 2, text: "very long first spoken sentence here." }, // 37자
+      { start: 2, end: 12, text: "short." }, // 6자
+    ];
+    const koTwo = "가나다. 라마바."; // 2문장(동일 길이)
+    // 첫 cue 끝(2s): f ≈ 37/43 ≈ 0.86 → 이미 둘째 문장 (시간상 2/12 밖에 안 지났지만
+    // 발화 내용의 86%가 첫 cue 에 있으므로 번역도 둘째로 넘어가 있어야 정확).
+    expect(pickActiveCaptionWithCues(koTwo, "x. y.", cuesSkew, 2, 12, 0)).toBe(
+      "라마바.",
     );
   });
 });
