@@ -115,6 +115,43 @@ async def test_list_avatars_requires_professor(client, student):
     assert resp.status_code in (401, 403)
 
 
+# ── Q&A 본인 얼굴 옵트인 ──────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_qa_face_defaults_off_and_toggles(client, professor, db):
+    # 기본값은 OFF(표준 아바타) — 사용자 수와 무관하게 막히지 않는 기본.
+    resp = await client.get("/api/avatars/me/qa-face", headers=make_auth_header(professor))
+    assert resp.status_code == 200
+    assert resp.json()["use_own_face"] is False
+
+    # 켜기 → True 저장.
+    resp = await client.patch(
+        "/api/avatars/me/qa-face",
+        json={"use_own_face": True},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["use_own_face"] is True
+
+    await db.refresh(professor)
+    assert professor.qa_use_own_face is True
+
+    # 끄기 → False.
+    resp = await client.patch(
+        "/api/avatars/me/qa-face",
+        json={"use_own_face": False},
+        headers=make_auth_header(professor),
+    )
+    assert resp.json()["use_own_face"] is False
+
+
+@pytest.mark.asyncio
+async def test_qa_face_requires_professor(client, student):
+    resp = await client.get("/api/avatars/me/qa-face", headers=make_auth_header(student))
+    assert resp.status_code in (401, 403)
+
+
 # ── 큐레이션 allowlist ────────────────────────────────────────────────────────
 
 

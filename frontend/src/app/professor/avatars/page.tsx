@@ -16,6 +16,7 @@ import SampleVoicePicker from "@/components/professor/avatars/SampleVoicePicker"
 import AvatarBuilderBar from "@/components/professor/avatars/AvatarBuilderBar";
 import AvatarScriptTest from "@/components/professor/avatars/AvatarScriptTest";
 import AvatarCreateTypeToggle from "@/components/professor/avatars/AvatarCreateTypeToggle";
+import QaFaceToggleCard from "@/components/professor/avatars/QaFaceToggleCard";
 import StandardAvatarRegisterCard from "@/components/professor/avatars/StandardAvatarRegisterCard";
 import { selectLook } from "@/components/professor/avatars/onboarding/photoAvatarApi";
 import {
@@ -925,6 +926,10 @@ export default function AvatarsPage() {
             t={t}
           />
         )}
+
+        {/* Q&A 답변 얼굴 옵트인 — 기본은 표준 아바타, 켜면 본인 얼굴(슬롯 여유 시).
+            HeyGen 사진 아바타 한도(계정당 3개)는 모두에게 줄 수 없어 표준이 기본. */}
+        <QaFaceToggleCard t={t} />
 
         {/* 내 아바타(룩 + 음성 조합) 갤러리 — 저장한 조합을 재생성 없이 바로 강의에
             적용한다. 미리보기 영상이 ready 면 카드에서 무음 루프로 재생된다(Phase 2).

@@ -235,6 +235,7 @@ def test_batch_uses_talking_photo_for_self_avatar(sync_db, monkeypatch):
     monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 6)
 
     prof, _c, lec = _seed_lecture(sync_db)
+    prof.qa_use_own_face = True  # 본인 얼굴 옵트인 ON
     prof.photo_avatar_id = "tp-self-123"  # 본인 아바타 등록됨, 강의는 아바타 미지정.
     sync_db.flush()
     _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))

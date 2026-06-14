@@ -304,6 +304,24 @@ class LookSelectResponse(BaseModel):
     message: str | None = Field(default=None, description="사용자 표시용 메시지.")
 
 
+# ── Q&A 본인 얼굴 옵트인 ──────────────────────────────────────────────────────
+
+
+class QaFaceResponse(BaseModel):
+    """``GET/PATCH /api/avatars/me/qa-face`` 응답 — Q&A 본인 얼굴 사용 여부."""
+
+    use_own_face: bool = Field(
+        ...,
+        description="Q&A 답변 영상에 본인 얼굴(Talking Photo)을 쓸지. False=표준 아바타(기본).",
+    )
+
+
+class QaFaceRequest(BaseModel):
+    """``PATCH /api/avatars/me/qa-face`` 요청."""
+
+    use_own_face: bool = Field(..., description="본인 얼굴 사용 옵트인 ON/OFF.")
+
+
 # ── 최근 선택한 아바타 (라이브러리에서 재생성 없이 바로 적용) ───────────────────
 
 

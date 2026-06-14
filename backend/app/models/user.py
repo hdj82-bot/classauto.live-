@@ -80,6 +80,14 @@ class User(Base):
     #   다음 방문 시 "최근 선택한 아바타" 박스로 복원해 재생성 없이 바로 강의에 적용한다.
     #   기본 룩(photo_avatar_default_look_id, 모든 강의의 폴백)과는 별개의 "최근 선택" 기록.
     recent_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Q&A 답변 영상에 "본인 얼굴(Talking Photo)"을 쓸지 여부(옵트인). 기본 False —
+    #   Q&A 는 표준 HeyGen 아바타로 렌더한다(HeyGen "사진 아바타 3개 한도"와 무관해
+    #   사용자 수와 상관없이 막히지 않음). 교수자가 아바타 페이지에서 이 스위치를
+    #   켜야만 본인 얼굴을 시도하고, 한도가 차 있으면 표준으로 폴백한다(2026-06-14).
+    #   강의 본편(슬라이드쇼)은 아바타를 쓰지 않으므로 영향 없음 — 이 플래그는 Q&A 전용.
+    qa_use_own_face: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     # 학습자 전용
     student_number: Mapped[str | None] = mapped_column(String(50), nullable=True)
     # 첫 사용 온보딩(영상 시청 4슬라이드 안내)을 "다시 보지 않기" 한 시각. NULL =

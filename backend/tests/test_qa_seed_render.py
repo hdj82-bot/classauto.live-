@@ -268,7 +268,8 @@ def test_resolve_character_falls_back_to_standard_avatar(sync_db, monkeypatch):
     monkeypatch.setattr(settings, "HEYGEN_AVATAR_ID_MALE", "std-avatar-male")
 
     prof, _c, lec = _seed_lecture(sync_db)
-    # 본인 아바타 보유로 판정되도록 기본 룩 지정 + 강의 avatar 는 미지정(본인 얼굴 경로).
+    # 본인 얼굴 옵트인 ON + 기본 룩 지정 + 강의 avatar 미지정(본인 얼굴 경로).
+    prof.qa_use_own_face = True
     prof.photo_avatar_default_look_id = "look-x"
     lec.avatar_id = None
     lec.voice_gender = VoiceGender.male
@@ -282,6 +283,33 @@ def test_resolve_character_falls_back_to_standard_avatar(sync_db, monkeypatch):
 
     # talking_photo 가 아니라 표준 avatar 로 폴백 → 렌더는 진행된다.
     assert character == {"avatar_id": "std-avatar-male"}
+
+
+def test_resolve_character_defaults_to_standard_when_not_opted_in(sync_db, monkeypatch):
+    """옵트인 OFF(기본)면 본인 룩이 있어도 표준 아바타로 렌더 — 슬롯 소모 0(확장성)."""
+    from app.tasks import qa_batch
+
+    # 옵트인이 아니면 talking_photo 등록을 시도조차 하면 안 된다(슬롯 보호).
+    def _must_not_register(*_a, **_k):
+        raise AssertionError("옵트인 OFF 인데 talking_photo 등록을 시도함")
+
+    monkeypatch.setattr(qa_batch, "_ensure_talking_photo_sync", _must_not_register)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    prof.qa_use_own_face = False  # 기본값(명시)
+    prof.photo_avatar_default_look_id = "look-x"  # 본인 룩이 있어도
+    lec.avatar_id = None
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        character = qa_batch._resolve_character(sync_db, loop, lec, prof)
+    finally:
+        loop.close()
+
+    # 표준 아바타 경로 — avatar_id 키(값 None 이면 create_video 가 gender 로 기본 선택).
+    assert character is not None and "talking_photo_id" not in character
+    assert "avatar_id" in character
 
 
 # ── 2. 범위 밖 질문은 렌더하지 않고 failed ─────────────────────────────────────

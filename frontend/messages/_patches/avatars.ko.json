@@ -226,6 +226,14 @@
     "createTypeStandardLabel": "표준 아바타",
     "createTypeStandardDesc": "HeyGen 웹 스튜디오에서 만든 Video Avatar를 선택하고 음성을 선택합니다. (예시: Adriana Business Front)",
 
+    "qaFaceTitle": "Q&A 답변 얼굴",
+    "qaFaceLabel": "Q&A 답변에 내 얼굴 사용",
+    "qaFaceDesc": "켜면 학생 Q&A 답변 영상을 내가 만든 본인 얼굴 아바타로 만듭니다. 끄면(기본) 표준 아바타로 답변합니다. 강의 본편 영상은 영향받지 않아요.",
+    "qaFaceHint": "본인 얼굴은 HeyGen 사진 아바타 한도(계정당 3개)를 사용합니다. 한도가 차 있으면 자동으로 표준 아바타로 답변하니 Q&A가 막히지 않습니다.",
+    "qaFaceOnToast": "Q&A 답변에 내 얼굴을 사용합니다. (본인 얼굴 룩이 없으면 표준 아바타로 답변)",
+    "qaFaceOffToast": "Q&A 답변을 표준 아바타로 만듭니다.",
+    "qaFaceError": "설정을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+
     "standardRegisterTitle": "표준 아바타 등록",
     "standardRegisterDescription": "HeyGen 웹 스튜디오에서 만든 Video Avatar를 아래 목록에서 골라 등록하세요. 스튜디오에서 지은 아바타 이름으로 검색하면 됩니다. 등록하면 갤러리에 표준 아바타로 추가되어, 포토 아바타와 자연스러움을 비교하고 강의에 적용할 수 있습니다.",
     "standardPickerSearchPlaceholder": "아바타 이름으로 검색 (스튜디오에서 지은 이름)",
