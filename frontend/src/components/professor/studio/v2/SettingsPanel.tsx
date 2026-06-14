@@ -1160,8 +1160,9 @@ function SeedQuestionCard({
         </button>
       )}
       {item.status === "failed" && (
-        <p style={{ margin: 0, fontSize: 11, color: "#B42318" }}>
-          생성에 실패했어요. 질문이 강의 범위 밖이거나 한도를 초과했을 수 있습니다.
+        <p style={{ margin: 0, fontSize: 11, color: "#B42318", lineHeight: 1.5 }}>
+          {item.error_message ||
+            "생성에 실패했어요. 질문이 강의 범위 밖이거나 한도를 초과했을 수 있습니다."}
         </p>
       )}
     </div>

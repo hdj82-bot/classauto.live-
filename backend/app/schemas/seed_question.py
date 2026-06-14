@@ -33,6 +33,9 @@ class SeedQuestionItem(BaseModel):
     preview_url: str | None = Field(
         None, description="ready 인 경우 점검용 클립 presigned URL(아니면 null)"
     )
+    error_message: str | None = Field(
+        None, description="status=failed 인 경우 실패 사유(교수자에게 표시). 아니면 null."
+    )
 
 
 class SeedQuestionInput(BaseModel):
