@@ -19,17 +19,35 @@ Dockerfile 기본값으로 되돌아갔을 때 결정적으로 복구할 수 있
 | 서비스 | 역할 | Start Command | Healthcheck | Pre-Deploy |
 |---|---|---|---|---|
 | **web** | FastAPI API | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4` | `/health` | `bash backend/scripts/release.sh` |
-| **worker** | Celery 워커 | `celery -A app.celery_app:celery worker --loglevel=info --concurrency=2` | — | — |
+| **worker** | Celery 워커 | `celery -A app.celery_app:celery worker --loglevel=info --concurrency=4 -Q celery,render` | — | — |
 | **beat** | Celery 스케줄러 | `celery -A app.celery_app:celery beat --loglevel=info` | — | — |
+| **worker-render** *(선택)* | 렌더 전용 워커 | `celery -A app.celery_app:celery worker --loglevel=info --concurrency=8 -Q render` | — | — |
 | **Redis** | 브로커/결과 | (Railway Redis 플러그인) | — | — |
 
-- 세 백엔드 서비스 모두 **같은 이미지**(`backend/Dockerfile.prod`)를 빌드하고 **Start Command 만** 다릅니다.
-- **worker/beat 에는 Pre-Deploy(마이그레이션)·Healthcheck 를 설정하지 마세요.** 마이그레이션은 web 한 곳에서만.
+- 세(+선택 1) 백엔드 서비스 모두 **같은 이미지**(`backend/Dockerfile.prod`)를 빌드하고 **Start Command 만** 다릅니다.
+- **worker/beat/worker-render 에는 Pre-Deploy(마이그레이션)·Healthcheck 를 설정하지 마세요.** 마이그레이션은 web 한 곳에서만.
 - worker 가 없으면 룩 생성·영상 렌더 큐가 영구 적체합니다(에러 없이 조용히). **항상 worker 가 떠 있어야 합니다.**
+- 기본 **worker** 는 `-Q celery,render` 로 **두 큐를 모두** 소비합니다(전용 렌더 워커 없이도 동작). 동시성은 `4` 기본(영상 렌더가 외부 API 대기 위주라 상향 효과 큼; 단 스크립트 생성·번역도 같은 워커에서 Claude 를 호출하므로 Anthropic 동시 한도(~5)를 고려해 4~8 사이로).
 
 검증된 설정 스니펫: [`deploy/railway.web.json.example`](../deploy/railway.web.json.example) ·
 [`railway.worker.json.example`](../deploy/railway.worker.json.example) ·
+[`railway.worker-render.json.example`](../deploy/railway.worker-render.json.example) ·
 [`railway.beat.json.example`](../deploy/railway.beat.json.example).
+
+### 렌더 전용 워커로 속도↑ (선택, 단계적 적용)
+
+영상 렌더(슬라이드 TTS·추천 질문 아바타·mp4)는 외부 API 대기 위주라 **동시성을 크게 올려도** 안전한 반면, 스크립트 생성·자막 번역은 **Claude 동시 연결 한도(~5)** 에 묶입니다. 이 둘을 **별도 큐/워커로 분리**하면 렌더를 고동시성으로 돌리면서 Claude 태스크는 저동시성으로 보호할 수 있습니다.
+
+`render` 큐로 가는 태스크: `render_slide`, `qa_batch.render_seed_questions`/`poll_seed_renders`, `export.compose_lecture_mp4`, `photo_avatar.*`(생성/폴링). 그 외(스크립트 파이프라인·nightly batch·reap·polling·cleanup·backup)는 기본 `celery` 큐.
+
+**안전한 단계적 적용 (각 단계는 그 자체로 동작):**
+1. **(머지)** 코드 배포 — `RENDER_QUEUE_ENABLED` 기본 `false` 라 전 태스크가 기본 큐로 가고 동작은 그대로.
+2. **기본 worker** Start Command 를 `-Q celery,render` 로 변경(두 큐 소비). 아직 라우팅은 꺼져 있으니 변화 없음 — 다음 단계 대비.
+3. **`RENDER_QUEUE_ENABLED=true`** 환경변수 설정(전 백엔드 서비스 공통). 이제 렌더 태스크가 `render` 큐로 가고, 기본 worker 가 두 큐를 모두 소비하므로 정상 처리(아직 단일 워커).
+4. **worker-render 서비스 추가** — `-Q render --concurrency=8`(메모리 보며 6~10). 렌더 처리량이 늘고 Claude 태스크와 슬롯 경쟁이 줄어듭니다.
+5. **(완전 격리)** 안정화되면 기본 worker 를 `-Q celery`(Claude 전용)로 바꿔 렌더를 worker-render 에 일임. ⚠️ 이 단계 이후엔 **worker-render 가 죽으면 렌더가 멈추므로** `/health/deep` 외 렌더 큐 적체도 모니터링하세요.
+
+> ⚠️ `RENDER_QUEUE_ENABLED=true` 인데 `render` 큐를 소비하는 워커가 하나도 없으면 렌더가 **조용히 적체**됩니다. 켜기 전 2번(또는 4번)을 먼저 적용하세요.
 
 ### 활성화 방법 (둘 중 하나)
 1. **대시보드(권장, 가장 안전)**: 각 서비스 Settings → Deploy 에 위 표의 Start Command / Healthcheck / Pre-Deploy 를 입력.
