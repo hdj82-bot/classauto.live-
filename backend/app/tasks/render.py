@@ -187,6 +187,10 @@ def render_slide(
             audio_url = s3_svc.upload_audio_bytes(tts_result.audio_bytes, str(render.id))
             render.audio_url = audio_url
             render.tts_provider = tts_result.provider
+            # 이 음원을 합성할 때 쓴 보이스/속도를 기록 — "다시 제작" 이 음성·속도 변경을
+            # 감지해(텍스트 동일해도) 해당 슬라이드만 재합성하기 위함.
+            render.voice_id = voice_id
+            render.voice_speed = voice_speed
             # 자막 정밀 싱크 cue (Forced Alignment 성공 시에만 non-None). 실패면 None
             # 그대로 두어 플레이어가 글자수 균등분배로 폴백한다. 음원과 같은 트랜잭션에
             # 커밋해 audio_url 과 cue 가 항상 짝을 이루게 한다.

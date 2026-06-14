@@ -45,6 +45,10 @@ class VideoRender(Base):
     # TTS
     tts_provider: Mapped[str] = mapped_column(String(50), nullable=False, default="elevenlabs")
     audio_url: Mapped[str | None] = mapped_column(String(1024))
+    # 이 음원을 합성할 때 쓴 보이스/속도 — "다시 제작" 이 음성·속도 변경을 감지해
+    # 해당 슬라이드만 재합성하기 위한 기록. NULL = 구버전 렌더(텍스트 기준으로만 비교).
+    voice_id: Mapped[str | None] = mapped_column(String(255))
+    voice_speed: Mapped[float | None] = mapped_column(Float)
 
     # 슬라이드별 스크립트
     script_text: Mapped[str | None] = mapped_column(Text)
