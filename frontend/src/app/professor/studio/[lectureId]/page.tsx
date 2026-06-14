@@ -1553,10 +1553,11 @@ export default function StudioWizardPage() {
         lectureTitle={lecture.title}
         slideCount={slides.length}
         processedSlides={Math.min(genCompleted, slides.length)}
-        // 추천 질문(Q&A) 아바타 진척 — 저장된(status 보유) 질문 기준. 0 이면 모달에서 숨김.
-        qaTotal={seedQuestions.filter((q) => !!q.status).length}
-        qaReady={seedQuestions.filter((q) => q.status === "ready").length}
-        qaFailed={seedQuestions.filter((q) => q.status === "failed").length}
+        // 추천 질문(Q&A) 답변 아바타 — 입력된 질문 1개당 1개 바로 즉시 표시(상태로
+        // 진척 결정). 제작과 동시에 바가 보이도록 status 없는(대기) 질문도 포함.
+        qaItems={seedQuestions
+          .filter((q) => q.question.trim())
+          .map((q) => ({ status: q.status }))}
         // 슬라이드가 끝나도 추천 질문(Q&A) 렌더가 진행 중이면 아직 "완성"이 아니다 —
         // Q&A 까지 끝나야 완료 화면(미리보기 버튼)을 띄운다. 그래야 사용자가 "미리보기 =
         // 모든 기능 완성"으로 믿을 수 있다. (seedAwaitingRender 는 타임아웃으로도 풀려

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 import {
   displayStyle,
@@ -9,65 +9,65 @@ import {
 } from "@/components/professor/shell";
 
 /**
- * Studio v2 — 영상 생성 진행 모달 (prototype SCREEN 4).
+ * Studio v2 — 영상 생성 진행 모달.
  *
- * 풀스크린 backdrop blur. 큰 원형 진행률 + 4단계 stages + 백그라운드 옵션 +
- * (비용 정보 제거) 진행 상황 박스.
+ * 진행 표현은 **단계별 가로 바**다(원형 1개 % 폐기). 각 작업이 독립 바로 좌→우
+ * 채워지고, 바마다 진행 %(또는 '제작 중')를 숫자로 보여준다. 추천 질문(Q&A)은
+ * HeyGen 영상 1개당 1개 바로 **독립** 표시한다(예: 슬라이드 1 + 음성 1 + 추천 질문 3
+ * = 바 5개). 슬라이드 음성과 추천 질문은 백엔드에서 병렬로 진행된다.
  *
- * 비용 표시 정책 (planning/05 §1.1): prototype 의 `gen-cost` 박스는 슬라이드
- * 진행률·예상 영상 길이·월 한도(편수) 만 보여주는 진행 정보 박스로 대체.
- *
- * 본 컴포넌트는 진행률을 외부에서 props 로 제어 — 부모가 백엔드 폴링 결과를
- * 매핑한다. DEV 시뮬레이션 핸들러는 백엔드 미연결 환경에서 시각 확인용.
+ * 본 컴포넌트는 진행 상태를 외부 props 로 제어한다(부모가 백엔드 폴링 결과 매핑).
  */
+export type SeedRenderStatus =
+  | "pending"
+  | "rendering"
+  | "ready"
+  | "failed"
+  | string;
+
 export interface GenerationModalProps {
   open: boolean;
-  /** 0~100 진행률. */
-  percent: number;
-  /** ETA 표시 (예: "2분 18초"). */
+  /** ETA 표시 (예: "2분 18초"). 선택. */
   eta?: string;
-  /** 현재 진행 중인 stage (1~4). 그보다 낮은 stage 는 done, 같은 stage 는 active. */
-  activeStage: 1 | 2 | 3 | 4;
   /** 강의 제목 (서브헤더용). */
   lectureTitle: string;
   /** 슬라이드 개수. */
   slideCount: number;
-  /** 진행 정보 — 현재까지 처리된 슬라이드 수. */
+  /** 음성(TTS) 완료된 슬라이드 수. */
   processedSlides: number;
   /**
-   * 추천 질문(Q&A) 아바타 생성 진척 — 등록된 추천 질문이 있을 때만 단계로 표시한다.
-   * 본문(슬라이드 음성)과 병렬로 진행되며, 0 이면 단계 자체를 숨긴다(자동 생성 안 함).
+   * 추천 질문(Q&A) 답변 아바타 — 등록된 질문 1개당 1개 바로 독립 표시.
+   * 각 항목의 status 로 바 상태를 결정한다(pending=대기·rendering=제작중·
+   * ready=완료·failed=실패). 비어 있으면 Q&A 바를 그리지 않는다.
    */
-  qaTotal?: number;
-  qaReady?: number;
-  qaFailed?: number;
-  /** 예상 영상 길이 (예: "5분 12초"). */
-  expectedDuration?: string;
-  /** 월 한도 — used/limit. */
-  monthlyUsed?: number;
-  monthlyLimit?: number;
-  /** "완료" 상태 — checkmark + confetti + 최종 통계 표시. */
+  qaItems?: { status?: SeedRenderStatus | null }[];
+  /** "완료" 상태 — 모든 바 완료 + 미리보기/공유 버튼. */
   done?: boolean;
   /** 백그라운드로 실행 핸들러. */
   onBackground?: () => void;
-  /**
-   * 진행이 오래 멈춘 것으로 보일 때 true. 워커 재시작 등으로 한 슬라이드 렌더가
-   * 유실되면 진행률이 고착될 수 있어, 이때 "다시 시도" 안내를 노출한다.
-   * (서버 reaper 가 수 분 내 자동 복구하지만, 사용자가 더 빨리 재시도할 수 있게.)
-   */
+  /** 진행이 오래 멈춘 것으로 보일 때 true. */
   stalled?: boolean;
-  /** 멈춤 시 재시도(rerender) 핸들러 — 완료된 슬라이드는 재사용(비용 0). */
+  /** 멈춤 시 재시도(rerender) 핸들러. */
   onRetry?: () => void;
   /** DEV 핸들러 (시뮬레이션용). */
   onDevAdd?: (delta: number) => void;
   onDevComplete?: () => void;
   onDevBackground?: () => void;
-  /** 완료 후 "공유하기"(공유·게시 화면 이동) 핸들러. */
+  /** 완료 후 "공유하기" 핸들러. */
   onViewVideo?: () => void;
-  /** 완료 후 "미리보기"(학생과 동일한 플레이어로 결과물 검토) 핸들러. */
+  /** 완료 후 "미리보기" 핸들러. */
   onPreview?: () => void;
-  /** 완료 후 추가 액션 슬롯(예: mp4 다운로드 버튼). done 일 때만 렌더. */
+  /** 완료 후 추가 액션 슬롯(예: mp4 다운로드). done 일 때만 렌더. */
   downloadSlot?: React.ReactNode;
+  // ── 후방 호환(미사용) — 기존 호출부가 넘기는 props 를 받아 무시한다. ──
+  percent?: number;
+  activeStage?: number;
+  qaTotal?: number;
+  qaReady?: number;
+  qaFailed?: number;
+  expectedDuration?: string;
+  monthlyUsed?: number;
+  monthlyLimit?: number;
 }
 
 const overlayStyle = (open: boolean): CSSProperties => ({
@@ -87,7 +87,7 @@ const overlayStyle = (open: boolean): CSSProperties => ({
 
 const modalStyle = (open: boolean): CSSProperties => ({
   width: "100%",
-  maxWidth: 720,
+  maxWidth: 640,
   background: "var(--bg-card)",
   border: "1px solid var(--line)",
   borderRadius: 20,
@@ -102,20 +102,23 @@ const modalStyle = (open: boolean): CSSProperties => ({
   position: "relative",
 });
 
+type BarTone = "done" | "active" | "pending" | "failed";
+interface BarDef {
+  key: string;
+  label: string;
+  sub: string;
+  percent: number;
+  tone: BarTone;
+  indeterminate?: boolean;
+}
+
 export default function GenerationModal({
   open,
-  percent,
   eta,
-  activeStage,
   lectureTitle,
   slideCount,
   processedSlides,
-  qaTotal = 0,
-  qaReady = 0,
-  qaFailed = 0,
-  expectedDuration,
-  monthlyUsed,
-  monthlyLimit,
+  qaItems = [],
   done = false,
   onBackground,
   stalled = false,
@@ -127,23 +130,13 @@ export default function GenerationModal({
   onPreview,
   downloadSlot,
 }: GenerationModalProps) {
-  const ringFillRef = useRef<SVGCircleElement | null>(null);
-  const [confettiBits, setConfettiBits] = useState<{ left: number; delay: number; bg: string }[]>([]);
-
-  useEffect(() => {
-    if (!ringFillRef.current) return;
-    const C = 2 * Math.PI * 70; // circumference for r=70
-    const offset = C * (1 - Math.min(100, Math.max(0, percent)) / 100);
-    ringFillRef.current.style.strokeDasharray = `${C}`;
-    ringFillRef.current.style.strokeDashoffset = `${offset}`;
-  }, [percent]);
+  const [confettiBits, setConfettiBits] = useState<
+    { left: number; delay: number; bg: string }[]
+  >([]);
 
   useEffect(() => {
     if (!done) return;
     const palette = ["#FFB627", "#E89E0E", "#10B981", "#A78BFA", "#22D3EE"];
-    // react-hooks/set-state-in-effect: effect body 안에서 동기 setState 호출
-    // 금지. rAF 한 번 거쳐 비동기화한다 (다음 프레임에 confetti 가 떨어지는
-    // 시각적 효과도 더 자연스러움).
     const handle = requestAnimationFrame(() => {
       setConfettiBits(
         Array.from({ length: 40 }).map(() => ({
@@ -156,53 +149,61 @@ export default function GenerationModal({
     return () => cancelAnimationFrame(handle);
   }, [done]);
 
-  // 슬라이드쇼 본문은 "슬라이드 검토 → 구간 TTS 음성 합성"이 전부다(HeyGen 영상
-  // 굽기·인코딩 없음). 예전 4단계(아바타 합성·인코딩)는 실제 작업이 없어 진척이
-  // 멈춘 듯 보였으므로, 실제 파이프라인에 맞춰 2단계로 줄인다. 가짜 소요시간 표기도
-  // 제거(측정값이 아니었음).
-  // 추천 질문(Q&A) 아바타 — 등록된 질문이 있을 때만 단계로 노출(없으면 비용 0, 숨김).
-  // 본문 음성과 병렬 진행이라 activeStage 와 무관하게 자체 상태(state)를 가진다.
-  const qaActive = qaTotal > 0;
-  const qaSettled = qaReady + qaFailed;
-  const qaAllDone = qaActive && qaSettled >= qaTotal;
+  // ── 단계별 바 구성 ──────────────────────────────────────────────────────────
+  // ① 스크립트 검토(즉시 완료) ② 음성 합성(TTS, 슬라이드 완료율) ③ 추천 질문 답변
+  // (HeyGen 영상 1개당 1개 바, 상태로 결정). 슬라이드·추천 질문은 병렬 진행이라
+  // 각 바가 독립적으로 채워진다.
+  const doneSlides = Math.min(processedSlides, slideCount);
+  const slidePct =
+    slideCount > 0 ? Math.round((doneSlides / slideCount) * 100) : 0;
 
-  type Stage = {
-    id: number;
-    title: string;
-    detail: string;
-    live?: string;
-    /** 지정되면 activeStage 휴리스틱 대신 이 상태를 그대로 쓴다(병렬 단계용). */
-    state?: "done" | "active" | "pending";
-  };
-  const stages: Stage[] = [
+  const bars: BarDef[] = [
     {
-      id: 1,
-      title: "스크립트 검토 완료",
-      detail: `${slideCount} / ${slideCount} 슬라이드 채택됨`,
+      key: "script",
+      label: "① 스크립트 검토",
+      sub: `${slideCount} / ${slideCount} 슬라이드 채택`,
+      percent: 100,
+      tone: "done",
     },
     {
-      id: 2,
-      title: done ? "음성 합성 완료" : "음성 합성 중… (TTS)",
-      detail: `${Math.min(processedSlides, slideCount)} / ${slideCount} 슬라이드`,
-      live: done
-        ? undefined
-        : `현재: 슬라이드 ${Math.min(processedSlides, slideCount)} 음성 합성`,
+      key: "tts",
+      label: "② 음성 합성 (TTS)",
+      sub: `${doneSlides} / ${slideCount} 슬라이드`,
+      percent: slidePct,
+      tone: slidePct >= 100 ? "done" : "active",
     },
   ];
-  if (qaActive) {
-    stages.push({
-      id: 3,
-      title: qaAllDone
-        ? `추천 질문 답변 ${qaTotal}개 완료`
-        : `추천 질문 답변 ${qaSettled} / ${qaTotal} 제작 중…`,
-      detail:
-        `완료 ${qaReady} / ${qaTotal}` + (qaFailed ? ` · 실패 ${qaFailed}` : ""),
-      state: qaAllDone ? "done" : "active",
-      live: qaAllDone
-        ? undefined
-        : `학생 추천 질문 답변 아바타 ${qaSettled + 1}번째 만드는 중`,
+  qaItems.forEach((q, i) => {
+    const st = (q?.status as SeedRenderStatus) ?? "pending";
+    let percent = 0;
+    let tone: BarTone = "pending";
+    let sub = "대기 중";
+    let indeterminate = false;
+    if (st === "ready") {
+      percent = 100;
+      tone = "done";
+      sub = "완료";
+    } else if (st === "failed") {
+      percent = 100;
+      tone = "failed";
+      sub = "실패";
+    } else if (st === "rendering") {
+      percent = 100;
+      tone = "active";
+      sub = "제작 중…";
+      indeterminate = true;
+    }
+    bars.push({
+      key: `qa${i}`,
+      label: `③ 추천 질문 답변 ${i + 1}`,
+      sub,
+      percent,
+      tone,
+      indeterminate,
     });
-  }
+  });
+
+  const doneCount = bars.filter((b) => b.tone === "done").length;
 
   return (
     <div
@@ -210,9 +211,6 @@ export default function GenerationModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="gen-h1"
-      // 모달 바깥(backdrop) 클릭 시 닫아 studio 편집 화면으로 복귀한다. 안쪽
-      // 모달 콘텐츠 클릭은 currentTarget 이 아니므로 닫히지 않는다. 생성은
-      // 백그라운드에서 계속 진행된다(onBackground = setGenOpen(false)).
       onClick={(e) => {
         if (e.target === e.currentTarget) onBackground?.();
       }}
@@ -236,8 +234,12 @@ export default function GenerationModal({
             }}
           >
             {onDevAdd && <DevBtn onClick={() => onDevAdd(10)}>DEV: +10%</DevBtn>}
-            {onDevComplete && <DevBtn onClick={onDevComplete}>DEV: 즉시 완료</DevBtn>}
-            {onDevBackground && <DevBtn onClick={onDevBackground}>DEV: 백그라운드</DevBtn>}
+            {onDevComplete && (
+              <DevBtn onClick={onDevComplete}>DEV: 즉시 완료</DevBtn>
+            )}
+            {onDevBackground && (
+              <DevBtn onClick={onDevBackground}>DEV: 백그라운드</DevBtn>
+            )}
           </div>
         )}
 
@@ -267,252 +269,59 @@ export default function GenerationModal({
                 }}
               />
             ))}
-            <style>{`
-              @keyframes gen-confetti-fall {
-                0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-                100% { transform: translateY(700px) rotate(720deg); opacity: 0; }
-              }
-              @media (prefers-reduced-motion: reduce) {
-                @keyframes gen-confetti-fall {
-                  0%, 100% { transform: translateY(0); opacity: 0; }
-                }
-              }
-            `}</style>
           </div>
         )}
 
-        <div style={{ overflowY: "auto", padding: "32px 36px 28px" }}>
+        {/* 바 채움/인디터미네이트/컨페티 keyframes */}
+        <style>{`
+          @keyframes gen-confetti-fall {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(700px) rotate(720deg); opacity: 0; }
+          }
+          @keyframes gen-bar-indet {
+            0% { left: -40%; }
+            100% { left: 100%; }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            @keyframes gen-confetti-fall { 0%,100% { transform: translateY(0); opacity: 0; } }
+            @keyframes gen-bar-indet { 0%,100% { left: 30%; } }
+          }
+        `}</style>
+
+        <div style={{ overflowY: "auto", padding: "30px 34px 26px" }}>
           {/* Header */}
-          <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div style={{ textAlign: "center", marginBottom: 22 }}>
             <h2
               id="gen-h1"
               style={{
                 ...displayStyle,
                 margin: 0,
                 marginBottom: 6,
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: 700,
                 color: "var(--text)",
               }}
             >
               {done ? "슬라이드 쇼가 완성되었어요!" : "슬라이드 쇼 만드는 중…"}
             </h2>
-            <div style={{ color: "var(--text-muted)", fontSize: 13.5 }}>
+            <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
               {lectureTitle} · 슬라이드 {slideCount}장
+              <span style={{ ...tabularStyle }}>
+                {" · "}
+                {doneCount} / {bars.length} 단계 완료
+              </span>
+              {!done && eta ? (
+                <span style={{ ...tabularStyle }}> · 예상 {eta}</span>
+              ) : null}
             </div>
           </div>
 
-          {/* Progress wrap */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 14,
-              marginBottom: 28,
-            }}
-          >
-            {done ? (
-              <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
-                <defs>
-                  <linearGradient id="modal-success-grad" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0" stopColor="#10B981" />
-                    <stop offset="1" stopColor="#059669" />
-                  </linearGradient>
-                </defs>
-                <circle cx="40" cy="40" r="36" fill="url(#modal-success-grad)" />
-                <path
-                  d="M24 41 L36 53 L57 30"
-                  fill="none"
-                  stroke="#FFFFFF"
-                  strokeWidth="5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            ) : (
-              <div style={{ position: "relative", width: 160, height: 160 }}>
-                <svg
-                  viewBox="0 0 160 160"
-                  width="160"
-                  height="160"
-                  style={{ transform: "rotate(-90deg)" }}
-                >
-                  <defs>
-                    <linearGradient id="modal-ring-grad" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0" stopColor="#FFB627" />
-                      <stop offset="1" stopColor="#E89E0E" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="80" cy="80" r="70" fill="none" stroke="#EFEEE9" strokeWidth="10" />
-                  <circle
-                    ref={ringFillRef}
-                    cx="80"
-                    cy="80"
-                    r="70"
-                    fill="none"
-                    stroke="url(#modal-ring-grad)"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                    style={{ transition: "stroke-dashoffset 500ms var(--ease-out)" }}
-                  />
-                </svg>
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      ...tabularStyle,
-                      fontSize: 38,
-                      fontWeight: 700,
-                      letterSpacing: "-0.02em",
-                      lineHeight: 1,
-                      color: "var(--text)",
-                    }}
-                  >
-                    {Math.round(percent)}%
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 4,
-                      fontSize: 10.5,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      color: "var(--text-subtle)",
-                      fontWeight: 700,
-                    }}
-                  >
-                    진행률
-                  </div>
-                </div>
-              </div>
-            )}
-            {!done && eta && (
-              <div style={{ fontSize: 12.5, color: "var(--text-muted)", ...tabularStyle }}>
-                예상 남은 시간 <b style={{ color: "var(--text)", fontWeight: 700 }}>{eta}</b>
-              </div>
-            )}
+          {/* 단계별 가로 바 */}
+          <div style={{ marginBottom: 20 }}>
+            {bars.map(({ key, ...rest }) => (
+              <ProgressBar key={key} {...rest} />
+            ))}
           </div>
-
-          {/* Stages */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 0,
-              marginBottom: 24,
-              border: "1px solid var(--line)",
-              borderRadius: 14,
-              overflow: "hidden",
-              background: "var(--bg)",
-            }}
-          >
-            {stages.map((s, i) => {
-              // 병렬 단계(Q&A)는 자체 state 를 그대로 쓰고, 순차 단계는 activeStage 휴리스틱.
-              const state: "done" | "active" | "pending" =
-                s.state ??
-                (done || s.id < activeStage
-                  ? "done"
-                  : s.id === activeStage
-                    ? "active"
-                    : "pending");
-              return (
-                <div
-                  key={s.id}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "36px 1fr auto",
-                    gap: 14,
-                    alignItems: "flex-start",
-                    padding: "14px 18px",
-                    borderBottom: i < stages.length - 1 ? "1px solid var(--line)" : "none",
-                  }}
-                >
-                  <StageNum state={state} num={s.id} />
-                  <div style={{ minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 13.5,
-                        fontWeight: 600,
-                        color: state === "pending" ? "var(--text-muted)" : "var(--text)",
-                        letterSpacing: "-0.005em",
-                      }}
-                    >
-                      {s.title}
-                    </div>
-                    <div style={{ fontSize: 11.5, color: "var(--text-subtle)", marginTop: 3 }}>
-                      {s.detail}
-                    </div>
-                    {state === "active" && s.live && (
-                      <div
-                        style={{
-                          fontSize: 11,
-                          color: "var(--text-muted)",
-                          marginTop: 6,
-                          fontStyle: "italic",
-                        }}
-                      >
-                        {s.live}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 진행 정보 박스 (prototype `gen-cost` 의 비용 제거 대체) */}
-          {!done && (
-            <div
-              style={{
-                border: "1px solid var(--line)",
-                borderRadius: 12,
-                padding: "14px 18px",
-                background: "var(--bg)",
-                marginBottom: 16,
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                  <defs>
-                    <linearGradient id="prog-info-grad" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0" stopColor="#8B5CF6" />
-                      <stop offset="1" stopColor="#6D28D9" />
-                    </linearGradient>
-                  </defs>
-                  <rect x="4" y="4" width="16" height="16" rx="3" fill="url(#prog-info-grad)" />
-                  <path
-                    d="M8 15 L11 11 L14 13 L17 8"
-                    stroke="#FFFFFF"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    fill="none"
-                  />
-                </svg>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text)" }}>진행 상황</span>
-              </div>
-              <InfoRow
-                label="슬라이드"
-                value={`${processedSlides} / ${slideCount} (${Math.round((processedSlides / Math.max(slideCount, 1)) * 100)}%)`}
-              />
-              {expectedDuration && <InfoRow label="예상 재생 길이" value={expectedDuration} />}
-              {monthlyUsed != null && monthlyLimit != null && (
-                <InfoRow
-                  label="사용 가능"
-                  value={`Pro 플랜 · 월 ${monthlyUsed} / ${monthlyLimit}편`}
-                  subtle
-                />
-              )}
-            </div>
-          )}
 
           {/* 멈춤 감지 — 진행이 오래 정체되면 재시도 안내 (done 이전만) */}
           {!done && stalled && onRetry && (
@@ -525,12 +334,26 @@ export default function GenerationModal({
                 background: "var(--gold-soft, #FDF6E3)",
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "var(--text)",
+                  marginBottom: 6,
+                }}
+              >
                 진행이 멈춘 것 같나요?
               </div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.5 }}>
-                한동안 진척이 없으면 일부 음성 합성이 중단됐을 수 있어요. 다시 시도하면
-                완성된 슬라이드는 그대로 두고 남은 슬라이드만 이어서 합성합니다(완료분 비용 0).
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  marginBottom: 12,
+                  lineHeight: 1.5,
+                }}
+              >
+                한동안 진척이 없으면 일부 합성이 중단됐을 수 있어요. 다시 시도하면
+                완성된 부분은 그대로 두고 남은 부분만 이어서 만듭니다(완료분 비용 0).
               </div>
               <button
                 type="button"
@@ -575,15 +398,28 @@ export default function GenerationModal({
                 border: "1px solid var(--line)",
                 borderRadius: 12,
                 padding: "16px 18px",
-                marginBottom: 16,
                 background: "var(--bg)",
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: "var(--text)",
+                  marginBottom: 8,
+                }}
+              >
                 백그라운드 실행
               </div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
-                이 창을 닫아도 서버에서 계속 제작됩니다. 완성된 슬라이드 쇼는 강의 페이지에서 확인하실 수 있어요.
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  marginBottom: 12,
+                }}
+              >
+                이 창을 닫아도 서버에서 계속 제작됩니다. 완성된 슬라이드 쇼는 강의
+                페이지에서 확인하실 수 있어요.
               </div>
               <button
                 type="button"
@@ -628,7 +464,7 @@ export default function GenerationModal({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            padding: "14px 36px",
+            padding: "14px 34px",
             borderTop: "1px solid var(--line)",
             background: "var(--bg-card)",
             flexShrink: 0,
@@ -638,7 +474,14 @@ export default function GenerationModal({
             진행 상황은 자동으로 저장됩니다.
           </div>
           {done && (onPreview || onViewVideo) ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
               {downloadSlot}
               {onPreview && (
                 <PrimaryButton
@@ -646,7 +489,16 @@ export default function GenerationModal({
                   size="md"
                   onClick={onPreview}
                   trailingIcon={
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.4}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <polygon points="5 3 19 12 5 21 5 3" />
                     </svg>
                   }
@@ -660,7 +512,16 @@ export default function GenerationModal({
                   size="md"
                   onClick={onViewVideo}
                   trailingIcon={
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.4}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <path d="M5 12h14" />
                       <path d="M12 5l7 7-7 7" />
                     </svg>
@@ -701,7 +562,108 @@ export default function GenerationModal({
 
 /* ───────── helpers ───────── */
 
-function DevBtn({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function ProgressBar({
+  label,
+  sub,
+  percent,
+  tone,
+  indeterminate,
+}: Omit<BarDef, "key">) {
+  const fill =
+    tone === "done"
+      ? "linear-gradient(90deg, #10B981, #059669)"
+      : tone === "failed"
+        ? "#EF4444"
+        : tone === "active"
+          ? "linear-gradient(90deg, #FFB627, #E89E0E)"
+          : "#D9D7CF";
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 8,
+          marginBottom: 6,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 13,
+            fontWeight: 600,
+            color: tone === "pending" ? "var(--text-muted)" : "var(--text)",
+            minWidth: 0,
+          }}
+        >
+          {label}
+          <span
+            style={{
+              fontSize: 11.5,
+              fontWeight: 500,
+              color: "var(--text-subtle)",
+            }}
+          >
+            {" · "}
+            {sub}
+          </span>
+        </span>
+        <span
+          style={{
+            ...tabularStyle,
+            fontSize: 12.5,
+            fontWeight: 700,
+            flexShrink: 0,
+            color: tone === "failed" ? "#EF4444" : "var(--text)",
+          }}
+        >
+          {tone === "failed" ? "실패" : indeterminate ? "제작 중" : `${percent}%`}
+        </span>
+      </div>
+      <div
+        style={{
+          height: 8,
+          borderRadius: 999,
+          background: "#EFEEE9",
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        {indeterminate ? (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              height: "100%",
+              width: "40%",
+              borderRadius: 999,
+              background: fill,
+              animation: "gen-bar-indet 1.2s ease-in-out infinite",
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              height: "100%",
+              width: `${Math.max(0, Math.min(100, percent))}%`,
+              borderRadius: 999,
+              background: fill,
+              transition: "width 500ms var(--ease-out)",
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DevBtn({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
@@ -720,78 +682,5 @@ function DevBtn({ children, onClick }: { children: React.ReactNode; onClick: () 
     >
       {children}
     </button>
-  );
-}
-
-function StageNum({ state, num }: { state: "done" | "active" | "pending"; num: number }) {
-  const bg =
-    state === "active"
-      ? "linear-gradient(135deg, #FFB627, #E89E0E)"
-      : state === "done"
-        ? "linear-gradient(135deg, #10B981, #059669)"
-        : "#E5E5E0";
-  const color =
-    state === "active" ? "#0A0A0A" : state === "done" ? "#FFFFFF" : "var(--text-subtle)";
-  return (
-    <span
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: "50%",
-        background: bg,
-        color,
-        fontSize: 12,
-        fontWeight: 700,
-        ...tabularStyle,
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-        marginTop: 1,
-        boxShadow: state === "active" ? "0 0 0 4px rgba(255, 182, 39, 0.18)" : "none",
-        transition: "all 320ms var(--ease-out)",
-      }}
-    >
-      {state === "done" ? (
-        <svg viewBox="0 0 16 16" width="12" height="12" fill="none">
-          <path
-            d="M3 8.5l3 3 7-7"
-            stroke="currentColor"
-            strokeWidth="2.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      ) : (
-        num
-      )}
-    </span>
-  );
-}
-
-function InfoRow({
-  label,
-  value,
-  subtle,
-}: {
-  label: string;
-  value: string;
-  subtle?: boolean;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "4px 0",
-        fontSize: subtle ? 11.5 : 12,
-        color: subtle ? "var(--text-subtle)" : "var(--text-muted)",
-        ...tabularStyle,
-      }}
-    >
-      <span>{label}</span>
-      <span style={{ fontWeight: 700, color: "var(--text)" }}>{value}</span>
-    </div>
   );
 }
