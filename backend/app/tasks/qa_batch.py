@@ -201,7 +201,12 @@ def _resolve_character(db, loop, lecture, professor) -> dict | None:
 
     반환: {"talking_photo_id": ...} | {"avatar_id": ...} | None(본인 아바타 미준비 → 보류).
 
-    본인 아바타로 판정(08 정책 — Q&A=본인 얼굴):
+    본인 얼굴은 **옵트인**(professor.qa_use_own_face=True)일 때만 시도한다 — 기본은
+    표준 HeyGen 아바타다. HeyGen "사진 아바타 3개 한도"는 계정 단위라 모든 교수자에게
+    본인 얼굴을 줄 수 없어, 표준 아바타를 기본으로 둔다(사용자 수와 무관하게 막히지
+    않음). 켠 교수자도 슬롯이 차 있으면 아래에서 표준으로 폴백한다.
+
+    옵트인 ON 일 때 본인 아바타로 판정(08 정책 — Q&A=본인 얼굴):
     - lecture.avatar_id 미지정(강의별 선택 없음 → 본인 기본 얼굴), 또는
     - lecture.avatar_id == 등록된 talking_photo_id, 또는 기본 룩 id, 또는
       교수자의 PhotoAvatarLook(id/heygen_look_id).
@@ -210,7 +215,8 @@ def _resolve_character(db, loop, lecture, professor) -> dict | None:
     av = (lecture.avatar_id or None) if lecture else None
     tp = professor.photo_avatar_id if professor else None
     look_default = professor.photo_avatar_default_look_id if professor else None
-    has_self = bool(tp or look_default)
+    opted_in = bool(getattr(professor, "qa_use_own_face", False)) if professor else False
+    has_self = opted_in and bool(tp or look_default)
 
     is_self = has_self and (
         not av

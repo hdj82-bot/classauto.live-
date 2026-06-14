@@ -226,6 +226,14 @@
     "createTypeStandardLabel": "Standard avatar",
     "createTypeStandardDesc": "Pick a Video Avatar you made in HeyGen web studio and choose a voice. (e.g. Adriana Business Front)",
 
+    "qaFaceTitle": "Q&A answer face",
+    "qaFaceLabel": "Use my face for Q&A answers",
+    "qaFaceDesc": "When on, student Q&A answer videos use your own photo-avatar face. When off (default), a standard avatar answers. Your main lecture videos are unaffected.",
+    "qaFaceHint": "Your own face uses HeyGen photo-avatar slots (3 per account). If they're full, Q&A automatically falls back to a standard avatar, so it never gets blocked.",
+    "qaFaceOnToast": "Q&A answers will use your face. (Falls back to a standard avatar if you have no face look.)",
+    "qaFaceOffToast": "Q&A answers will use a standard avatar.",
+    "qaFaceError": "Could not save the setting. Please try again shortly.",
+
     "standardRegisterTitle": "Register a standard avatar",
     "standardRegisterDescription": "Pick a Video Avatar you created in HeyGen web studio from the list below and register it — just search by the name you gave it in the studio. Once registered, it's added to your gallery as a standard avatar so you can compare its naturalness with the photo avatar and apply it to a lecture.",
     "standardPickerSearchPlaceholder": "Search avatars by name (the name you gave it in the studio)",

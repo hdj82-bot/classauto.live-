@@ -575,6 +575,40 @@ export async function setRecentAvatar(avatarId: string): Promise<void> {
   }
 }
 
+// ── Q&A 본인 얼굴 옵트인 (GET/PATCH /api/avatars/me/qa-face) ───────────────────
+//
+// Q&A 답변 영상에 본인 얼굴(Talking Photo)을 쓸지 여부. 기본은 OFF(표준 아바타) —
+// HeyGen "사진 아바타 3개 한도"는 계정 단위라 모든 교수자에게 본인 얼굴을 줄 수
+// 없어, 표준 아바타를 기본으로 둔다(사용자 수와 무관하게 막히지 않음). 켜도 슬롯이
+// 차 있으면 백엔드가 표준으로 폴백한다. deferred(미배포)면 OFF 로 폴백.
+
+/** GET /api/avatars/me/qa-face — 본인 얼굴 사용 여부. deferred 면 false. */
+export async function getQaUseOwnFace(): Promise<boolean> {
+  try {
+    const { data } = await api.get<{ use_own_face: boolean }>(
+      "/api/avatars/me/qa-face",
+    );
+    return data?.use_own_face ?? false;
+  } catch (err) {
+    if (isDeferredError(err)) return false;
+    throw err;
+  }
+}
+
+/** PATCH /api/avatars/me/qa-face — 옵트인 ON/OFF. deferred 면 입력값 그대로 반환. */
+export async function setQaUseOwnFace(useOwnFace: boolean): Promise<boolean> {
+  try {
+    const { data } = await api.patch<{ use_own_face: boolean }>(
+      "/api/avatars/me/qa-face",
+      { use_own_face: useOwnFace },
+    );
+    return data?.use_own_face ?? useOwnFace;
+  } catch (err) {
+    if (isDeferredError(err)) return useOwnFace;
+    throw err;
+  }
+}
+
 // ── 내 아바타(룩 + 음성 조합) 갤러리 (/api/avatars/me/saved) ───────────────────
 //
 // 교수자가 "룩 + 음성" 조합을 이름 붙여 저장해 두고, 강의마다 재생성 없이 바로

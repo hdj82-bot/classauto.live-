@@ -46,6 +46,8 @@ from app.schemas.avatar import (
     LookSelectResponse,
     PhotoAvatarStatusResponse,
     ProfilePhotoResponse,
+    QaFaceRequest,
+    QaFaceResponse,
     RecentAvatarRequest,
     RecentAvatarResponse,
     SavedAvatarApply,
@@ -1493,6 +1495,37 @@ async def rename_look(
 # 가장 최근에 고른 아바타/룩을 기억한다. 표준 HeyGen avatar_id 든 본인 룩
 # heygen_look_id(둘 다 렌더용 avatar_id)든 그대로 저장하며, 프론트가 이미 가진
 # 목록에서 해석해 "최근 선택한 아바타" 박스로 복원한다(재생성 없이 바로 적용).
+
+
+@router.get(
+    "/api/avatars/me/qa-face",
+    response_model=QaFaceResponse,
+    summary="Q&A 본인 얼굴 사용 여부 조회",
+)
+async def get_qa_face(user: User = Depends(require_professor)):
+    """Q&A 답변 영상에 본인 얼굴(Talking Photo)을 쓰는지 반환. 기본은 표준 아바타."""
+    return QaFaceResponse(use_own_face=bool(user.qa_use_own_face))
+
+
+@router.patch(
+    "/api/avatars/me/qa-face",
+    response_model=QaFaceResponse,
+    summary="Q&A 본인 얼굴 사용 옵트인 설정",
+)
+async def set_qa_face(
+    body: QaFaceRequest,
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """본인 얼굴 사용 ON/OFF.
+
+    OFF(기본)면 Q&A 는 표준 HeyGen 아바타로 렌더해 HeyGen "사진 아바타 3개 한도"와
+    무관하게 막히지 않는다. ON 이면 본인 얼굴을 시도하되 슬롯이 차 있으면 표준으로
+    폴백한다(qa_batch._resolve_character).
+    """
+    user.qa_use_own_face = bool(body.use_own_face)
+    await db.commit()
+    return QaFaceResponse(use_own_face=user.qa_use_own_face)
 
 
 @router.get(
