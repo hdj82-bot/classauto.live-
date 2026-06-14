@@ -139,7 +139,7 @@ docker compose exec backend python -m scripts.seed
 1. [railway.app](https://railway.app) 프로젝트 생성 → GitHub 레포 연결
 2. 서비스 3개 생성:
    - **backend**: `backend/Dockerfile.prod` 기반, 시작 명령 `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - **celery-worker**: 같은 이미지, 시작 명령 `celery -A app.celery_app worker --loglevel=info --concurrency=2`
+   - **celery-worker**: 같은 이미지, 시작 명령 `celery -A app.celery_app worker --loglevel=info --concurrency=4` (렌더 속도↑; 메모리·Claude 동시한도 보며 4~8 조정 — `docs/RAILWAY_DEPLOY.md` 참조)
    - **celery-beat**: 같은 이미지, 시작 명령 `celery -A app.celery_app beat --loglevel=info`
 3. Redis 플러그인 추가 (Railway 내장) → `REDIS_URL` 자동 주입
 4. 환경변수 설정 (Supabase `DATABASE_URL`, JWT 키, Claude/HeyGen 키 등)

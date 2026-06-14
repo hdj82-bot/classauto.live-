@@ -19,13 +19,14 @@ Dockerfile 기본값으로 되돌아갔을 때 결정적으로 복구할 수 있
 | 서비스 | 역할 | Start Command | Healthcheck | Pre-Deploy |
 |---|---|---|---|---|
 | **web** | FastAPI API | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 4` | `/health` | `bash backend/scripts/release.sh` |
-| **worker** | Celery 워커 | `celery -A app.celery_app:celery worker --loglevel=info --concurrency=2` | — | — |
+| **worker** | Celery 워커 | `celery -A app.celery_app:celery worker --loglevel=info --concurrency=4` | — | — |
 | **beat** | Celery 스케줄러 | `celery -A app.celery_app:celery beat --loglevel=info` | — | — |
 | **Redis** | 브로커/결과 | (Railway Redis 플러그인) | — | — |
 
 - 세 백엔드 서비스 모두 **같은 이미지**(`backend/Dockerfile.prod`)를 빌드하고 **Start Command 만** 다릅니다.
 - **worker/beat 에는 Pre-Deploy(마이그레이션)·Healthcheck 를 설정하지 마세요.** 마이그레이션은 web 한 곳에서만.
 - worker 가 없으면 룩 생성·영상 렌더 큐가 영구 적체합니다(에러 없이 조용히). **항상 worker 가 떠 있어야 합니다.**
+- **`--concurrency` 튜닝**: 영상 렌더(슬라이드 TTS·추천 질문)는 외부 API(ElevenLabs·HeyGen) 대기 위주라 동시성을 올리면 제작이 눈에 띄게 빨라집니다. 기본 `4`(2→4 로 상향). 워커 메모리가 넉넉하면 `6~8` 까지 올려도 됩니다(prefork 는 동시성당 프로세스 1개라 메모리 비례 증가). 단, **스크립트 생성·자막 번역도 같은 워커에서 Claude 를 호출**하므로 너무 높이면 Anthropic 동시 연결 한도(~5)에 더 자주 부딪힙니다(429 는 `retry_external` 로 백오프 재시도하지만 느려질 수 있음). 메모리·렌더 속도·Claude 한도를 보며 4~8 사이로 조정하세요.
 
 검증된 설정 스니펫: [`deploy/railway.web.json.example`](../deploy/railway.web.json.example) ·
 [`railway.worker.json.example`](../deploy/railway.worker.json.example) ·
