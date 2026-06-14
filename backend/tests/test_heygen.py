@@ -405,3 +405,49 @@ async def test_quota_endpoint_student_forbidden(client, student):
         headers=make_auth_header(student),
     )
     assert resp.status_code == 403
+
+
+# ── 공개 아바타 그룹 (include_public) ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_list_avatar_groups_passes_include_public():
+    """공개 Photo Avatar 그룹을 받으려면 include_public=true 를 전달해야 한다.
+
+    파라미터가 없으면 계정 소유 그룹만 와서 갤러리에 공개 아바타가 누락된다.
+    """
+    from app.services.pipeline.heygen import list_avatar_groups
+
+    captured: dict = {}
+
+    async def fake_req(method, url, **kwargs):
+        captured["url"] = url
+        captured["params"] = kwargs.get("params")
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "data": {
+                "avatar_group_list": [
+                    {
+                        "id": "grp_1",
+                        "name": "Annie",
+                        "num_looks": 57,
+                        "preview_image_url": "https://x/p.png",
+                    },
+                    {"group_id": "grp_2", "group_name": "Tyler"},  # 대체 키 파싱
+                    {"name": "no id"},  # id 없으면 제외
+                ]
+            }
+        }
+        return resp
+
+    with patch("app.services.pipeline.heygen.settings.HEYGEN_MOCK", False), patch(
+        "app.services.pipeline.heygen._request_with_retry", new=fake_req
+    ):
+        groups = await list_avatar_groups()
+
+    assert captured["url"].endswith("/v2/avatar_group.list")
+    assert captured["params"] == {"include_public": "true"}
+    assert [g["group_id"] for g in groups] == ["grp_1", "grp_2"]
+    assert groups[0]["num_looks"] == 57
+    assert groups[1]["name"] == "Tyler"

@@ -243,7 +243,11 @@ async def list_avatars() -> list[dict[str, Any]]:
 
 
 async def list_avatar_groups() -> list[dict[str, Any]]:
-    """공개/계정 아바타 그룹(캐릭터) 목록. ``GET /v2/avatar_group.list``.
+    """공개 + 계정 아바타 그룹(캐릭터) 목록. ``GET /v2/avatar_group.list``.
+
+    ``include_public=true`` 를 줘야 HeyGen 웹 "Public Avatars" 갤러리의 공개 Photo
+    Avatar 캐릭터(대다수)가 함께 내려온다. 파라미터가 없으면 계정 소유 그룹만 와서
+    갤러리에 공개 아바타가 대거 누락된다(2026-06-14 수정).
 
     각 항목을 ``{group_id, name, num_looks, preview_image_url}`` 로 정규화한다.
     실패는 HeyGenError 로 래핑.
@@ -251,7 +255,9 @@ async def list_avatar_groups() -> list[dict[str, Any]]:
     if settings.HEYGEN_MOCK:
         return []
     url = f"{settings.HEYGEN_BASE_URL}/v2/avatar_group.list"
-    resp = await _request_with_retry("GET", url, timeout=30.0)
+    resp = await _request_with_retry(
+        "GET", url, params={"include_public": "true"}, timeout=30.0
+    )
     if resp.status_code != 200:
         raise HeyGenError(
             f"HeyGen 아바타 그룹 목록 오류 [{resp.status_code}]: {resp.text[:200]}"
