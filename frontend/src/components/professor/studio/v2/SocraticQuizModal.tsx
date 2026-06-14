@@ -176,7 +176,12 @@ export default function SocraticQuizModal({
     setError(null);
     try {
       const res = await confirmQuiz(lectureId, point.boundaryIndex, draft, point.revealAnswer);
-      onConfirmed({ id: res.id, boundaryIndex: res.insert_after_slide_index, draft });
+      // 서버가 객관식 정답 위치를 무작위 재배치하므로, 저장본은 응답의 draft 를 쓴다.
+      onConfirmed({
+        id: res.id,
+        boundaryIndex: res.insert_after_slide_index,
+        draft: res.draft ?? draft,
+      });
     } catch {
       setError("문제 저장에 실패했습니다. 입력을 확인하거나 잠시 후 다시 시도해주세요.");
       setConfirming(false);

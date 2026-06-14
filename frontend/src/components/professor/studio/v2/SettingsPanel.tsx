@@ -65,6 +65,8 @@ export interface SettingsPanelProps {
   onChangeQuizPoint?: (index: number, patch: Partial<QuizInsertionPoint>) => void;
   /** "문제 만들기/수정" — 소크라테스 대화 모달 오픈. */
   onOpenSocratic?: (index: number) => void;
+  /** "퀵 생성" — 대화 없이 즉시 문제 1개 생성·저장. 완료/실패를 boolean 으로 반환. */
+  onQuickGenerateQuiz?: (index: number) => Promise<boolean>;
   // ── 예상 질문 (Q&A 사전 답변) ────────────────────────────────────────────────
   /** 등록된 사전 질문들 (최대 3). 비면 빈 배열. 질문 + (선택) 사전 대답을 입력한다. */
   seedQuestions?: SeedQuestionDraft[];
@@ -315,6 +317,7 @@ export default function SettingsPanel({
   onRemoveQuizPoint,
   onChangeQuizPoint,
   onOpenSocratic,
+  onQuickGenerateQuiz,
   seedQuestions = [],
   seedRenderingActive = false,
   onAddSeedQuestion,
@@ -568,6 +571,11 @@ export default function SettingsPanel({
                     onChange={(patch) => onChangeQuizPoint?.(i, patch)}
                     onRemove={() => onRemoveQuizPoint?.(i)}
                     onOpen={() => onOpenSocratic?.(i)}
+                    onQuickGenerate={
+                      onQuickGenerateQuiz
+                        ? () => onQuickGenerateQuiz(i)
+                        : undefined
+                    }
                   />
                 ))}
                 {quizPoints.length < 3 ? (
@@ -744,6 +752,7 @@ function QuizPointCard({
   onChange,
   onRemove,
   onOpen,
+  onQuickGenerate,
 }: {
   point: QuizInsertionPoint;
   index: number;
@@ -751,8 +760,19 @@ function QuizPointCard({
   onChange: (patch: Partial<QuizInsertionPoint>) => void;
   onRemove: () => void;
   onOpen: () => void;
+  onQuickGenerate?: () => Promise<boolean>;
 }) {
   const authored = point.authoredId !== null;
+  const [quickBusy, setQuickBusy] = useState(false);
+  const handleQuick = async () => {
+    if (quickBusy || !onQuickGenerate) return;
+    setQuickBusy(true);
+    try {
+      await onQuickGenerate();
+    } finally {
+      setQuickBusy(false);
+    }
+  };
   // 경계 N 은 0 ~ slideCount-2 (슬라이드 N+1 과 N+2 사이).
   const maxBoundary = Math.max(0, slideCount - 2);
   const boundary = Math.min(point.boundaryIndex, maxBoundary);
@@ -901,6 +921,37 @@ function QuizPointCard({
         </svg>
         {authored ? "문제 보기·수정" : "문제 만들기"}
       </button>
+
+      {/* 퀵 생성 — 대화 없이 즉시 문제+정답 생성(예상 질문 즉시 생성과 동일). */}
+      {onQuickGenerate && (
+        <button
+          type="button"
+          onClick={handleQuick}
+          disabled={quickBusy}
+          aria-label={`퀴즈 ${index + 1} 퀵 생성`}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            padding: "7px 12px",
+            borderRadius: 8,
+            border: "1px solid var(--line-strong)",
+            background: "var(--bg-card)",
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: quickBusy ? "default" : "pointer",
+            color: "var(--text)",
+            fontFamily: "inherit",
+            opacity: quickBusy ? 0.65 : 1,
+          }}
+        >
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13 2 3 14h7l-1 8 10-12h-7z" />
+          </svg>
+          {quickBusy ? "생성 중…" : authored ? "퀵 재생성" : "퀵 생성"}
+        </button>
+      )}
     </div>
   );
 }
