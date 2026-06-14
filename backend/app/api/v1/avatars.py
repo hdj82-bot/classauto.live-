@@ -184,11 +184,19 @@ async def _register_talking_photo_with_cleanup(
         photos = []
     photos.sort(key=_talking_photo_created_ts)  # 오래된 것부터
 
+    # 시도 횟수 상한 — 삭제가 (엔드포인트/권한 문제로) 실제로 슬롯을 못 비우면 목록
+    # 전체(수십 개)를 돌며 업로드를 반복해 수 분간 갈릴 수 있다. 한도(흔히 3개)를
+    # 풀려면 몇 개만 지우면 되므로 상한을 둬 빠르게 실패·피드백한다(무한 grind 방지).
+    _MAX_CLEANUP_ATTEMPTS = 8
     last_err: Exception | None = None
+    attempts = 0
     for tp in photos:
+        if attempts >= _MAX_CLEANUP_ATTEMPTS:
+            break
         tpid = tp.get("id") or tp.get("talking_photo_id")
         if not tpid or tpid == keep_id:
             continue
+        attempts += 1
         await delete_talking_photo(tpid)  # best-effort
         try:
             return await upload_talking_photo(img_bytes, content_type=content_type)

@@ -386,25 +386,38 @@ async def delete_talking_photo(talking_photo_id: str) -> bool:
     if settings.HEYGEN_MOCK:
         logger.warning("[HEYGEN_MOCK] delete_talking_photo 생략: %s", talking_photo_id)
         return True
-    # Talking Photo 전용 삭제 엔드포인트(공식 OpenAPI). v2/photo_avatar/{id} 는
-    # v2 Photo Avatar(룩 그룹) 용이라 v1 업로드 talking_photo_id 에는 동작하지 않는다.
-    url = f"{settings.HEYGEN_BASE_URL}/v2/talking_photo/{talking_photo_id}"
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.delete(url, headers=_headers())
-    except httpx.HTTPError as exc:
-        logger.warning(
-            "HeyGen Talking Photo 삭제 통신 오류: %s — %s", talking_photo_id, exc
-        )
-        return False
-    if resp.status_code not in (200, 204):
-        logger.warning(
-            "HeyGen Talking Photo 삭제 실패 [%d]: %s — %s",
-            resp.status_code, talking_photo_id, resp.text[:200],
-        )
-        return False
-    logger.info("HeyGen Talking Photo 삭제: %s", talking_photo_id)
-    return True
+    # v1 으로 업로드한 Talking Photo 는 **asset 삭제 엔드포인트**로 지워야 슬롯이
+    # 회수된다(POST /v1/asset/{id}/delete). 종전엔 v2/talking_photo/{id}(DELETE)만
+    # 호출했는데 이는 v2 Photo Avatar(룩 그룹) 용이라 v1 업로드 id 에는 404 → 슬롯이
+    # 영영 안 비어 "exceeded your limit" 한도가 자가 회복되지 않았다(seed 렌더가
+    # 업로드 400→삭제 404 를 무한 반복하던 원인). id 매핑이 버전마다 달라 두 엔드포인트를
+    # 순서대로 시도하고 하나라도 2xx 면 성공으로 본다(best-effort).
+    base = settings.HEYGEN_BASE_URL
+    candidates = (
+        ("POST", f"{base}/v1/asset/{talking_photo_id}/delete"),
+        ("DELETE", f"{base}/v2/talking_photo/{talking_photo_id}"),
+    )
+    last_status: int | None = None
+    last_text = ""
+    for method, url in candidates:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.request(method, url, headers=_headers())
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "HeyGen Talking Photo 삭제 통신 오류(%s): %s — %s",
+                method, talking_photo_id, exc,
+            )
+            continue
+        if resp.status_code in (200, 204):
+            logger.info("HeyGen Talking Photo 삭제(%s): %s", method, talking_photo_id)
+            return True
+        last_status, last_text = resp.status_code, resp.text[:200]
+    logger.warning(
+        "HeyGen Talking Photo 삭제 실패(모든 엔드포인트) [%s]: %s — %s",
+        last_status, talking_photo_id, last_text,
+    )
+    return False
 
 
 async def list_talking_photos() -> list[dict[str, Any]]:
