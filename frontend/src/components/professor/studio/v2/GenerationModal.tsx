@@ -193,12 +193,14 @@ export default function GenerationModal({
     stages.push({
       id: 3,
       title: qaAllDone
-        ? "추천 질문(Q&A) 준비 완료"
-        : "추천 질문(Q&A) 아바타 생성 중…",
+        ? `추천 질문 답변 ${qaTotal}개 완료`
+        : `추천 질문 답변 ${qaSettled} / ${qaTotal} 제작 중…`,
       detail:
-        `${qaReady} / ${qaTotal} 준비됨` + (qaFailed ? ` · ${qaFailed} 실패` : ""),
+        `완료 ${qaReady} / ${qaTotal}` + (qaFailed ? ` · 실패 ${qaFailed}` : ""),
       state: qaAllDone ? "done" : "active",
-      live: qaAllDone ? undefined : "학생 추천 질문 답변 영상을 함께 만드는 중",
+      live: qaAllDone
+        ? undefined
+        : `학생 추천 질문 답변 아바타 ${qaSettled + 1}번째 만드는 중`,
     });
   }
 
