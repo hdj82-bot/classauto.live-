@@ -123,6 +123,23 @@ class Settings(BaseSettings):
     HEYGEN_DAILY_BUDGET_USD: float = 3.0
     HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
 
+    # ── Hedra (본인 얼굴 Q&A 렌더 — 사진+음성 per-render, 계정 아바타 한도 없음) ──
+    # HeyGen Photo Avatar 는 계정당 3개 한도라 다수 사용자에게 본인 얼굴을 줄 수 없다.
+    # Hedra(Character-3)는 렌더할 때마다 이미지+음성을 넘기는 방식이라 등록 한도가
+    # 없어 사용자 수만큼 확장된다. qa_use_own_face=ON 인 교수자의 Q&A 답변에 쓴다.
+    # 키가 비어 있거나 MOCK 이면 HeyGen 표준 아바타로 폴백한다(서비스 연속성).
+    HEDRA_API_KEY: str = ""
+    HEDRA_BASE_URL: str = "https://api.hedra.com/web-app/public"
+    # Character-3 모델 id. 비우면 런타임에 GET /models 로 자동 탐색(이름에 "character")한다.
+    HEDRA_MODEL_ID: str = ""
+    HEDRA_RESOLUTION: str = "720p"  # "540p" | "720p"
+    HEDRA_ASPECT_RATIO: str = "16:9"  # "16:9" | "9:16" | "1:1"
+    # 영상 1초당 USD 환산(720p ≈ 6 credits/sec, $30/5400cr → 약 $0.033/sec). 회계용.
+    HEDRA_COST_USD_PER_SECOND: float = 0.033
+    # mock: 켜면 실제 Hedra 호출 0 — 제출/폴링을 placeholder 로 시뮬레이션(로컬/테스트).
+    HEDRA_MOCK: bool = False
+    HEDRA_MOCK_VIDEO_URL: str = ""
+
     # ── 아바타 Q&A 캐시 (docs/planning/08 §5, 09 §5) ─────────────
     # 실시간 HeyGen 렌더 금지(지연). 질문은 항상 즉시 RAG 텍스트로 답하고, 겹치는
     # 질문만 야간 배치로 사전 렌더한 아바타 클립을 캐시에서 즉시 제공한다.

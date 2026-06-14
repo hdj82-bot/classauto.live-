@@ -294,6 +294,49 @@ def test_batch_uses_avatar_id_for_standard_avatar(sync_db, monkeypatch):
     assert "talking_photo_id" not in captured
 
 
+def test_batch_uses_hedra_for_own_face_when_opted_in(sync_db, monkeypatch):
+    """qa_use_own_face ON + Hedra 가능 → HeyGen 이 아니라 Hedra(사진+음성)로 렌더.
+
+    job id 가 'hedra:' 접두를 받고, HeyGen create_video 는 호출되지 않는다.
+    """
+    from app.tasks import qa_batch
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", True)
+    monkeypatch.setattr(settings, "HEDRA_MOCK", True)  # Hedra 사용 가능 + 외부호출 0
+    monkeypatch.setattr(settings, "QA_AVATAR_TOP_CLUSTERS", 3)
+    monkeypatch.setattr(settings, "QA_AVATAR_MIN_CLUSTER_SIZE", 1)
+    monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 6)
+
+    # 본인 얼굴 이미지 로드는 S3 의존이라 테스트에선 직접 바이트를 돌려준다.
+    monkeypatch.setattr(qa_batch, "_own_face_image", lambda *a, **k: (b"IMG", "image/png"))
+
+    # HeyGen 경로가 절대 안 쓰이는지 확인용 — 호출되면 실패.
+    async def _boom_create_video(**_k):
+        raise AssertionError("Hedra 경로여야 하는데 HeyGen create_video 가 호출됨")
+
+    monkeypatch.setattr("app.services.pipeline.heygen.create_video", _boom_create_video)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    prof.qa_use_own_face = True
+    prof.photo_avatar_default_look_id = "look-x"
+    sync_db.flush()
+    _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch.process_qa_avatar_batch(sync_db, loop)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 1
+    rep = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.heygen_job_id.isnot(None)
+    ).first()
+    assert rep is not None
+    assert rep.heygen_job_id.startswith("hedra:")
+
+
 def test_batch_respects_monthly_lecture_cap(sync_db, monkeypatch):
     """교수자 월 한도는 '배포된 강의' 단위(09 §5 개정 2026-06-14).
 

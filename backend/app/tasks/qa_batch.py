@@ -250,10 +250,75 @@ def _resolve_character(db, loop, lecture, professor) -> dict | None:
     return {"avatar_id": av}
 
 
-def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
-    """클러스터 대표 질문 답변을 TTS→HeyGen 제출. 성공 시 True.
+# 본인 얼굴 렌더 job id 접두사 — 폴링이 provider(Hedra/HeyGen)를 구분하는 표식.
+# 별도 컬럼 없이 기존 heygen_job_id 문자열에 "hedra:" 를 붙여 라우팅한다.
+_HEDRA_JOB_PREFIX = "hedra:"
 
-    대표 행은 heygen_job_id 를 받고, 모든 멤버는 같은 cluster_key + status=rendering.
+
+def _hedra_enabled() -> bool:
+    """본인 얼굴 렌더를 Hedra 로 처리할 수 있는지(키 설정 또는 MOCK)."""
+    return bool((settings.HEDRA_API_KEY or "").strip()) or settings.HEDRA_MOCK
+
+
+def _own_face_image(db, professor) -> tuple[bytes, str] | None:
+    """본인 얼굴 소스 이미지(룩 우선, 없으면 프로필 사진) → (bytes, ctype). 실패면 None.
+
+    Hedra 는 렌더마다 이 이미지를 그대로 넘긴다(아바타 등록·한도 없음).
+    """
+    if professor is None:
+        return None
+    from urllib.parse import urlparse
+
+    from app.services.pipeline import s3 as s3_svc
+
+    url = None
+    look_id = professor.photo_avatar_default_look_id
+    if look_id:
+        from app.models.photo_avatar import LookStatus, PhotoAvatarLook
+
+        look = None
+        try:
+            look = db.query(PhotoAvatarLook).filter(
+                PhotoAvatarLook.user_id == professor.id,
+                PhotoAvatarLook.id == uuid.UUID(str(look_id)),
+            ).first()
+        except (ValueError, TypeError):
+            look = None
+        if look is None:
+            look = db.query(PhotoAvatarLook).filter(
+                PhotoAvatarLook.user_id == professor.id,
+                PhotoAvatarLook.heygen_look_id == str(look_id),
+            ).first()
+        if look and look.status == LookStatus.ready.value and look.image_url:
+            url = look.image_url
+    if not url:
+        url = professor.profile_image_url
+    if not url:
+        return None
+    try:
+        key = urlparse(url).path.lstrip("/")
+        img_bytes = s3_svc.download_file(key)
+        ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
+        try:
+            from app.api.v1.avatars import _ensure_talking_photo_payload
+            img_bytes, ctype = _ensure_talking_photo_payload(img_bytes, ctype)
+        except Exception:  # noqa: BLE001 — 리사이즈 실패면 원본 사용
+            pass
+        return img_bytes, ctype
+    except Exception as exc:  # noqa: BLE001 — 못 받으면 표준 아바타로 폴백
+        logger.warning(
+            "Hedra 본인 얼굴 이미지 로드 실패(표준 폴백): instructor=%s, error=%s",
+            getattr(professor, "id", None), exc,
+        )
+        return None
+
+
+def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
+    """클러스터 대표 질문 답변을 TTS→렌더 제출. 성공 시 True.
+
+    본인 얼굴 옵트인(qa_use_own_face) + Hedra 사용 가능 → **Hedra(사진+음성)** 로
+    렌더(계정 아바타 한도 없음). 아니면 HeyGen(표준 아바타 / 레거시 talking_photo).
+    대표 행은 heygen_job_id 를 받고(Hedra 면 "hedra:" 접두), 멤버는 같은 cluster_key.
     """
     from app.services.pipeline import s3 as s3_svc
     from app.services.pipeline.heygen import create_video
@@ -267,20 +332,29 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
 
     cfg = _lecture_voice_settings(db, lecture_id, instructor_id)
 
-    # 렌더 캐릭터 결정 — 본인 제작 아바타면 talking_photo, 표준이면 avatar.
-    # rendering 으로 전이하기 전에 판정해, 본인 아바타 미준비 시 pending 을 유지한다.
     from app.models.lecture import Lecture as _Lecture
     from app.models.user import User as _User
 
     _lecture = db.query(_Lecture).filter(_Lecture.id == lecture_id).first()
     _professor = db.query(_User).filter(_User.id == instructor_id).first()
-    character = _resolve_character(db, loop, _lecture, _professor)
-    if character is None:
-        logger.info(
-            "Q&A 배치: 본인 아바타 미준비(룩 not ready 등) — 렌더 보류(pending 유지): cache_id=%s",
-            rep.id,
-        )
-        return False
+
+    # 본인 얼굴 옵트인 + Hedra 가능 + 소스 이미지 확보 → Hedra. 하나라도 안 되면 HeyGen.
+    use_hedra = (
+        bool(getattr(_professor, "qa_use_own_face", False)) and _hedra_enabled()
+    )
+    own_face_img = _own_face_image(db, _professor) if use_hedra else None
+    use_hedra = use_hedra and own_face_img is not None
+
+    character = None
+    if not use_hedra:
+        # 렌더 캐릭터 결정(rendering 전이 전) — 본인 아바타 미준비면 pending 유지.
+        character = _resolve_character(db, loop, _lecture, _professor)
+        if character is None:
+            logger.info(
+                "Q&A 배치: 본인 아바타 미준비(룩 not ready 등) — 렌더 보류(pending 유지): cache_id=%s",
+                rep.id,
+            )
+            return False
 
     cluster_key = uuid.uuid4().hex
 
@@ -291,10 +365,10 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
     db.flush()
 
     try:
-        if settings.HEYGEN_MOCK:
-            # MOCK: 외부 호출 0 — TTS/S3 생략하고 placeholder audio_url 로 제출.
-            heygen_audio_url = _MOCK_AUDIO_URL
-        else:
+        # 음성 합성(두 provider 공통). MOCK 은 외부 호출 0.
+        audio_bytes: bytes | None = None
+        heygen_audio_url = _MOCK_AUDIO_URL
+        if not settings.HEYGEN_MOCK:
             from app.services.pipeline.tts import synthesize
 
             tts = loop.run_until_complete(
@@ -306,23 +380,36 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
                     cloned=cfg["is_cloned"],
                 )
             )
-            audio_url = s3_svc.upload_audio_bytes(tts.audio_bytes, f"qa_{rep.id}")
+            audio_bytes = tts.audio_bytes
+            audio_url = s3_svc.upload_audio_bytes(audio_bytes, f"qa_{rep.id}")
             heygen_audio_url = s3_svc.presign_stored_s3_url(audio_url, expiration=86400)
 
-        job_id = loop.run_until_complete(
-            create_video(
-                audio_url=heygen_audio_url,
-                gender=cfg["voice_gender"],
-                callback_id=str(rep.id),
-                avatar_scale=cfg["avatar_scale"],
-                **character,
+        if use_hedra:
+            from app.services.pipeline.hedra import submit_talking_video
+
+            gen_id = loop.run_until_complete(
+                submit_talking_video(
+                    image_bytes=own_face_img[0],
+                    image_ctype=own_face_img[1],
+                    audio_bytes=audio_bytes or b"",
+                )
             )
-        )
+            job_id = f"{_HEDRA_JOB_PREFIX}{gen_id}"
+        else:
+            job_id = loop.run_until_complete(
+                create_video(
+                    audio_url=heygen_audio_url,
+                    gender=cfg["voice_gender"],
+                    callback_id=str(rep.id),
+                    avatar_scale=cfg["avatar_scale"],
+                    **character,
+                )
+            )
         rep.heygen_job_id = job_id
         db.flush()
         logger.info(
-            "Q&A 배치 렌더 제출: cache_id=%s, cluster=%s, size=%d, job=%s",
-            rep.id, cluster_key, cluster.size, job_id,
+            "Q&A 배치 렌더 제출: cache_id=%s, cluster=%s, size=%d, job=%s, provider=%s",
+            rep.id, cluster_key, cluster.size, job_id, "hedra" if use_hedra else "heygen",
         )
         return True
     except Exception as exc:  # noqa: BLE001 — 한 클러스터 실패가 배치 전체를 막지 않게.
@@ -363,9 +450,13 @@ def _mark_cluster_failed(db, cluster_key, error: str | None) -> None:
 
 
 def _poll_inflight(loop, db) -> tuple[int, int]:
-    """status=rendering 인 대표 행(heygen_job_id 보유)을 폴링해 ready/failed 로 전이."""
+    """status=rendering 인 대표 행(heygen_job_id 보유)을 폴링해 ready/failed 로 전이.
+
+    job id 가 "hedra:" 접두면 Hedra 상태를, 아니면 HeyGen 상태를 조회한다.
+    """
     from app.services.pipeline import s3 as s3_svc
     from app.services.pipeline.heygen import get_video_status
+    from app.services.pipeline.hedra import get_generation_status
 
     reps = db.query(QAAnswerCache).filter(
         QAAnswerCache.status == qa_avatar.STATUS_RENDERING,
@@ -373,16 +464,24 @@ def _poll_inflight(loop, db) -> tuple[int, int]:
     ).all()
     completed = failed = 0
     for rep in reps:
+        job = rep.heygen_job_id or ""
+        is_hedra = job.startswith(_HEDRA_JOB_PREFIX)
+        mock = settings.HEDRA_MOCK if is_hedra else settings.HEYGEN_MOCK
         try:
-            status_data = loop.run_until_complete(get_video_status(rep.heygen_job_id))
+            if is_hedra:
+                status_data = loop.run_until_complete(
+                    get_generation_status(job[len(_HEDRA_JOB_PREFIX):])
+                )
+            else:
+                status_data = loop.run_until_complete(get_video_status(job))
         except Exception as exc:  # noqa: BLE001 — 다음 배치에서 재시도.
             logger.warning("Q&A 배치 폴링 실패(다음 배치 재시도): cache_id=%s, error=%s", rep.id, exc)
             continue
 
         video_url = status_data.get("video_url")
-        if status_data.get("status") == "completed" and (video_url or settings.HEYGEN_MOCK):
+        if status_data.get("status") == "completed" and (video_url or mock):
             duration = status_data.get("duration")
-            if settings.HEYGEN_MOCK:
+            if mock:
                 s3_url = video_url or f"mock://qa_clip/{rep.id}.mp4"
             else:
                 if not video_url:
