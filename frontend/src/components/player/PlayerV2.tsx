@@ -870,6 +870,19 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   />
                 )}
 
+              {/* 미리보기 전용 싱크 진단 배지 — 이 슬라이드에 발성 시각 cue 가 있으면
+                  '정밀 싱크', 없으면 글자수 추정 폴백('추정 싱크'). cue 가 안 생기면
+                  (워커 미배포·정렬 실패 등) 여기서 바로 드러난다. 학생 화면엔 안 보인다. */}
+              {preview && captionsOn && currentSlide &&
+                (currentSlide.subtitle_text || currentSlide.text) && (
+                  <span className={styles.syncBadge}>
+                    {currentSlide.subtitle_cues &&
+                    currentSlide.subtitle_cues.length > 0
+                      ? "정밀 싱크"
+                      : "추정 싱크"}
+                  </span>
+                )}
+
               {/* Q&A 아바타 — stage 모드: 좌측 강의 화면에 크게 오버레이 재생.
                   강의(슬라이드)를 잠시 가리고, 닫거나 끝나면 다시 강의로 돌아간다. */}
               {qaPlayMode === "stage" && stageAvatar && (

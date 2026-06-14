@@ -224,6 +224,23 @@
     font-size: 15px;
   }
 }
+/* 미리보기 전용 싱크 진단 배지 — 영상 좌상단. cue 유무를 교수자에게 즉시 알린다. */
+.syncBadge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 4;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  background: rgba(10, 10, 10, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
 .video::before {
   content: "";
   position: absolute;
@@ -1507,9 +1524,14 @@
   flex: 1 1 auto;
   min-width: 0;
   max-height: 240px;
+  /* 추천 질문을 왼쪽, 재생 위치 토글을 그 오른쪽에 둔다(토글이 답변이 강의 화면/
+     채팅창 중 어디 나오는지를 가리키도록 추천 질문 바로 옆). DOM 순서는 그대로 두고
+     flex order 로만 시각 순서를 바꾼다. */
+  order: 1;
 }
-/* 재생 위치 토글 — 다크 패널 위 세그먼트 컨트롤. */
+/* 재생 위치 토글 — 다크 패널 위 세그먼트 컨트롤. 추천 질문 오른쪽에 배치(order:2). */
 .playModeToggle {
+  order: 2;
   flex: 0 0 auto;
   display: inline-flex;
   padding: 3px;
