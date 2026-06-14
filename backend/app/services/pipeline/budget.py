@@ -19,7 +19,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.models.lecture import Lecture
 from app.models.qa_answer_cache import QAAnswerCache
+from app.models.user import User
 from app.models.video_render import RenderCostLog
 
 logger = logging.getLogger(__name__)
@@ -85,7 +87,17 @@ def assert_heygen_budget(db: Session, *, now: datetime | None = None) -> None:
             )
 
 
-# ── Q&A 아바타 렌더 한도 (docs/planning/09 §5: 교수자당 월 2영상 × 3렌더 = 6) ──
+# ── Q&A 아바타 한도 (docs/planning/09 §5 개정 2026-06-14) ─────────────────────
+#
+# 한도 단위는 '클립'이 아니라 '배포(is_published)된 강의'다. 베타테스터는 월 8강의.
+#  - 한 강의에 사전 질문이 3개여도, 디버깅으로 같은 강의를 여러 번 재렌더해도 1로 센다.
+#  - 미배포(제작 중) 강의 렌더는 한도를 소모하지 않는다 — 실제 배포한 강의만 센다.
+#  - 테스트 계정·계정주(QA_AVATAR_UNLIMITED_EMAILS)는 면제(무제한).
+# 렌더는 배포보다 이른 '영상 승인' 시점에 제출되므로, 미배포 강의는 게이트로 막지
+# 않는다(그 강의는 한도에 안 잡힘). 실질 하드캡은 HeyGen 계정 잔액(auto-refill OFF).
+
+
+_UNLIMITED_REMAINING = 9999  # 무제한 계정의 remaining 표시용 sentinel(렌더 비차단).
 
 
 def _month_start(now: datetime | None = None) -> datetime:
@@ -93,30 +105,92 @@ def _month_start(now: datetime | None = None) -> datetime:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
+def instructor_has_unlimited_qa(db: Session, instructor_id) -> bool:
+    """이 교수자가 월 Q&A 강의 한도 면제 대상인지(화이트리스트 이메일)."""
+    email = db.execute(
+        select(User.email).where(User.id == instructor_id)
+    ).scalar()
+    if not email:
+        return False
+    return email.strip().lower() in settings.qa_avatar_unlimited_email_set
+
+
 def qa_renders_used_this_month(
     db: Session, instructor_id, *, now: datetime | None = None
 ) -> int:
-    """이번 달 해당 교수자의 Q&A 아바타 렌더 수.
+    """이번 달 해당 교수자가 Q&A 아바타를 렌더한 '배포된 강의' 수(중복 제거).
 
-    렌더 1건 = 대표 행(heygen_job_id 보유). 형제 행(heygen_job_id NULL)·실패 후
-    재시도와 무관하게 "실제로 HeyGen 에 제출된 렌더"만 센다. failed 도 한도에
-    포함해(이미 제출·과금됐을 수 있음) 재시도 폭주를 막는다.
+    카운트 단위는 클립이 아니라 강의다. 한 강의에 사전 질문이 여러 개(≤3)거나
+    디버깅으로 여러 번 재렌더해도 그 강의는 1로 센다. 아직 배포(is_published)되지
+    않은 제작 중 강의는 제외 — 제작 과정의 렌더는 한도를 소모하지 않고 실제 배포한
+    강의만 월 한도에 포함한다(2026-06-14 사용자 결정). "실제 제출된 렌더"만 보도록
+    대표 행(heygen_job_id 보유)만 센다(failed 도 이미 제출·과금됐을 수 있어 포함).
     """
     month_start = _month_start(now)
     total = db.execute(
-        select(func.count(QAAnswerCache.id)).where(
+        select(func.count(func.distinct(QAAnswerCache.lecture_id)))
+        .select_from(QAAnswerCache)
+        .join(Lecture, Lecture.id == QAAnswerCache.lecture_id)
+        .where(
             QAAnswerCache.instructor_id == instructor_id,
             QAAnswerCache.heygen_job_id.isnot(None),
             QAAnswerCache.created_at >= month_start,
+            Lecture.is_published == True,  # noqa: E712
         )
     ).scalar()
     return int(total or 0)
 
 
+def _lecture_in_quota_set(
+    db: Session, instructor_id, lecture_id, *, now: datetime | None = None
+) -> bool:
+    """이 강의가 이미 이번 달 한도 집합에 포함됐는지(배포됨 + 제출된 렌더 보유).
+
+    이미 포함된 강의에 클립을 더 렌더하는 것은 '새 강의 슬롯'을 쓰지 않으므로,
+    한도가 찼더라도 허용한다(같은 강의 재렌더·사전 질문 추가).
+    """
+    month_start = _month_start(now)
+    found = db.execute(
+        select(func.count(QAAnswerCache.id))
+        .select_from(QAAnswerCache)
+        .join(Lecture, Lecture.id == QAAnswerCache.lecture_id)
+        .where(
+            QAAnswerCache.instructor_id == instructor_id,
+            QAAnswerCache.lecture_id == lecture_id,
+            QAAnswerCache.heygen_job_id.isnot(None),
+            QAAnswerCache.created_at >= month_start,
+            Lecture.is_published == True,  # noqa: E712
+        )
+    ).scalar()
+    return bool(found)
+
+
+def qa_can_render_lecture(
+    db: Session, instructor_id, lecture_id, *, now: datetime | None = None
+) -> bool:
+    """이번 달 이 강의에 새 Q&A 렌더를 시작할 여지가 있는지(강의 단위 월 한도).
+
+    - 무제한 계정 → 항상 True.
+    - 이미 한도 집합에 든 강의(배포+이번 달 렌더) → True(새 슬롯 아님).
+    - 그 외 → 배포된 강의 사용 수가 한도 미만이면 True.
+    한도 0/음수면 렌더 비활성(False).
+    """
+    if instructor_has_unlimited_qa(db, instructor_id):
+        return True
+    cap = settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR
+    if not cap or cap <= 0:
+        return False
+    if _lecture_in_quota_set(db, instructor_id, lecture_id, now=now):
+        return True
+    return qa_renders_used_this_month(db, instructor_id, now=now) < cap
+
+
 def qa_render_quota_remaining(
     db: Session, instructor_id, *, now: datetime | None = None
 ) -> int:
-    """이번 달 남은 Q&A 렌더 슬롯 수(0 이상). 한도 0/음수면 0(렌더 비활성)."""
+    """이번 달 남은 Q&A '강의' 슬롯 수(0 이상). 무제한 계정은 sentinel, 한도 0 면 0."""
+    if instructor_has_unlimited_qa(db, instructor_id):
+        return _UNLIMITED_REMAINING
     cap = settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR
     if not cap or cap <= 0:
         return 0
@@ -125,22 +199,23 @@ def qa_render_quota_remaining(
 
 
 def assert_qa_render_budget(
-    db: Session, instructor_id, *, now: datetime | None = None
+    db: Session, instructor_id, lecture_id, *, now: datetime | None = None
 ) -> None:
-    """Q&A 아바타 렌더 직전 검사 — 교수자 월 한도 + 전역 HeyGen 예산($).
+    """Q&A 아바타 렌더 직전 검사 — 교수자 월 강의 한도 + 전역 HeyGen 예산($).
 
-    - 교수자 월 렌더 한도(09 §5: 6) 소진 시 ``QARenderQuotaError``.
+    - 이 강의에 렌더 여지가 없으면(``qa_can_render_lecture`` False) ``QARenderQuotaError``.
+      한도 단위는 '배포된 강의'이며, 이미 한도 집합에 든 강의는 통과한다.
     - 전역 일/월 $ 서킷 브레이커(``assert_heygen_budget``) 재사용 — mock 은 통과.
-    렌더 한도는 mock 에서도 적용(렌더 "수" 통제이므로). $ 브레이커만 mock 면제.
+    강의 한도는 mock 에서도 적용(렌더 "수" 통제이므로). $ 브레이커만 mock 면제.
     """
-    if qa_render_quota_remaining(db, instructor_id, now=now) <= 0:
+    if not qa_can_render_lecture(db, instructor_id, lecture_id, now=now):
         cap = settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR
         used = qa_renders_used_this_month(db, instructor_id, now=now)
         logger.warning(
-            "[BUDGET] Q&A 렌더 월 한도 초과로 차단: instructor=%s used=%d cap=%d",
-            instructor_id, used, cap,
+            "[BUDGET] Q&A 렌더 월 강의 한도 초과로 차단: instructor=%s lecture=%s used=%d cap=%d",
+            instructor_id, lecture_id, used, cap,
         )
         raise QARenderQuotaError(
-            f"Q&A 아바타 렌더 월 한도 초과: {used}/{cap}"
+            f"Q&A 아바타 렌더 월 강의 한도 초과: {used}/{cap}"
         )
     assert_heygen_budget(db, now=now)
