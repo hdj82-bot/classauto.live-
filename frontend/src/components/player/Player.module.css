@@ -1428,9 +1428,135 @@
   color: var(--text-dark-subtle);
 }
 
+/* ── Q&A 아바타 — 좌측 강의 화면 오버레이 재생(stage 모드) ─────────────────── */
+.stageAvatar {
+  position: absolute;
+  inset: 0;
+  z-index: 4; /* 슬라이드(1)·자막(3) 위, 컨트롤(6)·퀴즈 아래. */
+  background: #000;
+  display: grid;
+  place-items: center;
+}
+.stageAvatar video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.stageAvatarClose {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(10, 10, 10, 0.62);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 5;
+  transition: background 160ms;
+}
+.stageAvatarClose:hover {
+  background: rgba(10, 10, 10, 0.85);
+}
+.stageAvatarClose svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* ── 음량(컨트롤바) ───────────────────────────────────────────────────────── */
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.volumeSlider {
+  width: 84px;
+  cursor: pointer;
+}
+
+/* ── Q&A 푸터(재생 위치 토글 + 추천 질문) ─────────────────────────────────── */
+.qaFooter {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 12px 0;
+}
+.qaFooter .suggest {
+  /* 푸터 안에서는 바깥 여백 제거 + 남는 폭 차지. 퍼센트 max-height 는 auto 높이
+     컨테이너에서 풀리므로 고정 px 로 둔다(채팅 잠식 방지). */
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: 240px;
+}
+/* 재생 위치 토글 — 다크 패널 위 세그먼트 컨트롤. */
+.playModeToggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line-dark);
+}
+.playModeBtn {
+  border: none;
+  background: transparent;
+  color: var(--text-dark-subtle);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 160ms, color 160ms;
+}
+.playModeOn {
+  background: var(--gold);
+  color: #0a0a0a;
+}
+
+/* ── 채팅창 Q&A 아바타 영상 — 가로 풀폭(끝에서 끝까지) ───────────────────── */
+.qaAvatarVideo {
+  margin-top: 8px;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 10px;
+  display: block;
+  background: #000;
+}
+/* stage 모드일 때 채팅의 "강의 화면에서 보기" 버튼. */
+.qaStagePlayBtn {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 182, 39, 0.24);
+  background: rgba(255, 182, 39, 0.10);
+  color: var(--gold);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms;
+}
+.qaStagePlayBtn:hover {
+  background: rgba(255, 182, 39, 0.18);
+}
+.qaStagePlayBtn svg {
+  width: 12px;
+  height: 12px;
+}
+
 /* Mobile responsive */
 @media (max-width: 900px) {
-  /* 모바일은 영상+채팅이 세로로 쌓이므로 뷰포트 고정 대신 문서 스크롤로 되돌린다. */
+  /* 모바일(세로) — 영상+채팅이 세로로 쌓이므로 뷰포트 고정 대신 문서 스크롤로. */
   .player {
     height: auto;
     min-height: 100vh;
@@ -1441,6 +1567,12 @@
   }
   .stage {
     flex: 0 0 auto;
+  }
+  /* 세로 스택에서 영상 영역이 0 으로 찌그러지지 않도록 가로폭 기준 16:9 높이 확보.
+     슬라이드·아바타·자막이 모두 이 박스 안에서 contain 된다. */
+  .video {
+    flex: 0 0 auto;
+    aspect-ratio: 16 / 9;
   }
   .qa {
     flex: 1 1 auto;
@@ -1453,6 +1585,36 @@
   .courseTitle {
     max-width: 50vw;
   }
+  .volumeSlider {
+    width: 64px;
+  }
+}
+@media (max-width: 900px) and (orientation: landscape) {
+  /* 모바일(가로) — 세로로 쌓으면 영상이 너무 납작해, 데스크탑처럼 영상|채팅 좌우 배치.
+     뷰포트 높이에 맞춰 영상이 채워지고 채팅은 자체 스크롤. */
+  .player {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .body {
+    flex-direction: row;
+  }
+  .stage {
+    flex: 1 1 58%;
+  }
+  .video {
+    flex: 1;
+    aspect-ratio: auto;
+  }
+  .qa {
+    flex: 1 1 42%;
+    border-left: 1px solid var(--line-dark);
+    border-top: none;
+  }
+  .qaBody {
+    max-height: none;
+  }
 }
 @media (max-width: 560px) {
   .bar {
@@ -1463,5 +1625,12 @@
   }
   .controls {
     padding: 12px 16px 16px;
+  }
+  /* 좁은 폭 — 음량은 음소거 버튼만(슬라이더 숨김), 푸터 토글/추천은 줄바꿈 허용. */
+  .volumeSlider {
+    display: none;
+  }
+  .qaFooter {
+    flex-wrap: wrap;
   }
 }
