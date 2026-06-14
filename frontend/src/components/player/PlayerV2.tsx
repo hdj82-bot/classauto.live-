@@ -209,6 +209,29 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const [seedOpen, setSeedOpen] = useState(false);
   const qaBottomRef = useRef<HTMLDivElement>(null);
 
+  // ── Q&A 아바타 영상 재생 위치 ───────────────────────────────────────────────
+  // "stage"(기본) = 좌측 강의 화면에 크게 재생, "chat" = 우측 채팅창에서 재생.
+  // 강의 화면을 가리는 게 불편한 학습자는 "추천 질문" 왼쪽 토글로 채팅 재생을 고른다.
+  const [qaPlayMode, setQaPlayMode] = useState<"stage" | "chat">("stage");
+  // 좌측 강의 화면에 오버레이로 재생할 현재 아바타 클립(stage 모드 전용).
+  const [stageAvatar, setStageAvatar] = useState<{ url: string } | null>(null);
+  const stageAvatarRef = useRef<HTMLVideoElement | null>(null);
+
+  // ── 음량(본문 슬라이드쇼 음성 + 아바타 Q&A 영상 공통) ──────────────────────
+  // localStorage 금지(SSR·artifact) — React state 로만 유지. 0~1, 기본 최대.
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const effVolume = muted ? 0 : volume;
+  // 핸들러(아바타 onPlay)에서 최신 음량을 읽도록 ref 동기화.
+  const volumeRef = useRef(effVolume);
+  useEffect(() => {
+    volumeRef.current = effVolume;
+    // <audio>.volume 은 src 가 바뀌어도 유지되므로(미디어가 아닌 엘리먼트 속성)
+    // playbackRate 와 달리 재적용 리스너가 필요 없다. 아바타 Q&A 영상은 자체 네이티브
+    // 컨트롤을 가지며 재생 시작(onPlay)에 volumeRef 로 현재 음량을 반영한다.
+    if (audioRef.current) audioRef.current.volume = effVolume;
+  }, [effVolume, audioRef]);
+
   // 인터스티셜 퀴즈 — 슬라이드 경계(또는 타임스탬프)에서 우측 Q&A 채팅에 출제.
   // 학생은 채팅에서 보기 버튼/입력으로 답한다(모달 아님).
   const [playbackQuizzes, setPlaybackQuizzes] = useState<PlaybackQuiz[]>([]);
@@ -530,6 +553,13 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     }
   }, [isPlaying]);
 
+  // 새 아바타 답변(캐시 적중·추천 질문)을 받으면, stage 모드일 때 좌측 강의 화면에
+  // 띄운다. setState-in-effect 를 피하려 이벤트 핸들러(sendQuestion·playSeedQuestion)
+  // 에서 직접 호출한다(qaPlayMode 는 클릭/전송 시점 값으로 충분).
+  const routeAvatarToStage = (url: string) => {
+    if (qaPlayMode === "stage") setStageAvatar({ url });
+  };
+
   // ─── 재생 컨트롤 (슬라이드쇼 엔진에 위임) ───
   const togglePlay = () => player.togglePlay();
   const seekDelta = (delta: number) => player.seekDelta(delta);
@@ -589,18 +619,21 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               { lecture_id: lecture?.id, question },
               { timeout: 75000 },
             );
+      // 겹치는 질문이라 사전 렌더된 아바타 클립이 있으면 함께 재생(부가).
+      const avatarUrl: string | null = data.avatar?.video_url ?? null;
       setQaMessages((m) => [
         ...m,
         {
           role: "assistant",
           text: data.answer ?? t("student.playerV2.qaGenericFallback"),
           source: data.source ?? t("student.playerV2.qaSourceFallback"),
-          // 겹치는 질문이라 사전 렌더된 아바타 클립이 있으면 함께 재생(부가).
-          avatarUrl: data.avatar?.video_url ?? null,
+          avatarUrl,
           // 투명성(09 §5.2) — 캐시 클립이 맞춰진 원 질문.
           matchedQuestion: data.avatar?.matched_question ?? null,
         },
       ]);
+      // stage 모드면 좌측 강의 화면에 자동 재생(채팅 모드는 채팅에서 인라인 재생).
+      if (avatarUrl) routeAvatarToStage(avatarUrl);
     } catch {
       setQaMessages((m) => [
         ...m,
@@ -629,6 +662,8 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       { role: "user", text: q.question },
       { role: "assistant", text: "", avatarUrl: q.video_url, seed: true },
     ]);
+    // stage 모드면 좌측 강의 화면에 자동 재생(채팅 모드는 채팅에서 인라인 재생).
+    routeAvatarToStage(q.video_url);
     setTimeout(
       () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
       50,
@@ -814,6 +849,59 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     }}
                   />
                 )}
+
+              {/* Q&A 아바타 — stage 모드: 좌측 강의 화면에 크게 오버레이 재생.
+                  강의(슬라이드)를 잠시 가리고, 닫거나 끝나면 다시 강의로 돌아간다. */}
+              {qaPlayMode === "stage" && stageAvatar && (
+                <div className={styles.stageAvatar}>
+                  <video
+                    key={stageAvatar.url}
+                    ref={stageAvatarRef}
+                    src={stageAvatar.url}
+                    autoPlay
+                    playsInline
+                    controls
+                    aria-label="AI 아바타 답변"
+                    onPlay={(e) => {
+                      pausePlayer();
+                      const prev = activeAvatarRef.current;
+                      if (prev && prev !== e.currentTarget) prev.pause();
+                      e.currentTarget.volume = volumeRef.current;
+                      activeAvatarRef.current = e.currentTarget;
+                    }}
+                    onPause={(e) => {
+                      if (activeAvatarRef.current === e.currentTarget) {
+                        activeAvatarRef.current = null;
+                      }
+                    }}
+                    onEnded={(e) => {
+                      if (activeAvatarRef.current === e.currentTarget) {
+                        activeAvatarRef.current = null;
+                      }
+                      setStageAvatar(null);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className={styles.stageAvatarClose}
+                    onClick={() => {
+                      if (stageAvatarRef.current) stageAvatarRef.current.pause();
+                      setStageAvatar(null);
+                    }}
+                    aria-label="강의 화면 아바타 닫기"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.4}
+                      strokeLinecap="round"
+                    >
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                </div>
+              )}
 
               {/* 인터스티셜 퀴즈 — 좌측 영상 화면 위 오버레이로 출제·응답(채팅 아님). */}
               {pendingQuiz && (
@@ -1185,6 +1273,59 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                       {t("student.playerV2.deploy.button")}
                     </button>
                   )}
+                  {/* 음량 — 본문 슬라이드쇼 음성 + 아바타 Q&A 영상 공통. 음소거
+                      버튼 + 슬라이더(좁은 화면에선 슬라이더 숨기고 버튼만). */}
+                  <div className={styles.volume}>
+                    <button
+                      type="button"
+                      className={styles.ctrl}
+                      onClick={() => setMuted((v) => !v)}
+                      aria-label={muted || volume === 0 ? "음소거 해제" : "음소거"}
+                      aria-pressed={muted || volume === 0}
+                    >
+                      {muted || volume === 0 ? (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M11 5 6 9H2v6h4l5 4z" />
+                          <line x1="22" y1="9" x2="16" y2="15" />
+                          <line x1="16" y1="9" x2="22" y2="15" />
+                        </svg>
+                      ) : (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M11 5 6 9H2v6h4l5 4z" />
+                          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+                          <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+                        </svg>
+                      )}
+                    </button>
+                    <input
+                      type="range"
+                      className={`slider-rb ${styles.volumeSlider}`}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={muted ? 0 : volume}
+                      aria-label="음량"
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        setVolume(v);
+                        setMuted(v === 0);
+                      }}
+                    />
+                  </div>
                   <button
                     type="button"
                     className={styles.ctrl}
@@ -1264,48 +1405,58 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                             : t("student.playerV2.qaSimilarAnswer")}
                         </span>
                       )}
-                      {m.avatarUrl && (
-                        // 캐시 적중 시 부가되는 아바타 답변 클립. 텍스트가 본답이고
-                        // 영상은 전달 보조 — 로드 실패해도 텍스트 답변은 그대로 남는다.
-                        // 음성이 겹치지 않도록 재생은 상호 배타다: 어떤 아바타가 재생되면
-                        // (1) 강의(슬라이드쇼)를 멈추고 (2) 먼저 재생 중이던 다른 아바타도
-                        // 멈춘다. 멈추면 활성 아바타 추적을 해제한다(강의 재개 시 강의가
-                        // 이 아바타를 다시 멈추지 않도록).
-                        <video
-                          src={m.avatarUrl}
-                          autoPlay
-                          playsInline
-                          controls
-                          aria-label="AI 아바타 답변"
-                          onPlay={(e) => {
-                            pausePlayer();
-                            // 다른 아바타가 재생 중이면 멈춰 동시 재생을 막는다.
-                            const prev = activeAvatarRef.current;
-                            if (prev && prev !== e.currentTarget) {
-                              prev.pause();
-                            }
-                            activeAvatarRef.current = e.currentTarget;
-                          }}
-                          onPause={(e) => {
-                            if (activeAvatarRef.current === e.currentTarget) {
-                              activeAvatarRef.current = null;
-                            }
-                          }}
-                          onEnded={(e) => {
-                            if (activeAvatarRef.current === e.currentTarget) {
-                              activeAvatarRef.current = null;
-                            }
-                          }}
-                          style={{
-                            marginTop: 8,
-                            width: "100%",
-                            maxWidth: 160,
-                            maxHeight: 120,
-                            borderRadius: 10,
-                            display: "block",
-                          }}
-                        />
-                      )}
+                      {m.avatarUrl &&
+                        (qaPlayMode === "chat" ? (
+                          // 채팅 재생 모드: 채팅창에서 바로 재생. 가로로 채팅창 폭을
+                          // 가득 채워(끝에서 끝까지) 작아서 안 보이는 문제를 없앤다.
+                          // 텍스트가 본답이고 영상은 전달 보조 — 로드 실패해도 텍스트는
+                          // 남는다. 음성 겹침 방지: 아바타 재생 시 (1) 강의를 멈추고
+                          // (2) 먼저 재생 중이던 다른 아바타도 멈춘다.
+                          <video
+                            src={m.avatarUrl}
+                            autoPlay
+                            playsInline
+                            controls
+                            aria-label="AI 아바타 답변"
+                            className={styles.qaAvatarVideo}
+                            onPlay={(e) => {
+                              pausePlayer();
+                              const prev = activeAvatarRef.current;
+                              if (prev && prev !== e.currentTarget) {
+                                prev.pause();
+                              }
+                              e.currentTarget.volume = volumeRef.current;
+                              activeAvatarRef.current = e.currentTarget;
+                            }}
+                            onPause={(e) => {
+                              if (activeAvatarRef.current === e.currentTarget) {
+                                activeAvatarRef.current = null;
+                              }
+                            }}
+                            onEnded={(e) => {
+                              if (activeAvatarRef.current === e.currentTarget) {
+                                activeAvatarRef.current = null;
+                              }
+                            }}
+                          />
+                        ) : (
+                          // 강의 화면 재생 모드(기본): 좌측 큰 화면에 띄운다. 채팅엔
+                          // 다시 보기용 버튼만 둬 강의 화면을 가리지 않는다.
+                          <button
+                            type="button"
+                            className={styles.qaStagePlayBtn}
+                            onClick={() => setStageAvatar({ url: m.avatarUrl! })}
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="currentColor"
+                              aria-hidden="true"
+                            >
+                              <path d="M7 4.5v15a1 1 0 0 0 1.55.83l11-7.5a1 1 0 0 0 0-1.66l-11-7.5A1 1 0 0 0 7 4.5z" />
+                            </svg>
+                            강의 화면에서 보기
+                          </button>
+                        ))}
                       {m.source && (
                         <span className={styles.source}>
                           <svg
@@ -1339,9 +1490,41 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               <div ref={qaBottomRef} />
             </div>
 
-            {/* 추천 질문 = 교수자가 사전 제작한 예상 질문(클립 보유분). 클릭 시
-                실시간 RAG 가 아니라 미리 만든 Q&A 영상을 재생한다. */}
-            {seedSuggestions.length > 0 && (
+            {/* 푸터 — 왼쪽: Q&A 영상 재생 위치 토글, 오른쪽: 추천 질문(있을 때). */}
+            <div className={styles.qaFooter}>
+              {/* Q&A 영상 재생 위치 — "강의 화면"(기본, 좌측 큰 화면) / "채팅창".
+                  강의 화면을 가리는 게 불편한 학습자는 채팅창 재생을 고른다. */}
+              <div
+                className={styles.playModeToggle}
+                role="group"
+                aria-label="Q&A 영상 재생 위치"
+              >
+                <button
+                  type="button"
+                  className={`${styles.playModeBtn} ${qaPlayMode === "stage" ? styles.playModeOn : ""}`}
+                  aria-pressed={qaPlayMode === "stage"}
+                  onClick={() => setQaPlayMode("stage")}
+                >
+                  강의 화면
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.playModeBtn} ${qaPlayMode === "chat" ? styles.playModeOn : ""}`}
+                  aria-pressed={qaPlayMode === "chat"}
+                  onClick={() => {
+                    setQaPlayMode("chat");
+                    // 채팅 재생으로 바꾸면 좌측 화면 아바타는 닫는다(중복 재생 방지).
+                    if (stageAvatarRef.current) stageAvatarRef.current.pause();
+                    setStageAvatar(null);
+                  }}
+                >
+                  채팅창
+                </button>
+              </div>
+
+              {/* 추천 질문 = 교수자가 사전 제작한 예상 질문(클립 보유분). 클릭 시
+                  실시간 RAG 가 아니라 미리 만든 Q&A 영상을 재생한다. */}
+              {seedSuggestions.length > 0 && (
               <div className={styles.suggest}>
                 <button
                   type="button"
@@ -1383,7 +1566,8 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   </div>
                 )}
               </div>
-            )}
+              )}
+            </div>
 
             <form
               className={styles.qaInput}
