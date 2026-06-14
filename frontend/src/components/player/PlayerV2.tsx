@@ -8,7 +8,7 @@ import {
   pickActiveCaptionWithCues,
   DEFAULT_CAPTION_LEAD_SECONDS,
 } from "./captionTiming";
-import type { SubtitleCue } from "./useSlideshowPlayback";
+import type { SubtitleCue, SubtitlePosition } from "./useSlideshowPlayback";
 import { tokens as tokenStorage } from "@/lib/tokens";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -121,6 +121,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const [capScale, setCapScale] = useState(1); // 0.7 ~ 1.6
   const [voiceRate, setVoiceRate] = useState(1); // 0.5 ~ 2.0 (음성 빠르기)
   const [capLead, setCapLead] = useState(DEFAULT_CAPTION_LEAD_SECONDS); // 자막 빠르기(초)
+  // 자막 위치(영상 영역 기준 정규화 좌표). null = 기본(하단 중앙). 폰트/색/크기와 달리
+  // 이 값은 강의에 저장돼 학생 화면에도 반영된다(미리보기에서 드래그 → PATCH 저장).
+  const [capPos, setCapPos] = useState<SubtitlePosition | null>(null);
 
   const [lecture, setLecture] = useState<LectureData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,6 +153,28 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const isPlaying = player.isPlaying;
   const progressSec = Math.floor(player.currentTime);
   const durationSec = player.duration;
+
+  // 강의에 저장된 자막 위치가 로드되면 로컬 상태로 동기화(학생·미리보기 공통).
+  const loadedCapPos = player.subtitlePosition;
+  useEffect(() => {
+    setCapPos(loadedCapPos);
+  }, [loadedCapPos]);
+
+  // 미리보기에서 교수자가 자막을 끌어 놓으면(또는 '기본 위치로') 강의에 저장한다.
+  // 폰트/색/크기는 미리보기 임시값이지만 위치는 학생 화면에 반영돼야 하므로 PATCH.
+  const saveCapPos = useCallback(
+    async (pos: SubtitlePosition | null) => {
+      if (!preview || !lecture) return;
+      try {
+        await api.patch(`/api/lectures/${lecture.id}`, {
+          subtitle_position: pos,
+        });
+      } catch {
+        /* 저장 실패는 조용히 무시 — 로컬 미리보기 위치는 유지된다. */
+      }
+    },
+    [preview, lecture],
+  );
 
   // 음성 빠르기 — 본문 슬라이드쇼 <audio> 의 playbackRate 를 즉시 바꾼다. 슬라이드가
   // 넘어가면 src 가 바뀌며 rate 가 1.0 으로 초기화되므로 loadeddata/play 에 재적용한다.
@@ -780,6 +805,13 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     userColor={capColor}
                     userFont={capFont}
                     leadSeconds={capLead}
+                    position={capPos}
+                    draggable={preview}
+                    onDragMove={setCapPos}
+                    onDragEnd={(p) => {
+                      setCapPos(p);
+                      void saveCapPos(p);
+                    }}
                   />
                 )}
 
@@ -1050,6 +1082,28 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                                   setCapScale(Number(parseFloat(e.target.value).toFixed(2)))
                                 }
                               />
+                              {/* 위치 — 자막을 끌어서 옮긴다(강의에 저장 → 학생 화면 반영). */}
+                              <div className={styles.avField}>
+                                <span className={styles.avLabel}>위치</span>
+                                <div className={styles.avBtns}>
+                                  <button
+                                    type="button"
+                                    className={styles.avChip}
+                                    onClick={() => {
+                                      setCapPos(null);
+                                      void saveCapPos(null);
+                                    }}
+                                    disabled={!capPos}
+                                  >
+                                    기본 위치로
+                                  </button>
+                                </div>
+                              </div>
+                              <p className={styles.avHint}>
+                                {capPos
+                                  ? "자막을 끌어서 위치를 옮길 수 있어요. 위치는 강의에 저장돼 학생 화면에도 적용됩니다."
+                                  : "영상 위 자막을 끌어서 원하는 위치에 놓으세요. (강의에 저장 → 학생 화면 반영)"}
+                              </p>
                             </div>
 
                             {/* 음성 빠르기 */}
@@ -1520,6 +1574,10 @@ function KaraokeCaption({
   userColor,
   userFont,
   leadSeconds,
+  position,
+  draggable = false,
+  onDragMove,
+  onDragEnd,
 }: {
   className?: string;
   text: string;
@@ -1540,7 +1598,68 @@ function KaraokeCaption({
   userFont?: "sans" | "serif";
   /** 미리보기 '자막 빠르기' 리드(초). 양수=빨라짐. */
   leadSeconds?: number;
+  /** 자막 위치(영상 영역 기준 정규화 좌표, 박스 중심). null = 기본(하단 중앙). */
+  position?: SubtitlePosition | null;
+  /** true 면(미리보기) 자막을 끌어서 위치를 옮길 수 있다. */
+  draggable?: boolean;
+  /** 드래그 중 위치 변경(로컬 즉시 반영). */
+  onDragMove?: (pos: SubtitlePosition) => void;
+  /** 드래그 종료 시 최종 위치(저장 트리거). */
+  onDragEnd?: (pos: SubtitlePosition) => void;
 }) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [dragging, setDragging] = useState(false);
+
+  // 포인터 좌표 → 영상 영역 기준 정규화(0~1) 자막 중심. 화면 밖으로 나가지 않게 클램프.
+  const posFromEvent = useCallback(
+    (clientX: number, clientY: number): SubtitlePosition | null => {
+      const parent = boxRef.current?.offsetParent as HTMLElement | null;
+      const rect = (parent ?? boxRef.current?.parentElement)?.getBoundingClientRect();
+      if (!rect || rect.width === 0 || rect.height === 0) return null;
+      const clamp = (v: number) => Math.min(0.92, Math.max(0.08, v));
+      return {
+        x: clamp((clientX - rect.left) / rect.width),
+        y: clamp((clientY - rect.top) / rect.height),
+      };
+    },
+    [],
+  );
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!draggable) return;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      setDragging(true);
+      const p = posFromEvent(e.clientX, e.clientY);
+      if (p) onDragMove?.(p);
+    },
+    [draggable, onDragMove, posFromEvent],
+  );
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragging) return;
+      const p = posFromEvent(e.clientX, e.clientY);
+      if (p) onDragMove?.(p);
+    },
+    [dragging, onDragMove, posFromEvent],
+  );
+
+  const endDrag = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!dragging) return;
+      setDragging(false);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        /* no-op */
+      }
+      const p = posFromEvent(e.clientX, e.clientY);
+      if (p) onDragEnd?.(p);
+    },
+    [dragging, onDragEnd, posFromEvent],
+  );
   // 자막은 다크 surface 위 CSS 모듈 고정 크기라 body 클래스(globals)에 안 닿는다.
   // 접근성 토글·미리보기 설정이 자막에 직접 반영되도록 인라인 style 로 덮어쓴다.
   const a11yScale = fontSize === "x-large" ? 1.5 : fontSize === "large" ? 1.25 : 1;
@@ -1567,9 +1686,40 @@ function KaraokeCaption({
       : userColor
         ? { color: userColor }
         : null),
+    // 저장된 위치가 있으면 기본(하단 중앙) 대신 정규화 좌표로 배치(박스 중심 기준).
+    ...(position
+      ? {
+          left: `${position.x * 100}%`,
+          top: `${position.y * 100}%`,
+          bottom: "auto",
+          right: "auto",
+          transform: "translate(-50%, -50%)",
+        }
+      : null),
+    // 미리보기: 자막을 끌 수 있게 포인터 이벤트를 켜고 드래그 표시를 준다.
+    ...(draggable
+      ? {
+          pointerEvents: "auto" as const,
+          cursor: dragging ? "grabbing" : "grab",
+          touchAction: "none" as const,
+          userSelect: "none" as const,
+          outline: "1px dashed rgba(255,182,39,0.7)",
+          outlineOffset: 2,
+        }
+      : null),
   };
   return (
-    <div className={className} style={style} aria-live="off">
+    <div
+      ref={boxRef}
+      className={className}
+      style={style}
+      aria-live="off"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      title={draggable ? "끌어서 자막 위치 이동" : undefined}
+    >
       {pickActiveCaptionWithCues(text, sourceText, cues, elapsed, duration, leadSeconds)}
     </div>
   );

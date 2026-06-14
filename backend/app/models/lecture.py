@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -87,6 +88,9 @@ class Lecture(Base):
     voice_speed: Mapped[float] = mapped_column(
         Float, nullable=False, default=1.0, server_default="1.0"
     )
+    # 교수자가 드래그로 정한 자막 위치. {"x": float, "y": float} 영상 영역 기준
+    # 정규화 좌표(0~1, 자막 박스 중심). NULL = 기본(하단 중앙). 학생 플레이어가 적용.
+    subtitle_position: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # 교수자가 만든 컬렉션(Folder)으로 강의를 묶기 위한 옵션 외래키.
     # NULL = 미분류. 폴더 삭제 시 ondelete=SET NULL 로 자동 해제(강의 자체는 보존).

@@ -24,6 +24,12 @@ export interface SubtitleCue {
   text: string;
 }
 
+/** 자막 위치 — 영상 영역 기준 정규화 좌표(0~1, 자막 박스 중심). null = 기본(하단 중앙). */
+export interface SubtitlePosition {
+  x: number;
+  y: number;
+}
+
 export interface SlideshowSlide {
   slide_index: number;
   image_url: string | null;
@@ -42,6 +48,8 @@ interface SlideshowWire {
   /** 본문 렌더 완료 여부. 구버전 백엔드 응답엔 없으므로 optional — 없으면 true 취급. */
   is_ready?: boolean;
   total_seconds: number;
+  /** 교수자가 정한 자막 위치. 구버전 응답엔 없으므로 optional. */
+  subtitle_position?: SubtitlePosition | null;
   slides: SlideshowSlide[];
 }
 
@@ -52,6 +60,8 @@ export interface SlideshowPlayback {
   /** 본문 렌더가 실제로 끝났는지(Video done). false 면 "준비 중"을 표시한다. */
   bodyReady: boolean;
   isExpired: boolean;
+  /** 교수자가 정한 자막 위치(정규화 좌표). null = 기본(하단 중앙). */
+  subtitlePosition: SubtitlePosition | null;
   currentIndex: number;
   currentSlide: SlideshowSlide | null;
   /** 현재 슬라이드가 시작된 뒤 흐른 실측 시간(초). 자막 동기화용. */
@@ -109,6 +119,8 @@ export function useSlideshowPlayback(
   const [ready, setReady] = useState(false);
   const [bodyReady, setBodyReady] = useState(true);
   const [isExpired, setIsExpired] = useState(false);
+  const [subtitlePosition, setSubtitlePosition] =
+    useState<SubtitlePosition | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -188,6 +200,7 @@ export function useSlideshowPlayback(
         }
         // 구버전 백엔드(필드 없음)는 true 로 간주해 종전 동작 유지.
         setBodyReady(data.is_ready !== false);
+        setSubtitlePosition(data.subtitle_position ?? null);
         const ss = data.slides ?? [];
         setSlides(ss);
         const resolved = await Promise.all(ss.map(resolveDuration));
@@ -411,6 +424,7 @@ export function useSlideshowPlayback(
     ready,
     bodyReady,
     isExpired,
+    subtitlePosition,
     currentIndex,
     currentSlide,
     currentSlideElapsed,

@@ -15,6 +15,19 @@ SlideStatus = Literal["pending", "ready"]
 VoiceLang = Literal["ko", "zh", "en", "ja", "de", "fr", "ru"]
 
 
+class SubtitlePosition(BaseModel):
+    """교수자가 드래그로 정한 자막 위치 — 영상 영역 기준 정규화 좌표(자막 박스 중심).
+
+    x/y 는 0~1 (0=좌/상, 1=우/하). 화면 크기와 무관하게 적용되도록 정규화한다.
+    NULL = 기본(하단 중앙). 범위 밖 값은 0~1 로 클램프해 저장/적용한다.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    x: float = Field(..., ge=0, le=1)
+    y: float = Field(..., ge=0, le=1)
+
+
 class SlideMeta(BaseModel):
     """편집기 좌측 패널 + 중앙 미리보기에서 즉시 렌더하기 위한 슬라이드 메타.
 
@@ -110,6 +123,13 @@ class SlideshowResponse(BaseModel):
         ),
     )
     total_seconds: float = Field(default=0, description="전체 타임라인 길이(초).")
+    subtitle_position: SubtitlePosition | None = Field(
+        default=None,
+        description=(
+            "교수자가 정한 자막 위치(영상 영역 기준 정규화 좌표). null = 기본"
+            "(하단 중앙). 플레이어가 이 값으로 자막 위치를 적용한다."
+        ),
+    )
     slides: list[SlideshowSlide]
 
 
@@ -191,6 +211,13 @@ class LectureUpdate(BaseModel):
             "voice_settings.speed 로 전달. 다음 렌더부터 적용."
         ),
     )
+    subtitle_position: SubtitlePosition | None = Field(
+        default=None,
+        description=(
+            "자막 위치(영상 영역 기준 정규화 좌표, 자막 박스 중심). null 로 보내면 "
+            "기본(하단 중앙)으로 초기화. 학생 플레이어에 즉시 반영."
+        ),
+    )
 
 
 class LectureResponse(BaseModel):
@@ -215,6 +242,7 @@ class LectureResponse(BaseModel):
     subtitle_lang: str | None = None
     voice_id: str | None = None
     voice_speed: float = 1.0
+    subtitle_position: SubtitlePosition | None = None
     created_at: datetime
     updated_at: datetime
 

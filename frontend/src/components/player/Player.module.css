@@ -1188,6 +1188,13 @@
   color: var(--text-dark-faint, #8a8a8a);
   font-variant-numeric: tabular-nums;
 }
+/* 자막 위치 안내 문구 — 설정 패널 '위치' 항목 아래. */
+.avHint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-dark-faint, #8a8a8a);
+}
 
 /* 배포하기 모달 — 학생 링크·QR. 라이트 카드(공유 채널 UI 가 라이트 톤이라 통일). */
 .deployScrim {
