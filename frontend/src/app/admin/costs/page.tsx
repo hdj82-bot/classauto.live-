@@ -80,6 +80,7 @@ export default function AdminCostsPage() {
         {data.by_month.length === 0 ? (
           <p className="text-gray-500 text-sm">{t("admin.noData")}</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -96,6 +97,7 @@ export default function AdminCostsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
