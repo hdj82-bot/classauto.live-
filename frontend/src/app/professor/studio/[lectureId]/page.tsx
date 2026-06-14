@@ -1557,7 +1557,11 @@ export default function StudioWizardPage() {
         qaTotal={seedQuestions.filter((q) => !!q.status).length}
         qaReady={seedQuestions.filter((q) => q.status === "ready").length}
         qaFailed={seedQuestions.filter((q) => q.status === "failed").length}
-        done={genDone}
+        // 슬라이드가 끝나도 추천 질문(Q&A) 렌더가 진행 중이면 아직 "완성"이 아니다 —
+        // Q&A 까지 끝나야 완료 화면(미리보기 버튼)을 띄운다. 그래야 사용자가 "미리보기 =
+        // 모든 기능 완성"으로 믿을 수 있다. (seedAwaitingRender 는 타임아웃으로도 풀려
+        // 무한 대기 안 됨)
+        done={genDone && !seedAwaitingRender}
         stalled={genStalled}
         onRetry={handleRetryRender}
         onBackground={() => setGenOpen(false)}
