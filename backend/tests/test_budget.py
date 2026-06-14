@@ -176,30 +176,42 @@ def test_render_slide_blocks_on_budget_and_skips_heygen():
 # ── Q&A 아바타 렌더 한도 (assert_qa_render_budget) ─────────────────────────────
 
 
-def _qa_db_with_used(used: int):
-    """qa_renders_used_this_month 의 COUNT(*) 가 used 를 반환하도록 mock."""
-    db = MagicMock()
-    db.execute.return_value.scalar.return_value = used
-    return db
-
-
 def test_qa_render_quota_remaining_counts_down():
+    # 한도 단위는 '배포된 강의' 수. used 만큼 사용했으면 cap-used 가 남는다.
     used = 2
-    remaining = budget.qa_render_quota_remaining(_qa_db_with_used(used), uuid.uuid4())
+    with patch.object(budget, "instructor_has_unlimited_qa", return_value=False), \
+         patch.object(budget, "qa_renders_used_this_month", return_value=used):
+        remaining = budget.qa_render_quota_remaining(_db(), uuid.uuid4())
     assert remaining == max(0, settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR - used)
 
 
 def test_assert_qa_render_budget_blocks_when_quota_exhausted():
     from app.services.pipeline.budget import QARenderQuotaError, assert_qa_render_budget
 
-    db = _qa_db_with_used(settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR)  # 한도 소진
-    with pytest.raises(QARenderQuotaError):
-        assert_qa_render_budget(db, uuid.uuid4())
+    # 배포 강의 한도 소진 + 현재 강의는 한도 집합 밖(새 강의) → 차단.
+    with patch.object(budget, "instructor_has_unlimited_qa", return_value=False), \
+         patch.object(budget, "_lecture_in_quota_set", return_value=False), \
+         patch.object(budget, "qa_renders_used_this_month",
+                      return_value=settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR):
+        with pytest.raises(QARenderQuotaError):
+            assert_qa_render_budget(_db(), uuid.uuid4(), uuid.uuid4())
 
 
 def test_assert_qa_render_budget_passes_under_quota_in_mock():
     from app.services.pipeline.budget import assert_qa_render_budget
 
-    db = _qa_db_with_used(0)  # 한도 충분
-    with patch.object(settings, "HEYGEN_MOCK", True):
-        assert_qa_render_budget(db, uuid.uuid4())  # 예외 없이 통과해야 함
+    # 한도 충분 + mock → $ 브레이커도 통과.
+    with patch.object(budget, "instructor_has_unlimited_qa", return_value=False), \
+         patch.object(budget, "_lecture_in_quota_set", return_value=False), \
+         patch.object(budget, "qa_renders_used_this_month", return_value=0), \
+         patch.object(settings, "HEYGEN_MOCK", True):
+        assert_qa_render_budget(_db(), uuid.uuid4(), uuid.uuid4())  # 예외 없이 통과
+
+
+def test_assert_qa_render_budget_unlimited_account_bypasses():
+    from app.services.pipeline.budget import assert_qa_render_budget
+
+    # 무제한 계정은 한도 소진 상태여도 통과($ 브레이커는 mock 으로 면제).
+    with patch.object(budget, "instructor_has_unlimited_qa", return_value=True), \
+         patch.object(settings, "HEYGEN_MOCK", True):
+        assert_qa_render_budget(_db(), uuid.uuid4(), uuid.uuid4())

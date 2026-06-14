@@ -67,10 +67,23 @@ def _seed_lecture(db) -> tuple[User, Course, Lecture]:
     lec = Lecture(
         id=uuid.uuid4(), course_id=course.id, title="강의",
         slug=f"slug-{uuid.uuid4().hex}", order=1, pipeline_task_id="task-1",
+        is_published=True,  # 한도는 '배포된 강의' 단위 — 기본 배포 상태로 생성.
     )
     db.add(lec)
     db.flush()
     return prof, course, lec
+
+
+def _another_lecture(db, course, *, published: bool = True, order: int = 2) -> Lecture:
+    """같은 강좌에 강의를 하나 더 생성(월 강의 한도 테스트용)."""
+    lec = Lecture(
+        id=uuid.uuid4(), course_id=course.id, title=f"강의{order}",
+        slug=f"slug-{uuid.uuid4().hex}", order=order, pipeline_task_id=f"task-{order}",
+        is_published=published,
+    )
+    db.add(lec)
+    db.flush()
+    return lec
 
 
 def _pending(db, lec, prof, question: str, emb: list[float], answer="답변입니다.") -> QAAnswerCache:
@@ -280,7 +293,11 @@ def test_batch_uses_avatar_id_for_standard_avatar(sync_db, monkeypatch):
     assert "talking_photo_id" not in captured
 
 
-def test_batch_respects_monthly_render_cap(sync_db, monkeypatch):
+def test_batch_respects_monthly_lecture_cap(sync_db, monkeypatch):
+    """교수자 월 한도는 '배포된 강의' 단위(09 §5 개정 2026-06-14).
+
+    cap=2 면 배포 강의 2개까지만 Q&A 렌더하고 3번째 강의는 건너뛴다(클립 수 무관).
+    """
     from app.tasks import qa_batch
 
     monkeypatch.setattr(settings, "HEYGEN_MOCK", True)
@@ -288,12 +305,13 @@ def test_batch_respects_monthly_render_cap(sync_db, monkeypatch):
     monkeypatch.setattr(settings, "QA_AVATAR_MIN_CLUSTER_SIZE", 1)
     monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 2)
 
-    prof, _c, lec = _seed_lecture(sync_db)
-    # 서로 다른(비유사) 4개 클러스터 → 한도 2 라 2건만 제출.
-    _pending(sync_db, lec, prof, "q1", _vec(1.0, 0.0))
-    _pending(sync_db, lec, prof, "q2", _vec(0.0, 1.0))
-    _pending(sync_db, lec, prof, "q3", _vec(0.0, 0.0, 1.0))
-    _pending(sync_db, lec, prof, "q4", _vec(0.0, 0.0, 0.0, 1.0))
+    prof, course, lec1 = _seed_lecture(sync_db)
+    lec2 = _another_lecture(sync_db, course, order=2)
+    lec3 = _another_lecture(sync_db, course, order=3)
+    # 같은 교수자의 배포된 강의 3개, 각 1개 질문 → 한도 2 라 강의 2개만 렌더.
+    _pending(sync_db, lec1, prof, "q1", _vec(1.0, 0.0))
+    _pending(sync_db, lec2, prof, "q2", _vec(0.0, 1.0))
+    _pending(sync_db, lec3, prof, "q3", _vec(0.0, 0.0, 1.0))
     sync_db.commit()
 
     loop = asyncio.new_event_loop()
@@ -302,14 +320,47 @@ def test_batch_respects_monthly_render_cap(sync_db, monkeypatch):
     finally:
         loop.close()
 
+    # 배포 강의 2개만 렌더, 3번째 강의 질문은 pending 유지.
     assert result["submitted"] == 2
-    ready = sync_db.query(QAAnswerCache).filter(
-        QAAnswerCache.status == qa_avatar.STATUS_READY
-    ).count()
+    distinct_rendered = {
+        r.lecture_id
+        for r in sync_db.query(QAAnswerCache)
+        .filter(QAAnswerCache.heygen_job_id.isnot(None))
+        .all()
+    }
+    assert len(distinct_rendered) == 2
     pending = sync_db.query(QAAnswerCache).filter(
         QAAnswerCache.status == qa_avatar.STATUS_PENDING
     ).count()
-    assert ready == 2 and pending == 2
+    assert pending == 1
+
+
+def test_unpublished_render_does_not_consume_quota(sync_db):
+    """미배포 강의 렌더는 월 강의 사용량(used_this_month)을 올리지 않는다.
+
+    제작 중 강의를 디버깅하며 여러 번 렌더해도, 실제 배포 전까지는 한도를 소모하지
+    않는다(실제 배포한 강의만 카운트). 또한 한 강의에 클립이 여러 개여도 강의는 1로
+    센다. 배포 즉시 그 강의가 사용량에 잡힌다.
+    """
+    from app.services.pipeline import budget
+
+    prof, _course, lec = _seed_lecture(sync_db)
+    lec.is_published = False  # 제작 중으로 되돌림
+    sync_db.flush()
+    # 이 강의에 렌더(클립) 2건 제출됨.
+    for i in range(2):
+        sync_db.add(QAAnswerCache(
+            lecture_id=lec.id, instructor_id=prof.id, question_text=f"q{i}",
+            status=qa_avatar.STATUS_RENDERING, heygen_job_id=f"job-{i}",
+        ))
+    sync_db.flush()
+    # 미배포 → 사용량 0.
+    assert budget.qa_renders_used_this_month(sync_db, prof.id) == 0
+
+    # 배포하면 그 강의가 1로 잡힌다(클립 2개여도 강의는 1).
+    lec.is_published = True
+    sync_db.flush()
+    assert budget.qa_renders_used_this_month(sync_db, prof.id) == 1
 
 
 def test_batch_caps_renders_per_lecture_across_nights(sync_db, monkeypatch):
@@ -358,25 +409,47 @@ def test_batch_caps_renders_per_lecture_across_nights(sync_db, monkeypatch):
     assert pending == 3
 
 
-def test_qa_render_budget_quota(sync_db):
+def test_qa_render_budget_quota(sync_db, monkeypatch):
     from app.services.pipeline import budget
     from app.services.pipeline.budget import QARenderQuotaError
 
-    prof, _c, lec = _seed_lecture(sync_db)
-    # 한도 1: 첫 렌더는 통과, 한 건 제출 후 차단.
-    import app.core.config as cfg
-    orig = cfg.settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR
-    cfg.settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR = 1
-    try:
-        budget.assert_qa_render_budget(sync_db, prof.id)  # 통과
-        # 렌더 1건 생성(heygen_job_id 보유) → 한도 소진.
-        r = QAAnswerCache(
-            lecture_id=lec.id, instructor_id=prof.id, question_text="q",
-            status=qa_avatar.STATUS_RENDERING, heygen_job_id="job-1",
-        )
-        sync_db.add(r)
-        sync_db.flush()
-        with pytest.raises(QARenderQuotaError):
-            budget.assert_qa_render_budget(sync_db, prof.id)
-    finally:
-        cfg.settings.QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR = orig
+    prof, course, lec = _seed_lecture(sync_db)  # 배포된 강의
+    # 한도 1(배포 강의 1개): 첫 강의는 통과, 두 번째 새 강의는 차단.
+    monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 1)
+
+    budget.assert_qa_render_budget(sync_db, prof.id, lec.id)  # 통과(used=0)
+    # lec 에 렌더 1건(heygen_job_id) → 배포 강의 1개 사용 = 한도 소진.
+    sync_db.add(QAAnswerCache(
+        lecture_id=lec.id, instructor_id=prof.id, question_text="q",
+        status=qa_avatar.STATUS_RENDERING, heygen_job_id="job-1",
+    ))
+    sync_db.flush()
+    # 같은 강의는 이미 한도 집합에 포함 → 추가 렌더(클립) 허용(새 슬롯 아님).
+    budget.assert_qa_render_budget(sync_db, prof.id, lec.id)
+    # 새(다른) 배포 강의는 한도 초과로 차단.
+    lec2 = _another_lecture(sync_db, course)
+    with pytest.raises(QARenderQuotaError):
+        budget.assert_qa_render_budget(sync_db, prof.id, lec2.id)
+
+
+def test_qa_unlimited_account_bypasses_quota(sync_db, monkeypatch):
+    """무제한 화이트리스트 계정(테스트 계정·계정주)은 강의 한도를 면제받는다."""
+    from app.services.pipeline import budget
+
+    monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 1)
+    monkeypatch.setattr(settings, "QA_AVATAR_UNLIMITED_EMAILS", "VIP@x.com , other@x.com")
+
+    prof, course, lec = _seed_lecture(sync_db)
+    prof.email = "vip@x.com"  # 대소문자 무시 매칭
+    sync_db.flush()
+    assert budget.instructor_has_unlimited_qa(sync_db, prof.id) is True
+
+    # 이미 배포 강의 1개 렌더(한도 소진 상태)여도 무제한 계정은 새 강의 통과.
+    sync_db.add(QAAnswerCache(
+        lecture_id=lec.id, instructor_id=prof.id, question_text="q",
+        status=qa_avatar.STATUS_RENDERING, heygen_job_id="job-1",
+    ))
+    sync_db.flush()
+    lec2 = _another_lecture(sync_db, course)
+    budget.assert_qa_render_budget(sync_db, prof.id, lec2.id)  # 차단 없이 통과
+    assert budget.qa_render_quota_remaining(sync_db, prof.id) == budget._UNLIMITED_REMAINING

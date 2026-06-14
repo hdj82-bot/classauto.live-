@@ -9,8 +9,8 @@
 3. **자체 폴링**으로 완료 감지(창1 webhooks/polling 비의존) → S3 이전 → status=ready.
    클러스터 형제 행은 같은 클립(s3_video_url)을 공유.
 
-비용 통제: 교수자당 월 한도(2영상 × 3렌더 = 6, budget.assert_qa_render_budget) +
-전역 $ 서킷 브레이커. MOCK 모드면 외부 호출 없이 전 경로를 통과(테스트 비용 ₩0).
+비용 통제: 교수자당 월 한도(배포된 강의 단위, 베타 8강의·budget.assert_qa_render_budget)
++ 영상당 3렌더 + 전역 $ 서킷 브레이커. MOCK 모드면 외부 호출 없이 전 경로 통과(비용 ₩0).
 """
 from __future__ import annotations
 
@@ -414,22 +414,23 @@ def _submit_pending(loop, db) -> int:
 
     submitted = 0
     for instructor_id, rows in by_instructor.items():
-        from app.services.pipeline.budget import qa_render_quota_remaining
-
-        remaining = qa_render_quota_remaining(db, instructor_id)
-        if remaining <= 0:
-            logger.info("Q&A 배치: 교수자 월 렌더 한도 소진 — 건너뜀: instructor=%s", instructor_id)
-            continue
+        from app.services.pipeline.budget import qa_can_render_lecture
 
         by_lecture: dict = defaultdict(list)
         for r in rows:
             by_lecture[r.lecture_id].append(r)
 
         for lecture_id, lrows in by_lecture.items():
-            if remaining <= 0:
-                break
+            # 교수자 월 한도는 '배포(is_published)된 강의' 단위 — 이 강의에 새 렌더
+            # 여지가 없으면 건너뛴다(이미 한도 집합에 든 강의·무제한 계정은 통과).
+            if not qa_can_render_lecture(db, instructor_id, lecture_id):
+                logger.info(
+                    "Q&A 배치: 교수자 월 강의 한도 소진 — 건너뜀: instructor=%s, lecture=%s",
+                    instructor_id, lecture_id,
+                )
+                continue
             # 영상 단위 한도(09 §5: 영상당 3렌더) — 여러 밤 배치 누적분까지 합산해,
-            # 인기 영상 하나가 교수자 월 한도(6)를 독식하며 "영상당 3"을 넘지 않게 한다.
+            # 한 영상이 "영상당 3"을 넘지 않게 한다.
             lecture_remaining = max(
                 0,
                 settings.QA_AVATAR_TOP_CLUSTERS - _lecture_renders_used_this_month(db, lecture_id),
@@ -447,17 +448,18 @@ def _submit_pending(loop, db) -> int:
                 and qa_avatar._to_list(c.representative().question_embedding)
             ]
             eligible.sort(key=lambda c: c.size, reverse=True)
-            chosen = eligible[: min(settings.QA_AVATAR_TOP_CLUSTERS, remaining, lecture_remaining)]
+            chosen = eligible[: min(settings.QA_AVATAR_TOP_CLUSTERS, lecture_remaining)]
             for cluster in chosen:
                 try:
-                    assert_qa_render_budget(db, instructor_id)
+                    assert_qa_render_budget(db, instructor_id, lecture_id)
                 except BudgetExceededError as exc:
-                    logger.warning("Q&A 배치 예산 차단(교수자 중단): instructor=%s, %s", instructor_id, exc)
-                    remaining = 0
+                    logger.warning(
+                        "Q&A 배치 예산 차단: instructor=%s, lecture=%s, %s",
+                        instructor_id, lecture_id, exc,
+                    )
                     break
                 if _submit_cluster(loop, db, cluster, lecture_id, instructor_id):
                     submitted += 1
-                    remaining -= 1
     return submitted
 
 
@@ -519,13 +521,14 @@ def _seed_still_rendering(db, lecture_id) -> int:
 def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
     """교수자 사전 질문(pending)을 RAG로 답변 생성 → 렌더 제출. 제출/실패 수 반환.
 
-    한도 = min(영상당 남은 렌더, 교수자 월 남은 렌더). 한도까지만 제출하고, 범위
-    밖 질문은 렌더 없이 failed 로 표시(한도를 소모하지 않음). 예산 차단 시 중단.
+    한도 = 영상당 남은 렌더(클립). 단, 교수자 월 '배포 강의' 한도에서 이 강의에 새
+    렌더 여지가 없으면 0(제출 안 함). 범위 밖 질문은 렌더 없이 failed 로 표시(한도
+    미소모). 예산 차단 시 중단.
     """
     from app.models.lecture import Lecture
     from app.services.pipeline.budget import (
         QARenderQuotaError,
-        qa_render_quota_remaining,
+        qa_can_render_lecture,
     )
     from app.services.pipeline.qa import generate_seed_answer
 
@@ -535,10 +538,12 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         QAAnswerCache.status == qa_avatar.STATUS_PENDING,
     ).all()
 
-    limit = min(
-        settings.QA_AVATAR_TOP_CLUSTERS - _lecture_renders_used_this_month(db, lecture_id),
-        qa_render_quota_remaining(db, instructor_id),
-    )
+    # 한도 = 영상당 남은 렌더(클립 수). 단, 교수자 월 '강의' 한도에서 이 강의에 새
+    # 렌더 여지가 없으면 0으로 막아 불필요한 HeyGen 호출(_resolve_character)도 피한다.
+    if qa_can_render_lecture(db, instructor_id, lecture_id):
+        limit = settings.QA_AVATAR_TOP_CLUSTERS - _lecture_renders_used_this_month(db, lecture_id)
+    else:
+        limit = 0
 
     lecture = db.get(Lecture, lecture_id)
     task_id = lecture.pipeline_task_id if lecture else None
@@ -600,10 +605,11 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         row.question_embedding = qa_avatar.embed_question(row.question_text)
 
         try:
-            assert_qa_render_budget(db, instructor_id)
+            assert_qa_render_budget(db, instructor_id, lecture_id)
         except QARenderQuotaError as exc:
             logger.warning(
-                "Q&A 사전질문 예산 차단(중단): instructor=%s, %s", instructor_id, exc
+                "Q&A 사전질문 예산 차단(중단): instructor=%s, lecture=%s, %s",
+                instructor_id, lecture_id, exc,
             )
             break
 

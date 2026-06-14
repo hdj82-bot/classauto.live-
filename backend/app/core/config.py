@@ -132,8 +132,23 @@ class Settings(BaseSettings):
     QA_AVATAR_CLUSTER_THRESHOLD: float = 0.9
     # 배치 1회가 렌더할 상위 클러스터 수 — 영상당 3렌더(09 §5).
     QA_AVATAR_TOP_CLUSTERS: int = 3
-    # 교수자당 월 렌더 한도 — 2영상 × 영상당 3렌더 = 6 (09 §5).
-    QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR: int = 6
+    # 교수자당 월 Q&A 아바타 한도 — '배포(is_published)된 강의' 단위 (2026-06-14 개정).
+    # 한 강의에 사전 질문이 3개여도, 디버깅으로 여러 번 재렌더해도 그 강의는 1로 센다.
+    # 제작 중(미배포) 강의 렌더는 한도를 소모하지 않고 실제 배포한 강의만 센다.
+    # 베타테스터 월 8강의. 무제한 화이트리스트(QA_AVATAR_UNLIMITED_EMAILS)는 면제.
+    QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR: int = 8
+    # 월 한도를 면제받는 계정(테스트 계정·계정주). 콤마 구분, 소문자 비교.
+    # 베타테스터(계정주 초대로 가입)는 위 월 한도가 적용된다.
+    QA_AVATAR_UNLIMITED_EMAILS: str = "hdj82@kyonggi.ac.kr,classauto101@gmail.com"
+
+    @property
+    def qa_avatar_unlimited_email_set(self) -> frozenset[str]:
+        """무제한 Q&A 화이트리스트를 정규화(소문자·공백 제거)한 집합."""
+        return frozenset(
+            e.strip().lower()
+            for e in self.QA_AVATAR_UNLIMITED_EMAILS.split(",")
+            if e.strip()
+        )
     # 클러스터가 렌더 대상이 되기 위한 최소 누적 질문 수(1회성 잡음 질문 렌더 방지).
     QA_AVATAR_MIN_CLUSTER_SIZE: int = 1
     # 아바타 답변 길이 상한(글자) — 변동비(렌더 길이) 상한 고정(08 §5.4 30초 클램프 근사).
