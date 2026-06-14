@@ -311,6 +311,64 @@ def test_seed_render_caps_across_calls(sync_db, mock_render, monkeypatch):
     assert result["submitted"] == 1  # 영상당 3 - 기존 2 = 1.
 
 
+def test_unlimited_account_bypasses_per_lecture_cap(sync_db, mock_render, monkeypatch):
+    """무제한 계정은 강의당 월 캡(3)을 면제 — 등록한 사전 질문을 전부 렌더한다."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    prof, _c, lec = _seed_lecture(sync_db)
+    # 이 교수자를 무제한 화이트리스트에 넣는다.
+    prof.email = "unlimited@t.ac.kr"
+    monkeypatch.setattr(settings, "QA_AVATAR_UNLIMITED_EMAILS", "unlimited@t.ac.kr")
+    # 이번 달 이미 3렌더(캡 소진) — 일반 계정이면 limit=0 이지만 무제한은 무시.
+    for i in range(3):
+        sync_db.add(QAAnswerCache(
+            lecture_id=lec.id, instructor_id=prof.id, question_text=f"이전 {i}",
+            status=qa_avatar.STATUS_RENDERING, heygen_job_id=f"prev-{i}",
+            origin=qa_avatar.ORIGIN_SEED,
+        ))
+    for i in range(4):
+        _seed(sync_db, lec, prof, f"신규 질문 {i}")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    # 캡(3)에 안 막히고 신규 4개 전부 제출.
+    assert result["submitted"] == 4
+
+
+def test_limit_zero_marks_failed_with_quota_message(sync_db, mock_render, monkeypatch):
+    """한도 0(일반 계정·캡 소진)이면 질문을 '대기'로 방치하지 않고 사유와 함께 failed."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    prof, _c, lec = _seed_lecture(sync_db)  # 일반 계정(무제한 아님)
+    # 이번 달 이미 3렌더 → 영상당 남은 한도 0.
+    for i in range(3):
+        sync_db.add(QAAnswerCache(
+            lecture_id=lec.id, instructor_id=prof.id, question_text=f"이전 {i}",
+            status=qa_avatar.STATUS_RENDERING, heygen_job_id=f"prev-{i}",
+            origin=qa_avatar.ORIGIN_SEED,
+        ))
+    row = _seed(sync_db, lec, prof, "추가 질문")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result == {"submitted": 0, "failed": 1}
+    sync_db.refresh(row)
+    assert row.status == qa_avatar.STATUS_FAILED
+    assert "한도" in (row.error_message or "")  # 조용한 '대기' 가 아니라 사유 표시
+
+
 # ── 4. 야간 배치(_submit_pending)는 instructor_seed 를 건너뛴다 ─────────────────
 
 
