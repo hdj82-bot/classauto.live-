@@ -30,6 +30,7 @@ from app.schemas.quiz import (
     QuizConfirmRequest,
     QuizConfirmResponse,
     QuizDraft,
+    QuizQuickGenerateRequest,
     SocraticTurnRequest,
     SocraticTurnResponse,
 )
@@ -113,6 +114,25 @@ async def _confirm_lock(lecture_id: uuid.UUID):
             await redis_client.delete(key)
         except Exception as exc:  # noqa: BLE001
             logger.warning("quiz confirm lock: 해제 실패 (TTL 만료 의존): %s", exc)
+
+
+def _saved_quiz_payload(q) -> dict:
+    """저장된 Question → 응답 dict(최종 draft 포함). enum 은 문자열 값으로 변환."""
+    qtype = getattr(q.question_type, "value", str(q.question_type))
+    diff = getattr(q.difficulty, "value", str(q.difficulty))
+    return {
+        "id": q.id,
+        "insert_after_slide_index": q.insert_after_slide_index,
+        "timestamp_seconds": q.timestamp_seconds,
+        "draft": {
+            "question_type": qtype,
+            "difficulty": diff,
+            "content": q.content,
+            "options": q.options,
+            "correct_answer": q.correct_answer,
+            "explanation": q.explanation,
+        },
+    }
 
 
 # ── 대화 1턴 ──────────────────────────────────────────────────────────────────
@@ -199,11 +219,7 @@ async def quiz_confirm(
                     explanation=body.explanation,
                     reveal_answer=body.reveal_answer,
                 )
-                return {
-                    "id": q.id,
-                    "insert_after_slide_index": q.insert_after_slide_index,
-                    "timestamp_seconds": q.timestamp_seconds,
-                }
+                return _saved_quiz_payload(q)
 
         try:
             saved = await loop.run_in_executor(None, _run)
@@ -223,6 +239,75 @@ async def quiz_confirm(
         insert_after_slide_index=saved["insert_after_slide_index"],
         timestamp_seconds=saved["timestamp_seconds"],
         message="문제가 저장되었습니다.",
+        draft=QuizDraft(**saved["draft"]),
+    )
+
+
+# ── 퀵 생성 (대화 없이 즉시 1문항 생성·저장) ──────────────────────────────────
+
+@router.post(
+    "/lectures/{lecture_id}/quiz/generate",
+    response_model=QuizConfirmResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="대화 없이 즉시 퀴즈 1문항 생성·저장 (교수자 전용)",
+)
+async def quiz_quick_generate(
+    lecture_id: uuid.UUID,
+    body: QuizQuickGenerateRequest,
+    current_user: User = Depends(require_professor),
+):
+    """소크라테스 대화를 건너뛰고 근거 슬라이드로 문제 1개를 즉시 생성한 뒤 곧바로 저장한다.
+
+    객관식 정답 위치는 저장 시점에 무작위 재배치된다(confirm_quiz). 반복 비용 방어를 위해
+    소크라테스 대화와 동일한 rate-limit 을 적용한다.
+    """
+    await _enforce_socratic_rate_limit(lecture_id, current_user.id)
+    async with _confirm_lock(lecture_id):
+        loop = asyncio.get_event_loop()
+
+        def _run():
+            with SyncSessionLocal() as db:
+                draft = quiz_svc.quick_generate_quiz(
+                    db=db,
+                    lecture_id=lecture_id,
+                    insert_after_slide_index=body.insert_after_slide_index,
+                    question_type=body.question_type,
+                    difficulty=body.difficulty,
+                )
+                q = quiz_svc.confirm_quiz(
+                    db=db,
+                    lecture_id=lecture_id,
+                    insert_after_slide_index=body.insert_after_slide_index,
+                    question_type=draft["question_type"],
+                    difficulty=draft["difficulty"],
+                    content=draft["content"],
+                    options=draft["options"],
+                    correct_answer=draft["correct_answer"],
+                    explanation=draft["explanation"],
+                    reveal_answer=body.reveal_answer,
+                )
+                return _saved_quiz_payload(q)
+
+        try:
+            saved = await loop.run_in_executor(None, _run)
+        except ValueError as exc:
+            # 생성 결과가 형식(예: 객관식 4지선다)을 못 맞춘 경우.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
+        except Exception as exc:  # noqa: BLE001
+            logger.error("퀴즈 퀵 생성 실패: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="문제 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+            ) from exc
+
+    return QuizConfirmResponse(
+        id=saved["id"],
+        insert_after_slide_index=saved["insert_after_slide_index"],
+        timestamp_seconds=saved["timestamp_seconds"],
+        message="문제가 생성되었습니다.",
+        draft=QuizDraft(**saved["draft"]),
     )
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 import uuid
 from dataclasses import dataclass
@@ -55,6 +56,17 @@ def _claude_socratic_call(client: anthropic.Anthropic, system: str, messages: li
     )
 
 
+@track_external_api("claude")
+@retry_external(label="claude.quiz.quickgen", extra_retry_on=_CLAUDE_RETRY_ON)
+def _claude_quick_quiz_call(client: anthropic.Anthropic, system: str, user: str):
+    return client.messages.create(
+        model=settings.SOCRATIC_MODEL,
+        max_tokens=settings.SOCRATIC_MAX_TOKENS,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+
+
 @dataclass
 class SocraticResult:
     reply: str
@@ -74,6 +86,7 @@ def _build_system_prompt(
     difficulty: str,
     current_draft: dict | None = None,
     lang: str = "ko",
+    slides_outline: str = "",
 ) -> str:
     qtype_ko = _QTYPE_KO.get(question_type, _QTYPE_KO["multiple_choice"])
     diff_ko = _DIFFICULTY_KO.get(difficulty, _DIFFICULTY_KO["medium"])
@@ -96,7 +109,16 @@ def _build_system_prompt(
             "교수자가 이 문제를 다시 열었습니다. 교수자의 수정 요청을 반영해 이 문제를 다듬으세요. "
             "별도 지시가 없으면 이 문제를 기준으로 삼습니다.\n"
         )
-    return f"""당신은 대학 교수자와 함께 강의 영상에 삽입할 평가 문제를 설계하는 교육과정 설계 파트너입니다. 소크라테스식 대화법으로 교수자의 의도를 이끌어내어 최종 문제를 확정합니다.{edit_block}
+    outline_block = ""
+    if slides_outline:
+        outline_block = (
+            "\n## 강의 전체 슬라이드 개요 (참고)\n"
+            f"{slides_outline}\n"
+            "교수자가 대화 중 다른 슬라이드 구간(예: \"슬라이드 6~7 사이로 바꿔줘\")을 지목하면, "
+            "위 개요에서 그 슬라이드 내용을 찾아 출제 위치를 옮기고 그 슬라이드 기준으로 문제를 다시 만드세요. "
+            "\"내용이 없다\"고 답하지 말고 개요를 근거로 진행하세요.\n"
+        )
+    return f"""당신은 대학 교수자와 함께 강의 영상에 삽입할 평가 문제를 설계하는 교육과정 설계 파트너입니다. 소크라테스식 대화법으로 교수자의 의도를 이끌어내어 최종 문제를 확정합니다.{edit_block}{outline_block}
 
 ## 출제 맥락
 - 삽입 위치: 슬라이드 {n + 1}번과 {n + 2}번 사이 (학생이 영상에서 이 지점에 도달하면 출제)
@@ -104,7 +126,7 @@ def _build_system_prompt(
 - 난이도: {diff_ko}
 - 문항 수: 정확히 1문항
 
-## 근거 자료 (반드시 이 범위 안에서만 출제)
+## 근거 자료 (이 경계 중심 — 교수자가 다른 슬라이드를 지목하면 위 전체 개요를 활용)
 {slide_context}
 
 ## 대화 방식
@@ -122,6 +144,7 @@ def _build_system_prompt(
 
 규칙:
 - 객관식이면 options 는 정확히 4개, correct_answer 는 정답 선택지의 인덱스 문자열("0"~"3").
+- 객관식 정답의 위치는 특정 보기(예: 항상 2번)에 몰리지 않게 A·B·C·D 중에서 무작위로 고르게 분포시키세요.
 - 주관식이면 options 는 null, correct_answer 는 핵심 키워드를 담은 모범답안.
 - 아직 초안을 제시하기 이르면 draft 를 null 로 두어도 됩니다.
 - 자연어 메시지에는 코드블록이나 JSON 을 노출하지 말고, 사람에게 말하듯 자연스럽게 작성하세요.
@@ -174,6 +197,70 @@ def _slide_context(db: Session, lecture_id: uuid.UUID, n: int) -> str:
         return "(슬라이드 텍스트를 찾을 수 없습니다. 강의 일반 원칙에 따라 설계하되, 추측을 최소화하세요.)"
 
     return "\n\n".join(f"### 슬라이드 {idx + 1}\n{parts[idx]}" for idx in sorted(parts))
+
+
+# 슬라이드 1장당·전체 개요 길이 상한(토큰·비용 방어). 교수자가 채팅으로 임의 슬라이드를
+# 지목해도 그 내용을 참고할 수 있게 전체 개요를 함께 싣되, 과도하게 커지지 않게 자른다.
+_OUTLINE_PER_SLIDE_CHARS = 280
+_OUTLINE_TOTAL_CHARS = 7000
+
+
+def _all_slides_outline(db: Session, lecture_id: uuid.UUID) -> str:
+    """강의 전체 슬라이드의 텍스트 개요(슬라이드별로 잘라서). 교수자가 채팅에서 다른
+    슬라이드를 지목할 때도 모델이 그 내용을 참고할 수 있게 한다. VideoScript 우선,
+    부족분은 SlideEmbedding 으로 보완."""
+    parts: dict[int, str] = {}
+
+    video = (
+        db.execute(
+            select(Video)
+            .where(Video.lecture_id == lecture_id)
+            .order_by(Video.created_at.desc())
+        )
+        .scalars()
+        .first()
+    )
+    if video and video.script and video.script.segments:
+        for seg in video.script.segments:
+            idx = seg.get("slide_index")
+            text = seg.get("text")
+            if isinstance(idx, int) and idx >= 0 and text and idx not in parts:
+                parts[idx] = str(text)
+
+    # VideoScript 에 없는 슬라이드는 SlideEmbedding(슬라이드 본문 텍스트)으로 보완.
+    lecture = db.get(Lecture, lecture_id)
+    task_id = lecture.pipeline_task_id if lecture else None
+    if task_id:
+        rows = (
+            db.execute(
+                select(SlideEmbedding)
+                .where(SlideEmbedding.task_id == task_id)
+                .order_by(SlideEmbedding.slide_number)
+            )
+            .scalars()
+            .all()
+        )
+        for row in rows:
+            idx = row.slide_number - 1
+            if idx >= 0 and idx not in parts and row.text_content:
+                parts[idx] = str(row.text_content)
+
+    if not parts:
+        return ""
+
+    chunks: list[str] = []
+    total = 0
+    for idx in sorted(parts):
+        body = " ".join(parts[idx].split())  # 개행·공백 정규화
+        if len(body) > _OUTLINE_PER_SLIDE_CHARS:
+            body = body[:_OUTLINE_PER_SLIDE_CHARS].rstrip() + "…"
+        line = f"- 슬라이드 {idx + 1}: {body}"
+        if total + len(line) > _OUTLINE_TOTAL_CHARS:
+            chunks.append("- … (이하 생략)")
+            break
+        chunks.append(line)
+        total += len(line)
+    return "\n".join(chunks)
 
 
 # ── 응답 파싱 ─────────────────────────────────────────────────────────────────
@@ -241,11 +328,12 @@ def socratic_turn(
 ) -> SocraticResult:
     """대화 1턴 실행. messages 가 비어 있으면 클로드가 먼저 초안을 제시한다."""
     context = _slide_context(db, lecture_id, insert_after_slide_index)
+    outline = _all_slides_outline(db, lecture_id)
     lecture = db.get(Lecture, lecture_id)
     voice_lang = (lecture.voice_lang if lecture else None) or "ko"
     system = _build_system_prompt(
         context, insert_after_slide_index, question_type, difficulty, current_draft,
-        lang=voice_lang,
+        lang=voice_lang, slides_outline=outline,
     )
 
     # 숨은 kickoff(user) 를 항상 맨 앞에 붙인다. 프론트는 화면에 보이는 턴만 보관하므로
@@ -303,6 +391,131 @@ def socratic_turn(
     )
 
 
+# ── 퀵 생성(대화 없이 1회 호출로 완성) ────────────────────────────────────────
+
+def _quick_quiz_system_prompt(
+    slide_context: str,
+    slides_outline: str,
+    n: int,
+    question_type: str,
+    difficulty: str,
+    lang: str = "ko",
+) -> str:
+    qtype_ko = _QTYPE_KO.get(question_type, _QTYPE_KO["multiple_choice"])
+    diff_ko = _DIFFICULTY_KO.get(difficulty, _DIFFICULTY_KO["medium"])
+    if not lang or lang == "ko":
+        lang_rule = "- 모든 내용을 한국어로 작성합니다."
+    else:
+        lang_rule = (
+            f"- 학생에게 노출되는 내용(content·options·correct_answer·explanation)은 "
+            f"강의 발화 언어인 {_lang_name(lang)}(으)로 작성합니다."
+        )
+    outline_block = ""
+    if slides_outline:
+        outline_block = f"\n## 강의 전체 슬라이드 개요 (참고)\n{slides_outline}\n"
+    return f"""당신은 대학 강의 영상에 삽입할 평가 문제 1개를 빠르게 설계합니다. 교수자와의 대화 없이, 아래 근거만으로 완성된 문제 하나를 즉시 만들어 JSON 으로만 출력합니다.
+
+## 출제 맥락
+- 삽입 위치: 슬라이드 {n + 1}번과 {n + 2}번 사이
+- 문제 유형: {qtype_ko}
+- 난이도: {diff_ko}
+- 문항 수: 정확히 1문항
+
+## 근거 슬라이드 (이 경계 중심)
+{slide_context}
+{outline_block}
+## 출력 형식 (오직 아래 JSON 객체 하나만 출력 — 설명·인사·코드블록 표시 금지)
+{{"question_type": "{question_type}", "difficulty": "{difficulty}", "content": "문제 본문", "options": ["선택지A","선택지B","선택지C","선택지D"], "correct_answer": "정답", "explanation": "정답 해설"}}
+
+규칙:
+- 객관식이면 options 는 정확히 4개, correct_answer 는 정답 선택지의 인덱스 문자열("0"~"3").
+- 객관식 정답 위치는 특정 보기에 몰리지 않게 A·B·C·D 중 무작위로 정하세요.
+- 주관식이면 options 는 null, correct_answer 는 핵심 키워드를 담은 모범답안.
+- 근거 슬라이드 내용 안에서만 출제하고, 추측을 최소화하세요.
+{lang_rule}
+"""
+
+
+def _parse_quick_draft(raw: str, qtype: str, difficulty: str) -> dict | None:
+    """퀵 생성 응답에서 JSON 문제 객체를 추출·정규화. 실패 시 None."""
+    text = (raw or "").strip()
+    block = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+    payload = block.group(1) if block else text
+    start, end = payload.find("{"), payload.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        return None
+    try:
+        data = json.loads(payload[start : end + 1])
+    except json.JSONDecodeError:
+        logger.warning("퀵 생성 JSON 파싱 실패")
+        return None
+    if isinstance(data, dict) and isinstance(data.get("draft"), dict):
+        data = data["draft"]
+    if not isinstance(data, dict):
+        return None
+    data.setdefault("question_type", qtype)
+    data.setdefault("difficulty", difficulty)
+    return _normalize_draft(data)
+
+
+def quick_generate_quiz(
+    db: Session,
+    lecture_id: uuid.UUID,
+    insert_after_slide_index: int,
+    question_type: str,
+    difficulty: str,
+) -> dict:
+    """대화 없이 1회 호출로 완성된 문제 초안(dict)을 생성한다. 저장은 호출부가 confirm.
+
+    실패(파싱·API) 시 RuntimeError.
+    """
+    context = _slide_context(db, lecture_id, insert_after_slide_index)
+    outline = _all_slides_outline(db, lecture_id)
+    lecture = db.get(Lecture, lecture_id)
+    voice_lang = (lecture.voice_lang if lecture else None) or "ko"
+    system = _quick_quiz_system_prompt(
+        context, outline, insert_after_slide_index, question_type, difficulty, voice_lang
+    )
+
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=60.0)
+    try:
+        response = _claude_quick_quiz_call(
+            client, system, "위 맥락으로 문제 1개를 만들어 JSON 객체 하나로만 출력하세요."
+        )
+    except anthropic.APIError as exc:
+        logger.error("퀵 생성 Claude 호출 실패: %s", exc)
+        raise RuntimeError(f"문제 생성 실패: {exc}") from exc
+
+    raw = next((b.text for b in response.content if b.type == "text"), "")
+    draft = _parse_quick_draft(raw, question_type, difficulty)
+
+    # 비용 기록 (best-effort).
+    try:
+        it, ot = response.usage.input_tokens, response.usage.output_tokens
+        cost = (
+            it * settings.CLAUDE_INPUT_COST_PER_M + ot * settings.CLAUDE_OUTPUT_COST_PER_M
+        ) / 1_000_000
+        db.add(
+            CostLog(
+                lecture_id=lecture_id,
+                category=CostCategory.llm_assessment,
+                model=settings.SOCRATIC_MODEL,
+                input_tokens=it,
+                output_tokens=ot,
+                cost_usd=round(cost, 6),
+                memo="quiz quick generate",
+            )
+        )
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("CostLog 기록 실패(무시): %s", exc)
+        db.rollback()
+
+    if not draft or not draft.get("content"):
+        raise RuntimeError("문제 생성 결과를 해석하지 못했습니다.")
+    return draft
+
+
 # ── 확정/저장 ─────────────────────────────────────────────────────────────────
 
 def _boundary_timestamp(db: Session, lecture_id: uuid.UUID, n: int) -> int | None:
@@ -324,6 +537,27 @@ def _boundary_timestamp(db: Session, lecture_id: uuid.UUID, n: int) -> int | Non
             if isinstance(end, (int, float)) and end >= 0:
                 return int(end)
     return None
+
+
+def _shuffle_mc_options(
+    options: list[str], correct_index: str
+) -> tuple[list[str], str]:
+    """객관식 4지선다 보기를 무작위로 섞어 정답 위치가 A·B·C·D 에 고르게 분포하게 한다.
+
+    모델이 정답을 특정 위치(예: 2번)에 몰아 출력하는 편향을 저장 시점에 균등화한다.
+    (options, 새 정답 인덱스 문자열) 반환. 입력이 4지선다·유효 인덱스가 아니면 그대로.
+    """
+    try:
+        ci = int(correct_index)
+    except (TypeError, ValueError):
+        return options, correct_index
+    if not isinstance(options, list) or len(options) != 4 or ci not in (0, 1, 2, 3):
+        return options, correct_index
+    order = [0, 1, 2, 3]
+    random.shuffle(order)
+    new_options = [options[i] for i in order]
+    new_correct = str(order.index(ci))
+    return new_options, new_correct
 
 
 def confirm_quiz(
@@ -349,7 +583,8 @@ def confirm_quiz(
         ca = str(correct_answer).strip() if correct_answer is not None else ""
         if ca not in ("0", "1", "2", "3"):
             raise ValueError("객관식 정답은 0~3 인덱스여야 합니다.")
-        correct_answer = ca
+        # 정답 위치 편향(항상 B/C 등) 완화 — 저장 시점에 보기를 무작위 재배치.
+        options, correct_answer = _shuffle_mc_options(options, ca)
     else:
         options = None
 

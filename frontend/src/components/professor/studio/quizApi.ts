@@ -58,6 +58,9 @@ export interface ConfirmQuizResult {
   id: string;
   insert_after_slide_index: number;
   timestamp_seconds: number | null;
+  /** 저장된 최종 문제. 객관식은 정답 위치가 서버에서 무작위 재배치되므로, 보낸
+   *  draft 가 아니라 이 값을 저장본(미리보기·재열람)으로 써야 일관적이다. */
+  draft?: QuizDraft | null;
 }
 
 export async function confirmQuiz(
@@ -77,6 +80,32 @@ export async function confirmQuiz(
       correct_answer: draft.correct_answer,
       explanation: draft.explanation,
       reveal_answer: revealAnswer,
+    },
+  );
+  return data;
+}
+
+/**
+ * 퀵 생성 — 소크라테스 대화를 건너뛰고 즉시 문제 1개를 생성·저장한다(예상 질문의
+ * 즉시 생성과 동일한 패턴). 객관식 정답 위치는 서버가 무작위 재배치한다.
+ * 응답의 draft 가 저장된 최종 문제.
+ */
+export async function quickGenerateQuiz(
+  lectureId: string,
+  params: {
+    insertAfterSlideIndex: number;
+    questionType: QuizQuestionType;
+    difficulty: QuizDifficulty;
+    revealAnswer: boolean;
+  },
+): Promise<ConfirmQuizResult> {
+  const { data } = await api.post<ConfirmQuizResult>(
+    `/api/lectures/${lectureId}/quiz/generate`,
+    {
+      insert_after_slide_index: params.insertAfterSlideIndex,
+      question_type: params.questionType,
+      difficulty: params.difficulty,
+      reveal_answer: params.revealAnswer,
     },
   );
   return data;

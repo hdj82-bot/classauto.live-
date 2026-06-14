@@ -69,6 +69,17 @@ class QuizConfirmResponse(BaseModel):
     insert_after_slide_index: int
     timestamp_seconds: int | None
     message: str
+    # 저장된 최종 문제(객관식은 정답 위치가 서버에서 무작위 재배치됨) — 프론트가
+    # 미리보기/재열람을 저장본과 일치시키도록 함께 반환.
+    draft: QuizDraft | None = None
+
+
+class QuizQuickGenerateRequest(BaseModel):
+    """POST /api/lectures/{lecture_id}/quiz/generate — 대화 없이 즉시 문제 1개 생성·저장."""
+    insert_after_slide_index: int = Field(..., ge=0)
+    question_type: QuestionTypeLit = "multiple_choice"
+    difficulty: DifficultyLit = "medium"
+    reveal_answer: bool = True
 
 
 # ── 패널 재수화 ───────────────────────────────────────────────────────────────

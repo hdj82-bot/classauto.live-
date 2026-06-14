@@ -19,6 +19,7 @@ import { langLabel } from "@/components/professor/studio/studioTypes";
 import {
   deleteQuiz,
   listAuthoredQuizzes,
+  quickGenerateQuiz,
 } from "@/components/professor/studio/quizApi";
 import {
   generateSeedAnswer,
@@ -1352,6 +1353,48 @@ export default function StudioWizardPage() {
     [socraticOpenIndex, toast],
   );
 
+  // 퀵 생성 — 대화 없이 즉시 문제 1개를 생성·저장하고 카드를 '작성됨'으로 갱신.
+  const handleQuickGenerateQuiz = useCallback(
+    async (index: number): Promise<boolean> => {
+      const point = quizPoints[index];
+      if (!point) return false;
+      try {
+        const res = await quickGenerateQuiz(lectureId, {
+          insertAfterSlideIndex: point.boundaryIndex,
+          questionType: point.questionType,
+          difficulty: point.difficulty,
+          revealAnswer: point.revealAnswer,
+        });
+        setQuizPoints((prev) =>
+          prev.map((p, i) =>
+            i === index
+              ? {
+                  ...p,
+                  boundaryIndex: res.insert_after_slide_index,
+                  authoredId: res.id,
+                  savedDraft: res.draft ?? p.savedDraft,
+                }
+              : p,
+          ),
+        );
+        toast("문제를 생성했어요. ‘문제 보기·수정’에서 검토할 수 있어요.", "success");
+        return true;
+      } catch (err) {
+        const detail = (
+          err as { response?: { data?: { detail?: unknown } } } | undefined
+        )?.response?.data?.detail;
+        toast(
+          typeof detail === "string" && detail.trim()
+            ? detail
+            : "문제 생성에 실패했어요. 잠시 후 다시 시도해주세요.",
+          "error",
+        );
+        return false;
+      }
+    },
+    [quizPoints, lectureId, toast],
+  );
+
   // ── 렌더링 ───────────────────────────────────────────────────────────────────
   if (lectureLoading) {
     return (
@@ -1475,6 +1518,7 @@ export default function StudioWizardPage() {
         onRemoveQuizPoint={handleRemoveQuizPoint}
         onChangeQuizPoint={handleChangeQuizPoint}
         onOpenSocratic={setSocraticOpenIndex}
+        onQuickGenerateQuiz={handleQuickGenerateQuiz}
         seedQuestions={seedQuestions}
         seedRenderingActive={seedAwaitingRender}
         onAddSeedQuestion={handleAddSeedQuestion}
