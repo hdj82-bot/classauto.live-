@@ -25,6 +25,7 @@ import {
   generateSeedQuestions,
   getSeedQuestions,
   putSeedQuestions,
+  renderSeedQuestions,
   type SeedQuestionDraft,
 } from "@/components/professor/studio/seedQuestionsApi";
 import { useReducedMotion } from "@/components/professor/avatars/useReducedMotion";
@@ -1000,11 +1001,22 @@ export default function StudioWizardPage() {
 
     // 이미 승인된 강의: approve 는 pending_review 에서만 가능(아니면 409).
     if (approved) {
-      // 제작이 끝난(done) 강의에서 다시 누르면 = "다시 제작(재생성)".
-      // 변경된 슬라이드만 음성을 새로 합성한다(미변경=비용 0) — 확인 후 진행.
+      // 제작이 끝난(done) 강의에서 다시 누르면 = "다시 제작(점검·완성)".
+      // ① 슬라이드(스크립트·음성·속도) ② 추천 질문(Q&A) 답변 아바타 — 두 가지를
+      // 점검해 누락·변경된 부분만 새로 만든다(미변경=비용 0, PPT 재업로드 불필요).
       if (genDone && videoId) {
+        // 아직 만들어지지 않은(대기/실패) 추천 질문 — "다시 제작" 이 함께 완성한다.
+        const pendingSeed = seedQuestions.filter(
+          (q) => !!q.status && q.status !== "ready" && q.status !== "rendering",
+        ).length;
+        const seedLine = pendingSeed
+          ? `② 추천 질문 답변 아바타 — 아직 안 만든 ${pendingSeed}개 생성`
+          : "② 추천 질문 — 모두 준비됨(변경 없음)";
         const ok = window.confirm(
-          "변경한 부분만 새로 만듭니다 — 스크립트를 고친 슬라이드, 또는 음성·속도를 바꿨다면 그 영향을 받는 슬라이드의 음성을 다시 합성합니다. (PPT 재업로드 불필요, 바뀐 부분만 비용 발생·변경 없으면 비용 0) 계속할까요?",
+          "강의를 점검해 누락·변경된 부분만 새로 만듭니다:\n" +
+            "① 슬라이드(스크립트·음성·자막) — 수정·변경된 슬라이드만 다시 합성\n" +
+            seedLine +
+            "\n\n(PPT 재업로드 불필요 · 바뀐 부분만 비용 · 변경 없으면 비용 0)\n계속할까요?",
         );
         if (!ok) return;
         try {
@@ -1012,21 +1024,36 @@ export default function StudioWizardPage() {
             rerendered_segments?: number;
             status?: string;
           }>(`/api/videos/${videoId}/rerender`);
-          // 바뀐 구간이 없으면 재합성할 게 없다 — 모달을 열지 않고 안내만.
-          if (!data?.rerendered_segments) {
-            // 백엔드가 rendering 에 갇혀 있던 Video 를 done 으로 풀어준 경우
-            // (모든 슬라이드는 이미 완성). 미리보기를 바로 열 수 있게 상태를 맞춘다.
+          const slidesChanged = data?.rerendered_segments ?? 0;
+
+          // 대기 중 추천 질문이 있으면 그 답변 아바타 렌더를 함께 시작한다(병렬).
+          let seedStarted = false;
+          if (pendingSeed > 0) {
+            try {
+              await renderSeedQuestions(lectureId);
+              setSeedAwaitingRender(true);
+              void reloadSeedQuestions();
+              seedStarted = true;
+            } catch {
+              /* 시드 렌더 트리거 실패는 슬라이드 재제작을 막지 않는다. */
+            }
+          }
+
+          // 슬라이드·추천 질문 모두 새로 만들 게 없으면 안내만(모달 안 엶).
+          if (slidesChanged === 0 && !seedStarted) {
             if (data?.status === "done") {
               setVideoStatus("done");
               setGenDone(true);
-              toast("이미 모든 슬라이드가 완성되어 있어요. 미리보기로 확인하세요.", "success");
-            } else {
-              toast("변경된 내용이 없어 다시 제작할 슬라이드가 없습니다.", "info");
             }
+            toast(
+              "점검 완료 — 슬라이드와 추천 질문 모두 이미 완성되어 있어요. 미리보기로 확인하세요.",
+              "success",
+            );
             return;
           }
-          // 모달을 진행 상태로 되돌리고(완료 표시 제거), 멈춰 있던 렌더 폴링을
-          // 재가동(nonce 증가 → 폴링 effect 재실행).
+
+          // 새로 만들 게 있으면 진행 모달을 열고(완료 표시 제거) 폴링 재가동.
+          // 모달은 슬라이드 진행률 + 추천 질문(Q&A) 진행 단계를 함께 보여준다.
           setGenDone(false);
           setGenPercent(0);
           setGenStage(1);
@@ -1035,6 +1062,13 @@ export default function StudioWizardPage() {
           lastProgressRef.current = { completed: -1, at: 0 };
           setGenOpen(true);
           setRenderPollNonce((n) => n + 1);
+          if (slidesChanged === 0 && seedStarted) {
+            // 슬라이드 변경은 없고 추천 질문만 새로 만드는 경우 — 슬라이드는 이미
+            // 완성이라 모달의 슬라이드 단계는 바로 완료로 두고 Q&A 진행만 보인다.
+            setGenPercent(100);
+            setGenStage(2);
+            setGenCompleted(slides.length);
+          }
         } catch {
           toast(t("step2.saveError"), "error");
           setGenOpen(false);
@@ -1099,6 +1133,7 @@ export default function StudioWizardPage() {
     persistSeedQuestions,
     seedQuestions,
     reloadSeedQuestions,
+    slides,
   ]);
 
   // 멈춤 시 "다시 시도" — 진행 중(아직 done 아님)에 정체된 렌더를 재가동한다.
