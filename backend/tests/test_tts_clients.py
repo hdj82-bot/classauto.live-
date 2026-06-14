@@ -157,6 +157,8 @@ async def test_elevenlabs_synthesize_422_raises_immediately():
     with pytest.raises(elevenlabs_client.ElevenLabsError):
         await elevenlabs_client.synthesize("bad payload")
 
+    assert route.call_count == 1  # 4xx 는 재시도하지 않음
+
 
 # ── Forced Alignment (자막 정밀 싱크) ─────────────────────────────────────────
 

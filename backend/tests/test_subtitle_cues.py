@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.core.config import settings
-from app.services.pipeline import elevenlabs_client, tts
+from app.services.pipeline import elevenlabs_client
 from app.services.pipeline.tts import _cues_from_alignment, synthesize
 
 
