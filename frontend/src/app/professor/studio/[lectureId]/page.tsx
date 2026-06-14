@@ -401,6 +401,7 @@ export default function StudioWizardPage() {
             status: q.status,
             has_clip: q.has_clip,
             preview_url: q.preview_url,
+            error_message: q.error_message,
           })),
         );
       }
@@ -851,6 +852,7 @@ export default function StudioWizardPage() {
           status: q.status,
           has_clip: q.has_clip,
           preview_url: q.preview_url,
+          error_message: q.error_message,
         })),
       );
     } catch {

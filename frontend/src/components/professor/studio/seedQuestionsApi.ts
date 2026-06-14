@@ -42,6 +42,8 @@ export interface SeedQuestion {
   has_clip: boolean;
   /** ready 인 경우 점검용 클립 presigned URL(아니면 null). */
   preview_url: string | null;
+  /** status=failed 인 경우 실패 사유(아니면 null). */
+  error_message?: string | null;
 }
 
 /** PUT 으로 보낼 항목 — 질문 + (선택) 사전 대답. */
@@ -61,6 +63,8 @@ export interface SeedQuestionDraft {
   status?: SeedQuestionStatus;
   has_clip?: boolean;
   preview_url?: string | null;
+  /** status=failed 인 경우 실패 사유. */
+  error_message?: string | null;
 }
 
 interface SeedQuestionsWire {

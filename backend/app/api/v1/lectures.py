@@ -232,6 +232,7 @@ def _seed_questions_response(sdb, instructor_id, rows) -> SeedQuestionsResponse:
             preview_url=(
                 presign_stored_s3_url(r.s3_video_url) if r.s3_video_url else None
             ),
+            error_message=getattr(r, "error_message", None),
         )
         for r in rows
     ]
