@@ -1448,6 +1448,17 @@
   }
   .stage {
     flex: 0 0 auto;
+    width: 100%;
+  }
+  /* 모바일은 영상+채팅이 세로로 쌓여 .stage 높이가 콘텐츠 기준이 된다. 데스크톱은
+     .video{flex:1} 이 뷰포트 높이를 채우지만, 세로 스택에선 높이 기준이 사라져
+     슬라이드(object-fit:contain)가 위아래로 찌그러져 보였다. 슬라이드 PNG·영상이
+     16:9 이므로 같은 비율 박스를 명시해 비율을 고정한다. */
+  .video {
+    flex: 0 0 auto;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    height: auto;
   }
   .qa {
     flex: 1 1 auto;
