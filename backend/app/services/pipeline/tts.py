@@ -60,12 +60,17 @@ class TTSResult:
         duration_seconds: float,
         text_chars: int = 0,
         fallback_reason: str | None = None,
+        subtitle_cues: list[dict] | None = None,
     ):
         self.audio_bytes = audio_bytes
         self.provider = provider
         self.duration_seconds = duration_seconds
         self.text_chars = text_chars
         self.fallback_reason = fallback_reason
+        # 자막 정밀 싱크용 문장 cue. with_alignment=True 로 호출하고 Forced Alignment
+        # 가 성공했을 때만 채워진다. 형식: [{"start","end","text"}, ...] (이 음원의
+        # 자체 타임라인 기준 초). None = 정렬 미수행/실패 → 호출부 폴백.
+        self.subtitle_cues = subtitle_cues
 
 
 # ── 메인 진입점 ──────────────────────────────────────────────────────────────
@@ -79,6 +84,7 @@ async def synthesize(
     gender: str | None = None,
     speed: float | None = None,
     cloned: bool = False,
+    with_alignment: bool = False,
     sessionmaker=None,
     video_render_id: uuid.UUID | None = None,
     s3_render_id: str | None = None,
@@ -91,6 +97,10 @@ async def synthesize(
               Lecture.voice_gender 를 흘려보내는 용도.
     speed:    발화 속도 배율(1.0 = 기본). ElevenLabs 는 voice_settings.speed(0.7~1.2
               로 클램프), Google 폴백은 speaking_rate 로 전달한다.
+    with_alignment: True 면 최종 음원에 대해 Forced Alignment 를 돌려 자막 정밀
+              싱크용 문장 cue(TTSResult.subtitle_cues)를 만든다. 합성 경로와
+              독립적이며 실패해도 cues=None 으로 degrade(예외 전파 없음). 슬라이드쇼
+              본문 렌더에서만 켠다(미리듣기 등은 불필요).
     cloned:   교수자 본인 목소리(Instant Voice Cloning)면 True. 이 경우 eleven_v3
               가 아니라 ``ELEVENLABS_MODEL_ID_CLONE``(multilingual_v2)+클론 튜닝
               세팅으로 합성한다(클론 fidelity 안정화). v3 는 similarity_boost 등
@@ -161,12 +171,21 @@ async def synthesize(
     # speed 미지원이라 네이티브 1.0 → 전량 atempo 로 적용(speed_provider 로 구분).
     audio_bytes = await _postprocess_speed(audio_bytes, speed, speed_provider)
 
+    # ── 자막 정밀 싱크 cue (선택) ─────────────────────────────────────────
+    # 속도 후처리까지 끝난 "최종 음원"에 대해 정렬하므로 시각이 재생 타임라인과
+    # 정확히 일치한다(atempo·구간 이어붙임·provider 무관). best-effort — 실패해도
+    # None 으로 degrade 하고 렌더/합성은 막지 않는다.
+    subtitle_cues: list[dict] | None = None
+    if with_alignment and settings.SUBTITLE_ALIGNMENT_ENABLED:
+        subtitle_cues = await _build_subtitle_cues(audio_bytes, text)
+
     result = TTSResult(
         audio_bytes=audio_bytes,
         provider=provider,
         duration_seconds=elapsed,
         text_chars=len(text),
         fallback_reason=fallback_reason,
+        subtitle_cues=subtitle_cues,
     )
 
     # ── 비용 기록 (선택) ─────────────────────────────────────────────────
@@ -570,6 +589,77 @@ async def _run_google_tts(text: str, *, speed: float | None = None) -> bytes:
     rate = max(0.25, min(4.0, float(speed)))
     return await asyncio.to_thread(
         lambda: google_tts_client.synthesize(text, speaking_rate=rate)
+    )
+
+
+# ── 자막 정밀 싱크 cue 생성 ──────────────────────────────────────────────────────
+# Forced Alignment(글자별 시각)을 문장 단위 cue 로 묶는다. 플레이어 KaraokeCaption
+# 의 문장 분할 규칙과 동일한 종결부호 기준으로 끊어, 같은 문장이 같은 cue 가 되게 한다.
+_SENTENCE_END_CHARS = "。．.!?！？\n"
+
+
+async def _build_subtitle_cues(audio_bytes: bytes, text: str) -> list[dict] | None:
+    """최종 음원 + transcript → 문장 단위 자막 cue. 실패 시 None(폴백)."""
+    try:
+        alignment = await elevenlabs_client.align_forced(audio_bytes, text)
+    except Exception as exc:  # noqa: BLE001 — 자막은 폴백 가능, 렌더를 막지 않는다.
+        logger.warning("Forced Alignment 실패 → 자막 cue 생략(글자수 폴백): %s", exc)
+        return None
+    cues = _cues_from_alignment(alignment)
+    if cues:
+        logger.info("자막 cue 생성: %d문장 (정밀 싱크)", len(cues))
+    else:
+        logger.warning("Forced Alignment 응답에서 cue 를 만들지 못함 → 글자수 폴백")
+    return cues or None
+
+
+def _cues_from_alignment(alignment: dict) -> list[dict]:
+    """alignment.characters([{text,start,end}, ...]) 를 문장 cue 로 묶는다.
+
+    종결부호(。．.!?！？·개행)에서 한 cue 를 끊는다. 빈/공백 cue 는 버린다.
+    각 cue: ``{"start","end","text"}`` — start/end 는 음원 자체 타임라인(초).
+    """
+    chars = alignment.get("characters") if isinstance(alignment, dict) else None
+    if not isinstance(chars, list) or not chars:
+        return []
+    cues: list[dict] = []
+    buf: list[str] = []
+    cue_start: float | None = None
+    last_end: float = 0.0
+    for ch in chars:
+        if not isinstance(ch, dict):
+            continue
+        c = ch.get("text")
+        if not isinstance(c, str) or c == "":
+            continue
+        try:
+            cs = float(ch.get("start"))
+            ce = float(ch.get("end"))
+        except (TypeError, ValueError):
+            continue
+        # 선행 공백은 cue 시작 시각에 포함하지 않는다.
+        if cue_start is None and c.strip():
+            cue_start = cs
+        buf.append(c)
+        last_end = max(last_end, ce)
+        if c in _SENTENCE_END_CHARS:
+            _flush_cue(cues, buf, cue_start, last_end)
+            buf = []
+            cue_start = None
+    _flush_cue(cues, buf, cue_start, last_end)
+    return cues
+
+
+def _flush_cue(
+    cues: list[dict], buf: list[str], start: float | None, end: float
+) -> None:
+    """버퍼를 cue 로 닫아 cues 에 추가(빈 텍스트·시작시각 없음은 건너뜀)."""
+    text = "".join(buf).strip()
+    if not text or start is None:
+        return
+    end = max(float(end), float(start))
+    cues.append(
+        {"start": round(float(start), 3), "end": round(end, 3), "text": text}
     )
 
 

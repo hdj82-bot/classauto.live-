@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -48,6 +49,12 @@ class VideoRender(Base):
     # 슬라이드별 스크립트
     script_text: Mapped[str | None] = mapped_column(Text)
     slide_number: Mapped[int | None] = mapped_column(Integer)
+
+    # 자막 정밀 싱크용 cue (Forced Alignment 로 산출한 실제 발성 시각).
+    # 형식: [{"start": float, "end": float, "text": "문장"}, ...]
+    # 시각은 이 슬라이드 음성(audio_url)의 자체 타임라인(0-base, 속도 후처리 반영).
+    # NULL = 정렬 미수행/실패 — 플레이어는 글자수 균등분배 폴백으로 자막을 싱크한다.
+    subtitle_cues: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     # 결과
     status: Mapped[RenderStatus] = mapped_column(

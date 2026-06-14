@@ -316,10 +316,18 @@ async def get_lecture_slideshow_by_slug(
         .order_by(VideoRender.created_at.desc())
     )
     audio_by_index: dict[int, str] = {}
+    cues_by_index: dict[int, list] = {}
     for r in render_result.scalars().all():
         if r.slide_number is None or not r.audio_url:
             continue
-        audio_by_index.setdefault(int(r.slide_number), r.audio_url)
+        idx_r = int(r.slide_number)
+        if idx_r in audio_by_index:
+            continue  # 슬라이드별 최신 ready 렌더 1개만 (created_at desc 정렬)
+        audio_by_index[idx_r] = r.audio_url
+        # cue 는 반드시 음원을 고른 그 렌더의 것을 써야 시각이 음원과 일치한다.
+        cues = getattr(r, "subtitle_cues", None)
+        if isinstance(cues, list) and cues:
+            cues_by_index[idx_r] = cues
 
     slides: list[SlideshowSlide] = []
     total_seconds = 0.0
@@ -340,6 +348,7 @@ async def get_lecture_slideshow_by_slug(
                 end_seconds=end,
                 text=seg.get("text") or "",
                 subtitle_text=subtitle_by_index.get(idx),
+                subtitle_cues=cues_by_index.get(idx),
             )
         )
 

@@ -310,6 +310,8 @@ def test_e2e_render_slide_pipeline():
         gender="male",
         speed=1.0,
         cloned=False,
+        # heygen 모드(=slideshow 아님)라 자막 cue 정렬은 끔.
+        with_alignment=False,
     )
 
     # S3 오디오 업로드 검증

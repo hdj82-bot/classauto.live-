@@ -86,6 +86,14 @@ class SlideshowSlide(BaseModel):
         default=None,
         description="자막 언어가 음성과 다를 때의 번역 자막. null = 음성과 동일.",
     )
+    subtitle_cues: list[dict] | None = Field(
+        default=None,
+        description=(
+            "자막 정밀 싱크 cue [{start,end,text}, ...]. 발성 시각(이 슬라이드 "
+            "음성 자체 타임라인, 초) 기준. null = 정렬 미수행/실패 → 플레이어가 "
+            "글자수 균등분배로 폴백."
+        ),
+    )
 
 
 class SlideshowResponse(BaseModel):

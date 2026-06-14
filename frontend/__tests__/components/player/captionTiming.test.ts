@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   pickActiveCaption,
+  pickActiveCaptionWithCues,
   splitIntoSentences,
 } from "@/components/player/captionTiming";
+import type { SubtitleCue } from "@/components/player/useSlideshowPlayback";
 
 describe("splitIntoSentences", () => {
   it("splits Korean sentences on terminal punctuation", () => {
@@ -90,5 +92,68 @@ describe("pickActiveCaption", () => {
     // 경계(0.333) 직전 시점이라도 큰 리드를 주면 다음 문장으로 넘어간다.
     expect(pickActiveCaption(zh, ko, 3.9, 12, 0)).toBe("第一句。");
     expect(pickActiveCaption(zh, ko, 3.9, 12, 1.5)).toBe("第二句。");
+  });
+});
+
+describe("pickActiveCaptionWithCues", () => {
+  const zh = "第一句。第二句。第三句。"; // 발화(3문장)
+  const ko = "첫째 문장입니다. 둘째 문장입니다. 셋째 문장입니다."; // 번역 자막(3문장)
+  // 발성 시각 cue — 균등하지 않은 실제 발성 길이를 흉내(첫 문장이 길다).
+  const cues: SubtitleCue[] = [
+    { start: 0, end: 7, text: "第一句。" },
+    { start: 7, end: 9, text: "第二句。" },
+    { start: 9, end: 12, text: "第三句。" },
+  ];
+
+  it("falls back to char-weight when there are no cues", () => {
+    expect(pickActiveCaptionWithCues(zh, ko, null, 6, 12)).toBe(
+      pickActiveCaption(zh, ko, 6, 12),
+    );
+    expect(pickActiveCaptionWithCues(zh, ko, [], 6, 12)).toBe(
+      pickActiveCaption(zh, ko, 6, 12),
+    );
+  });
+
+  it("syncs same-language captions by real cue times (lead=0)", () => {
+    // 자막==발화: cue 텍스트를 시각창대로 보여준다. 균등분배라면 6s 는 둘째지만
+    // 실제 발성(첫 문장 0–7s)에 맞춰 6s 에도 여전히 첫째다.
+    expect(pickActiveCaptionWithCues(zh, undefined, cues, 6, 12, 0)).toBe(
+      "第一句。",
+    );
+    expect(pickActiveCaptionWithCues(zh, undefined, cues, 8, 12, 0)).toBe(
+      "第二句。",
+    );
+    expect(pickActiveCaptionWithCues(zh, undefined, cues, 10, 12, 0)).toBe(
+      "第三句。",
+    );
+  });
+
+  it("maps cue index to the translated sentence when counts match", () => {
+    // 번역 자막: cue(발화 문장) 인덱스를 같은 순번 번역 문장에 매핑.
+    expect(pickActiveCaptionWithCues(ko, zh, cues, 6, 12, 0)).toBe(
+      "첫째 문장입니다.",
+    );
+    expect(pickActiveCaptionWithCues(ko, zh, cues, 8, 12, 0)).toBe(
+      "둘째 문장입니다.",
+    );
+    expect(pickActiveCaptionWithCues(ko, zh, cues, 11, 12, 0)).toBe(
+      "셋째 문장입니다.",
+    );
+  });
+
+  it("clamps before-first/after-last to first/last cue", () => {
+    expect(pickActiveCaptionWithCues(zh, undefined, cues, -2, 12, 0)).toBe(
+      "第一句。",
+    );
+    expect(pickActiveCaptionWithCues(zh, undefined, cues, 99, 12, 0)).toBe(
+      "第三句。",
+    );
+  });
+
+  it("falls back to char-weight when translated counts differ from cues", () => {
+    const koTwo = "한 문장. 두 문장."; // 2문장 ≠ cue 3개 → 검증된 글자수 폴백
+    expect(pickActiveCaptionWithCues(koTwo, zh, cues, 6, 12)).toBe(
+      pickActiveCaption(koTwo, zh, 6, 12),
+    );
   });
 });
