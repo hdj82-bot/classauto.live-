@@ -258,6 +258,32 @@ def test_seed_render_fails_when_avatar_unavailable(sync_db, mock_render, monkeyp
         assert r.heygen_job_id is None  # 렌더(제출) 자체를 하지 않는다.
 
 
+def test_resolve_character_falls_back_to_standard_avatar(sync_db, monkeypatch):
+    """본인 얼굴(Talking Photo) 미확보 시 표준 아바타로 폴백해 Q&A 가 막히지 않는다."""
+    from app.models.lecture import VoiceGender
+    from app.tasks import qa_batch
+
+    # 본인 얼굴 등록이 끝내 실패하는 상황(HeyGen 한도 등) — None 반환.
+    monkeypatch.setattr(qa_batch, "_ensure_talking_photo_sync", lambda *a, **k: None)
+    monkeypatch.setattr(settings, "HEYGEN_AVATAR_ID_MALE", "std-avatar-male")
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    # 본인 아바타 보유로 판정되도록 기본 룩 지정 + 강의 avatar 는 미지정(본인 얼굴 경로).
+    prof.photo_avatar_default_look_id = "look-x"
+    lec.avatar_id = None
+    lec.voice_gender = VoiceGender.male
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        character = qa_batch._resolve_character(sync_db, loop, lec, prof)
+    finally:
+        loop.close()
+
+    # talking_photo 가 아니라 표준 avatar 로 폴백 → 렌더는 진행된다.
+    assert character == {"avatar_id": "std-avatar-male"}
+
+
 # ── 2. 범위 밖 질문은 렌더하지 않고 failed ─────────────────────────────────────
 
 

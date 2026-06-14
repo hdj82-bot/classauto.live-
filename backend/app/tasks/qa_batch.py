@@ -174,12 +174,17 @@ def _ensure_talking_photo_sync(db, loop, professor) -> str | None:
         tp = loop.run_until_complete(
             _register_talking_photo_with_cleanup(img_bytes, ctype, keep_id=None)
         )
-    except Exception as exc:  # noqa: BLE001 — 끝내 실패면 기존 id 유지(없으면 None).
+    except Exception as exc:  # noqa: BLE001
+        # 등록 실패(HeyGen "사진 아바타 3개 한도" 401028 등) → None 을 반환해 호출부
+        # (_resolve_character)가 **표준 아바타로 폴백**하게 한다. 종전엔 기존
+        # photo_avatar_id 를 돌려줬는데, 그 id 가 (대시보드에서 삭제돼) 무효면 그걸로
+        # 렌더하다 또 실패했다. 한도가 풀리거나 본인 얼굴이 다시 등록되면 그때부터
+        # 본인 얼굴로 돌아온다.
         logger.warning(
-            "Q&A 배치: talking_photo 등록 실패 — instructor=%s, look=%s, error=%s",
+            "Q&A 배치: talking_photo 등록 실패 → 표준 아바타 폴백 — instructor=%s, look=%s, error=%s",
             professor.id, look_id, exc,
         )
-        return professor.photo_avatar_id
+        return None
 
     professor.photo_avatar_id = tp
     professor.photo_avatar_look_id = look_id
@@ -217,7 +222,25 @@ def _resolve_character(db, loop, lecture, professor) -> dict | None:
         resolved = _ensure_talking_photo_sync(db, loop, professor)
         if resolved:
             return {"talking_photo_id": resolved}
-        return None  # 잘못된 avatar_id 로 렌더하지 않고 보류
+        # 본인 얼굴(Talking Photo)을 못 만드는 경우(HeyGen "사진 아바타 3개 한도"
+        # 401028, 룩 미준비 등) Q&A 를 막지 말고 **표준 아바타로 폴백**해 답변 영상은
+        # 나오게 한다(얼굴만 일반 아바타). 표준 아바타는 photo-avatar 한도와 무관.
+        # 한도가 풀리거나 본인 얼굴이 다시 등록되면 그 다음 렌더부터 본인 얼굴로 돌아온다.
+        from app.services.pipeline.heygen import pick_avatar_id
+
+        gender = (
+            lecture.voice_gender.value
+            if lecture and hasattr(lecture.voice_gender, "value")
+            else (str(lecture.voice_gender) if lecture and lecture.voice_gender else None)
+        )
+        fallback = (pick_avatar_id(gender) or "").strip()
+        if fallback:
+            logger.warning(
+                "Q&A: 본인 아바타 미확보 → 표준 아바타로 폴백 렌더(instructor=%s)",
+                getattr(professor, "id", None),
+            )
+            return {"avatar_id": fallback}
+        return None  # 표준 아바타도 없으면(env 미설정) 보류
     return {"avatar_id": av}
 
 
