@@ -34,6 +34,40 @@ celery.conf.update(
     worker_prefetch_multiplier=1,
 )
 
+
+# ── 렌더 전용 큐 라우팅 (선택) ────────────────────────────────────────────────
+# I/O 위주(ElevenLabs TTS·HeyGen·OpenAI 이미지·S3) 태스크를 'render' 큐로 보내, 전용
+# 워커가 고동시성으로 돌리게 한다. 스크립트 생성 등 Claude 호출 태스크는 기본 큐에
+# 남아 저동시성을 유지(Anthropic 동시 연결 한도 보호). 스케줄·경량 유지보수(reap·
+# polling·cleanup·backup·nightly batch)는 기본 큐에 둔다.
+# RENDER_QUEUE_ENABLED 가 False(기본)면 라우트가 비어 전 태스크가 기본 큐로 간다
+# (= 종전 동작, 무회귀). True 로 켜기 전 그 큐 소비 워커가 떠 있어야 한다.
+_RENDER_TASK_NAMES = (
+    "app.tasks.render.render_slide",
+    "app.tasks.qa_batch.render_seed_questions",
+    "app.tasks.qa_batch.poll_seed_renders",
+    "app.tasks.export.compose_lecture_mp4",
+    "app.tasks.photo_avatar.prepare_photo_avatar_training",
+    "app.tasks.photo_avatar.poll_photo_avatar_training",
+    "app.tasks.photo_avatar.poll_photo_avatar_looks",
+    "app.tasks.photo_avatar.generate_gpt_looks",
+)
+
+
+def build_task_routes(enabled: bool, queue_name: str) -> dict:
+    """RENDER_QUEUE_ENABLED 일 때 렌더 I/O 태스크를 render 큐로 보내는 라우트 맵.
+
+    enabled=False 면 빈 dict(전 태스크 기본 큐 — 무회귀). 순수 함수라 단위 테스트 가능.
+    """
+    if not enabled or not queue_name:
+        return {}
+    return {name: {"queue": queue_name} for name in _RENDER_TASK_NAMES}
+
+
+celery.conf.task_routes = build_task_routes(
+    settings.RENDER_QUEUE_ENABLED, settings.RENDER_QUEUE_NAME
+)
+
 # 스케줄 태스크
 celery.conf.beat_schedule = {
     "poll-heygen-pending-jobs": {

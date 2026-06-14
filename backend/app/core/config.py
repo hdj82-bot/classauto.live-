@@ -273,6 +273,15 @@ class Settings(BaseSettings):
     # ── Celery / Redis ──────────────────────────────────────────
     CELERY_BROKER_URL: str = "redis://redis:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://redis:6379/0"
+    # 렌더 전용 큐 분리(선택). True 면 영상 렌더·아바타 생성 같은 I/O 위주 태스크를
+    # 별도 큐(RENDER_QUEUE_NAME)로 보내, 전용 워커가 고동시성으로 처리하게 한다.
+    # Claude 호출 태스크(스크립트 생성 등)는 기본 큐에 남겨 저동시성으로 Anthropic
+    # 동시 연결 한도(~5)를 지킨다. **기본 False — 코드만 머지하면 동작 불변(전 태스크
+    # 기본 큐).** ⚠️ True 로 켜기 전에 반드시 그 큐를 소비하는 워커가 떠 있어야 한다
+    # (기본 워커를 `-Q celery,render` 로 두거나 전용 render 워커 추가). 안 그러면
+    # 렌더가 큐에 조용히 적체된다. 자세한 절차는 docs/RAILWAY_DEPLOY.md.
+    RENDER_QUEUE_ENABLED: bool = False
+    RENDER_QUEUE_NAME: str = "render"
 
     # ── 알림 / 폴링 ────────────────────────────────────────────
     NOTIFICATION_WEBHOOK_URL: str = ""
