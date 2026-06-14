@@ -533,11 +533,23 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
     )
     from app.services.pipeline.qa import generate_seed_answer
 
+    # pending + **failed** 를 함께 가져온다. 실패한 질문도 "다시 제작" 시 재시도해야
+    # 하는데, 종전엔 pending 만 조회해 한 번 failed 가 되면 영영 재시도되지 않았다
+    # (원인이 해소돼도 — 예: HeyGen 한도 정리·본인 아바타 재등록 — 그대로 '실패' 고착).
+    # failed 행은 상태/사유를 초기화(pending)해 새로 시도한다. ready/rendering 은 제외.
     rows = db.query(QAAnswerCache).filter(
         QAAnswerCache.lecture_id == lecture_id,
         QAAnswerCache.origin == qa_avatar.ORIGIN_SEED,
-        QAAnswerCache.status == qa_avatar.STATUS_PENDING,
+        QAAnswerCache.status.in_(
+            [qa_avatar.STATUS_PENDING, qa_avatar.STATUS_FAILED]
+        ),
     ).all()
+    for _r in rows:
+        if _r.status == qa_avatar.STATUS_FAILED:
+            _r.status = qa_avatar.STATUS_PENDING
+            _r.error_message = None
+    if rows:
+        db.commit()
 
     # 렌더 한도 계산.
     #  - 무제한 계정(QA_AVATAR_UNLIMITED_EMAILS, 계정주 포함)은 강의당 월 캡도 면제 —

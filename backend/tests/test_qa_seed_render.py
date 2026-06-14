@@ -158,6 +158,36 @@ def test_seed_render_roundtrip_to_ready(sync_db, mock_render, monkeypatch):
     assert all(r.s3_video_url for r in rows)
 
 
+def test_seed_render_retries_failed_questions(sync_db, mock_render, monkeypatch):
+    """이미 failed 인 질문도 '다시 제작' 시 재시도된다(원인 해소 후 복구)."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    prof, _c, lec = _seed_lecture(sync_db)
+    # 이전 시도에서 실패로 박힌 질문(예: 본인 아바타 미확보·한도).
+    sync_db.add(QAAnswerCache(
+        lecture_id=lec.id, instructor_id=prof.id, question_text="실패했던 질문",
+        answer_text="사전 답변", status=qa_avatar.STATUS_FAILED,
+        error_message="본인 아바타를 준비하지 못했습니다.",
+        origin=qa_avatar.ORIGIN_SEED,
+    ))
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    # 실패였던 질문이 재시도되어 제출됨(원인 해소 가정 — MOCK).
+    assert result["submitted"] == 1
+    row = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.lecture_id == lec.id
+    ).first()
+    assert row.status == qa_avatar.STATUS_RENDERING
+    assert row.error_message is None  # 재시도 시 이전 사유 초기화
+
+
 # ── 1-b. 교수자 사전 대답이 있으면 RAG 를 건너뛰고 그 답변으로 렌더 ────────────
 
 
