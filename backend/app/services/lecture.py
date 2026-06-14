@@ -208,6 +208,7 @@ async def get_public_lecture_by_slug(
     )
     course_name = lecture.course.title if lecture.course else None
     duration_sec = await _resolve_lecture_duration_seconds(db, lecture.id)
+    avatar_image_url = await _resolve_avatar_image_url(db, lecture)
 
     return LecturePublicResponse(
         id=lecture.id,
@@ -221,7 +222,57 @@ async def get_public_lecture_by_slug(
         professor_name=professor_name,
         course_name=course_name,
         duration_sec=duration_sec,
+        avatar_image_url=avatar_image_url,
     )
+
+
+async def _resolve_avatar_image_url(db: AsyncSession, lecture) -> str | None:
+    """강의 아바타의 얼굴 이미지 URL(presigned) 을 best-effort 로 해석.
+
+    아바타 종류가 여러 가지(표준 HeyGen / 사진 아바타 룩)라 한 곳에 모여있지 않으므로
+    순서대로 시도하고, 모두 실패하면 교수자 프로필 이미지로 폴백한다. 어느 것도 없으면
+    None — 프론트가 'AI' 텍스트 아이콘으로 폴백한다. 학생 Q&A 채팅 답변자 아이콘 전용.
+    """
+    from sqlalchemy import String as _String, cast as _cast, or_  # noqa: PLC0415
+
+    from app.models.photo_avatar import PhotoAvatarLook  # noqa: PLC0415
+    from app.models.standard_avatar import StandardAvatar  # noqa: PLC0415
+    from app.services.pipeline.s3 import presign_stored_s3_url  # noqa: PLC0415
+
+    avatar_id = (getattr(lecture, "avatar_id", None) or "").strip()
+    img: str | None = None
+
+    if avatar_id:
+        # 1) 표준 아바타(HeyGen avatar_id) preview 이미지
+        img = (
+            await db.execute(
+                select(StandardAvatar.preview_image_url).where(
+                    StandardAvatar.heygen_avatar_id == avatar_id
+                )
+            )
+        ).scalars().first()
+        # 2) 사진 아바타 룩 — heygen_look_id(문자열) 또는 내부 id(uuid→문자열) 일치
+        if not img:
+            look = (
+                await db.execute(
+                    select(
+                        PhotoAvatarLook.preview_image_url, PhotoAvatarLook.image_url
+                    ).where(
+                        or_(
+                            PhotoAvatarLook.heygen_look_id == avatar_id,
+                            _cast(PhotoAvatarLook.id, _String) == avatar_id,
+                        )
+                    )
+                )
+            ).first()
+            if look:
+                img = look[0] or look[1]
+
+    # 3) 폴백 — 교수자 프로필 이미지
+    if not img and lecture.course and lecture.course.instructor:
+        img = lecture.course.instructor.profile_image_url
+
+    return presign_stored_s3_url(img) if img else None
 
 
 async def get_lecture_slideshow_by_slug(

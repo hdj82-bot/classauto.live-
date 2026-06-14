@@ -70,6 +70,8 @@ interface LectureData {
   school_name?: string | null;
   week_number?: number | null;
   lesson_number?: number | null;
+  /** 강의 아바타 얼굴 이미지(presigned). Q&A 채팅 답변자 아이콘에 사용. 없으면 'AI'. */
+  avatar_image_url?: string | null;
 }
 
 interface QAMessage {
@@ -116,7 +118,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // ── 미리보기 자막·속도 사용자 조절 (재생성 없이 즉시 반영) ──────────────────
   // 음성/자막 언어·TTS 마다 체감 동기가 달라, 교수자가 미리보기에서 직접 맞춘다.
   const [avSettingsOpen, setAvSettingsOpen] = useState(false);
-  const [capFont, setCapFont] = useState<"sans" | "serif">("sans");
+  const [capFont, setCapFont] = useState<"sans" | "serif" | "pretendard">(
+    "sans",
+  );
   const [capColor, setCapColor] = useState<string>("#ffffff");
   const [capScale, setCapScale] = useState(1); // 0.7 ~ 1.6
   const [voiceRate, setVoiceRate] = useState(1); // 0.5 ~ 2.0 (음성 빠르기)
@@ -703,6 +707,22 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     return parts.join(" · ");
   })();
 
+  // Q&A 답변자 아이콘 — 강의 아바타 얼굴 이미지가 있으면 그 얼굴, 없으면 'AI' 텍스트.
+  const botAvatar = lecture?.avatar_image_url ? (
+    <span className={`${styles.msgAv} ${styles.msgAvBot}`} aria-label="AI">
+      {/* presigned S3 URL(만료·외부 도메인 가변)이라 next/image 부적합 → 일반 img. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={lecture.avatar_image_url}
+        alt=""
+        className={styles.msgAvImg}
+        draggable={false}
+      />
+    </span>
+  ) : (
+    <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
+  );
+
   return (
     <PlayerSurfaceDark>
       <div className={styles.player} ref={playerRef}>
@@ -1134,6 +1154,13 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                                   >
                                     명조
                                   </button>
+                                  <button
+                                    type="button"
+                                    className={`${styles.avChip} ${capFont === "pretendard" ? styles.avChipOn : ""}`}
+                                    onClick={() => setCapFont("pretendard")}
+                                  >
+                                    프리텐다드
+                                  </button>
                                 </div>
                               </div>
                               <div className={styles.avField}>
@@ -1313,12 +1340,19 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     </button>
                     <input
                       type="range"
-                      className={`slider-rb ${styles.volumeSlider}`}
+                      className={`slider-rb slider-vol ${styles.volumeSlider}`}
                       min={0}
                       max={1}
                       step={0.05}
                       value={muted ? 0 : volume}
                       aria-label="음량"
+                      // 트랙 채움 비율(노브 위치)을 CSS 변수로 전달 → 음량만큼만 골드로
+                      // 채우고 나머지는 비워(검정) 보이게 한다.
+                      style={
+                        {
+                          "--vol": `${(muted ? 0 : volume) * 100}%`,
+                        } as React.CSSProperties
+                      }
                       onChange={(e) => {
                         const v = parseFloat(e.target.value);
                         setVolume(v);
@@ -1379,7 +1413,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               {qaMessages.map((m, i) =>
                 m.role === "assistant" ? (
                   <div key={i} className={styles.msg}>
-                    <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
+                    {botAvatar}
                     <div>
                       {m.text && (
                         <div
@@ -1483,7 +1517,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               )}
               {qaSending && (
                 <div className={styles.msg}>
-                  <span className={`${styles.msgAv} ${styles.msgAvBot}`}>AI</span>
+                  {botAvatar}
                   <div className={styles.bubble}>•••</div>
                 </div>
               )}
@@ -1778,8 +1812,8 @@ function KaraokeCaption({
   userScale?: number;
   /** 미리보기 설정의 사용자 글자색(고대비 모드면 무시). */
   userColor?: string;
-  /** 미리보기 설정의 사용자 폰트(고딕/명조). */
-  userFont?: "sans" | "serif";
+  /** 미리보기 설정의 사용자 폰트(고딕/명조/프리텐다드). */
+  userFont?: "sans" | "serif" | "pretendard";
   /** 미리보기 '자막 빠르기' 리드(초). 양수=빨라짐. */
   leadSeconds?: number;
   /** 자막 위치(영상 영역 기준 정규화 좌표, 박스 중심). null = 기본(하단 중앙). */
@@ -1855,7 +1889,10 @@ function KaraokeCaption({
           fontFamily:
             userFont === "serif"
               ? "var(--font-han, Georgia, serif)"
-              : "var(--font-body, sans-serif)",
+              : userFont === "pretendard"
+                ? "'Pretendard Variable', 'Pretendard', sans-serif"
+                : // 고딕 — 시스템 한글 고딕(프리텐다드와 구분되도록 명시).
+                  "'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
         }
       : null),
     ...(highContrast

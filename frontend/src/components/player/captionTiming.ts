@@ -157,11 +157,39 @@ export function pickActiveCaptionWithCues(
     // 자막 == 발화: cue 텍스트가 곧 표시 자막. 긴 문장은 창 안에서 절 단위로 세분.
     return refineWithinCue(cues[idx], t);
   }
-  // 번역 자막: cue(=발화 문장) 인덱스를 번역 문장에 매핑.
+
+  // 번역 자막(예: 영어 음성 + 한국어 자막): cue 는 발화(원문) 기준이라 번역과
+  // 문장 수가 거의 안 맞는다. 종전엔 수가 다르면 cue 를 통째로 버리고 글자수 추정
+  // 으로 폴백해 정밀 싱크가 사실상 무용지물이었다. 이제는 **항상 cue 의 실제 발성
+  // 타임라인을 쓴다**: cue 로 "발화 진행률 f(0~1)"를 구하고, f 를 번역문 글자수
+  // 누적에 매핑해 현재 번역 문장을 고른다(문장 수 일치 불필요).
   const transSents = splitBySentenceOnly(text);
-  if (transSents.length === cues.length) {
-    return transSents[idx];
+  if (transSents.length <= 1) return transSents[0] ?? text;
+  // 문장 수가 정확히 같으면 1:1 인덱스가 가장 정확.
+  if (transSents.length === cues.length) return transSents[idx];
+
+  // (1) 시간 → 발화 진행률 f: cue 를 글자수로 가중해 누적(원문에서 어디까지
+  //     말했는지)하고, 현재 cue 안에서는 시간 비례로 보간한다.
+  const cueWeights = cues.map((c) => Math.max(1, c.text.length));
+  const cueTotal = cueWeights.reduce((a, b) => a + b, 0);
+  let cumBefore = 0;
+  for (let i = 0; i < idx; i += 1) cumBefore += cueWeights[i] / cueTotal;
+  const within = Math.min(
+    Math.max(
+      (t - cues[idx].start) / Math.max(cues[idx].end - cues[idx].start, 0.001),
+      0,
+    ),
+    1,
+  );
+  const f = Math.min(cumBefore + (cueWeights[idx] / cueTotal) * within, 0.9999);
+
+  // (2) 발화 진행률 f → 번역 문장(글자수 가중 누적).
+  const koWeights = transSents.map((s) => Math.max(1, s.length));
+  const koTotal = koWeights.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  for (let i = 0; i < transSents.length; i += 1) {
+    acc += koWeights[i] / koTotal;
+    if (f < acc) return transSents[i];
   }
-  // 문장 수 불일치 → 검증된 글자수 폴백(실측 elapsed/duration 사용).
-  return pickActiveCaption(text, sourceText, elapsed, duration, leadSeconds);
+  return transSents[transSents.length - 1];
 }
