@@ -34,6 +34,13 @@ export interface GenerationModalProps {
   slideCount: number;
   /** 진행 정보 — 현재까지 처리된 슬라이드 수. */
   processedSlides: number;
+  /**
+   * 추천 질문(Q&A) 아바타 생성 진척 — 등록된 추천 질문이 있을 때만 단계로 표시한다.
+   * 본문(슬라이드 음성)과 병렬로 진행되며, 0 이면 단계 자체를 숨긴다(자동 생성 안 함).
+   */
+  qaTotal?: number;
+  qaReady?: number;
+  qaFailed?: number;
   /** 예상 영상 길이 (예: "5분 12초"). */
   expectedDuration?: string;
   /** 월 한도 — used/limit. */
@@ -103,6 +110,9 @@ export default function GenerationModal({
   lectureTitle,
   slideCount,
   processedSlides,
+  qaTotal = 0,
+  qaReady = 0,
+  qaFailed = 0,
   expectedDuration,
   monthlyUsed,
   monthlyLimit,
@@ -150,7 +160,21 @@ export default function GenerationModal({
   // 굽기·인코딩 없음). 예전 4단계(아바타 합성·인코딩)는 실제 작업이 없어 진척이
   // 멈춘 듯 보였으므로, 실제 파이프라인에 맞춰 2단계로 줄인다. 가짜 소요시간 표기도
   // 제거(측정값이 아니었음).
-  const stages = [
+  // 추천 질문(Q&A) 아바타 — 등록된 질문이 있을 때만 단계로 노출(없으면 비용 0, 숨김).
+  // 본문 음성과 병렬 진행이라 activeStage 와 무관하게 자체 상태(state)를 가진다.
+  const qaActive = qaTotal > 0;
+  const qaSettled = qaReady + qaFailed;
+  const qaAllDone = qaActive && qaSettled >= qaTotal;
+
+  type Stage = {
+    id: number;
+    title: string;
+    detail: string;
+    live?: string;
+    /** 지정되면 activeStage 휴리스틱 대신 이 상태를 그대로 쓴다(병렬 단계용). */
+    state?: "done" | "active" | "pending";
+  };
+  const stages: Stage[] = [
     {
       id: 1,
       title: "스크립트 검토 완료",
@@ -165,6 +189,18 @@ export default function GenerationModal({
         : `현재: 슬라이드 ${Math.min(processedSlides, slideCount)} 음성 합성`,
     },
   ];
+  if (qaActive) {
+    stages.push({
+      id: 3,
+      title: qaAllDone
+        ? "추천 질문(Q&A) 준비 완료"
+        : "추천 질문(Q&A) 아바타 생성 중…",
+      detail:
+        `${qaReady} / ${qaTotal} 준비됨` + (qaFailed ? ` · ${qaFailed} 실패` : ""),
+      state: qaAllDone ? "done" : "active",
+      live: qaAllDone ? undefined : "학생 추천 질문 답변 영상을 함께 만드는 중",
+    });
+  }
 
   return (
     <div
@@ -377,8 +413,14 @@ export default function GenerationModal({
             }}
           >
             {stages.map((s, i) => {
+              // 병렬 단계(Q&A)는 자체 state 를 그대로 쓰고, 순차 단계는 activeStage 휴리스틱.
               const state: "done" | "active" | "pending" =
-                done || s.id < activeStage ? "done" : s.id === activeStage ? "active" : "pending";
+                s.state ??
+                (done || s.id < activeStage
+                  ? "done"
+                  : s.id === activeStage
+                    ? "active"
+                    : "pending");
               return (
                 <div
                   key={s.id}

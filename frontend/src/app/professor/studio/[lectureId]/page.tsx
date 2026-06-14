@@ -1474,6 +1474,10 @@ export default function StudioWizardPage() {
         lectureTitle={lecture.title}
         slideCount={slides.length}
         processedSlides={Math.min(genCompleted, slides.length)}
+        // 추천 질문(Q&A) 아바타 진척 — 저장된(status 보유) 질문 기준. 0 이면 모달에서 숨김.
+        qaTotal={seedQuestions.filter((q) => !!q.status).length}
+        qaReady={seedQuestions.filter((q) => q.status === "ready").length}
+        qaFailed={seedQuestions.filter((q) => q.status === "failed").length}
         done={genDone}
         stalled={genStalled}
         onRetry={handleRetryRender}
