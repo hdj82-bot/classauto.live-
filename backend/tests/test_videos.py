@@ -387,6 +387,83 @@ async def test_rerender_done_video_no_changes_stays_done(
     assert data["status"] == "done"
 
 
+@pytest.mark.asyncio
+async def test_rerender_detects_voice_change(client, professor, lecture, db):
+    """텍스트가 그대로여도 음성(보이스/속도)을 바꿨으면 해당 슬라이드를 재합성한다."""
+    from unittest.mock import patch
+
+    from app.models.video import Video, VideoScript
+    from app.models.video_render import RenderStatus, VideoRender
+
+    segments = [
+        {"slide_index": 0, "text": "그대로인 발화", "start_seconds": 0, "end_seconds": 10},
+    ]
+    # 강의의 현재 보이스를 변경된 상태로 둔다.
+    lecture.voice_id = "new-voice"
+    lecture.voice_speed = 1.0
+    video = Video(id=uuid.uuid4(), lecture_id=lecture.id, status=VideoStatus.done)
+    db.add(video)
+    await db.flush()
+    db.add(VideoScript(
+        id=uuid.uuid4(), video_id=video.id,
+        ai_segments=segments, segments=list(segments),
+    ))
+    # 렌더는 예전 보이스로 합성됨(텍스트는 동일).
+    db.add(VideoRender(
+        id=uuid.uuid4(), lecture_id=lecture.id, instructor_id=professor.id,
+        avatar_id="avatar-x", status=RenderStatus.ready,
+        audio_url="https://s3/audio/0.mp3", script_text="그대로인 발화",
+        slide_number=0, voice_id="old-voice", voice_speed=1.0,
+    ))
+    await db.flush()
+
+    with patch("app.tasks.render.render_slide.delay") as mock_delay:
+        resp = await client.post(
+            f"/api/videos/{video.id}/rerender",
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["rerendered_segments"] == 1  # 텍스트 동일해도 음성 변경 → 재합성
+    assert data["status"] == "rendering"
+    mock_delay.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_rerender_legacy_render_without_voice_record_no_regression(
+    client, professor, lecture, db
+):
+    """구버전 렌더(voice 기록 NULL)는 음성 변경을 판별할 수 없어 텍스트 기준만 — 무회귀."""
+    from app.models.video import Video, VideoScript
+    from app.models.video_render import RenderStatus, VideoRender
+
+    segments = [
+        {"slide_index": 0, "text": "그대로인 발화", "start_seconds": 0, "end_seconds": 10},
+    ]
+    lecture.voice_id = "new-voice"  # 바뀌었지만 렌더에 기록이 없어 감지 불가.
+    video = Video(id=uuid.uuid4(), lecture_id=lecture.id, status=VideoStatus.done)
+    db.add(video)
+    await db.flush()
+    db.add(VideoScript(
+        id=uuid.uuid4(), video_id=video.id,
+        ai_segments=segments, segments=list(segments),
+    ))
+    db.add(VideoRender(
+        id=uuid.uuid4(), lecture_id=lecture.id, instructor_id=professor.id,
+        avatar_id="avatar-x", status=RenderStatus.ready,
+        audio_url="https://s3/audio/0.mp3", script_text="그대로인 발화",
+        slide_number=0,  # voice_id/voice_speed 기록 없음(NULL)
+    ))
+    await db.flush()
+
+    resp = await client.post(
+        f"/api/videos/{video.id}/rerender",
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200
+    assert resp.json()["rerendered_segments"] == 0
+
+
 # ── 헬퍼 ─────────────────────────────────────────────────────────────────────
 
 def _make_other_professor():

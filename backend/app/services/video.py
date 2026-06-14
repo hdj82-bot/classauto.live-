@@ -543,6 +543,21 @@ async def approve_video(
 
 # ── 다시 제작(재생성) ─────────────────────────────────────────────────────────
 
+
+def _render_voice_matches(render, cur_voice_id, cur_voice_speed) -> bool:
+    """이 render 의 음원이 강의의 현재 보이스/속도로 합성됐는지.
+
+    render.voice_speed 가 NULL 이면 보이스 추적 이전(구버전) 렌더라 판별 불가 →
+    True 로 둬 텍스트 기준으로만 비교한다(무회귀). 추적 기록이 있으면 보이스 id 와
+    속도(부동소수 오차 허용)를 비교해 하나라도 다르면 False(=재합성 필요).
+    """
+    if getattr(render, "voice_speed", None) is None:
+        return True
+    if (getattr(render, "voice_id", None) or None) != (cur_voice_id or None):
+        return False
+    return abs(float(render.voice_speed) - float(cur_voice_speed)) < 1e-6
+
+
 async def rerender_video(
     db: AsyncSession,
     video_id: uuid.UUID,
@@ -611,10 +626,14 @@ async def rerender_video(
         if r.slide_number is not None:
             latest_by_slide[int(r.slide_number)] = r
 
-    # 변경된 구간만 재합성한다(재과금 최소화). 발화 텍스트가 그대로이고 이미
-    # 완료(ready+오디오)된 슬라이드는 기존 음성을 재사용하므로 비용이 들지 않는다.
-    # 텍스트가 바뀐 슬라이드만 audio_url 을 비워 TTS 를 새로 합성한다.
-    # (주의: 음성/속도 변경은 render 행에 기록이 없어 텍스트 기준으로만 감지한다.)
+    # 강의의 현재 보이스/속도 — render 에 기록된 합성 당시 값과 비교해 음성/속도
+    # 변경도 감지한다(텍스트가 그대로여도 보이스·속도를 바꿨으면 재합성해야 한다).
+    cur_voice_id = (lecture.voice_id or None) if lecture else None
+    cur_voice_speed = (getattr(lecture, "voice_speed", None) or 1.3) if lecture else 1.3
+
+    # 변경된 구간만 재합성한다(재과금 최소화). 발화 텍스트·보이스·속도가 모두 그대로이고
+    # 이미 완료(ready+오디오)된 슬라이드는 기존 음성을 재사용하므로 비용이 들지 않는다.
+    # 바뀐 슬라이드만 audio_url 을 비워 TTS 를 새로 합성한다.
     to_enqueue: list[tuple[str, str]] = []
     reused_ready = 0  # 변경 없이 재사용된(이미 ready+음성) 슬라이드 수
     for seg in segments:
@@ -627,12 +646,13 @@ async def rerender_video(
             if slide_number is not None
             else None
         )
-        # 변경 없음 + 이미 완료 → 재사용(비용 0).
+        # 변경 없음(텍스트+음성+속도) + 이미 완료 → 재사용(비용 0).
         if (
             render is not None
             and render.status == RenderStatus.ready
             and render.audio_url
             and (render.script_text or "") == script_text
+            and _render_voice_matches(render, cur_voice_id, cur_voice_speed)
         ):
             reused_ready += 1
             continue
