@@ -157,7 +157,66 @@ async def test_elevenlabs_synthesize_422_raises_immediately():
     with pytest.raises(elevenlabs_client.ElevenLabsError):
         await elevenlabs_client.synthesize("bad payload")
 
+    assert route.call_count == 1  # 4xx 는 재시도하지 않음
+
+
+# ── Forced Alignment (자막 정밀 싱크) ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_forced_alignment_200_returns_alignment():
+    payload = {
+        "characters": [{"text": "안", "start": 0.0, "end": 0.5}],
+        "words": [{"text": "안", "start": 0.0, "end": 0.5, "loss": 0.1}],
+        "loss": 0.1,
+    }
+    route = respx.post(
+        "https://api.elevenlabs.io/v1/forced-alignment"
+    ).mock(return_value=httpx.Response(200, json=payload))
+
+    result = await elevenlabs_client.align_forced(b"MP3", "안")
+
+    assert result == payload
+    assert route.called
+    request = route.calls.last.request
+    assert request.headers.get("xi-api-key") == "test-elevenlabs-key"
+    # multipart 로 file + text 가 실린다.
+    assert b'name="file"' in request.content
+    assert b'name="text"' in request.content
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_forced_alignment_429_retries_then_quota():
+    route = respx.post(
+        "https://api.elevenlabs.io/v1/forced-alignment"
+    ).mock(return_value=httpx.Response(429, text="rate"))
+
+    with pytest.raises(elevenlabs_client.ElevenLabsQuotaError):
+        await elevenlabs_client.align_forced(b"MP3", "안녕")
+
+    assert route.call_count == 3
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_forced_alignment_401_raises_auth_no_retry():
+    route = respx.post(
+        "https://api.elevenlabs.io/v1/forced-alignment"
+    ).mock(return_value=httpx.Response(401, text="bad key"))
+
+    with pytest.raises(elevenlabs_client.ElevenLabsAuthError):
+        await elevenlabs_client.align_forced(b"MP3", "안녕")
+
     assert route.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_forced_alignment_missing_key_raises_auth(monkeypatch):
+    monkeypatch.setattr(settings, "ELEVENLABS_API_KEY", "")
+    with pytest.raises(elevenlabs_client.ElevenLabsAuthError):
+        await elevenlabs_client.align_forced(b"MP3", "안녕")
 
 
 # ── ElevenLabs synthesize: v3 voice_settings 정리 ────────────────────────────

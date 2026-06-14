@@ -17,6 +17,13 @@ import { api, bootstrapAuth } from "@/lib/api";
  * 다음 슬라이드 음성을 이어 재생한다.
  */
 
+/** 자막 정밀 싱크 cue — 발성 시각(해당 슬라이드 음성 자체 타임라인, 초) 기준. */
+export interface SubtitleCue {
+  start: number;
+  end: number;
+  text: string;
+}
+
 export interface SlideshowSlide {
   slide_index: number;
   image_url: string | null;
@@ -25,6 +32,8 @@ export interface SlideshowSlide {
   end_seconds: number;
   text: string;
   subtitle_text: string | null;
+  /** 발성 시각 기반 자막 cue. null = 정렬 미수행/실패 → 글자수 폴백. */
+  subtitle_cues: SubtitleCue[] | null;
 }
 
 interface SlideshowWire {

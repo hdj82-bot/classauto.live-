@@ -259,6 +259,96 @@ def _status_from_exc(exc: BaseException) -> int | None:
     return None
 
 
+# ── Forced Alignment (자막 정밀 싱크) ─────────────────────────────────────────
+# 합성과 독립적인 별도 API. 이미 만들어진 audio + 그 transcript 를 주면 글자/단어별
+# 발성 시각(초)을 돌려준다. 합성 모델(v3/v2/Google)·속도 후처리·구간 이어붙임과
+# 무관하게 "최종 음원"에 직접 정렬하므로 시각이 재생 타임라인과 정확히 일치한다.
+# 근거: https://elevenlabs.io/docs/api-reference/forced-alignment
+
+
+async def align_forced(
+    audio_bytes: bytes,
+    text: str,
+    *,
+    filename: str = "audio.mp3",
+    timeout: float = _DEFAULT_TIMEOUT,
+) -> dict[str, Any]:
+    """ElevenLabs Forced Alignment (``POST /v1/forced-alignment``).
+
+    audio_bytes 와 그 발화 transcript(text)를 정렬해 글자/단어별 시각을 반환한다.
+    반환 shape: ``{"characters": [{"text","start","end"}, ...],
+    "words": [{"text","start","end","loss"}, ...], "loss": float}``.
+    start/end 는 audio_bytes 의 자체 타임라인 기준 초. 호출부(tts.py)가 이 결과로
+    문장 단위 cue 를 만든다. 합성 hot-path 가 아니므로 실패는 호출부가 best-effort
+    로 삼키게 도메인 예외로 변환해 던진다(자막은 폴백으로 degrade).
+    """
+    if not (settings.ELEVENLABS_API_KEY or "").strip():
+        raise ElevenLabsAuthError("ELEVENLABS_API_KEY 미설정")
+    if not audio_bytes:
+        raise ElevenLabsError("align_forced: audio_bytes 가 비어있음")
+    if not (text or "").strip():
+        raise ElevenLabsError("align_forced: text 가 비어있음")
+    try:
+        return await _align_forced_with_retry(
+            audio_bytes=audio_bytes,
+            text=text,
+            filename=filename,
+            timeout=timeout,
+        )
+    except (RetryableHTTPError, httpx.HTTPStatusError, httpx.TimeoutException) as exc:
+        status = _status_from_exc(exc)
+        if status == 429:
+            raise ElevenLabsQuotaError(
+                f"ElevenLabs forced-alignment 쿼터/레이트리밋 — 재시도 {DEFAULT_MAX_ATTEMPTS}회 초과"
+            ) from exc
+        raise ElevenLabsServerError(
+            f"ElevenLabs forced-alignment 서버 오류 — 재시도 {DEFAULT_MAX_ATTEMPTS}회 초과: {exc}"
+        ) from exc
+
+
+@track_external_api("elevenlabs")
+@retry_external(label="elevenlabs.forced_alignment")
+async def _align_forced_with_retry(
+    *,
+    audio_bytes: bytes,
+    text: str,
+    filename: str,
+    timeout: float,
+) -> dict[str, Any]:
+    url = f"{_BASE_URL}/forced-alignment"
+    headers = {"xi-api-key": settings.ELEVENLABS_API_KEY, "Accept": "application/json"}
+    files = [("file", (filename, audio_bytes, "audio/mpeg"))]
+    data = {"text": text}
+    logger.info(
+        "ElevenLabs forced-alignment 요청: chars=%d, audio_bytes=%d",
+        len(text), len(audio_bytes),
+    )
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        resp = await client.post(url, headers=headers, data=data, files=files)
+    return _interpret_alignment_response(resp)
+
+
+def _interpret_alignment_response(resp: httpx.Response) -> dict[str, Any]:
+    if resp.status_code == 200:
+        data = resp.json()
+        return data if isinstance(data, dict) else {}
+    if resp.status_code == 401:
+        raise ElevenLabsAuthError(f"ElevenLabs forced-alignment 401: {resp.text[:300]}")
+    if resp.status_code in (429, 500, 502, 503, 504):
+        raise httpx.HTTPStatusError(
+            f"ElevenLabs forced-alignment HTTP {resp.status_code}",
+            request=resp.request,
+            response=resp,
+        )
+    if 400 <= resp.status_code < 500:
+        raise ElevenLabsError(
+            f"ElevenLabs forced-alignment HTTP {resp.status_code}: {resp.text[:300]}"
+        )
+    raise ElevenLabsServerError(
+        f"ElevenLabs forced-alignment HTTP {resp.status_code}: {resp.text[:300]}"
+    )
+
+
 # ── 보이스 목록 (선택 UI) ─────────────────────────────────────────────────────
 
 

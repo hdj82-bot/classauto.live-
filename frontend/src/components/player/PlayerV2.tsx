@@ -4,7 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, API_URL, userApi, bootstrapAuth } from "@/lib/api";
 import { useSlideshowPlayback } from "./useSlideshowPlayback";
-import { pickActiveCaption, DEFAULT_CAPTION_LEAD_SECONDS } from "./captionTiming";
+import {
+  pickActiveCaptionWithCues,
+  DEFAULT_CAPTION_LEAD_SECONDS,
+} from "./captionTiming";
+import type { SubtitleCue } from "./useSlideshowPlayback";
 import { tokens as tokenStorage } from "@/lib/tokens";
 import { useI18n } from "@/contexts/I18nContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -767,6 +771,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     sourceText={
                       currentSlide.subtitle_text ? currentSlide.text : undefined
                     }
+                    cues={currentSlide.subtitle_cues}
                     elapsed={player.currentSlideElapsed}
                     duration={player.currentSlideDuration}
                     fontSize={a11y.fontSize}
@@ -1506,6 +1511,7 @@ function KaraokeCaption({
   className,
   text,
   sourceText,
+  cues,
   elapsed,
   duration,
   fontSize = "normal",
@@ -1518,6 +1524,8 @@ function KaraokeCaption({
   className?: string;
   text: string;
   sourceText?: string;
+  /** 발성 시각 cue(있으면 정밀 싱크, 없으면 글자수 폴백). */
+  cues?: SubtitleCue[] | null;
   elapsed: number;
   duration: number;
   /** 접근성 글씨 크기 — 자막 텍스트를 확대한다. */
@@ -1562,7 +1570,7 @@ function KaraokeCaption({
   };
   return (
     <div className={className} style={style} aria-live="off">
-      {pickActiveCaption(text, sourceText, elapsed, duration, leadSeconds)}
+      {pickActiveCaptionWithCues(text, sourceText, cues, elapsed, duration, leadSeconds)}
     </div>
   );
 }

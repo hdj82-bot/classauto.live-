@@ -165,6 +165,9 @@ def render_slide(
                     gender=voice_gender,
                     speed=voice_speed,
                     cloned=is_cloned_voice,
+                    # 슬라이드쇼 본문만 자막 정밀 싱크 cue 가 필요하다(학생 플레이어가
+                    # 슬라이드 이미지+음성을 동기 재생하며 자막을 cue 로 싱크).
+                    with_alignment=slideshow_mode,
                 )
             )
 
@@ -184,6 +187,10 @@ def render_slide(
             audio_url = s3_svc.upload_audio_bytes(tts_result.audio_bytes, str(render.id))
             render.audio_url = audio_url
             render.tts_provider = tts_result.provider
+            # 자막 정밀 싱크 cue (Forced Alignment 성공 시에만 non-None). 실패면 None
+            # 그대로 두어 플레이어가 글자수 균등분배로 폴백한다. 음원과 같은 트랜잭션에
+            # 커밋해 audio_url 과 cue 가 항상 짝을 이루게 한다.
+            render.subtitle_cues = tts_result.subtitle_cues
             db.commit()
         else:
             logger.info(

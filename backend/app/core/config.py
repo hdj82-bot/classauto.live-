@@ -228,6 +228,11 @@ class Settings(BaseSettings):
     ELEVENLABS_CLONE_USE_SPEAKER_BOOST: bool = True
     # 합성 출력 포맷(품질). mp3_44100_128(=44.1kHz/128kbps) 이상 권장.
     ELEVENLABS_OUTPUT_FORMAT: str = "mp3_44100_128"
+    # 자막 정밀 싱크: 렌더 시 ElevenLabs Forced Alignment 로 슬라이드 음성의 실제
+    # 발성 시각을 산출해 VideoRender.subtitle_cues 에 저장한다. 플레이어는 이 cue 로
+    # 자막을 싱크하고, 없으면 글자수 균등분배로 폴백한다. 합성 경로와 독립적이며
+    # 실패해도 렌더는 진행된다(best-effort). False 면 정렬 호출 자체를 건너뛴다.
+    SUBTITLE_ALIGNMENT_ENABLED: bool = True
     # IVC 생성 시 업로드 샘플의 배경 잡음 제거(마이크 녹음 품질 보정 → 클론 fidelity↑).
     ELEVENLABS_IVC_REMOVE_NOISE: bool = True
     # 교수자 음성 선택 UI 에 노출할 큐레이션 보이스 ID(쉼표 구분). 비우면

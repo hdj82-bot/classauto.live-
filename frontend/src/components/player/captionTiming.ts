@@ -5,7 +5,11 @@
  * 여러 문장이 있으면 음성은 다음 문장으로 가는데 자막 블록은 그대로 남아 어긋난다.
  * 여기서는 **실측 음성 기준** 경과 시간(elapsed)·길이(duration)로 현재 문장을 고른다.
  * 추정 타임라인(start/end_seconds, 5자/초)을 쓰면 실측 재생과 어긋나므로 쓰지 않는다.
+ *
+ * 가장 정확한 경로는 ``pickActiveCaptionWithCues`` — 렌더 시 Forced Alignment 로
+ * 기록한 실제 발성 시각(cue)을 쓴다. cue 가 없을 때만 아래 글자수 비례로 폴백한다.
  */
+import type { SubtitleCue } from "./useSlideshowPlayback";
 
 /** 절(clause) 단위로 더 쪼갤 때의 최소 길이 — 이보다 짧으면 그대로 둔다. */
 const CLAUSE_SPLIT_MIN = 28;
@@ -91,4 +95,73 @@ export function pickActiveCaption(
     if (frac < acc) return sentences[i];
   }
   return sentences[sentences.length - 1];
+}
+
+/** 종결부호·줄바꿈만으로 문장 분리(절 세분 없음). cue 입도와 맞추는 용도. */
+function splitBySentenceOnly(text: string): string[] {
+  const s = text
+    .split(/(?<=[。．.!?！？\n])/u)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return s.length ? s : [text];
+}
+
+/** cue 시각창 안에서 긴 문장을 절 단위로 세분해 글자수 비례로 현재 조각을 고른다. */
+function refineWithinCue(cue: SubtitleCue, t: number): string {
+  const pieces = splitIntoSentences(cue.text);
+  if (pieces.length <= 1) return cue.text;
+  const span = Math.max(cue.end - cue.start, 0.001);
+  const weights = pieces.map((p) => Math.max(1, p.length));
+  const total = weights.reduce((a, b) => a + b, 0);
+  const frac = Math.min(Math.max((t - cue.start) / span, 0), 0.9999);
+  let acc = 0;
+  for (let i = 0; i < pieces.length; i += 1) {
+    acc += weights[i] / total;
+    if (frac < acc) return pieces[i];
+  }
+  return pieces[pieces.length - 1];
+}
+
+/**
+ * 발성 시각 cue(Forced Alignment)로 현재 자막을 고른다. **cue 가 있으면** 글자수
+ * 추정이 아니라 실제 발성 시각으로 싱크하므로 강의·언어와 무관하게 정확하다.
+ * cue 가 없으면(정렬 미수행/실패) 기존 ``pickActiveCaption`` 글자수 방식으로 폴백.
+ *
+ * @param text       표시할 자막(번역 자막 또는 발화 원문).
+ * @param sourceText 발화 원문. 자막과 다르면(=번역) cue 인덱스를 번역 문장에 매핑.
+ * @param cues       발성 시각 cue [{start,end,text}] (슬라이드 음성 자체 타임라인, 초).
+ * @param elapsed    현재 슬라이드가 시작된 뒤 흐른 실측 시간(초).
+ * @param duration   현재 슬라이드의 실측 재생 길이(초) — 폴백 경로에서만 사용.
+ * @param leadSeconds 자막을 음성보다 앞당기는 리드(초).
+ */
+export function pickActiveCaptionWithCues(
+  text: string,
+  sourceText: string | undefined,
+  cues: SubtitleCue[] | null | undefined,
+  elapsed: number,
+  duration: number,
+  leadSeconds: number = DEFAULT_CAPTION_LEAD_SECONDS,
+): string {
+  if (!cues || cues.length === 0) {
+    return pickActiveCaption(text, sourceText, elapsed, duration, leadSeconds);
+  }
+  const t = elapsed + leadSeconds;
+  // 현재 cue 인덱스 — start 기준(창 사이 공백·반올림에 견고).
+  let idx = 0;
+  for (let i = 0; i < cues.length; i += 1) {
+    if (t >= cues[i].start) idx = i;
+    else break;
+  }
+  const isTranslated = !!sourceText && sourceText.trim() !== text.trim();
+  if (!isTranslated) {
+    // 자막 == 발화: cue 텍스트가 곧 표시 자막. 긴 문장은 창 안에서 절 단위로 세분.
+    return refineWithinCue(cues[idx], t);
+  }
+  // 번역 자막: cue(=발화 문장) 인덱스를 번역 문장에 매핑.
+  const transSents = splitBySentenceOnly(text);
+  if (transSents.length === cues.length) {
+    return transSents[idx];
+  }
+  // 문장 수 불일치 → 검증된 글자수 폴백(실측 elapsed/duration 사용).
+  return pickActiveCaption(text, sourceText, elapsed, duration, leadSeconds);
 }
