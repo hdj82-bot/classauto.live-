@@ -9,7 +9,11 @@ import {
 } from "react";
 import Link from "next/link";
 import { useToast } from "@/components/ui/Toast";
-import { listHeyGenAccountAvatars, registerStandardAvatar } from "./avatarsApi";
+import {
+  listFavoriteAvatars,
+  listHeyGenAccountAvatars,
+  registerStandardAvatar,
+} from "./avatarsApi";
 import type { Avatar, StandardAvatar } from "./avatarsTypes";
 
 interface StandardAvatarRegisterCardProps {
@@ -27,23 +31,19 @@ function backendDetail(err: unknown): string | null {
   return typeof d === "string" && d.trim() ? d : null;
 }
 
-// 검색 결과를 한 번에 너무 많이 그리지 않도록 캡(이미지 카드라 무겁다). 초과분은
-// "검색으로 좁히세요" 안내로 대체한다.
-const MAX_VISIBLE = 48;
-
 /**
- * "표준 아바타 등록" — HeyGen 계정 아바타를 이름·썸네일로 골라 등록한다.
+ * "표준 아바타 등록" — 둘러보기에서 즐겨찾기(★)한 표준 아바타만 보여 준다.
  *
- * Pay-As-You-Go 등급은 커스텀 Video Avatar 를 API 로 생성할 수 없으므로(Enterprise
- * 전용), 교수자가 HeyGen 웹 스튜디오에서 본인 영상으로 Video Avatar 를 1회 만든 뒤
- * 그 아바타를 여기서 고른다. avatar_id 를 직접 찾을 필요 없이, 계정 아바타 목록을
- * 불러와 스튜디오에서 지은 이름으로 검색·선택한다(고른 id 는 /v2/avatars 출처라
- * 등록 검증을 항상 통과). 목록을 못 불러오면 avatar_id 직접 입력으로 폴백한다.
+ * 종전엔 계정 전체 아바타(수백~수천 개)를 인라인 피커로 깔고 avatar_id 직접 입력까지
+ * 두어 복잡했다. 이제 선택은 "전체 공개 아바타 둘러보기"에서 하고(거기서 ★ 즐겨찾기),
+ * 이 카드는 즐겨찾기한 것만 추려 등록·적용한다(2026-06-14 사용자 결정).
  *
- * 카드(썸네일)를 누르면 전체 둘러보기 페이지와 동일하게 **크게 보기(라이트박스)**가
- * 열리고, 거기서 표시 이름을 다듬은 뒤 "이 아바타 등록"으로 바로 등록한다. 이전엔
- * 클릭이 "선택만" 하고 하단의 별도 버튼을 눌러야 등록돼, 클릭해도 상단 "룩"에 변화가
- * 없어 보였다(2026-06-09 사용자 피드백). 클릭 → 큰 화면 → 등록의 한 흐름으로 통일한다.
+ * 표준 등록은 Video Avatar(/v2/avatars) 전용이므로, 즐겨찾기 id 를 계정 아바타 목록과
+ * 교차해 그 목록에 있는 것만(=등록 가능한 표준 아바타) 메타데이터와 함께 보여 준다.
+ * 포토 아바타 룩 즐겨찾기는 여기에 나타나지 않는다(표준 등록 대상이 아님).
+ *
+ * 카드(썸네일)를 누르면 크게 보기(라이트박스)가 열리고, 표시 이름을 다듬은 뒤
+ * "이 아바타 등록"으로 바로 등록한다.
  */
 export default function StandardAvatarRegisterCard({
   onRegistered,
@@ -55,12 +55,12 @@ export default function StandardAvatarRegisterCard({
   }`;
   const { toast } = useToast();
 
-  // 계정 아바타 목록(피커). null = 아직 로드 전.
+  // 즐겨찾기 id 집합 + 계정 아바타 목록(메타데이터 출처). null = 로드 전.
+  const [favoriteIds, setFavoriteIds] = useState<Set<string> | null>(null);
   const [accountAvatars, setAccountAvatars] = useState<Avatar[] | null>(null);
   const [loadStatus, setLoadStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
-  const [search, setSearch] = useState("");
 
   // 크게 보기(라이트박스) 대상 + 그 안에서 편집 중인 표시 이름. null = 닫힘.
   const [zoom, setZoom] = useState<Avatar | null>(null);
@@ -68,40 +68,32 @@ export default function StandardAvatarRegisterCard({
   // 등록 진행 중인 아바타 id(라이트박스 버튼 busy 표시).
   const [registeringId, setRegisteringId] = useState<string | null>(null);
 
-  // avatar_id 직접 입력(폴백). 목록을 못 불러왔거나 사용자가 펼치면 노출.
-  const [manualOpen, setManualOpen] = useState(false);
-  const [manualId, setManualId] = useState("");
-  const [manualName, setManualName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const loadAccount = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoadStatus("loading");
     try {
-      const list = await listHeyGenAccountAvatars();
-      setAccountAvatars(list);
+      const [favs, account] = await Promise.all([
+        listFavoriteAvatars(),
+        listHeyGenAccountAvatars(),
+      ]);
+      setFavoriteIds(new Set(favs));
+      setAccountAvatars(account);
       setLoadStatus("ready");
-      // 목록이 비면(MOCK/미배포/계정에 아바타 없음) 수동 입력을 바로 펼친다.
-      if (list.length === 0) setManualOpen(true);
     } catch {
+      setFavoriteIds(new Set());
       setAccountAvatars([]);
       setLoadStatus("error");
-      setManualOpen(true);
     }
   }, []);
 
   useEffect(() => {
-    void loadAccount();
-  }, [loadAccount]);
+    void load();
+  }, [load]);
 
-  const filtered = useMemo(() => {
-    const list = accountAvatars ?? [];
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter((a) => a.name.toLowerCase().includes(q));
-  }, [accountAvatars, search]);
-
-  const visible = filtered.slice(0, MAX_VISIBLE);
-  const overflow = filtered.length - visible.length;
+  // 즐겨찾기한 표준(Video) 아바타 — 계정 목록에 있는 즐겨찾기만(포토 룩 제외).
+  const favoriteAvatars = useMemo(() => {
+    if (!accountAvatars || !favoriteIds) return [];
+    return accountAvatars.filter((a) => favoriteIds.has(a.id));
+  }, [accountAvatars, favoriteIds]);
 
   // 썸네일 클릭 — 크게 보기를 열고 표시 이름을 그 아바타 이름으로 채운다(이후 편집 가능).
   const openZoom = useCallback((a: Avatar) => {
@@ -109,8 +101,8 @@ export default function StandardAvatarRegisterCard({
     setZoomName(a.name ?? "");
   }, []);
 
-  // 등록 — 피커에서 고른 아바타를 메타데이터와 함께 등록(서버 재조회 생략)하고,
-  // 라이트박스를 닫은 뒤 부모에 알린다(부모가 상단 "룩"으로 선택 + 라이브러리 갱신).
+  // 등록 — 고른 아바타를 메타데이터와 함께 등록(서버 재조회 생략)하고, 라이트박스를
+  // 닫은 뒤 부모에 알린다(부모가 상단 "룩"으로 선택 + 라이브러리 갱신).
   const registerPicked = useCallback(
     async (a: Avatar, displayName: string) => {
       setRegisteringId(a.id);
@@ -136,28 +128,6 @@ export default function StandardAvatarRegisterCard({
     [toast, t, onRegistered],
   );
 
-  // 수동 입력(avatar_id 직접) 등록 — 메타데이터 없이 id 만 보낸다(서버가 조회).
-  const handleManualSubmit = useCallback(async () => {
-    const id = manualId.trim();
-    if (!id) return;
-    setSubmitting(true);
-    try {
-      const avatar = await registerStandardAvatar(
-        id,
-        manualName.trim() || null,
-        null,
-      );
-      toast(t("standardRegisterSuccess"), "success");
-      setManualId("");
-      setManualName("");
-      onRegistered?.(avatar);
-    } catch (err) {
-      toast(backendDetail(err) ?? t("standardRegisterError"), "error");
-    } finally {
-      setSubmitting(false);
-    }
-  }, [manualId, manualName, toast, t, onRegistered]);
-
   return (
     <div data-testid="standard-avatar-register" style={cardStyle}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
@@ -169,121 +139,51 @@ export default function StandardAvatarRegisterCard({
         {t("standardBrowseLink")} →
       </Link>
 
-      {/* 계정 아바타 피커 — 이름으로 검색해 본인 스튜디오 아바타를 고른다. */}
-      {loadStatus !== "error" && (accountAvatars?.length ?? 0) > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("standardPickerSearchPlaceholder")}
-            data-testid="standard-picker-search"
-            style={inputStyle}
-          />
-          {filtered.length === 0 ? (
-            <p style={mutedNote}>{t("standardPickerSearchEmpty")}</p>
-          ) : (
-            <>
-              <div style={gridStyle} data-testid="standard-picker-grid">
-                {visible.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => openZoom(a)}
-                    data-testid={`standard-picker-item-${a.id}`}
-                    style={pickStyle}
-                  >
-                    <span style={thumbWrap}>
-                      {a.preview_image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={a.preview_image_url}
-                          alt={a.name}
-                          loading="lazy"
-                          style={fillStyle}
-                        />
-                      ) : (
-                        <span aria-hidden="true" style={thumbInitial}>
-                          {a.name.slice(0, 1)}
-                        </span>
-                      )}
-                      <span aria-hidden="true" style={zoomHint}>
-                        ⤢
-                      </span>
-                    </span>
-                    <span style={pickName} title={a.name}>
-                      {a.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              {overflow > 0 && (
-                <p style={mutedNote}>
-                  {t("standardPickerMoreHint", { count: overflow })}
-                </p>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {loadStatus === "loading" && (
-        <p style={mutedNote} data-testid="standard-picker-loading">
+      {loadStatus === "loading" ? (
+        <p style={mutedNote} data-testid="standard-fav-loading">
           {t("standardPickerLoading")}
         </p>
-      )}
-      {loadStatus === "error" && (
+      ) : loadStatus === "error" ? (
         <p role="alert" style={errorNote} data-testid="standard-picker-error">
           {t("standardPickerError")}
         </p>
-      )}
-
-      {/* avatar_id 직접 입력(폴백) — 목록에서 못 찾거나 id 를 이미 아는 경우. */}
-      <button
-        type="button"
-        onClick={() => setManualOpen((v) => !v)}
-        data-testid="standard-manual-toggle"
-        style={manualToggleBtn}
-      >
-        {manualOpen ? t("standardManualHide") : t("standardManualToggle")}
-      </button>
-      {manualOpen && (
-        <div style={{ marginTop: 10 }}>
-          <input
-            value={manualId}
-            onChange={(e) => setManualId(e.target.value)}
-            placeholder={t("standardRegisterIdPlaceholder")}
-            data-testid="standard-avatar-id-input"
-            maxLength={255}
-            style={inputStyle}
-          />
-          <label style={{ ...labelStyle, marginTop: 10 }}>
-            {t("standardRegisterNameLabel")}
-            <input
-              value={manualName}
-              onChange={(e) => setManualName(e.target.value)}
-              placeholder={t("standardRegisterNamePlaceholder")}
-              data-testid="standard-avatar-name-input"
-              maxLength={80}
-              style={inputStyle}
-            />
-          </label>
-          <ol style={guideStyle}>
-            <li>{t("standardRegisterStep1")}</li>
-            <li>{t("standardRegisterStep2Api")}</li>
-          </ol>
-          <button
-            type="button"
-            onClick={handleManualSubmit}
-            disabled={submitting || !manualId.trim()}
-            data-testid="standard-avatar-register-submit"
-            style={{
-              ...submitBtn,
-              opacity: submitting || !manualId.trim() ? 0.5 : 1,
-              cursor: submitting || !manualId.trim() ? "not-allowed" : "pointer",
-            }}
-          >
-            {submitting ? t("standardRegistering") : t("standardRegisterSubmit")}
-          </button>
+      ) : favoriteAvatars.length === 0 ? (
+        <p style={mutedNote} data-testid="standard-fav-empty">
+          {t("standardFavEmpty")}
+        </p>
+      ) : (
+        <div style={gridStyle} data-testid="standard-fav-grid">
+          {favoriteAvatars.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => openZoom(a)}
+              data-testid={`standard-fav-item-${a.id}`}
+              style={pickStyle}
+            >
+              <span style={thumbWrap}>
+                {a.preview_image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={a.preview_image_url}
+                    alt={a.name}
+                    loading="lazy"
+                    style={fillStyle}
+                  />
+                ) : (
+                  <span aria-hidden="true" style={thumbInitial}>
+                    {a.name.slice(0, 1)}
+                  </span>
+                )}
+                <span aria-hidden="true" style={zoomHint}>
+                  ⤢
+                </span>
+              </span>
+              <span style={pickName} title={a.name}>
+                {a.name}
+              </span>
+            </button>
+          ))}
         </div>
       )}
 
@@ -449,27 +349,6 @@ const heygenLinkStyle: CSSProperties = {
   textDecoration: "none",
 };
 
-const labelStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 6,
-  fontSize: 12.5,
-  fontWeight: 600,
-  color: "var(--text)",
-};
-
-const inputStyle: CSSProperties = {
-  width: "100%",
-  padding: "9px 11px",
-  fontSize: 13,
-  borderRadius: 10,
-  border: "1px solid var(--line-strong)",
-  background: "var(--bg-card)",
-  color: "var(--text)",
-  fontFamily: "inherit",
-  outline: "none",
-};
-
 const gridStyle: CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
@@ -561,29 +440,6 @@ const errorNote: CSSProperties = {
   color: "var(--warning, #B45309)",
   background: "var(--gold-soft)",
   border: "1px solid var(--gold-medium)",
-};
-
-const manualToggleBtn: CSSProperties = {
-  marginTop: 14,
-  padding: 0,
-  border: "none",
-  background: "transparent",
-  color: "var(--gold-on-light, #B88308)",
-  fontSize: 12.5,
-  fontWeight: 700,
-  cursor: "pointer",
-  fontFamily: "inherit",
-};
-
-const guideStyle: CSSProperties = {
-  margin: "10px 0 0",
-  padding: "12px 14px 12px 30px",
-  borderRadius: 12,
-  background: "var(--bg-subtle)",
-  border: "1px solid var(--line)",
-  fontSize: 12.5,
-  lineHeight: 1.7,
-  color: "var(--text-muted)",
 };
 
 const submitBtn: CSSProperties = {
