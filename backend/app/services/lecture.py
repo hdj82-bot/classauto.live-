@@ -357,6 +357,8 @@ async def get_lecture_slideshow_by_slug(
         is_expired=False,
         is_ready=is_body_ready,
         total_seconds=total_seconds,
+        # 교수자가 드래그로 정한 자막 위치(정규화 좌표). NULL = 기본(하단 중앙).
+        subtitle_position=getattr(lecture, "subtitle_position", None),
         slides=slides,
     )
 

@@ -166,6 +166,49 @@ async def test_update_lecture_student_forbidden(client, student, lecture):
 
 
 @pytest.mark.asyncio
+async def test_update_lecture_subtitle_position(client, professor, lecture):
+    """자막 위치(드래그 결과)가 저장·반환되고, null 로 초기화되며, 부분 PATCH 로 보존된다."""
+    # 위치 저장
+    resp = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"subtitle_position": {"x": 0.3, "y": 0.85}},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["subtitle_position"] == {"x": 0.3, "y": 0.85}
+
+    # 다른 필드만 보낼 때 위치 보존(부분 업데이트)
+    resp2 = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"title": "제목만"},
+    )
+    assert resp2.json()["subtitle_position"] == {"x": 0.3, "y": 0.85}
+
+    # null 로 기본 위치 초기화
+    resp3 = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"subtitle_position": None},
+    )
+    assert resp3.status_code == 200
+    assert resp3.json()["subtitle_position"] is None
+
+
+@pytest.mark.asyncio
+async def test_update_lecture_subtitle_position_out_of_range_rejected(
+    client, professor, lecture
+):
+    """정규화 범위(0~1) 밖 좌표는 422 로 거부된다."""
+    resp = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"subtitle_position": {"x": 1.5, "y": 0.5}},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_update_lecture_avatar_id_and_name(client, professor, lecture):
     """아바타 페이지에서 고른 avatar_id 와 교수자 편집 avatar_name 이 저장된다."""
     resp = await client.patch(
