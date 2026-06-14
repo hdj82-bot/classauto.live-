@@ -528,6 +528,7 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
     from app.models.lecture import Lecture
     from app.services.pipeline.budget import (
         QARenderQuotaError,
+        instructor_has_unlimited_qa,
         qa_can_render_lecture,
     )
     from app.services.pipeline.qa import generate_seed_answer
@@ -538,12 +539,36 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         QAAnswerCache.status == qa_avatar.STATUS_PENDING,
     ).all()
 
-    # 한도 = 영상당 남은 렌더(클립 수). 단, 교수자 월 '강의' 한도에서 이 강의에 새
-    # 렌더 여지가 없으면 0으로 막아 불필요한 HeyGen 호출(_resolve_character)도 피한다.
-    if qa_can_render_lecture(db, instructor_id, lecture_id):
+    # 렌더 한도 계산.
+    #  - 무제한 계정(QA_AVATAR_UNLIMITED_EMAILS, 계정주 포함)은 강의당 월 캡도 면제 —
+    #    등록된 사전 질문을 전부 렌더한다. (종전엔 무제한이어도 강의당 캡(=3)에 걸려,
+    #    같은 강의를 반복 제작하면 캡 소진 → 질문이 영구 '대기'로 방치되는 버그가 있었다.)
+    #  - 일반 계정: 영상당 남은 렌더(클립 수) = 강의당 월 캡 − 이번 달 이 강의 렌더 수.
+    #    교수자 월 '강의' 한도에서 새 렌더 여지가 없으면 0.
+    if instructor_has_unlimited_qa(db, instructor_id):
+        limit = len(rows)
+    elif qa_can_render_lecture(db, instructor_id, lecture_id):
         limit = settings.QA_AVATAR_TOP_CLUSTERS - _lecture_renders_used_this_month(db, lecture_id)
     else:
         limit = 0
+
+    # 한도가 0 이하인데 대기 질문이 있으면 — 조용히 '대기'로 방치하지 말고(피드백 0이
+    # 가장 혼란) 명확한 사유로 failed 표시한다. (무제한 계정은 limit=len(rows)>0 이라
+    # 여기 안 걸린다.)
+    if rows and limit <= 0:
+        for row in rows:
+            row.status = qa_avatar.STATUS_FAILED
+            row.error_message = (
+                "이번 달 추천 질문 제작 한도를 모두 사용했어요. 다음 달에 다시 "
+                "시도하거나 관리자에게 한도 상향을 문의해 주세요."
+            )
+        db.commit()
+        logger.warning(
+            "Q&A 사전질문: 렌더 한도 0 — seed %d개 failed(한도) 표시: "
+            "lecture=%s, instructor=%s",
+            len(rows), lecture_id, instructor_id,
+        )
+        return {"submitted": 0, "failed": len(rows)}
 
     lecture = db.get(Lecture, lecture_id)
     task_id = lecture.pipeline_task_id if lecture else None
@@ -552,8 +577,7 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
     # seed 카드를 영구 "대기"로 두지 않고 즉시 failed + 사유로 표시한다(피드백 필수).
     # _ensure_talking_photo_sync 가 한도(401028) self-healing 까지 시도한 뒤에도 None 이면
     # 본인 얼굴을 등록할 수 없는 상태다(룩 미준비·HeyGen 등록 실패 등).
-    # 월/영상 렌더 한도가 0이면(limit<=0) 어차피 제출하지 않으므로 불필요한 HeyGen
-    # 호출을 피해 건너뛴다(그 경우 rows 는 pending 유지 — 한도는 UI 가 안내).
+    # (limit<=0 인 경우는 위에서 이미 failed 로 처리·return 했으므로 여기는 limit>0.)
     if rows and limit > 0:
         from app.models.user import User as _User
 
