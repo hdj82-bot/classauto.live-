@@ -202,10 +202,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   useEffect(() => {
     volumeRef.current = effVolume;
     // <audio>.volume 은 src 가 바뀌어도 유지되므로(미디어가 아닌 엘리먼트 속성)
-    // playbackRate 와 달리 재적용 리스너가 필요 없다.
+    // playbackRate 와 달리 재적용 리스너가 필요 없다. 아바타 Q&A 영상은 자체 네이티브
+    // 컨트롤을 가지며 재생 시작(onPlay)에 volumeRef 로 현재 음량을 반영한다.
     if (audioRef.current) audioRef.current.volume = effVolume;
-    if (activeAvatarRef.current) activeAvatarRef.current.volume = effVolume;
-    if (stageAvatarRef.current) stageAvatarRef.current.volume = effVolume;
   }, [effVolume, audioRef]);
 
   // 인터스티셜 퀴즈 — 슬라이드 경계(또는 타임스탬프)에서 우측 Q&A 채팅에 출제.
@@ -529,24 +528,12 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     }
   }, [isPlaying]);
 
-  // ─── 새 아바타 답변 → stage 모드면 좌측 강의 화면에 자동 재생 ───
-  // 캐시 적중·추천 질문으로 새 아바타 클립이 도착하면, stage 모드에서 좌측 큰 화면에
-  // 띄운다. 이미 처리한 메시지는 건너뛰어, 모드 전환만으로 과거 답변이 다시 재생되지
-  // 않게 한다(과거 답변은 채팅의 "강의 화면에서 보기" 버튼으로만 다시 띄운다).
-  const lastAvatarKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    for (let i = qaMessages.length - 1; i >= 0; i--) {
-      const m = qaMessages[i];
-      if (m.role === "assistant" && m.avatarUrl) {
-        const key = `${i}:${m.avatarUrl}`;
-        if (key !== lastAvatarKeyRef.current) {
-          lastAvatarKeyRef.current = key;
-          if (qaPlayMode === "stage") setStageAvatar({ url: m.avatarUrl });
-        }
-        break;
-      }
-    }
-  }, [qaMessages, qaPlayMode]);
+  // 새 아바타 답변(캐시 적중·추천 질문)을 받으면, stage 모드일 때 좌측 강의 화면에
+  // 띄운다. setState-in-effect 를 피하려 이벤트 핸들러(sendQuestion·playSeedQuestion)
+  // 에서 직접 호출한다(qaPlayMode 는 클릭/전송 시점 값으로 충분).
+  const routeAvatarToStage = (url: string) => {
+    if (qaPlayMode === "stage") setStageAvatar({ url });
+  };
 
   // ─── 재생 컨트롤 (슬라이드쇼 엔진에 위임) ───
   const togglePlay = () => player.togglePlay();
@@ -607,18 +594,21 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               { lecture_id: lecture?.id, question },
               { timeout: 75000 },
             );
+      // 겹치는 질문이라 사전 렌더된 아바타 클립이 있으면 함께 재생(부가).
+      const avatarUrl: string | null = data.avatar?.video_url ?? null;
       setQaMessages((m) => [
         ...m,
         {
           role: "assistant",
           text: data.answer ?? t("student.playerV2.qaGenericFallback"),
           source: data.source ?? t("student.playerV2.qaSourceFallback"),
-          // 겹치는 질문이라 사전 렌더된 아바타 클립이 있으면 함께 재생(부가).
-          avatarUrl: data.avatar?.video_url ?? null,
+          avatarUrl,
           // 투명성(09 §5.2) — 캐시 클립이 맞춰진 원 질문.
           matchedQuestion: data.avatar?.matched_question ?? null,
         },
       ]);
+      // stage 모드면 좌측 강의 화면에 자동 재생(채팅 모드는 채팅에서 인라인 재생).
+      if (avatarUrl) routeAvatarToStage(avatarUrl);
     } catch {
       setQaMessages((m) => [
         ...m,
@@ -647,6 +637,8 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       { role: "user", text: q.question },
       { role: "assistant", text: "", avatarUrl: q.video_url, seed: true },
     ]);
+    // stage 모드면 좌측 강의 화면에 자동 재생(채팅 모드는 채팅에서 인라인 재생).
+    routeAvatarToStage(q.video_url);
     setTimeout(
       () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
       50,
