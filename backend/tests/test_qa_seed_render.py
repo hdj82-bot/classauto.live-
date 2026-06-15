@@ -297,10 +297,9 @@ def test_resolve_character_falls_back_to_standard_avatar(sync_db, monkeypatch):
     monkeypatch.setattr(settings, "HEYGEN_AVATAR_ID_MALE", "std-avatar-male")
 
     prof, _c, lec = _seed_lecture(sync_db)
-    # 본인 얼굴 옵트인 ON + 기본 룩 지정 + 강의 avatar 미지정(본인 얼굴 경로).
-    prof.qa_use_own_face = True
+    # 강의에 본인 룩(look-x)을 적용 → 본인 얼굴 경로. 단 Talking Photo 확보 실패 가정.
     prof.photo_avatar_default_look_id = "look-x"
-    lec.avatar_id = None
+    lec.avatar_id = "look-x"
     lec.voice_gender = VoiceGender.male
     sync_db.commit()
 

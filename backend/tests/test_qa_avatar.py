@@ -226,7 +226,7 @@ def test_batch_pending_to_ready_in_mock(sync_db, monkeypatch):
 
 
 def test_batch_uses_talking_photo_for_self_avatar(sync_db, monkeypatch):
-    """본인 제작 아바타(photo_avatar_id 보유)는 avatar_id 가 아니라 talking_photo_id 로 렌더."""
+    """강의에 본인 아바타(talking_photo)를 적용하면 avatar_id 가 아니라 talking_photo_id 로 렌더."""
     from app.tasks import qa_batch
 
     monkeypatch.setattr(settings, "HEYGEN_MOCK", True)
@@ -235,8 +235,8 @@ def test_batch_uses_talking_photo_for_self_avatar(sync_db, monkeypatch):
     monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 6)
 
     prof, _c, lec = _seed_lecture(sync_db)
-    prof.qa_use_own_face = True  # 본인 얼굴 옵트인 ON
-    prof.photo_avatar_id = "tp-self-123"  # 본인 아바타 등록됨, 강의는 아바타 미지정.
+    prof.photo_avatar_id = "tp-self-123"  # 본인 아바타 등록됨.
+    lec.avatar_id = "tp-self-123"  # 강의에 본인 아바타를 적용 → 본인 얼굴로 판정.
     sync_db.flush()
     _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))
     sync_db.commit()
@@ -294,10 +294,11 @@ def test_batch_uses_avatar_id_for_standard_avatar(sync_db, monkeypatch):
     assert "talking_photo_id" not in captured
 
 
-def test_batch_uses_hedra_for_own_face_when_opted_in(sync_db, monkeypatch):
-    """qa_use_own_face ON + Hedra 가능 → HeyGen 이 아니라 Hedra(사진+음성)로 렌더.
+def test_batch_uses_hedra_for_own_face_avatar(sync_db, monkeypatch):
+    """강의에 본인 룩을 적용 + Hedra 가능 → HeyGen 이 아니라 Hedra(사진+음성)로 렌더.
 
-    job id 가 'hedra:' 접두를 받고, HeyGen create_video 는 호출되지 않는다.
+    본인/타인은 강의에 적용한 avatar_id 로 판정한다(전역 옵트인 아님). job id 가
+    'hedra:' 접두를 받고, HeyGen create_video 는 호출되지 않는다.
     """
     from app.tasks import qa_batch
 
@@ -317,8 +318,8 @@ def test_batch_uses_hedra_for_own_face_when_opted_in(sync_db, monkeypatch):
     monkeypatch.setattr("app.services.pipeline.heygen.create_video", _boom_create_video)
 
     prof, _c, lec = _seed_lecture(sync_db)
-    prof.qa_use_own_face = True
     prof.photo_avatar_default_look_id = "look-x"
+    lec.avatar_id = "look-x"  # 강의에 본인 룩을 적용 → 본인 얼굴(Hedra)로 판정.
     sync_db.flush()
     _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))
     sync_db.commit()
@@ -335,6 +336,53 @@ def test_batch_uses_hedra_for_own_face_when_opted_in(sync_db, monkeypatch):
     ).first()
     assert rep is not None
     assert rep.heygen_job_id.startswith("hedra:")
+
+
+def test_batch_standard_avatar_not_overridden_by_own_face(sync_db, monkeypatch):
+    """타인(표준) 아바타를 적용하면, 본인 룩·Hedra 가 있어도 Q&A 가 본인 얼굴로 섞이지 않는다.
+
+    2026-06-15 사용자 보고 회귀 방지: 이전엔 _submit_cluster 가 전역 qa_use_own_face 로만
+    Hedra(본인 얼굴)를 결정해, 타인 아바타를 골라도 Q&A 가 본인 얼굴로 나갔다. 이제 강의에
+    적용한 avatar_id 로 판정한다 → 표준 avatar_id 로 HeyGen 렌더(hedra·talking_photo 아님).
+    """
+    from app.tasks import qa_batch
+
+    monkeypatch.setattr(settings, "HEYGEN_MOCK", True)
+    monkeypatch.setattr(settings, "HEDRA_MOCK", True)  # Hedra 사용 가능해도
+    monkeypatch.setattr(settings, "QA_AVATAR_TOP_CLUSTERS", 3)
+    monkeypatch.setattr(settings, "QA_AVATAR_MIN_CLUSTER_SIZE", 1)
+    monkeypatch.setattr(settings, "QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR", 6)
+    monkeypatch.setattr(qa_batch, "_own_face_image", lambda *a, **k: (b"IMG", "image/png"))
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    prof.qa_use_own_face = True  # (구) 전역 옵트인이 켜져 있어도 무시되어야 한다.
+    prof.photo_avatar_default_look_id = "look-x"
+    prof.photo_avatar_id = "tp-self"
+    lec.avatar_id = "heygen-standard-xyz"  # 강의엔 타인(표준) 아바타 적용.
+    sync_db.flush()
+    _pending(sync_db, lec, prof, "환율이란?", _vec(1.0, 0.0))
+    sync_db.commit()
+
+    captured: dict = {}
+
+    async def _fake_create_video(**kwargs):
+        captured.update(kwargs)
+        return "mock_job_std"
+
+    monkeypatch.setattr("app.services.pipeline.heygen.create_video", _fake_create_video)
+
+    loop = asyncio.new_event_loop()
+    try:
+        qa_batch.process_qa_avatar_batch(sync_db, loop)
+    finally:
+        loop.close()
+
+    assert captured.get("avatar_id") == "heygen-standard-xyz"
+    assert "talking_photo_id" not in captured
+    rep = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.heygen_job_id.isnot(None)
+    ).first()
+    assert rep is not None and not rep.heygen_job_id.startswith("hedra:")
 
 
 def test_batch_respects_monthly_lecture_cap(sync_db, monkeypatch):

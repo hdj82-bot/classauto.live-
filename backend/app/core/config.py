@@ -126,7 +126,8 @@ class Settings(BaseSettings):
     # ── Hedra (본인 얼굴 Q&A 렌더 — 사진+음성 per-render, 계정 아바타 한도 없음) ──
     # HeyGen Photo Avatar 는 계정당 3개 한도라 다수 사용자에게 본인 얼굴을 줄 수 없다.
     # Hedra(Character-3)는 렌더할 때마다 이미지+음성을 넘기는 방식이라 등록 한도가
-    # 없어 사용자 수만큼 확장된다. qa_use_own_face=ON 인 교수자의 Q&A 답변에 쓴다.
+    # 없어 사용자 수만큼 확장된다. 강의에 '교수자 본인 아바타(룩)'를 적용한 Q&A 에 쓴다
+    # (본인/타인은 강의에 적용한 avatar_id 가 결정 — qa_batch._is_own_face_lecture).
     # 키가 비어 있거나 MOCK 이면 HeyGen 표준 아바타로 폴백한다(서비스 연속성).
     HEDRA_API_KEY: str = ""
     HEDRA_BASE_URL: str = "https://api.hedra.com/web-app/public"
