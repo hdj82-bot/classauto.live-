@@ -27,6 +27,12 @@ import type { SeedQuestionDraft, SeedQuestionStatus } from "../seedQuestionsApi"
  */
 export interface SettingsPanelProps {
   avatarName: string;
+  /** 지정 아바타 미리보기 썸네일 이미지 URL (없으면 텍스트만 표시). */
+  avatarPreviewImageUrl?: string | null;
+  /** 지정 아바타 미리보기 영상 URL — 있으면 썸네일 클릭 시 그 자리에서 재생. */
+  avatarPreviewVideoUrl?: string | null;
+  /** prefers-reduced-motion — 자동재생 힌트 표시에만 사용(클릭 재생은 항상 허용). */
+  reducedMotion?: boolean;
   ttsProvider?: TtsProvider;
   voiceGender?: VoiceGender;
   monthlyUsed?: number;
@@ -266,6 +272,134 @@ function Switch({ on, onClick, label }: { on: boolean; onClick?: () => void; lab
   );
 }
 
+/**
+ * 선택된 Q&A 아바타 미리보기 — 썸네일(이미지) + 이름. 영상 URL 이 있으면 썸네일
+ * 클릭으로 그 자리에서 루프 재생한다(다시 클릭하면 썸네일로 복귀). 텍스트만으로는
+ * 어떤 아바타인지 알기 어렵다는 피드백에 따른 표시 전용 요소.
+ */
+function AvatarPersonaPreview({
+  name,
+  imageUrl,
+  videoUrl,
+  reducedMotion,
+}: {
+  name: string;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  reducedMotion: boolean;
+}) {
+  const [playing, setPlaying] = useState(false);
+  const canPlay = !!videoUrl;
+  return (
+    <div style={personaRowStyle}>
+      <button
+        type="button"
+        onClick={() => canPlay && setPlaying((p) => !p)}
+        aria-label={canPlay ? `${name} 미리보기 재생` : name}
+        style={{ ...personaThumbStyle, cursor: canPlay ? "pointer" : "default" }}
+      >
+        {playing && videoUrl ? (
+          <video
+            src={videoUrl}
+            autoPlay
+            loop
+            muted
+            playsInline
+            style={personaFillStyle}
+          />
+        ) : imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={imageUrl} alt={name} style={personaFillStyle} />
+        ) : (
+          <span aria-hidden="true" style={personaInitialStyle}>
+            {name.slice(0, 1)}
+          </span>
+        )}
+        {canPlay && !playing && (
+          <span aria-hidden="true" style={personaPlayBadgeStyle}>
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </span>
+        )}
+      </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+        <span style={personaNameStyle} title={name}>
+          {name}
+        </span>
+        {canPlay && !playing && !reducedMotion && (
+          <span style={{ fontSize: 10.5, color: "var(--text-faint)" }}>
+            클릭하면 미리보기 재생
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const personaRowStyle: CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: 10,
+  padding: "8px 10px",
+  background: "var(--bg)",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  minWidth: 0,
+};
+
+const personaThumbStyle: CSSProperties = {
+  position: "relative",
+  width: 44,
+  height: 44,
+  flexShrink: 0,
+  borderRadius: 9,
+  overflow: "hidden",
+  background: "var(--bg-subtle)",
+  border: "1px solid var(--line-strong)",
+  padding: 0,
+  fontFamily: "inherit",
+};
+
+const personaFillStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  display: "block",
+};
+
+const personaInitialStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  display: "grid",
+  placeItems: "center",
+  fontSize: 17,
+  fontWeight: 700,
+  color: "var(--text-faint)",
+};
+
+const personaPlayBadgeStyle: CSSProperties = {
+  position: "absolute",
+  right: 2,
+  bottom: 2,
+  display: "grid",
+  placeItems: "center",
+  width: 15,
+  height: 15,
+  borderRadius: 999,
+  background: "rgba(10,10,10,0.62)",
+  color: "#fff",
+};
+
+const personaNameStyle: CSSProperties = {
+  fontSize: 12.5,
+  fontWeight: 700,
+  color: "var(--text)",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 function CaretIcon() {
   return (
     <svg
@@ -303,6 +437,9 @@ function H4Icon({ children }: { children: ReactNode }) {
 
 export default function SettingsPanel({
   avatarName,
+  avatarPreviewImageUrl = null,
+  avatarPreviewVideoUrl = null,
+  reducedMotion = false,
   voiceLang,
   subtitleLang,
   voiceSpeed = 1.0,
@@ -391,7 +528,16 @@ export default function SettingsPanel({
               <div style={{ fontSize: 11.5, color: "var(--text-subtle)", fontWeight: 600 }}>
                 선택된 페르소나
               </div>
-              <div style={fieldValStyle}>{avatarName}</div>
+              {avatarPreviewImageUrl || avatarPreviewVideoUrl ? (
+                <AvatarPersonaPreview
+                  name={avatarName}
+                  imageUrl={avatarPreviewImageUrl}
+                  videoUrl={avatarPreviewVideoUrl}
+                  reducedMotion={reducedMotion}
+                />
+              ) : (
+                <div style={fieldValStyle}>{avatarName}</div>
+              )}
             </div>
             <button
               type="button"

@@ -147,6 +147,25 @@ async def patch_lecture(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
 
 
+# ── 강의 단건 조회 (소유 교수자 전용) ─────────────────────────────────────────
+
+@router.get(
+    "/api/lectures/{lecture_id}",
+    response_model=LectureResponse,
+    summary="강의 단건 조회 (소유 교수자 전용)",
+)
+async def get_lecture(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    professor: User = Depends(require_professor),
+):
+    """강의 한 건을 조회합니다(아바타 지정·미리보기 등 표시용).
+
+    비소유 강의는 ``assert_professor_owns_lecture`` 가 404 로 거부합니다.
+    """
+    return await assert_professor_owns_lecture(db, lecture_id, professor.id)
+
+
 # ── 강의 삭제 ─────────────────────────────────────────────────────────────────
 
 @router.delete(
