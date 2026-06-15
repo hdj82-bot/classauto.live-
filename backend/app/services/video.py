@@ -485,19 +485,16 @@ async def approve_video(
     # 실제로 시작시키지 않아 TTS 0/N 에서 영구히 멈췄다 — render.py 의
     # create_render_request 와 동일한 VideoRender 생성 + render_slide.delay 패턴.)
     from app.models.lecture import Lecture  # noqa: PLC0415
-    from app.models.user import User  # noqa: PLC0415
     from app.models.video_render import VideoRender  # noqa: PLC0415
 
     segments = video.script.segments
     lecture = await db.get(Lecture, video.lecture_id)
-    # 아바타 결정 순서: 강의가 고른 avatar_id → 교수자 기본 Photo Avatar 룩 →
-    # 빈 문자열(heygen.create_video 가 env HEYGEN_AVATAR_ID_* 로 폴백).
-    # 본인 룩을 기본으로 정해두면 강의별 선택 없이 모든 강의가 본인 얼굴로 생성된다.
+    # 아바타는 강의에 적용된 것만 쓴다(교수자 본인=Hedra / 타인=HeyGen 선택이 명시적으로
+    # lecture.avatar_id 에 저장됨). 과거엔 비어 있으면 교수자 기본 룩(본인 얼굴)으로
+    # 폴백했는데, 그러면 타인 아바타를 골라도 "가장 최근에 만든 본인 룩"이 자동 채용되는
+    # 문제가 있었다(2026-06-15 사용자 보고). 비어 있으면 create_video 가 gender 기본
+    # 아바타로 처리한다 — 본인 얼굴은 강의에 본인 아바타를 적용했을 때만 쓰인다.
     avatar_id = (lecture.avatar_id if lecture else None) or ""
-    if not avatar_id:
-        professor = await db.get(User, professor_id)
-        if professor and professor.photo_avatar_default_look_id:
-            avatar_id = professor.photo_avatar_default_look_id
 
     video.status = VideoStatus.rendering
     video.script.approved_at = datetime.now(tz=timezone.utc)
@@ -604,16 +601,12 @@ async def rerender_video(
         )
 
     from app.models.lecture import Lecture  # noqa: PLC0415
-    from app.models.user import User  # noqa: PLC0415
     from app.models.video_render import RenderStatus, VideoRender  # noqa: PLC0415
 
     segments = video.script.segments
     lecture = await db.get(Lecture, video.lecture_id)
+    # 아바타는 강의에 적용된 것만 쓴다(approve_video 와 동일 — 본인 룩 자동 폴백 제거).
     avatar_id = (lecture.avatar_id if lecture else None) or ""
-    if not avatar_id:
-        professor = await db.get(User, professor_id)
-        if professor and professor.photo_avatar_default_look_id:
-            avatar_id = professor.photo_avatar_default_look_id
 
     # 기존 렌더 — 슬라이드 번호별 최신 1개(created_at 오름차순이므로 마지막이 최신).
     existing = await db.execute(

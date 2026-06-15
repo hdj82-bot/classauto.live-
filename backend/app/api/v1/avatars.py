@@ -1384,11 +1384,10 @@ async def upload_own_face_look(
         saved_to_library=True,
     )
     db.add(look)
-    # 본인 사진을 올린 교수자는 본인 얼굴 Q&A 대상이다. 프론트의 "Q&A 답변에 내 얼굴
-    # 사용" 토글은 폐지됐으므로(Hedra=본인/HeyGen=타인 선택이 그 역할을 대신함), 업로드
-    # 시점에 옵트인을 켜 둔다. 실제 본인 얼굴 vs 표준은 강의에 적용한 아바타가 정한다
-    # (qa_batch._resolve_character — 본인 룩이면 Hedra/Talking Photo, 표준이면 HeyGen).
-    user.qa_use_own_face = True
+    # 업로드만으로 본인 얼굴 Q&A 를 강제로 켜지 않는다 — 사진을 올린 것과 그 얼굴을
+    # 강의/Q&A 에 쓰는 것은 별개이며, 강의에 어떤 아바타를 적용했는지가 본인(얼굴) vs
+    # 타인(표준)을 결정한다. (이전엔 여기서 qa_use_own_face=True 로 강제해, 타인 아바타를
+    # 골라도 Q&A 가 본인 얼굴로 나가는 문제가 있었다 — 2026-06-15 사용자 보고.)
     await db.commit()
     await db.refresh(look)
 
