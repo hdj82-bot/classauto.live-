@@ -2216,10 +2216,20 @@ async def apply_saved_avatar(
             status_code=status.HTTP_404_NOT_FOUND, detail="강의를 찾을 수 없습니다."
         )
 
+    avatar_or_voice_changed = (
+        row.look_id != lecture.avatar_id or row.voice_id != lecture.voice_id
+    )
     lecture.avatar_id = row.look_id
     lecture.avatar_name = row.name
     lecture.avatar_scale = row.avatar_scale
     lecture.voice_id = row.voice_id
+    # 아바타·음성이 바뀌면 이미 렌더된 추천 질문(seed) 클립을 pending 으로 초기화한다 —
+    # update_lecture(PATCH /lectures)와 동일 무효화(2026-06-15). 이 경로(저장 조합 적용)는
+    # update_lecture 를 거치지 않아 빠져 있었다. 안 그러면 '다시 제작'이 옛 아바타로 만든
+    # 답변 클립을 "변경 없음"으로 건너뛴다.
+    if avatar_or_voice_changed:
+        from app.services.lecture import _reset_seed_renders
+        await _reset_seed_renders(db, lecture.id)
     await db.commit()
     return {"ok": True}
 

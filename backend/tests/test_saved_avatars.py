@@ -294,6 +294,45 @@ async def test_apply_sets_lecture_fields(client, professor, db, lecture):
 
 
 @pytest.mark.asyncio
+async def test_apply_resets_ready_seed_clips(client, professor, db, lecture):
+    """저장 조합 적용으로 아바타가 바뀌면 이미 렌더된 추천 질문 클립이 pending 으로 초기화된다.
+
+    update_lecture(PATCH)와 동일 무효화 — 안 그러면 '다시 제작'이 옛 아바타 답변을
+    "변경 없음"으로 건너뛴다(2026-06-15 사용자 보고).
+    """
+    from app.models.qa_answer_cache import QAAnswerCache
+    from app.services.pipeline import qa_avatar
+
+    await _make_look(db, professor, heygen_look_id="hg_look_2", image_url=None)
+    row = SavedAvatar(
+        id=uuid.uuid4(), user_id=professor.id, name="새 조합",
+        look_id="hg_look_2", voice_id="vc_new",
+    )
+    db.add(row)
+    seed = QAAnswerCache(
+        lecture_id=lecture.id, instructor_id=professor.id,
+        question_text="핵심은?", answer_text="요약.", question_embedding=None,
+        status=qa_avatar.STATUS_READY, origin=qa_avatar.ORIGIN_SEED,
+        s3_video_url="https://x.s3.ap-northeast-2.amazonaws.com/seed.mp4",
+        heygen_job_id="hg-seed-apply",
+    )
+    db.add(seed)
+    await db.flush()
+
+    resp = await client.post(
+        f"/api/avatars/me/saved/{row.id}/apply",
+        json={"lecture_id": str(lecture.id)},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 200, resp.text
+
+    await db.refresh(seed)
+    assert seed.status == qa_avatar.STATUS_PENDING
+    assert seed.s3_video_url is None
+    assert seed.heygen_job_id is None
+
+
+@pytest.mark.asyncio
 async def test_apply_rejects_other_users_lecture(client, professor, db):
     # 다른 교수의 강좌·강의.
     other = User(
