@@ -1968,6 +1968,7 @@ async def create_saved_avatar(
     룩은 본인 소유 + ready 여야 한다. 저장 수는 ``PHOTO_AVATAR_SAVED_MAX`` 로 상한.
     """
     look = await _resolve_look(user, db, payload.look_id)
+    std = None
     if look is not None:
         if look.status != LookStatus.ready.value:
             raise HTTPException(
@@ -2000,12 +2001,39 @@ async def create_saved_avatar(
             ),
         )
 
+    # 방금 빌더(스크립트 테스트)에서 렌더한 미리보기가 이 룩+음성과 일치하면, 재렌더
+    # 없이 그 영상을 그대로 저장한다 — "제작 때 만든 미리보기를 갤러리에 영구 보존"
+    # (사용자 요청). user.photo_avatar_preview_url 은 영구 S3 객체(렌더마다 uuid 키라
+    # 다음 렌더가 덮어쓰지 않음)라 그 URL 을 그대로 복사해도 안전하다. 일치하지 않으면
+    # preview 없이 저장되고, 카드는 기존처럼 "미리보기 영상 만들기"를 노출한다.
+    preview_url: str | None = None
+    if user.photo_avatar_preview_url:
+        cur_avatar = user.photo_avatar_preview_avatar_id or None
+        voice_ok = (user.photo_avatar_preview_voice_id or None) == (
+            payload.voice_id or None
+        )
+        if std is not None:
+            # 표준 아바타 — 빌더가 그 avatar_id 로 렌더했어야 일치.
+            look_ok = cur_avatar == payload.look_id
+        else:
+            # 사진(본인 얼굴) 룩 — 빌더가 본인 얼굴(avatar_id 없음)로, 그리고 이 룩을
+            # 기본 룩으로 렌더했어야 일치(handlePrepareRender 가 렌더 전 selectLook).
+            look_ok = cur_avatar is None and (
+                user.photo_avatar_default_look_id == payload.look_id
+            )
+        if voice_ok and look_ok:
+            preview_url = user.photo_avatar_preview_url
+
     row = SavedAvatar(
         user_id=user.id,
         name=payload.name.strip()[:80],
         look_id=payload.look_id,
         voice_id=payload.voice_id,
         avatar_scale=payload.avatar_scale,
+        # 일치하는 빌더 미리보기가 있으면 영구 보존(없으면 None → status none).
+        preview_video_url=preview_url,
+        preview_voice_id=user.photo_avatar_preview_voice_id if preview_url else None,
+        preview_text=user.photo_avatar_preview_text if preview_url else None,
     )
     db.add(row)
     await db.commit()
