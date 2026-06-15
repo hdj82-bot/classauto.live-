@@ -196,35 +196,40 @@ def _ensure_talking_photo_sync(db, loop, professor) -> str | None:
     return tp
 
 
+def _is_own_face_lecture(db, lecture, professor) -> bool:
+    """이 강의 Q&A 가 '교수자 본인 얼굴' 아바타를 쓰는지 — **강의에 적용한 avatar_id 로만** 판정.
+
+    더 이상 전역 옵트인(qa_use_own_face)에 의존하지 않는다(2026-06-15 사용자 보고:
+    타인 아바타를 골라도 Q&A 가 본인 얼굴로 섞여 나옴). 교수자가 강의에 적용한 아바타가
+    본인 룩(업로드 사진/talking_photo/기본 룩)이면 본인 얼굴, 표준(타인) 아바타거나
+    미지정이면 표준으로 본다. **미지정 → 표준** — 선택하지 않은 본인 얼굴이 자동으로
+    섞이지 않게 한다(approve_video 본문 아바타 결정과 동일 원칙).
+    """
+    if professor is None or lecture is None:
+        return False
+    av = lecture.avatar_id or None
+    if not av:
+        return False
+    tp = professor.photo_avatar_id
+    look_default = professor.photo_avatar_default_look_id
+    return bool(
+        (tp and av == tp)
+        or (look_default and av == look_default)
+        or _instructor_look_match(db, professor.id, av)
+    )
+
+
 def _resolve_character(db, loop, lecture, professor) -> dict | None:
     """create_video 의 character 인자(본인 아바타=talking_photo / 표준=avatar)를 결정.
 
     반환: {"talking_photo_id": ...} | {"avatar_id": ...} | None(본인 아바타 미준비 → 보류).
 
-    본인 얼굴은 **옵트인**(professor.qa_use_own_face=True)일 때만 시도한다 — 기본은
-    표준 HeyGen 아바타다. HeyGen "사진 아바타 3개 한도"는 계정 단위라 모든 교수자에게
-    본인 얼굴을 줄 수 없어, 표준 아바타를 기본으로 둔다(사용자 수와 무관하게 막히지
-    않음). 켠 교수자도 슬롯이 차 있으면 아래에서 표준으로 폴백한다.
-
-    옵트인 ON 일 때 본인 아바타로 판정(08 정책 — Q&A=본인 얼굴):
-    - lecture.avatar_id 미지정(강의별 선택 없음 → 본인 기본 얼굴), 또는
-    - lecture.avatar_id == 등록된 talking_photo_id, 또는 기본 룩 id, 또는
-      교수자의 PhotoAvatarLook(id/heygen_look_id).
-    그 외(표준 HeyGen 아바타를 강의에 지정)면 avatar_id 그대로 사용.
+    본인 얼굴 여부는 **강의에 적용한 avatar_id**(``_is_own_face_lecture``)로만 정한다 —
+    본인 룩을 적용했을 때만 본인 얼굴, 표준(타인) 아바타·미지정이면 표준 HeyGen 아바타.
+    본인 얼굴이라도 Talking Photo 슬롯을 못 만들면 아래에서 표준으로 폴백한다.
     """
     av = (lecture.avatar_id or None) if lecture else None
-    tp = professor.photo_avatar_id if professor else None
-    look_default = professor.photo_avatar_default_look_id if professor else None
-    opted_in = bool(getattr(professor, "qa_use_own_face", False)) if professor else False
-    has_self = opted_in and bool(tp or look_default)
-
-    is_self = has_self and (
-        not av
-        or (tp and av == tp)
-        or (look_default and av == look_default)
-        or _instructor_look_match(db, professor.id, av)
-    )
-    if is_self:
+    if _is_own_face_lecture(db, lecture, professor):
         resolved = _ensure_talking_photo_sync(db, loop, professor)
         if resolved:
             return {"talking_photo_id": resolved}
@@ -316,9 +321,10 @@ def _own_face_image(db, professor) -> tuple[bytes, str] | None:
 def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
     """클러스터 대표 질문 답변을 TTS→렌더 제출. 성공 시 True.
 
-    본인 얼굴 옵트인(qa_use_own_face) + Hedra 사용 가능 → **Hedra(사진+음성)** 로
-    렌더(계정 아바타 한도 없음). 아니면 HeyGen(표준 아바타 / 레거시 talking_photo).
-    대표 행은 heygen_job_id 를 받고(Hedra 면 "hedra:" 접두), 멤버는 같은 cluster_key.
+    강의에 적용한 아바타가 본인 룩(``_is_own_face_lecture``) + Hedra 사용 가능 →
+    **Hedra(사진+음성)** 로 렌더(계정 아바타 한도 없음). 아니면 HeyGen(표준 아바타 /
+    레거시 talking_photo). 대표 행은 heygen_job_id 를 받고(Hedra 면 "hedra:" 접두),
+    멤버는 같은 cluster_key.
     """
     from app.services.pipeline import s3 as s3_svc
     from app.services.pipeline.heygen import create_video
@@ -338,10 +344,10 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
     _lecture = db.query(_Lecture).filter(_Lecture.id == lecture_id).first()
     _professor = db.query(_User).filter(_User.id == instructor_id).first()
 
-    # 본인 얼굴 옵트인 + Hedra 가능 + 소스 이미지 확보 → Hedra. 하나라도 안 되면 HeyGen.
-    use_hedra = (
-        bool(getattr(_professor, "qa_use_own_face", False)) and _hedra_enabled()
-    )
+    # 강의에 적용한 아바타가 본인 룩일 때만 Hedra(본인 얼굴). 타인(표준)·미지정이면
+    # HeyGen 표준. (전역 qa_use_own_face 플래그가 아니라 적용 아바타로 판정 — 2026-06-15
+    # 사용자 보고: 타인 아바타를 골라도 Q&A 가 본인 얼굴로 섞여 나옴.)
+    use_hedra = _is_own_face_lecture(db, _lecture, _professor) and _hedra_enabled()
     own_face_img = _own_face_image(db, _professor) if use_hedra else None
     use_hedra = use_hedra and own_face_img is not None
 
