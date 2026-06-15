@@ -72,6 +72,10 @@ logger = logging.getLogger(__name__)
 # 이 상수에서 자동 계산하므로(``// (1024*1024)``) 값만 바꾸면 메시지도 따라간다.
 _MAX_PROFILE_PHOTO = 20 * 1024 * 1024  # 20MB
 
+# 본인 얼굴(교수자 아바타) 직접 업로드 한도 — AI 룩 생성을 대체해 교수자가 준비한
+# 고화질 16:9 원본을 그대로 라이브러리 룩으로 받으므로 넉넉히 30MB.
+_MAX_OWN_FACE_PHOTO = 30 * 1024 * 1024  # 30MB
+
 # HeyGen Talking Photo 업로드 한도 — 룩 이미지(gpt-image-2 1536x1024 PNG)는
 # 흔히 3-5MB 가 나와 HeyGen 제한(공식 명시는 없으나 실측 4-5MB 부근에서 거부)에
 # 닿을 수 있어, select 단계에서 안전망으로 다운스케일 + JPEG 재인코딩한다.
@@ -331,6 +335,71 @@ async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
     return talking_photo_id
 
 
+# 본인 얼굴(포토) 미리보기를 Hedra 로 렌더할 때 generation id 앞에 붙이는 접두사.
+# 별도 컬럼 없이 photo_avatar_preview_video_id 문자열에 "hedra:" 를 붙여, GET 폴링이
+# provider(Hedra/HeyGen)를 구분한다(qa_batch 의 _HEDRA_JOB_PREFIX 와 같은 방식).
+_HEDRA_PREVIEW_PREFIX = "hedra:"
+
+
+def _hedra_enabled() -> bool:
+    """본인 얼굴(교수자 아바타) 렌더를 Hedra 로 처리할 수 있는지(키 설정 또는 MOCK)."""
+    return bool((settings.HEDRA_API_KEY or "").strip()) or settings.HEDRA_MOCK
+
+
+async def _own_face_image_bytes(
+    user: User, db: AsyncSession
+) -> tuple[bytes, str] | None:
+    """본인 얼굴 소스 이미지(기본 룩 우선, 없으면 프로필 사진) → (bytes, ctype).
+
+    Hedra 렌더는 아바타를 등록하지 않고 매 렌더마다 이 이미지를 그대로 넘긴다
+    (계정 한도 없음). 이미지가 없거나 다운로드에 실패하면 None 을 돌려줘, 호출부가
+    기존 HeyGen Talking Photo 경로로 폴백하게 한다(서비스 연속성).
+    """
+    from urllib.parse import urlparse
+
+    url: str | None = None
+    look_id = user.photo_avatar_default_look_id
+    if look_id:
+        row = None
+        try:
+            row = (
+                await db.execute(
+                    select(PhotoAvatarLook).where(
+                        PhotoAvatarLook.user_id == user.id,
+                        PhotoAvatarLook.id == uuid.UUID(look_id),
+                    )
+                )
+            ).scalar_one_or_none()
+        except ValueError:
+            row = None
+        if row is None:
+            row = (
+                await db.execute(
+                    select(PhotoAvatarLook).where(
+                        PhotoAvatarLook.user_id == user.id,
+                        PhotoAvatarLook.heygen_look_id == look_id,
+                    )
+                )
+            ).scalar_one_or_none()
+        if row and row.status == LookStatus.ready.value and row.image_url:
+            url = row.image_url
+    if not url:
+        url = user.profile_image_url
+    if not url:
+        return None
+    try:
+        key = urlparse(url).path.lstrip("/")
+        img_bytes = s3_svc.download_file(key)
+        ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
+        # Hedra 도 과대 이미지는 거부할 수 있어 talking-photo 와 동일 정규화(≤1920, JPEG).
+        return _ensure_talking_photo_payload(img_bytes, ctype)
+    except Exception as exc:  # noqa: BLE001 — 못 받으면 HeyGen 폴백
+        logger.warning(
+            "본인 얼굴 이미지 로드 실패(HeyGen 폴백): user=%s, error=%s", user.id, exc
+        )
+        return None
+
+
 _JPEG_MAGIC = b"\xff\xd8\xff"
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -583,6 +652,9 @@ async def create_avatar_preview(
     # 렌더한다(전신 자연 움직임). avatar_id 미지정이면 기존 본인 포토 아바타 경로.
     std_avatar_id = (payload.avatar_id or "").strip() or None
     character_kwargs: dict = {}
+    # 본인 얼굴(포토) 경로에서 Hedra 로 렌더할 소스 이미지. None 이면 HeyGen 폴백.
+    own_face_img: tuple[bytes, str] | None = None
+    use_hedra = False
     if std_avatar_id:
         std_row = (
             await db.execute(
@@ -597,22 +669,28 @@ async def create_avatar_preview(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="등록된 표준 아바타가 아닙니다. 먼저 표준 아바타를 등록해 주세요.",
             )
+        # 표준 아바타(우측 "표준 아바타")는 HeyGen 으로 렌더한다(전신 자연 움직임).
         character_kwargs = {"avatar_id": std_avatar_id}
     else:
-        # 2026-06-01: 기존엔 select 가 HeyGen 등록까지 했지만, 이제 select 는 default
-        # 만 저장한다. preview 진입 시점에 lazy 등록 — 사진→룩→default 까지 끝낸
-        # 사용자만 도달할 수 있는 시점이고, 어차피 preview 자체가 HeyGen 호출이므로
-        # 여기서 talking_photo 등록을 함께 수행한다(idempotent).
-        talking_photo_id = await _ensure_photo_avatar_id(user, db)
-        if not talking_photo_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    "본인 아바타가 아직 등록되지 않았습니다. 먼저 사진을 올리고 "
-                    "기본 룩을 지정해 주세요."
-                ),
-            )
-        character_kwargs = {"talking_photo_id": talking_photo_id}
+        # 교수자 본인 얼굴(포토) 경로 — 가능하면 Hedra(사진+음성, 아바타 등록·계정 한도
+        # 없음)로 렌더한다. Hedra 미설정/이미지 미확보면 기존 HeyGen Talking Photo 로
+        # 폴백한다(무회귀). HeyGen 경로는 lazy talking_photo 등록을 동반한다.
+        if _hedra_enabled():
+            own_face_img = await _own_face_image_bytes(user, db)
+        if own_face_img is not None:
+            use_hedra = True
+        else:
+            # 2026-06-01: select 는 default 만 저장하고, preview 진입 시 lazy 등록한다.
+            talking_photo_id = await _ensure_photo_avatar_id(user, db)
+            if not talking_photo_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=(
+                        "본인 아바타가 아직 등록되지 않았습니다. 먼저 사진을 올리고 "
+                        "기본 룩을 지정해 주세요."
+                    ),
+                )
+            character_kwargs = {"talking_photo_id": talking_photo_id}
 
     voice_id = payload.voice_id
     # 렌더할 대본 — "스크립트 테스트"가 임의 문장을 보내면 그 문장을, 아니면 기본
@@ -643,8 +721,9 @@ async def create_avatar_preview(
             status="processing", voice_id=user.photo_avatar_preview_voice_id
         )
 
-    # 새 렌더 시작: 샘플 텍스트 → TTS → S3 → HeyGen Talking Photo 비디오 생성.
+    # 새 렌더 시작: 샘플 텍스트 → TTS → (본인 얼굴=Hedra 사진+음성 / 그 외=HeyGen).
     from app.services.pipeline import tts
+    from app.services.pipeline.hedra import HedraError, submit_talking_video
     from app.services.pipeline.heygen import HeyGenError, create_video
 
     # 미리보기 대상이 교수자 본인 목소리(IVC 클론)면 v3 가 아니라 multilingual_v2
@@ -652,16 +731,26 @@ async def create_avatar_preview(
     is_cloned = bool(voice_id and user.cloned_voice_id and voice_id == user.cloned_voice_id)
     try:
         result = await tts.synthesize(render_text, voice_id=voice_id, cloned=is_cloned)
-        stored_audio_url = s3_svc.upload_audio_bytes(
-            result.audio_bytes, f"avatar-preview-{user.id}"
-        )
-        audio_url = s3_svc.presign_stored_s3_url(stored_audio_url) or stored_audio_url
-        video_id = await create_video(
-            audio_url=audio_url,
-            callback_id=f"avatar-preview:{user.id}",
-            **character_kwargs,
-        )
-    except (HeyGenError, tts.TTSError) as e:
+        if use_hedra and own_face_img is not None:
+            # 본인 얼굴 — Hedra 에 사진+음성을 그대로 넘겨 렌더(아바타 등록 없음).
+            # job id 에 "hedra:" 접두를 붙여 GET 폴링이 Hedra 상태를 조회하게 한다.
+            gen_id = await submit_talking_video(
+                image_bytes=own_face_img[0],
+                image_ctype=own_face_img[1],
+                audio_bytes=result.audio_bytes,
+            )
+            video_id = f"{_HEDRA_PREVIEW_PREFIX}{gen_id}"
+        else:
+            stored_audio_url = s3_svc.upload_audio_bytes(
+                result.audio_bytes, f"avatar-preview-{user.id}"
+            )
+            audio_url = s3_svc.presign_stored_s3_url(stored_audio_url) or stored_audio_url
+            video_id = await create_video(
+                audio_url=audio_url,
+                callback_id=f"avatar-preview:{user.id}",
+                **character_kwargs,
+            )
+    except (HeyGenError, HedraError, tts.TTSError) as e:
         return AvatarPreviewResponse(
             status="failed",
             voice_id=voice_id,
@@ -703,14 +792,22 @@ async def get_avatar_preview(
             voice_id=user.photo_avatar_preview_voice_id,
         )
 
-    if not user.photo_avatar_preview_video_id:
+    vid = user.photo_avatar_preview_video_id
+    if not vid:
         return AvatarPreviewResponse(status="not_started")
 
+    from app.services.pipeline.hedra import HedraError, get_generation_status
     from app.services.pipeline.heygen import HeyGenError, get_video_status
 
+    # job id 가 "hedra:" 접두면 Hedra 상태를, 아니면 HeyGen 상태를 조회한다.
+    # 두 함수 모두 {status, video_url, ...} 동일 dict 를 돌려줘 이후 처리는 공통이다.
+    is_hedra = vid.startswith(_HEDRA_PREVIEW_PREFIX)
     try:
-        st = await get_video_status(user.photo_avatar_preview_video_id)
-    except HeyGenError:
+        if is_hedra:
+            st = await get_generation_status(vid[len(_HEDRA_PREVIEW_PREFIX):])
+        else:
+            st = await get_video_status(vid)
+    except (HeyGenError, HedraError):
         # 일시적 조회 실패 — 계속 진행 중으로 보고 다음 폴링을 기다린다.
         return AvatarPreviewResponse(
             status="processing", voice_id=user.photo_avatar_preview_voice_id
@@ -1238,6 +1335,74 @@ async def list_looks(
             )
         )
     return items
+
+
+@router.post(
+    "/api/avatars/me/looks/upload",
+    response_model=LookItem,
+    summary="교수자 본인 사진을 라이브러리 룩으로 직접 업로드",
+)
+async def upload_own_face_look(
+    file: UploadFile = File(...),
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """교수자가 준비한 본인 사진(16:9 권장)을 그대로 라이브러리 '룩'으로 등록한다.
+
+    AI 룩 생성(페르소나/복장/배경/표정)을 대체하는 경로 — HeyGen/OpenAI 호출 없이
+    원본을 S3 에 저장하고 ``ready`` + ``saved`` 룩 1개를 만든다. Q&A 답변·미리보기는
+    본인 얼굴 렌더(Hedra)에서 이 이미지를 매 렌더 그대로 사용한다(아바타 등록·한도 없음).
+    """
+    content = await file.read()
+    if len(content) > _MAX_OWN_FACE_PHOTO:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"사진은 {_MAX_OWN_FACE_PHOTO // (1024 * 1024)}MB 이하여야 합니다.",
+        )
+    if content[:3] == _JPEG_MAGIC:
+        ext, ctype = "jpg", "image/jpeg"
+    elif content[:8] == _PNG_MAGIC:
+        ext, ctype = "png", "image/png"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="JPEG 또는 PNG 이미지만 업로드할 수 있습니다.",
+        )
+
+    s3_key = f"thumbnails/photo-avatar/{user.id}/own-{uuid.uuid4().hex[:8]}.{ext}"
+    s3_svc.upload_file(content, s3_key, content_type=ctype)
+    image_url = (
+        f"https://{settings.S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/{s3_key}"
+    )
+
+    look = PhotoAvatarLook(
+        user_id=user.id,
+        image_url=image_url,
+        preview_image_url=image_url,
+        status=LookStatus.ready.value,
+        # 직접 올린 사진은 곧바로 라이브러리에 노출(후보 단계 없음).
+        saved_to_library=True,
+    )
+    db.add(look)
+    # 본인 사진을 올린 교수자는 본인 얼굴 Q&A 대상이다. 프론트의 "Q&A 답변에 내 얼굴
+    # 사용" 토글은 폐지됐으므로(Hedra=본인/HeyGen=타인 선택이 그 역할을 대신함), 업로드
+    # 시점에 옵트인을 켜 둔다. 실제 본인 얼굴 vs 표준은 강의에 적용한 아바타가 정한다
+    # (qa_batch._resolve_character — 본인 룩이면 Hedra/Talking Photo, 표준이면 HeyGen).
+    user.qa_use_own_face = True
+    await db.commit()
+    await db.refresh(look)
+
+    return LookItem(
+        look_id=str(look.id),
+        image_url=s3_svc.presign_stored_s3_url(look.image_url),
+        preview_image_url=s3_svc.presign_stored_s3_url(look.preview_image_url),
+        prompt=None,
+        name=look.name,
+        status="ready",
+        is_default=(str(look.id) == user.photo_avatar_default_look_id),
+        saved=look.saved_to_library,
+        created_at=look.created_at,
+    )
 
 
 @router.post(
