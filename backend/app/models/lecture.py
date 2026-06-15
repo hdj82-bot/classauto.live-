@@ -89,6 +89,11 @@ class Lecture(Base):
     # 교수자가 고른 ElevenLabs 보이스 ID. NULL = voice_gender 기준 기본 보이스
     # (elevenlabs_client.pick_voice_id). render.py 가 합성 시 이 보이스를 사용.
     voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Q&A 사전질문 클립을 마지막으로 렌더할 때 쓴 아바타·음성(렌더 출처). 현재
+    # avatar_id/voice_id 와 다르면 이미 렌더된(ready) 클립이 '낡은' 상태 → '다시 제작'
+    # 점검이 이를 감지해 새 아바타로 재렌더한다(qa_batch._render_seed_questions 가 갱신).
+    qa_rendered_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    qa_rendered_voice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 영상 발화 속도 배율. 1.0 = 기본. ElevenLabs voice_settings.speed 유효범위
     # 0.7~1.2 로 합성 시 클램프. render.py 가 synthesize(speed=) 로 전달.
     voice_speed: Mapped[float] = mapped_column(

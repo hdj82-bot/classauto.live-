@@ -71,6 +71,13 @@ class SeedQuestionsResponse(BaseModel):
     max: int = Field(..., description="영상당 사전 질문 최대 개수")
     used_this_month: int = Field(..., description="이번 달 이미 사용한 Q&A 렌더 수")
     remaining: int = Field(..., description="이번 달 남은 Q&A 렌더 수")
+    qa_avatar_stale: bool = Field(
+        default=False,
+        description=(
+            "현재 강의 아바타/음성이 이미 렌더된(ready) 사전질문 클립의 것과 달라, "
+            "'다시 제작' 시 그 클립을 새 아바타로 다시 만들어야 하는지 여부."
+        ),
+    )
 
 
 class GenerateSeedAnswerRequest(BaseModel):

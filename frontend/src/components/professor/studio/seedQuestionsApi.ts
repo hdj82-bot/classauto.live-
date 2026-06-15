@@ -72,6 +72,7 @@ interface SeedQuestionsWire {
   max: number;
   used_this_month: number;
   remaining: number;
+  qa_avatar_stale?: boolean;
 }
 
 export interface SeedQuestionsResult {
@@ -84,6 +85,8 @@ export interface SeedQuestionsResult {
   remaining: number;
   /** 백엔드 미응답/404 로 빈 목록을 쓰는 중인지. */
   deferred: boolean;
+  /** 현재 아바타/음성이 이미 렌더된 클립과 달라 '다시 제작' 시 새로 만들어야 하는지. */
+  qaAvatarStale: boolean;
 }
 
 function _parse(data: SeedQuestionsWire, deferred: boolean): SeedQuestionsResult {
@@ -93,6 +96,7 @@ function _parse(data: SeedQuestionsWire, deferred: boolean): SeedQuestionsResult
     usedThisMonth: data.used_this_month ?? 0,
     remaining: data.remaining ?? 0,
     deferred,
+    qaAvatarStale: !!data.qa_avatar_stale,
   };
 }
 
@@ -111,6 +115,7 @@ export async function getSeedQuestions(
       usedThisMonth: 0,
       remaining: 0,
       deferred: true,
+      qaAvatarStale: false,
     };
   }
 }

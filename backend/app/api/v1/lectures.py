@@ -284,7 +284,21 @@ async def get_seed_questions(
     def _work():
         with SyncSessionLocal() as sdb:
             rows = qa_avatar.list_seed_questions(sdb, lecture_id)
-            return _seed_questions_response(sdb, instructor_id, rows)
+            resp = _seed_questions_response(sdb, instructor_id, rows)
+            # 아바타·음성이 마지막 Q&A 렌더 때(lecture.qa_rendered_*)와 다르고, 이미
+            # 렌더된(ready) 클립이 있으면 '낡은' 상태 — '다시 제작' 점검이 이를 알린다.
+            from app.models.lecture import Lecture as _Lecture  # noqa: PLC0415
+
+            lec = sdb.get(_Lecture, lecture_id)
+            if lec is not None:
+                changed = (lec.avatar_id or None) != (
+                    lec.qa_rendered_avatar_id or None
+                ) or (lec.voice_id or None) != (lec.qa_rendered_voice_id or None)
+                has_ready = any(
+                    r.status == qa_avatar.STATUS_READY for r in rows
+                )
+                resp.qa_avatar_stale = bool(changed and has_ready)
+            return resp
 
     return await loop.run_in_executor(None, _work)
 

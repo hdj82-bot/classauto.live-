@@ -340,6 +340,53 @@ def test_resolve_character_defaults_to_standard_when_not_opted_in(sync_db, monke
     assert "avatar_id" in character
 
 
+# ── 1-c. 아바타 변경 시 이미 ready 인 클립도 새 아바타로 재렌더 ────────────────
+
+
+def test_seed_render_resets_stale_ready_clips_on_avatar_change(
+    sync_db, mock_render, monkeypatch
+):
+    """아바타가 바뀌면(qa_rendered_* 와 불일치) 이미 ready 인 사전질문 클립도 다시 렌더.
+
+    2026-06-15 사용자 보고: 아바타만 바꿔도 '다시 제작' 이 "변경 없음"으로 건너뜀.
+    이제 강의 출처(qa_rendered_avatar_id)와 현재 avatar_id 가 다르면 ready 클립을
+    pending 으로 되돌려 새 아바타로 만들고, 출처를 현재 아바타로 갱신한다.
+    """
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    prof, _c, lec = _seed_lecture(sync_db)
+    # 아바타 A 로 이미 렌더 완료된(ready) 클립 + 출처 기록.
+    lec.avatar_id = "avatar-A"
+    lec.qa_rendered_avatar_id = "avatar-A"
+    sync_db.add(QAAnswerCache(
+        lecture_id=lec.id, instructor_id=prof.id, question_text="질문",
+        answer_text="답변", status=qa_avatar.STATUS_READY, origin=qa_avatar.ORIGIN_SEED,
+        s3_video_url="https://x.s3.ap-northeast-2.amazonaws.com/clip.mp4",
+        heygen_job_id="job-A",
+    ))
+    sync_db.commit()
+
+    # 아바타를 B 로 변경 → stale.
+    lec.avatar_id = "avatar-B"
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    # ready 였던 클립이 stale 로 초기화→재렌더 제출됨.
+    assert result["submitted"] == 1
+    row = sync_db.query(QAAnswerCache).one()
+    assert row.status == qa_avatar.STATUS_RENDERING
+    # 출처가 새 아바타로 갱신됨(다음 점검은 not-stale).
+    sync_db.refresh(lec)
+    assert lec.qa_rendered_avatar_id == "avatar-B"
+    assert qa_batch.qa_avatar_stale(lec) is False
+
+
 # ── 2. 범위 밖 질문은 렌더하지 않고 failed ─────────────────────────────────────
 
 
