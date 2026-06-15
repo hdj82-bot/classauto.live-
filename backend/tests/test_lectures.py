@@ -240,7 +240,6 @@ async def test_changing_avatar_resets_ready_seed_clips(client, professor, lectur
     """
     from app.models.qa_answer_cache import QAAnswerCache
     from app.services.pipeline import qa_avatar
-    from sqlalchemy import select
 
     seed = QAAnswerCache(
         lecture_id=lecture.id,
