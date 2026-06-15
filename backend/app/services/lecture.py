@@ -532,15 +532,55 @@ async def update_lecture(
         and update_data["subtitle_lang"] != lecture.subtitle_lang
     )
 
+    # 아바타·음성이 바뀌면 이미 렌더된 교수자 사전 질문(instructor_seed) 클립은 옛
+    # 아바타/음성이라 무효 — pending 으로 되돌려 다음 '다시 제작'이 새 아바타/음성으로
+    # 다시 렌더하게 한다. (안 그러면 ready 클립이 고착돼 재제작이 "0개 변경"으로
+    # 건너뛰어, 아바타를 바꿔도 옛 얼굴 답변이 그대로 남는다 — 2026-06-15 사용자 보고.)
+    avatar_or_voice_changed = (
+        ("avatar_id" in update_data and update_data["avatar_id"] != lecture.avatar_id)
+        or ("voice_id" in update_data and update_data["voice_id"] != lecture.voice_id)
+    )
+
     for field, value in update_data.items():
         setattr(lecture, field, value)
 
     if subtitle_lang_changed:
         await _clear_subtitle_segments(db, lecture_id)
+    if avatar_or_voice_changed:
+        await _reset_seed_renders(db, lecture_id)
 
     await db.commit()
     await db.refresh(lecture)
     return lecture
+
+
+async def _reset_seed_renders(db: AsyncSession, lecture_id: uuid.UUID) -> None:
+    """이미 렌더된 교수자 사전 질문(instructor_seed) 클립을 pending 으로 되돌린다.
+
+    아바타·음성 변경 시 호출 — ready/rendering 클립은 옛 아바타/음성이라 무효이므로
+    s3_video_url·heygen_job_id·cluster_key 를 비우고 status=pending 으로 되돌려, 다음
+    '다시 제작'(render_seed_questions)이 새 아바타/음성으로 재렌더하게 한다. 학생 적립
+    행(origin=student)은 건드리지 않는다(야간 배치 소관).
+    """
+    from app.models.qa_answer_cache import QAAnswerCache  # noqa: PLC0415
+    from app.services.pipeline import qa_avatar  # noqa: PLC0415
+
+    rows = (
+        await db.execute(
+            select(QAAnswerCache).where(
+                QAAnswerCache.lecture_id == lecture_id,
+                QAAnswerCache.origin == qa_avatar.ORIGIN_SEED,
+                QAAnswerCache.status.in_(
+                    [qa_avatar.STATUS_READY, qa_avatar.STATUS_RENDERING]
+                ),
+            )
+        )
+    ).scalars().all()
+    for r in rows:
+        r.status = qa_avatar.STATUS_PENDING
+        r.s3_video_url = None
+        r.heygen_job_id = None
+        r.cluster_key = None
 
 
 async def _clear_subtitle_segments(db: AsyncSession, lecture_id: uuid.UUID) -> None:

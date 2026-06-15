@@ -231,6 +231,44 @@ async def test_update_lecture_avatar_id_and_name(client, professor, lecture):
     assert resp2.json()["avatar_name"] == "김교수 아바타"
 
 
+@pytest.mark.asyncio
+async def test_changing_avatar_resets_ready_seed_clips(client, professor, lecture, db):
+    """아바타를 바꾸면 이미 렌더된 교수자 사전 질문 클립이 pending 으로 초기화된다.
+
+    (안 그러면 ready 클립이 옛 아바타로 고착돼 '다시 제작'이 0개 변경으로 건너뛴다 —
+    2026-06-15 사용자 보고.) 학생 적립 행은 건드리지 않는다.
+    """
+    from app.models.qa_answer_cache import QAAnswerCache
+    from app.services.pipeline import qa_avatar
+    from sqlalchemy import select
+
+    seed = QAAnswerCache(
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        question_text="이 강의의 핵심은?",
+        answer_text="핵심 요약입니다.",
+        question_embedding=None,
+        status=qa_avatar.STATUS_READY,
+        origin=qa_avatar.ORIGIN_SEED,
+        s3_video_url="https://x.s3.ap-northeast-2.amazonaws.com/seed.mp4",
+        heygen_job_id="hg-seed-1",
+    )
+    db.add(seed)
+    await db.flush()
+
+    resp = await client.patch(
+        f"/api/lectures/{lecture.id}",
+        headers=make_auth_header(professor),
+        json={"avatar_id": "av_new_999"},
+    )
+    assert resp.status_code == 200
+
+    await db.refresh(seed)
+    assert seed.status == qa_avatar.STATUS_PENDING
+    assert seed.s3_video_url is None
+    assert seed.heygen_job_id is None
+
+
 # ── GET /api/lectures/{slug}/public ──────────────────────────────────────────
 
 @pytest.mark.asyncio
