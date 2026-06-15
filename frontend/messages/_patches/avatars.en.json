@@ -66,8 +66,6 @@
     "builderCreateHint": "Pick both a look and a voice ('Use for avatar' in the library, 'Use this voice for the avatar' below).",
     "currentAvatarLabel": "Current avatar",
     "currentAvatarFallbackName": "Default avatar",
-    "currentAvatarPlay": "Play {name} preview",
-    "currentAvatarPlayHint": "Click to play preview",
     "useForBuild": "Use for avatar",
     "useForBuildDone": "Set as the look for your avatar. Pick a voice, then finish with 'Create avatar (look + voice)'.",
     "voiceUseForBuildDone": "Set as the voice for your avatar. With a look, finish with 'Create avatar (look + voice)'.",

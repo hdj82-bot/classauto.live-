@@ -1502,8 +1502,6 @@ export default function StudioWizardPage() {
       <SettingsPanel
         avatarName={lecture.avatar_name ?? "기본 아바타"}
         avatarPreviewImageUrl={lecture.avatar_preview_url ?? null}
-        avatarPreviewVideoUrl={lecture.avatar_preview_video_url ?? null}
-        reducedMotion={reducedMotion}
         ttsProvider="elevenlabs"
         voiceGender={voiceGender}
         voiceLang={voiceLang}

@@ -453,7 +453,7 @@ export default function AvatarsPage() {
     [voices, selectedVoiceId],
   );
 
-  // "현재 지정된 아바타" 표시 데이터 — 강의에 저장된 미리보기(비정규화)를 우선 쓰고,
+  // "현재 지정된 아바타" 표시 데이터(식별용) — 강의에 저장된 썸네일을 우선 쓰고,
   // 없으면(구 강의 등) avatar_id 를 로드된 목록에서 해석해 폴백한다. 목록이 늦게
   // 로드돼도 resolveAvatar 의존으로 자동 갱신된다. avatar_id 가 없으면 표시 안 함.
   const currentAvatarDisplay = useMemo(() => {
@@ -469,12 +469,32 @@ export default function AvatarsPage() {
         currentLectureAvatar?.avatar_preview_url ??
         resolved?.preview_image_url ??
         null,
-      videoUrl:
-        currentLectureAvatar?.avatar_preview_video_url ??
-        resolved?.preview_video_url ??
-        null,
     };
   }, [currentLectureAvatar, resolveAvatar, t]);
+
+  // 자동 백필 — 구 강의는 적용 당시 썸네일을 저장하지 않아 studio 우측 패널엔
+  // 이미지가 안 뜬다(studio 는 저장된 값만 읽고 목록 해석을 안 함). 아바타 페이지에서
+  // avatar_id 를 목록으로 해석해 썸네일을 찾았는데 강의에 저장돼 있지 않으면, 한 번
+  // 조용히 강의에 저장(PATCH)해 다음 studio 진입부터 썸네일이 보이게 한다.
+  const backfilledRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lectureId) return;
+    const info = currentLectureAvatar;
+    if (!info?.avatar_id || info.avatar_preview_url) return; // 이미 저장됨/없음
+    const resolved = resolveAvatar(info.avatar_id);
+    const imageUrl = resolved?.preview_image_url ?? null;
+    const videoUrl = resolved?.preview_video_url ?? null;
+    if (!imageUrl && !videoUrl) return; // 목록 미로드 등 — 아직 해석 불가
+    const key = `${lectureId}:${info.avatar_id}`;
+    if (backfilledRef.current === key) return;
+    backfilledRef.current = key;
+    void saveLectureAvatarPreview(lectureId, { imageUrl, videoUrl });
+    setCurrentLectureAvatar({
+      ...info,
+      avatar_preview_url: imageUrl,
+      avatar_preview_video_url: videoUrl,
+    });
+  }, [lectureId, currentLectureAvatar, resolveAvatar]);
 
   // 스크립트 테스트 렌더 직전 — 선택한 본인 룩(MyLook)을 기본 룩으로 지정해
   // me/preview 가 그 룩을 렌더하도록 맞춘다. 이미 기본이거나 본인 룩이 아니면 no-op.
@@ -990,14 +1010,12 @@ export default function AvatarsPage() {
                 creating={applying}
                 t={t}
               />
-              {/* 현재 강의에 지정된 아바타 — 미리보기 썸네일(클릭 시 영상). 강의
-                  컨텍스트(?lecture=)가 있고 지정 아바타가 있을 때만 노출. */}
+              {/* 현재 강의에 지정된 아바타 — 썸네일 + 이름으로 식별만(재생 없음).
+                  강의 컨텍스트(?lecture=)가 있고 지정 아바타가 있을 때만 노출. */}
               {lectureId && currentAvatarDisplay && (
                 <CurrentAvatarChip
                   name={currentAvatarDisplay.name}
                   imageUrl={currentAvatarDisplay.imageUrl}
-                  videoUrl={currentAvatarDisplay.videoUrl}
-                  reducedMotion={reducedMotion}
                   t={t}
                 />
               )}
