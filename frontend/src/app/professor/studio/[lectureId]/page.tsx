@@ -54,6 +54,9 @@ import type {
 type LectureWithAvatar = Lecture & {
   avatar_id?: string | null;
   avatar_name?: string | null;
+  /** 지정 아바타 미리보기 썸네일/영상 URL (아바타 페이지에서 적용 시 저장). */
+  avatar_preview_url?: string | null;
+  avatar_preview_video_url?: string | null;
   /** 영상에서 아바타 크기 배율 (1.0 = 기본). 미배포 동안 undefined → 1.0 폴백. */
   avatar_scale?: number | null;
 };
@@ -1498,6 +1501,9 @@ export default function StudioWizardPage() {
 
       <SettingsPanel
         avatarName={lecture.avatar_name ?? "기본 아바타"}
+        avatarPreviewImageUrl={lecture.avatar_preview_url ?? null}
+        avatarPreviewVideoUrl={lecture.avatar_preview_video_url ?? null}
+        reducedMotion={reducedMotion}
         ttsProvider="elevenlabs"
         voiceGender={voiceGender}
         voiceLang={voiceLang}

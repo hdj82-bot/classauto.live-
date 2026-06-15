@@ -180,6 +180,16 @@ class LectureUpdate(BaseModel):
         max_length=100,
         description="강의별 아바타 표시 이름 (라벨 전용, 영상 생성과 무관).",
     )
+    avatar_preview_url: str | None = Field(
+        default=None,
+        max_length=1024,
+        description="지정 아바타 미리보기 썸네일 URL (표시 전용). 아바타 적용 시 함께 저장.",
+    )
+    avatar_preview_video_url: str | None = Field(
+        default=None,
+        max_length=1024,
+        description="지정 아바타 미리보기 영상 URL (클릭 시 재생, 표시 전용).",
+    )
     avatar_scale: float | None = Field(
         default=None,
         ge=0.3,
@@ -237,6 +247,8 @@ class LectureResponse(BaseModel):
     voice_gender: VoiceGender
     avatar_id: str | None = None
     avatar_name: str | None = None
+    avatar_preview_url: str | None = None
+    avatar_preview_video_url: str | None = None
     avatar_scale: float = 1.0
     voice_lang: str = "ko"
     subtitle_lang: str | None = None

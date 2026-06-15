@@ -13,6 +13,7 @@ import AvatarViewerModal from "@/components/professor/avatars/AvatarViewerModal"
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import SampleVoicePicker from "@/components/professor/avatars/SampleVoicePicker";
 import AvatarBuilderBar from "@/components/professor/avatars/AvatarBuilderBar";
+import CurrentAvatarChip from "@/components/professor/avatars/CurrentAvatarChip";
 import AvatarScriptTest from "@/components/professor/avatars/AvatarScriptTest";
 import AvatarCreateTypeToggle from "@/components/professor/avatars/AvatarCreateTypeToggle";
 import OwnPhotoUploadCard from "@/components/professor/avatars/OwnPhotoUploadCard";
@@ -27,9 +28,11 @@ import {
   deleteMyVoice,
   deleteSavedAvatar,
   deleteStandardAvatar,
+  getLectureAvatar,
   getLectureTitle,
   getMyVoice,
   getRecentAvatarId,
+  saveLectureAvatarPreview,
   listAvatars,
   listMyLooks,
   listMyStandardAvatars,
@@ -44,7 +47,11 @@ import {
   uploadOwnFaceLook,
   uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
-import type { MyLook, ScriptLanguage } from "@/components/professor/avatars/avatarsApi";
+import type {
+  LectureAvatarInfo,
+  MyLook,
+  ScriptLanguage,
+} from "@/components/professor/avatars/avatarsApi";
 import { listVoiceOptions, previewVoice } from "@/components/professor/avatars/voicesApi";
 import type {
   Avatar,
@@ -125,6 +132,11 @@ export default function AvatarsPage() {
 
   // 녹음 대본 주제로 쓸 현재 강의 제목(없으면 null → 일반 학술 대본).
   const [lectureTitle, setLectureTitle] = useState<string | null>(null);
+
+  // 현재 강의에 적용돼 있는 아바타(빌더 바 우측 "현재 지정된 아바타" 표시용).
+  // 저장된 미리보기 URL 우선, 없으면 목록에서 avatar_id 로 해석해 폴백한다.
+  const [currentLectureAvatar, setCurrentLectureAvatar] =
+    useState<LectureAvatarInfo | null>(null);
 
   const [voices, setVoices] = useState<VoiceOption[]>([]);
   const [voicesLoading, setVoicesLoading] = useState(true);
@@ -281,6 +293,22 @@ export default function AvatarsPage() {
     };
   }, [lectureId]);
 
+  // 현재 강의에 지정된 아바타 — "현재 지정된 아바타" 칩 표시용. 미배포/실패면 null.
+  useEffect(() => {
+    if (!lectureId) {
+      setCurrentLectureAvatar(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const info = await getLectureAvatar(lectureId);
+      if (!cancelled) setCurrentLectureAvatar(info);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [lectureId]);
+
   // 음성 카탈로그 (studio 와 동일한 /api/voices). 실패 시 합성 폴백.
   useEffect(() => {
     let cancelled = false;
@@ -424,6 +452,29 @@ export default function AvatarsPage() {
     () => voices.find((v) => v.id === selectedVoiceId)?.name ?? null,
     [voices, selectedVoiceId],
   );
+
+  // "현재 지정된 아바타" 표시 데이터 — 강의에 저장된 미리보기(비정규화)를 우선 쓰고,
+  // 없으면(구 강의 등) avatar_id 를 로드된 목록에서 해석해 폴백한다. 목록이 늦게
+  // 로드돼도 resolveAvatar 의존으로 자동 갱신된다. avatar_id 가 없으면 표시 안 함.
+  const currentAvatarDisplay = useMemo(() => {
+    const id = currentLectureAvatar?.avatar_id;
+    if (!id) return null;
+    const resolved = resolveAvatar(id);
+    return {
+      name:
+        currentLectureAvatar?.avatar_name ??
+        resolved?.name ??
+        t("currentAvatarFallbackName"),
+      imageUrl:
+        currentLectureAvatar?.avatar_preview_url ??
+        resolved?.preview_image_url ??
+        null,
+      videoUrl:
+        currentLectureAvatar?.avatar_preview_video_url ??
+        resolved?.preview_video_url ??
+        null,
+    };
+  }, [currentLectureAvatar, resolveAvatar, t]);
 
   // 스크립트 테스트 렌더 직전 — 선택한 본인 룩(MyLook)을 기본 룩으로 지정해
   // me/preview 가 그 룩을 렌더하도록 맞춘다. 이미 기본이거나 본인 룩이 아니면 no-op.
@@ -600,7 +651,13 @@ export default function AvatarsPage() {
       if (!lectureId || !id) return;
       setApplying(true);
       try {
-        await applyAvatarToLecture(lectureId, id);
+        // 적용 시점에 알고 있는 미리보기 URL 도 함께 저장해, studio 우측 패널·
+        // "현재 지정된 아바타"가 썸네일(클릭 시 영상)을 보여 줄 수 있게 한다.
+        const applied = resolveAvatar(id);
+        await applyAvatarToLecture(lectureId, id, {
+          imageUrl: applied?.preview_image_url ?? null,
+          videoUrl: applied?.preview_video_url ?? null,
+        });
         // 음성을 골랐을 때만 voice_id 를 덮어쓴다(미선택 시 기존 강의 음성 보존).
         if (selectedVoiceId) await applyVoiceToLecture(lectureId, selectedVoiceId);
         toast(t("applySuccess"), "success");
@@ -611,7 +668,7 @@ export default function AvatarsPage() {
         setApplying(false);
       }
     },
-    [lectureId, router, toast, t, selectedVoiceId],
+    [lectureId, router, toast, t, selectedVoiceId, resolveAvatar],
   );
 
   const handleApply = useCallback(
@@ -680,6 +737,16 @@ export default function AvatarsPage() {
       setApplyingSavedId(id);
       try {
         await applySavedAvatar(id, lectureId);
+        // 적용 직후 표시용 미리보기(룩 썸네일 + ready 루프 영상)를 강의에 저장한다.
+        // applySavedAvatar 가 서버에서 avatar_id 를 정하므로 미리보기만 비정규화한다.
+        const saved = savedAvatars.find((a) => a.id === id);
+        if (saved) {
+          await saveLectureAvatarPreview(lectureId, {
+            imageUrl: resolveLookImage(saved.look_id),
+            videoUrl:
+              saved.preview_status === "ready" ? saved.preview_video_url : null,
+          });
+        }
         toast(t("applySuccess"), "success");
         router.push(`/professor/studio/${lectureId}`);
       } catch {
@@ -688,7 +755,7 @@ export default function AvatarsPage() {
         setApplyingSavedId(null);
       }
     },
-    [lectureId, router, toast, t],
+    [lectureId, router, toast, t, savedAvatars, resolveLookImage],
   );
 
   // 삭제(낙관적). 실패 시 서버 기준으로 목록을 다시 맞춘다.
@@ -908,13 +975,33 @@ export default function AvatarsPage() {
           title={t("title")}
           subtitle={t("subtitle")}
           actions={
-            <AvatarBuilderBar
-              look={selectedAvatar}
-              voiceName={selectedVoiceName}
-              onCreate={handleOpenBuilder}
-              creating={applying}
-              t={t}
-            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "stretch",
+                flexWrap: "wrap",
+                gap: 12,
+              }}
+            >
+              <AvatarBuilderBar
+                look={selectedAvatar}
+                voiceName={selectedVoiceName}
+                onCreate={handleOpenBuilder}
+                creating={applying}
+                t={t}
+              />
+              {/* 현재 강의에 지정된 아바타 — 미리보기 썸네일(클릭 시 영상). 강의
+                  컨텍스트(?lecture=)가 있고 지정 아바타가 있을 때만 노출. */}
+              {lectureId && currentAvatarDisplay && (
+                <CurrentAvatarChip
+                  name={currentAvatarDisplay.name}
+                  imageUrl={currentAvatarDisplay.imageUrl}
+                  videoUrl={currentAvatarDisplay.videoUrl}
+                  reducedMotion={reducedMotion}
+                  t={t}
+                />
+              )}
+            </div>
           }
         />
 

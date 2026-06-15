@@ -127,13 +127,84 @@ export async function listAvatars(): Promise<AvatarListResult> {
   }
 }
 
-/** PATCH /api/lectures/{id} { avatar_id }. deferred 면 시뮬레이션 성공. */
+/** 강의에 지정된 아바타 정보(표시용) — GET /api/lectures/{id} 의 부분 투영. */
+export interface LectureAvatarInfo {
+  avatar_id: string | null;
+  avatar_name: string | null;
+  /** 미리보기 썸네일 이미지 URL (적용 시 비정규화 저장). */
+  avatar_preview_url: string | null;
+  /** 미리보기 루프 영상 URL (클릭 시 재생). */
+  avatar_preview_video_url: string | null;
+}
+
+/**
+ * GET /api/lectures/{id} — "현재 지정된 아바타" 표시에 필요한 필드만 추린다.
+ * 표시 전용이라 어떤 실패(미배포·404·네트워크)에서도 throw 하지 않고 null 을 돌려
+ * 칩이 조용히 비워지게 한다(페이지 동작에 영향 없음).
+ */
+export async function getLectureAvatar(
+  lectureId: string,
+): Promise<LectureAvatarInfo | null> {
+  try {
+    const { data } = await api.get<{
+      avatar_id?: string | null;
+      avatar_name?: string | null;
+      avatar_preview_url?: string | null;
+      avatar_preview_video_url?: string | null;
+    }>(`/api/lectures/${lectureId}`);
+    return {
+      avatar_id: data.avatar_id ?? null,
+      avatar_name: data.avatar_name ?? null,
+      avatar_preview_url: data.avatar_preview_url ?? null,
+      avatar_preview_video_url: data.avatar_preview_video_url ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * PATCH /api/lectures/{id} { avatar_id }. deferred 면 시뮬레이션 성공.
+ *
+ * ``preview`` 를 함께 넘기면 미리보기 썸네일/영상 URL 도 강의에 비정규화 저장한다
+ * (studio 우측 패널·"현재 지정된 아바타" 표시용). undefined 인 필드는 PATCH 에서
+ * 빠져 기존 값을 보존한다.
+ */
 export async function applyAvatarToLecture(
   lectureId: string,
   avatarId: string,
+  preview?: { imageUrl?: string | null; videoUrl?: string | null },
 ): Promise<void> {
   try {
-    await api.patch(`/api/lectures/${lectureId}`, { avatar_id: avatarId });
+    await api.patch(`/api/lectures/${lectureId}`, {
+      avatar_id: avatarId,
+      ...(preview && "imageUrl" in preview
+        ? { avatar_preview_url: preview.imageUrl ?? null }
+        : {}),
+      ...(preview && "videoUrl" in preview
+        ? { avatar_preview_video_url: preview.videoUrl ?? null }
+        : {}),
+    });
+  } catch (err) {
+    if (isDeferredError(err)) return;
+    throw err;
+  }
+}
+
+/**
+ * PATCH /api/lectures/{id} — 미리보기 썸네일/영상 URL 만 갱신한다(avatar_id 불변).
+ * 저장 조합 적용(applySavedAvatar)처럼 서버가 avatar_id 를 정하는 경로에서, 적용
+ * 직후 표시용 미리보기를 강의에 비정규화해 두는 데 쓴다. deferred 면 조용히 성공.
+ */
+export async function saveLectureAvatarPreview(
+  lectureId: string,
+  preview: { imageUrl?: string | null; videoUrl?: string | null },
+): Promise<void> {
+  try {
+    await api.patch(`/api/lectures/${lectureId}`, {
+      avatar_preview_url: preview.imageUrl ?? null,
+      avatar_preview_video_url: preview.videoUrl ?? null,
+    });
   } catch (err) {
     if (isDeferredError(err)) return;
     throw err;

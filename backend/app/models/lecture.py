@@ -66,6 +66,12 @@ class Lecture(Base):
     # 우측 패널·갤러리에 노출할 강의별 아바타 표시 이름 (교수자 자유 편집).
     # NULL = 기본 표시명. 영상 생성 로직과 무관한 라벨 전용.
     avatar_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # 선택된 아바타의 미리보기 썸네일/영상 URL. 아바타 적용 시 프론트가 함께 저장한다
+    # (avatar_id 만으로는 미리보기를 되찾기 어려워 — 표준/저장조합 등 출처가 다양 —
+    #  적용 시점에 알던 URL 을 비정규화해 둔다). studio 우측 패널·아바타 페이지
+    # "현재 지정된 아바타"가 이 값으로 썸네일(클릭 시 영상)을 보여 준다. 영상 생성과 무관.
+    avatar_preview_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    avatar_preview_video_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # 영상에서 아바타가 차지하는 크기 배율. 1.0 = 기본. studio 미리보기의 PiP
     # 크기와 1:1로 매핑되며, render.py 가 heygen.create_video(avatar_scale=) 로
     # 전달해 HeyGen character.scale 에 반영한다(작을수록 프레임 안에서 아바타가
