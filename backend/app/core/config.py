@@ -169,11 +169,11 @@ class Settings(BaseSettings):
     # 클러스터가 렌더 대상이 되기 위한 최소 누적 질문 수(1회성 잡음 질문 렌더 방지).
     QA_AVATAR_MIN_CLUSTER_SIZE: int = 1
     # 아바타 답변 길이 상한(글자) — 렌더 TTS 에 넘기는 답변을 자른다. 교수자 입력
-    # 스키마(seed_question.answer max_length=2000)와 일치시켜, 교수자가 적은 답변이
-    # 그대로 발화되게 한다(이전 400 은 영어 등 긴 답변을 중간에서 끊었다 — 2026-06-15
-    # 사용자 보고). 변동비(렌더 길이)는 이 상한 × 발화 속도로 결정되므로, 비용을 더
-    # 죄어야 하면 이 값을 낮춘다(낮춰도 저장된 answer_text 원문은 보존됨 — qa_batch 참조).
-    QA_AVATAR_MAX_ANSWER_CHARS: int = 2000
+    # 스키마(seed_question.answer max_length=800)와 일치시켜, 교수자가 적은 답변이
+    # 그대로 발화되게 한다. 권장 답변 길이는 300~800자(2026-06-15 사용자 결정 — 2000 은
+    # 발화가 너무 길다). 변동비(렌더 길이)는 이 상한 × 발화 속도로 결정되므로, 비용을
+    # 더 죄어야 하면 이 값을 낮춘다(낮춰도 저장된 answer_text 원문은 보존됨 — qa_batch 참조).
+    QA_AVATAR_MAX_ANSWER_CHARS: int = 800
     # 야간 배치 실행 시각(UTC 시). 기본 18시(UTC) = KST 03:00 — 일일 백업(03 UTC) 이후.
     QA_AVATAR_BATCH_HOUR_UTC: int = 18
 
