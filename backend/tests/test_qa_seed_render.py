@@ -223,6 +223,35 @@ def test_seed_render_uses_instructor_answer_without_rag(sync_db, mock_render, mo
         loop.close()
 
 
+def test_seed_render_preserves_long_instructor_answer(sync_db, mock_render, monkeypatch):
+    """긴 사전 대답(>400자)이 렌더 후에도 원문 그대로 보존된다.
+
+    이전엔 렌더가 answer_text 를 QA_AVATAR_MAX_ANSWER_CHARS(=400)로 잘라 다시 저장해,
+    편집기에 답변 뒷부분이 사라졌다(2026-06-15 사용자 보고). 이제 원문을 보존한다.
+    """
+    from app.tasks import qa_batch
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    long_answer = "A" * 900  # 옛 상한(400)보다 길고 입력 상한(2000) 이내
+    row = QAAnswerCache(
+        lecture_id=lec.id, instructor_id=prof.id,
+        question_text="긴 답변이 필요한 질문?", answer_text=long_answer,
+        question_embedding=None, status=qa_avatar.STATUS_PENDING,
+        origin=qa_avatar.ORIGIN_SEED,
+    )
+    sync_db.add(row)
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        rendered = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+        assert rendered == {"submitted": 1, "failed": 0}
+        refreshed = sync_db.query(QAAnswerCache).one()
+        assert refreshed.answer_text == long_answer  # 400자로 잘리지 않음
+    finally:
+        loop.close()
+
+
 # ── 1-c. 본인 아바타를 끝내 확보 못 하면 failed + 사유(무한 "대기" 방지) ─────────
 
 
