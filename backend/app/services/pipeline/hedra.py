@@ -157,13 +157,19 @@ async def submit_talking_video(
     audio_id = await _create_asset(aud_name, "audio", audio_bytes, audio_ctype)
     model_id = await _resolve_model_id()
 
+    # /generations 는 type 으로 구분되는 discriminated union 이라 "type":"video" 가
+    # 필수다(없으면 422 union_tag_not_found). 영상 파라미터(프롬프트·해상도·비율)는
+    # 최상위가 아니라 generated_video_inputs 안에 넣는다(Hedra web-app/public 스키마).
     payload = {
+        "type": "video",
         "ai_model_id": model_id,
         "start_keyframe_id": image_id,
         "audio_id": audio_id,
-        "text_prompt": text_prompt or "",
-        "resolution": settings.HEDRA_RESOLUTION,
-        "aspect_ratio": settings.HEDRA_ASPECT_RATIO,
+        "generated_video_inputs": {
+            "text_prompt": text_prompt or "",
+            "resolution": settings.HEDRA_RESOLUTION,
+            "aspect_ratio": settings.HEDRA_ASPECT_RATIO,
+        },
     }
     resp = await _request_json("POST", "/generations", json=payload, timeout=60.0)
     if resp.status_code >= 400:

@@ -102,8 +102,11 @@ def test_submit_builds_correct_payload(monkeypatch):
     assert len(calls["uploads"]) == 2
     # generation 페이로드가 자산 id·모델·해상도를 정확히 담았는지
     gen = calls["gen"]
+    # discriminated union 판별자 — 없으면 422 union_tag_not_found.
+    assert gen["type"] == "video"
     assert gen["ai_model_id"] == "char-3"
     assert gen["start_keyframe_id"] == "image-id"
     assert gen["audio_id"] == "audio-id"
-    assert gen["resolution"] == "720p"
-    assert gen["aspect_ratio"] == "16:9"
+    # 영상 파라미터는 generated_video_inputs 안에 중첩된다(web-app/public 스키마).
+    assert gen["generated_video_inputs"]["resolution"] == "720p"
+    assert gen["generated_video_inputs"]["aspect_ratio"] == "16:9"
