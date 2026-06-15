@@ -203,6 +203,42 @@ async def test_approve_video(client, professor, video_pending):
 
 
 @pytest.mark.asyncio
+async def test_approve_does_not_fallback_to_own_face_look(
+    client, professor, db, video_pending, lecture
+):
+    """강의에 아바타 미적용 시, 교수자 기본 본인 룩을 자동 채용하지 않는다(2026-06-15).
+
+    이전엔 lecture.avatar_id 가 비면 professor.photo_avatar_default_look_id(본인 얼굴)로
+    폴백해, 타인 아바타를 고른 강의도 "가장 최근 본인 룩"으로 렌더되는 문제가 있었다.
+    이제 빈 문자열(= create_video 의 gender 기본 아바타)로 두고 본인 룩을 쓰지 않는다.
+    """
+    from unittest.mock import patch
+
+    from sqlalchemy import select
+
+    from app.models.video_render import VideoRender
+
+    professor.photo_avatar_default_look_id = "look-default-own"
+    lecture.avatar_id = None
+    await db.flush()
+
+    with patch("app.tasks.render.render_slide"):
+        resp = await client.post(
+            f"/api/videos/{video_pending.id}/approve",
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+
+    rows = (
+        await db.execute(
+            select(VideoRender).where(VideoRender.lecture_id == lecture.id)
+        )
+    ).scalars().all()
+    assert rows  # 세그먼트별 렌더가 생성됨
+    assert all(r.avatar_id == "" for r in rows)
+
+
+@pytest.mark.asyncio
 async def test_approve_video_wrong_status(client, professor, db, lecture):
     """이미 rendering 상태에서 재승인 → 409."""
     from app.models.video import Video, VideoScript
