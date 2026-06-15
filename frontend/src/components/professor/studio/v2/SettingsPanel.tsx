@@ -1081,13 +1081,16 @@ function SeedQuestionCard({
         <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
           사전 대답
         </label>
+        {/* 긴 답변(영어 등)도 한눈에 보이도록 넉넉한 높이 + 세로 스크롤·리사이즈.
+            내용이 잘리지 않고 maxLength 도 없으며(백엔드 2000자까지 저장), 길면 스크롤된다. */}
         <textarea
           value={item.answer}
           onChange={(e) => onChange({ answer: e.target.value })}
           placeholder="이 질문이 들어오면 아바타가 말할 답변. 비워 두면 강의 자료로 자동 작성됩니다."
-          rows={3}
+          rows={6}
+          maxLength={2000}
           aria-label={`예상 질문 ${index + 1} 사전 대답`}
-          style={textareaStyle}
+          style={{ ...textareaStyle, minHeight: 120, maxHeight: 320, overflowY: "auto" }}
         />
       </div>
 
