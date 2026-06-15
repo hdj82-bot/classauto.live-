@@ -69,6 +69,51 @@ async def test_create_and_list_saved_avatar(client, professor, db):
 
 
 @pytest.mark.asyncio
+async def test_create_persists_matching_builder_preview(client, professor, db):
+    """제작(스크립트 테스트) 때 렌더한 미리보기가 룩+음성과 일치하면 저장 시 그대로 보존.
+
+    빌더는 본인 얼굴(avatar_id 없음) + 이 룩을 기본 룩으로 voice=vc_self 로 렌더한 상태를
+    user.photo_avatar_preview_* 에 남긴다. 같은 조합으로 저장하면 재렌더 없이 ready 카드.
+    """
+    look = await _make_look(db, professor)
+    professor.photo_avatar_default_look_id = str(look.id)
+    professor.photo_avatar_preview_url = "https://cdn.example.invalid/renders/prev_abc.mp4"
+    professor.photo_avatar_preview_voice_id = "vc_self"
+    professor.photo_avatar_preview_avatar_id = None
+    professor.photo_avatar_preview_text = "안녕하세요."
+    await db.flush()
+
+    resp = await client.post(
+        "/api/avatars/me/saved",
+        json={"name": "내 룩", "look_id": str(look.id), "voice_id": "vc_self"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 201, resp.text
+    item = resp.json()
+    assert item["preview_status"] == "ready"
+    assert item["preview_video_url"]
+
+
+@pytest.mark.asyncio
+async def test_create_skips_preview_when_voice_differs(client, professor, db):
+    """빌더 미리보기가 다른 음성으로 렌더됐으면(불일치) 복사하지 않는다(none)."""
+    look = await _make_look(db, professor)
+    professor.photo_avatar_default_look_id = str(look.id)
+    professor.photo_avatar_preview_url = "https://cdn.example.invalid/renders/prev_abc.mp4"
+    professor.photo_avatar_preview_voice_id = "vc_other"  # 저장 음성과 다름
+    professor.photo_avatar_preview_avatar_id = None
+    await db.flush()
+
+    resp = await client.post(
+        "/api/avatars/me/saved",
+        json={"name": "내 룩", "look_id": str(look.id), "voice_id": "vc_self"},
+        headers=make_auth_header(professor),
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["preview_status"] == "none"
+
+
+@pytest.mark.asyncio
 async def test_create_rejects_non_ready_look(client, professor, db):
     look = await _make_look(db, professor, status=LookStatus.generating.value)
     resp = await client.post(
