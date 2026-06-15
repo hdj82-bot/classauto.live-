@@ -149,14 +149,11 @@ export default function LectureLibrarySection({
     (id: string) => {
       const lec = lectures.find((l) => l.id === id);
       if (!lec) return;
-      const isProduction =
-        !lec.is_published && (Boolean(lec.pipeline_task_id) || !lec.video_url);
-      if (isProduction) {
-        router.push(`/professor/studio?lecture=${id}`);
-      } else {
-        // 편집 진입점 통일 — 발행/완료 강의도 studio 에서 편집(단순 에디터 폐지).
-        router.push(`/professor/studio/${id}`);
-      }
+      // 제작 중·발행 완료 모두 강의별 제작 화면으로 바로 진입한다.
+      // 이전엔 제작 중 강의를 `/professor/studio?lecture=` 로 보냈으나, 그 진입
+      // 페이지는 쿼리를 무시하고 새 강의 마법사(Step 1)만 띄워, "이어서 제작"이
+      // 엉뚱한 새 제작 화면으로 빠졌다. 강의별 페이지로 일원화한다.
+      router.push(`/professor/studio/${id}`);
     },
     [lectures, router],
   );
