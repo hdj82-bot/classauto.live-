@@ -10,11 +10,12 @@ import type { Avatar } from "./avatarsTypes";
 
 interface AvatarViewerModalProps {
   avatar: Avatar;
-  /** 강의 컨텍스트(?lecture=)가 있어 바로 적용이 가능한지. */
-  canApply: boolean;
-  applying: boolean;
-  /** "이 강의에 적용" — 지정 아바타/룩을 현재 강의에 적용. */
-  onApply: (id: string) => void;
+  /**
+   * "이 룩으로 아바타 제작" — 이 룩/아바타를 상단 "룩" 슬롯으로 선택한다(제작 대상).
+   * 강의에 바로 적용하지 않는다 — 음성을 고른 뒤 "룩과 목소리 아바타 제작"에서
+   * (본인 얼굴=Hedra / 표준=HeyGen) 합성한다.
+   */
+  onUseForBuild: (id: string) => void;
   /** 룩 이름 저장(연필). avatar.isLook 일 때만 노출. */
   onRename: (id: string, name: string) => void;
   onClose: () => void;
@@ -30,9 +31,7 @@ interface AvatarViewerModalProps {
  */
 export default function AvatarViewerModal({
   avatar,
-  canApply,
-  applying,
-  onApply,
+  onUseForBuild,
   onRename,
   onClose,
   t,
@@ -172,17 +171,16 @@ export default function AvatarViewerModal({
           <button type="button" onClick={onClose} style={secondaryBtn} data-testid="avatar-viewer-cancel">
             {t("viewerClose")}
           </button>
-          {canApply ? (
-            <button
-              type="button"
-              onClick={() => onApply(avatar.id)}
-              disabled={applying}
-              data-testid="avatar-viewer-apply"
-              style={{ ...primaryBtn, opacity: applying ? 0.55 : 1, cursor: applying ? "wait" : "pointer" }}
-            >
-              {applying ? t("applying") : t("applyToLecture")}
-            </button>
-          ) : null}
+          {/* "이 룩으로 아바타 제작" — 강의에 바로 적용하지 않고, 상단 "룩" 슬롯으로
+              선택한다(클릭 시 부모가 선택 + 모달 닫기). 이후 음성 선택 → 제작. */}
+          <button
+            type="button"
+            onClick={() => onUseForBuild(avatar.id)}
+            data-testid="avatar-viewer-apply"
+            style={primaryBtn}
+          >
+            {t("viewerUseForBuild")}
+          </button>
         </footer>
       </div>
     </div>

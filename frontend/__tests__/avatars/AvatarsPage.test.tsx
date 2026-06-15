@@ -176,17 +176,19 @@ describe("AvatarsPage", () => {
     expect(screen.getByTestId("sample-voice-option-v_adam")).toBeTruthy();
   });
 
-  it("embeds the Design-with-AI looks onboarding inline (photo upload step in card)", async () => {
+  it("offers own-photo upload in the own-avatar card (AI look generation removed)", async () => {
     mockDeferredBackend();
     renderPage(<AvatarsPage />);
 
-    // 별도 /onboarding 라우트로 보내지 않고, 카드 안에서 사진 업로드 단계부터 시작.
+    // AI 룩 생성(페르소나/복장/배경/표정)·스텝퍼는 폐지됐다 — 기본 "교수자 본인 아바타"
+    // 모드에서 본인 사진을 직접 업로드한다(16:9 안내 포함).
     await waitFor(() =>
-      expect(screen.getByTestId("photo-avatar-studio")).toBeTruthy(),
+      expect(screen.getByTestId("own-photo-upload")).toBeTruthy(),
     );
-    expect(screen.getByTestId("studio-stepper")).toBeTruthy();
-    expect(screen.getByTestId("step-upload")).toBeTruthy();
-    // 라우팅이 일어나지 않아야 한다(인라인 임베드).
+    expect(screen.getByTestId("own-photo-upload-btn")).toBeTruthy();
+    // 폐지된 룩 생성 온보딩 카드는 더 이상 렌더되지 않는다.
+    expect(screen.queryByTestId("photo-avatar-studio")).toBeNull();
+    // 라우팅이 일어나지 않아야 한다.
     expect(push).not.toHaveBeenCalled();
   });
 

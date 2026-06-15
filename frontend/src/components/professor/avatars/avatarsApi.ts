@@ -512,6 +512,50 @@ export async function listMyLooks(): Promise<MyLook[]> {
 }
 
 /**
+ * POST /api/avatars/me/looks/upload — 교수자 본인 사진을 라이브러리 룩으로 직접
+ * 업로드한다(AI 룩 생성 대체). 고화질 16:9 원본을 받으므로 클라이언트 다운스케일
+ * 없이 그대로 전송한다(백엔드가 렌더 시 안전 사이즈로 정규화). 미배포(deferred)면
+ * 오브젝트 URL 로 시뮬레이션한 룩을 돌려준다.
+ */
+export async function uploadOwnFaceLook(file: File): Promise<MyLook> {
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    const { data } = await api.post<LookItemWire>(
+      "/api/avatars/me/looks/upload",
+      form,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return {
+      id: data.look_id,
+      preview_image_url: data.preview_image_url ?? null,
+      prompt: data.prompt ?? null,
+      name: data.name ?? null,
+      status: data.status,
+      is_default: data.is_default ?? false,
+      saved: data.saved ?? true,
+    };
+  } catch (err) {
+    if (isDeferredError(err)) {
+      const previewUrl =
+        typeof URL !== "undefined" && "createObjectURL" in URL
+          ? URL.createObjectURL(file)
+          : null;
+      return {
+        id: `look-${Date.now()}`,
+        preview_image_url: previewUrl,
+        prompt: null,
+        name: null,
+        status: "ready",
+        is_default: false,
+        saved: true,
+      };
+    }
+    throw err;
+  }
+}
+
+/**
  * PATCH /api/avatars/me/looks/{id}/name — 룩 표시 이름을 저장한다(연필).
  * 빈 문자열/공백이면 이름 해제(null). 미배포(404 등)는 멱등 성공으로 폴백.
  */

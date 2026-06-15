@@ -10,13 +10,12 @@ import { useReducedMotion } from "@/components/professor/avatars/useReducedMotio
 import AvatarLibrary from "@/components/professor/avatars/AvatarLibrary";
 import SavedAvatarGallery from "@/components/professor/avatars/SavedAvatarGallery";
 import AvatarViewerModal from "@/components/professor/avatars/AvatarViewerModal";
-import PhotoAvatarStudioCard from "@/components/professor/avatars/PhotoAvatarStudioCard";
 import VoiceCloneUploadCard from "@/components/professor/avatars/VoiceCloneUploadCard";
 import SampleVoicePicker from "@/components/professor/avatars/SampleVoicePicker";
 import AvatarBuilderBar from "@/components/professor/avatars/AvatarBuilderBar";
 import AvatarScriptTest from "@/components/professor/avatars/AvatarScriptTest";
 import AvatarCreateTypeToggle from "@/components/professor/avatars/AvatarCreateTypeToggle";
-import QaFaceToggleCard from "@/components/professor/avatars/QaFaceToggleCard";
+import OwnPhotoUploadCard from "@/components/professor/avatars/OwnPhotoUploadCard";
 import StandardAvatarRegisterCard from "@/components/professor/avatars/StandardAvatarRegisterCard";
 import { selectLook } from "@/components/professor/avatars/onboarding/photoAvatarApi";
 import {
@@ -42,6 +41,7 @@ import {
   requestVoiceScript,
   setRecentAvatar,
   updateSavedAvatar,
+  uploadOwnFaceLook,
   uploadVoiceSample,
 } from "@/components/professor/avatars/avatarsApi";
 import type { MyLook, ScriptLanguage } from "@/components/professor/avatars/avatarsApi";
@@ -116,8 +116,12 @@ export default function AvatarsPage() {
   // 나란히 노출하고 강의에 적용할 수 있다.
   const [standardAvatars, setStandardAvatars] = useState<StandardAvatar[]>([]);
 
-  // 아바타 제작 방식 — "photo"(내 사진) | "standard"(표준 avatar_id 등록). 기본 photo.
+  // 아바타 제작 방식 — "photo"(교수자 본인 아바타) | "standard"(타인 아바타). 기본 photo.
+  // 갤러리·라이브러리도 이 값으로 본인(업로드) vs 타인(HeyGen)을 나눠 보여 준다.
   const [createType, setCreateType] = useState<AvatarKind>("photo");
+
+  // 본인 사진 직접 업로드(교수자 본인 얼굴 룩) 진행 상태.
+  const [uploadingOwnPhoto, setUploadingOwnPhoto] = useState(false);
 
   // 녹음 대본 주제로 쓸 현재 강의 제목(없으면 null → 일반 학술 대본).
   const [lectureTitle, setLectureTitle] = useState<string | null>(null);
@@ -371,6 +375,40 @@ export default function AvatarsPage() {
     [resolveAvatar, recentId],
   );
 
+  // 제작 방식 토글로 라이브러리·갤러리를 본인 vs 타인으로 나눈다.
+  //  - 교수자 본인 아바타(photo): 업로드 사진으로 만든 룩·본인 아바타(kind "photo").
+  //  - 타인 아바타(standard): HeyGen 표준 아바타(kind "standard").
+  const isStandardMode = createType === "standard";
+
+  const visibleLibraryItems = useMemo(
+    () =>
+      libraryItems.filter((a) =>
+        isStandardMode ? a.kind === "standard" : a.kind === "photo",
+      ),
+    [libraryItems, isStandardMode],
+  );
+
+  // 저장된 아바타(룩+음성)는 look_id 가 등록 표준 아바타면 타인, 아니면 본인으로 본다.
+  const visibleSavedAvatars = useMemo(
+    () =>
+      savedAvatars.filter((a) => {
+        const isStandard = standardAvatars.some(
+          (s) => s.avatar_id === a.look_id,
+        );
+        return isStandardMode ? isStandard : !isStandard;
+      }),
+    [savedAvatars, standardAvatars, isStandardMode],
+  );
+
+  // 최근 선택 박스도 현재 모드에 해당할 때만 노출(다른 모드의 항목 숨김).
+  const visibleRecent = useMemo(() => {
+    if (!recentAvatar) return null;
+    const matches = isStandardMode
+      ? recentAvatar.kind === "standard"
+      : recentAvatar.kind === "photo";
+    return matches ? recentAvatar : null;
+  }, [recentAvatar, isStandardMode]);
+
   // 큰 보기(뷰어) 대상 — 목록이 갱신되면(이름 변경 등) 자동으로 최신 값을 반영한다.
   const viewerAvatar = useMemo(
     () => resolveAvatar(viewerId),
@@ -470,6 +508,26 @@ export default function AvatarsPage() {
       handleSelect(id);
       setBuilderOpen(false); // 룩이 바뀌었으니 작업대는 다시 "제작"으로 연다.
       toast(t("useForBuildDone"), "success");
+    },
+    [handleSelect, toast, t],
+  );
+
+  // 본인이 준비한 사진을 라이브러리 룩으로 직접 업로드(AI 룩 생성 대체). 성공 시
+  // 라이브러리에 즉시 반영하고 그 룩을 제작용 룩(상단 "룩")으로 선택한다.
+  const handleUploadOwnPhoto = useCallback(
+    async (file: File) => {
+      setUploadingOwnPhoto(true);
+      try {
+        const look = await uploadOwnFaceLook(file);
+        setLooks((prev) => [look, ...prev.filter((l) => l.id !== look.id)]);
+        handleSelect(look.id);
+        setBuilderOpen(false);
+        toast(t("libraryUploadSuccess"), "success");
+      } catch {
+        toast(t("libraryUploadError"), "error");
+      } finally {
+        setUploadingOwnPhoto(false);
+      }
     },
     [handleSelect, toast, t],
   );
@@ -905,21 +963,21 @@ export default function AvatarsPage() {
           t={t}
         />
 
-        {/* ① 아바타 제작 — 포토(내 사진) vs 표준(웹 스튜디오 Video Avatar 등록) 선택.
-            포토는 몸 고정·얼굴만 움직이고, 표준은 전신이 자연스럽게 움직인다(동일 단가).
-            저장/라이브러리 섹션 위(헤더 바로 아래)에 둬, 제작 방식 선택이 바로 보이게 한다
-            (2026-06-09 사용자 피드백: 갤러리·라이브러리에 밀려 토글이 안 보였음). */}
+        {/* 아바타 제작 방식 — "교수자 본인 아바타"(본인 사진 업로드 → Hedra) vs
+            "타인 아바타"(플랫폼 제공 HeyGen 샘플). 토글이 아래 제작 카드와 갤러리·
+            라이브러리 구분을 함께 전환한다. */}
         <AvatarCreateTypeToggle value={createType} onChange={setCreateType} t={t} />
 
         {createType === "photo" ? (
-          // 내 사진으로 아바타 만들기 — Design with AI 룩 온보딩을 카드 안에 인라인 임베드
-          <PhotoAvatarStudioCard
-            reducedMotion={reducedMotion}
-            onConfirmed={refreshAvatars}
-            onLibraryChanged={refreshAvatars}
+          // 교수자 본인 아바타 — 준비한 본인 사진을 직접 업로드(AI 룩 생성 폐지).
+          // Q&A 답변은 이 얼굴로 Hedra 합성한다.
+          <OwnPhotoUploadCard
+            onUpload={handleUploadOwnPhoto}
+            uploading={uploadingOwnPhoto}
+            t={t}
           />
         ) : (
-          // 표준 아바타 등록 — 등록 후 그 아바타를 제작용 룩으로 바로 선택(상단 "룩")
+          // 타인 아바타 — 플랫폼 제공 HeyGen 표준 아바타를 등록·선택한다.
           <StandardAvatarRegisterCard
             onRegistered={handleStandardRegistered}
             lectureId={lectureId}
@@ -927,15 +985,10 @@ export default function AvatarsPage() {
           />
         )}
 
-        {/* Q&A 답변 얼굴 옵트인 — 기본은 표준 아바타, 켜면 본인 얼굴(슬롯 여유 시).
-            HeyGen 사진 아바타 한도(계정당 3개)는 모두에게 줄 수 없어 표준이 기본. */}
-        <QaFaceToggleCard t={t} />
-
-        {/* 내 아바타(룩 + 음성 조합) 갤러리 — 저장한 조합을 재생성 없이 바로 강의에
-            적용한다. 미리보기 영상이 ready 면 카드에서 무음 루프로 재생된다(Phase 2).
-            기존 "저장된 아바타·룩 라이브러리" 위에 둔다. */}
+        {/* 내 아바타(룩 + 음성 조합) 갤러리 — 현재 토글(본인/타인)에 해당하는 항목만
+            보여 준다. 저장한 조합을 재생성 없이 바로 강의에 적용한다. */}
         <SavedAvatarGallery
-          items={savedAvatars}
+          items={visibleSavedAvatars}
           resolveLookImage={resolveLookImage}
           resolveVoiceName={resolveSavedVoiceName}
           canApply={!!lectureId}
@@ -951,8 +1004,8 @@ export default function AvatarsPage() {
         {/* 최근 선택한 아바타 + 저장된 아바타·룩 라이브러리 — 재생성 없이 즉시 선택/적용.
             만든 아바타·룩이 없으면 컴포넌트가 스스로 아무것도 렌더하지 않는다. */}
         <AvatarLibrary
-          recent={recentAvatar}
-          items={libraryItems}
+          recent={visibleRecent}
+          items={visibleLibraryItems}
           selectedId={selectedId}
           onOpen={handleOpen}
           onRenameLook={handleRenameLook}
@@ -996,9 +1049,11 @@ export default function AvatarsPage() {
           <AvatarViewerModal
             key={viewerAvatar.id}
             avatar={viewerAvatar}
-            canApply={!!lectureId}
-            applying={applying}
-            onApply={(id) => doApply(id)}
+            onUseForBuild={(id) => {
+              // 강의에 바로 적용하지 않고 상단 "룩" 슬롯으로 선택한 뒤 모달을 닫는다.
+              handleUseForBuild(id);
+              setViewerId(null);
+            }}
             onRename={handleRenameLook}
             onClose={() => setViewerId(null)}
             t={t}
