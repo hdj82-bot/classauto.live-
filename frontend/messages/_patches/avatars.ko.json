@@ -231,7 +231,7 @@
     "createTypeTitle": "아바타 제작 방식",
     "createTypePhotoLabel": "교수자 본인 아바타",
     "createTypePhotoDesc": "본인을 Q&A 답변하는 아바타로 제작합니다.",
-    "createTypeStandardLabel": "타인 아바타",
+    "createTypeStandardLabel": "AI 아바타",
     "createTypeStandardDesc": "플랫폼에서 제공하는 샘플을 사용합니다.",
     "ownAvatarCardTitle": "내 사진으로 교수자 아바타 만들기",
     "ownAvatarCardDesc": "준비한 본인 사진을 올리면 라이브러리에 본인 아바타로 추가됩니다. Q&A 답변은 이 얼굴로 합성됩니다.",

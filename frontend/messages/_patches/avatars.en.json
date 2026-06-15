@@ -231,7 +231,7 @@
     "createTypeTitle": "How to create the avatar",
     "createTypePhotoLabel": "Your own avatar",
     "createTypePhotoDesc": "Create an avatar of yourself that answers Q&A.",
-    "createTypeStandardLabel": "Other avatar",
+    "createTypeStandardLabel": "AI avatar",
     "createTypeStandardDesc": "Use a sample provided by the platform.",
     "ownAvatarCardTitle": "Make your avatar from a photo",
     "ownAvatarCardDesc": "Upload a photo you prepared and it's added to your library as your own avatar. Q&A answers are synthesized with this face.",
