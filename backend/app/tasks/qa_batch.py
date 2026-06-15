@@ -255,20 +255,27 @@ def _resolve_character(db, loop, lecture, professor) -> dict | None:
     return {"avatar_id": av}
 
 
-# 본인 얼굴 렌더 job id 접두사 — 폴링이 provider(Hedra/HeyGen)를 구분하는 표식.
-# 별도 컬럼 없이 기존 heygen_job_id 문자열에 "hedra:" 를 붙여 라우팅한다.
-_HEDRA_JOB_PREFIX = "hedra:"
+# 본인 얼굴 렌더 job id 접두사 — 폴링이 provider(VisionStory/HeyGen)를 구분하는 표식.
+# 별도 컬럼 없이 기존 heygen_job_id 문자열에 "visionstory:" 를 붙여 라우팅한다.
+_VS_JOB_PREFIX = "visionstory:"
 
 
-def _hedra_enabled() -> bool:
-    """본인 얼굴 렌더를 Hedra 로 처리할 수 있는지(키 설정 또는 MOCK)."""
-    return bool((settings.HEDRA_API_KEY or "").strip()) or settings.HEDRA_MOCK
+def _visionstory_enabled() -> bool:
+    """본인 얼굴 렌더를 VisionStory 로 처리할 수 있는지(키 설정 또는 MOCK)."""
+    return bool((settings.VISIONSTORY_API_KEY or "").strip()) or settings.VISIONSTORY_MOCK
+
+
+def _own_face_source_key(professor) -> str | None:
+    """VisionStory 아바타 캐시 키 — 기본 룩 id 우선, 없으면 프로필 이미지 URL."""
+    if professor is None:
+        return None
+    return professor.photo_avatar_default_look_id or professor.profile_image_url
 
 
 def _own_face_image(db, professor) -> tuple[bytes, str] | None:
     """본인 얼굴 소스 이미지(룩 우선, 없으면 프로필 사진) → (bytes, ctype). 실패면 None.
 
-    Hedra 는 렌더마다 이 이미지를 그대로 넘긴다(아바타 등록·한도 없음).
+    VisionStory 아바타를 생성할 때 이 이미지를 쓴다(아바타는 1회 생성 후 재사용).
     """
     if professor is None:
         return None
@@ -312,7 +319,7 @@ def _own_face_image(db, professor) -> tuple[bytes, str] | None:
         return img_bytes, ctype
     except Exception as exc:  # noqa: BLE001 — 못 받으면 표준 아바타로 폴백
         logger.warning(
-            "Hedra 본인 얼굴 이미지 로드 실패(표준 폴백): instructor=%s, error=%s",
+            "본인 얼굴 이미지 로드 실패(표준 폴백): instructor=%s, error=%s",
             getattr(professor, "id", None), exc,
         )
         return None
@@ -321,10 +328,10 @@ def _own_face_image(db, professor) -> tuple[bytes, str] | None:
 def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
     """클러스터 대표 질문 답변을 TTS→렌더 제출. 성공 시 True.
 
-    강의에 적용한 아바타가 본인 룩(``_is_own_face_lecture``) + Hedra 사용 가능 →
-    **Hedra(사진+음성)** 로 렌더(계정 아바타 한도 없음). 아니면 HeyGen(표준 아바타 /
-    레거시 talking_photo). 대표 행은 heygen_job_id 를 받고(Hedra 면 "hedra:" 접두),
-    멤버는 같은 cluster_key.
+    강의에 적용한 아바타가 본인 룩(``_is_own_face_lecture``) + VisionStory 사용 가능 →
+    **VisionStory(본인 아바타)** 로 렌더(계정 아바타 한도 없음). 아니면 HeyGen(표준 아바타 /
+    레거시 talking_photo). 대표 행은 heygen_job_id 를 받고(VisionStory 면 "visionstory:"
+    접두), 멤버는 같은 cluster_key.
     """
     from app.services.pipeline import s3 as s3_svc
     from app.services.pipeline.heygen import create_video
@@ -344,15 +351,15 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
     _lecture = db.query(_Lecture).filter(_Lecture.id == lecture_id).first()
     _professor = db.query(_User).filter(_User.id == instructor_id).first()
 
-    # 강의에 적용한 아바타가 본인 룩일 때만 Hedra(본인 얼굴). 타인(표준)·미지정이면
+    # 강의에 적용한 아바타가 본인 룩일 때만 VisionStory(본인 얼굴). 타인(표준)·미지정이면
     # HeyGen 표준. (전역 qa_use_own_face 플래그가 아니라 적용 아바타로 판정 — 2026-06-15
     # 사용자 보고: 타인 아바타를 골라도 Q&A 가 본인 얼굴로 섞여 나옴.)
-    use_hedra = _is_own_face_lecture(db, _lecture, _professor) and _hedra_enabled()
-    own_face_img = _own_face_image(db, _professor) if use_hedra else None
-    use_hedra = use_hedra and own_face_img is not None
+    use_vs = _is_own_face_lecture(db, _lecture, _professor) and _visionstory_enabled()
+    own_face_img = _own_face_image(db, _professor) if use_vs else None
+    use_vs = use_vs and own_face_img is not None
 
     character = None
-    if not use_hedra:
+    if not use_vs:
         # 렌더 캐릭터 결정(rendering 전이 전) — 본인 아바타 미준비면 pending 유지.
         character = _resolve_character(db, loop, _lecture, _professor)
         if character is None:
@@ -390,17 +397,31 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
             audio_url = s3_svc.upload_audio_bytes(audio_bytes, f"qa_{rep.id}")
             heygen_audio_url = s3_svc.presign_stored_s3_url(audio_url, expiration=86400)
 
-        if use_hedra:
-            from app.services.pipeline.hedra import submit_talking_video
+        if use_vs:
+            from app.services.pipeline.visionstory import (
+                create_avatar,
+                submit_talking_video,
+            )
 
-            gen_id = loop.run_until_complete(
+            # 교수자별 VisionStory 아바타를 1회 생성해 재사용한다(매 렌더 재생성 금지).
+            # 소스 이미지(룩/프로필)가 바뀌면 source_key 가 달라져 재생성한다.
+            source_key = _own_face_source_key(_professor)
+            avatar_id = _professor.visionstory_avatar_id
+            if not avatar_id or _professor.visionstory_avatar_source != source_key:
+                avatar_id = loop.run_until_complete(
+                    create_avatar(own_face_img[0], own_face_img[1])
+                )
+                _professor.visionstory_avatar_id = avatar_id
+                _professor.visionstory_avatar_source = source_key
+                db.flush()
+
+            video_id = loop.run_until_complete(
                 submit_talking_video(
-                    image_bytes=own_face_img[0],
-                    image_ctype=own_face_img[1],
+                    avatar_id=avatar_id,
                     audio_bytes=audio_bytes or b"",
                 )
             )
-            job_id = f"{_HEDRA_JOB_PREFIX}{gen_id}"
+            job_id = f"{_VS_JOB_PREFIX}{video_id}"
         else:
             job_id = loop.run_until_complete(
                 create_video(
@@ -415,7 +436,7 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
         db.flush()
         logger.info(
             "Q&A 배치 렌더 제출: cache_id=%s, cluster=%s, size=%d, job=%s, provider=%s",
-            rep.id, cluster_key, cluster.size, job_id, "hedra" if use_hedra else "heygen",
+            rep.id, cluster_key, cluster.size, job_id, "visionstory" if use_vs else "heygen",
         )
         return True
     except Exception as exc:  # noqa: BLE001 — 한 클러스터 실패가 배치 전체를 막지 않게.
@@ -458,11 +479,11 @@ def _mark_cluster_failed(db, cluster_key, error: str | None) -> None:
 def _poll_inflight(loop, db) -> tuple[int, int]:
     """status=rendering 인 대표 행(heygen_job_id 보유)을 폴링해 ready/failed 로 전이.
 
-    job id 가 "hedra:" 접두면 Hedra 상태를, 아니면 HeyGen 상태를 조회한다.
+    job id 가 "visionstory:" 접두면 VisionStory 상태를, 아니면 HeyGen 상태를 조회한다.
     """
     from app.services.pipeline import s3 as s3_svc
     from app.services.pipeline.heygen import get_video_status
-    from app.services.pipeline.hedra import get_generation_status
+    from app.services.pipeline.visionstory import get_generation_status
 
     reps = db.query(QAAnswerCache).filter(
         QAAnswerCache.status == qa_avatar.STATUS_RENDERING,
@@ -471,12 +492,12 @@ def _poll_inflight(loop, db) -> tuple[int, int]:
     completed = failed = 0
     for rep in reps:
         job = rep.heygen_job_id or ""
-        is_hedra = job.startswith(_HEDRA_JOB_PREFIX)
-        mock = settings.HEDRA_MOCK if is_hedra else settings.HEYGEN_MOCK
+        is_vs = job.startswith(_VS_JOB_PREFIX)
+        mock = settings.VISIONSTORY_MOCK if is_vs else settings.HEYGEN_MOCK
         try:
-            if is_hedra:
+            if is_vs:
                 status_data = loop.run_until_complete(
-                    get_generation_status(job[len(_HEDRA_JOB_PREFIX):])
+                    get_generation_status(job[len(_VS_JOB_PREFIX):])
                 )
             else:
                 status_data = loop.run_until_complete(get_video_status(job))

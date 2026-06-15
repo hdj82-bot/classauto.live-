@@ -80,6 +80,13 @@ class User(Base):
     #   다음 방문 시 "최근 선택한 아바타" 박스로 복원해 재생성 없이 바로 강의에 적용한다.
     #   기본 룩(photo_avatar_default_look_id, 모든 강의의 폴백)과는 별개의 "최근 선택" 기록.
     recent_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # VisionStory(본인 얼굴 렌더 제공자) 아바타 id — 사진으로 1회 생성해 재사용한다.
+    #   매 렌더 재생성하지 않도록 캐시한다. visionstory_avatar_source 가 현재 소스
+    #   이미지(기본 룩 id 또는 프로필 URL)와 다르면 호출부가 아바타를 재생성한다.
+    visionstory_avatar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 위 avatar_id 를 만든 소스 식별자(룩 id 또는 프로필 이미지 URL). 사진이 바뀌면
+    #   이 값과 달라져 자동 재생성된다(별도 무효화 훅 불필요).
+    visionstory_avatar_source: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # Q&A 답변 영상에 "본인 얼굴(Talking Photo)"을 쓸지 여부(옵트인). 기본 False —
     #   Q&A 는 표준 HeyGen 아바타로 렌더한다(HeyGen "사진 아바타 3개 한도"와 무관해
     #   사용자 수와 상관없이 막히지 않음). 교수자가 아바타 페이지에서 이 스위치를

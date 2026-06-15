@@ -335,15 +335,20 @@ async def _ensure_photo_avatar_id(user: User, db: AsyncSession) -> str | None:
     return talking_photo_id
 
 
-# 본인 얼굴(포토) 미리보기를 Hedra 로 렌더할 때 generation id 앞에 붙이는 접두사.
-# 별도 컬럼 없이 photo_avatar_preview_video_id 문자열에 "hedra:" 를 붙여, GET 폴링이
-# provider(Hedra/HeyGen)를 구분한다(qa_batch 의 _HEDRA_JOB_PREFIX 와 같은 방식).
-_HEDRA_PREVIEW_PREFIX = "hedra:"
+# 본인 얼굴(포토) 미리보기를 VisionStory 로 렌더할 때 video id 앞에 붙이는 접두사.
+# 별도 컬럼 없이 photo_avatar_preview_video_id 문자열에 "visionstory:" 를 붙여, GET
+# 폴링이 provider(VisionStory/HeyGen)를 구분한다(qa_batch 의 _VS_JOB_PREFIX 와 같은 방식).
+_VS_PREVIEW_PREFIX = "visionstory:"
 
 
-def _hedra_enabled() -> bool:
-    """본인 얼굴(교수자 아바타) 렌더를 Hedra 로 처리할 수 있는지(키 설정 또는 MOCK)."""
-    return bool((settings.HEDRA_API_KEY or "").strip()) or settings.HEDRA_MOCK
+def _visionstory_enabled() -> bool:
+    """본인 얼굴(교수자 아바타) 렌더를 VisionStory 로 처리할 수 있는지(키 설정 또는 MOCK)."""
+    return bool((settings.VISIONSTORY_API_KEY or "").strip()) or settings.VISIONSTORY_MOCK
+
+
+def _own_face_source_key(user: User) -> str | None:
+    """VisionStory 아바타 캐시 키 — 기본 룩 id 우선, 없으면 프로필 이미지 URL."""
+    return user.photo_avatar_default_look_id or user.profile_image_url
 
 
 async def _own_face_image_bytes(
@@ -351,9 +356,9 @@ async def _own_face_image_bytes(
 ) -> tuple[bytes, str] | None:
     """본인 얼굴 소스 이미지(기본 룩 우선, 없으면 프로필 사진) → (bytes, ctype).
 
-    Hedra 렌더는 아바타를 등록하지 않고 매 렌더마다 이 이미지를 그대로 넘긴다
-    (계정 한도 없음). 이미지가 없거나 다운로드에 실패하면 None 을 돌려줘, 호출부가
-    기존 HeyGen Talking Photo 경로로 폴백하게 한다(서비스 연속성).
+    VisionStory 아바타를 생성할 때 이 이미지를 쓴다(아바타는 1회 생성 후 재사용).
+    이미지가 없거나 다운로드에 실패하면 None 을 돌려줘, 호출부가 기존 HeyGen Talking
+    Photo 경로로 폴백하게 한다(서비스 연속성).
     """
     from urllib.parse import urlparse
 
@@ -391,7 +396,7 @@ async def _own_face_image_bytes(
         key = urlparse(url).path.lstrip("/")
         img_bytes = s3_svc.download_file(key)
         ctype = "image/png" if key.lower().endswith(".png") else "image/jpeg"
-        # Hedra 도 과대 이미지는 거부할 수 있어 talking-photo 와 동일 정규화(≤1920, JPEG).
+        # 과대 이미지는 거부될 수 있어 talking-photo 와 동일 정규화(≤1920, JPEG).
         return _ensure_talking_photo_payload(img_bytes, ctype)
     except Exception as exc:  # noqa: BLE001 — 못 받으면 HeyGen 폴백
         logger.warning(
@@ -652,9 +657,9 @@ async def create_avatar_preview(
     # 렌더한다(전신 자연 움직임). avatar_id 미지정이면 기존 본인 포토 아바타 경로.
     std_avatar_id = (payload.avatar_id or "").strip() or None
     character_kwargs: dict = {}
-    # 본인 얼굴(포토) 경로에서 Hedra 로 렌더할 소스 이미지. None 이면 HeyGen 폴백.
+    # 본인 얼굴(포토) 경로에서 VisionStory 로 렌더할 소스 이미지. None 이면 HeyGen 폴백.
     own_face_img: tuple[bytes, str] | None = None
-    use_hedra = False
+    use_vs = False
     if std_avatar_id:
         std_row = (
             await db.execute(
@@ -672,13 +677,13 @@ async def create_avatar_preview(
         # 표준 아바타(우측 "표준 아바타")는 HeyGen 으로 렌더한다(전신 자연 움직임).
         character_kwargs = {"avatar_id": std_avatar_id}
     else:
-        # 교수자 본인 얼굴(포토) 경로 — 가능하면 Hedra(사진+음성, 아바타 등록·계정 한도
-        # 없음)로 렌더한다. Hedra 미설정/이미지 미확보면 기존 HeyGen Talking Photo 로
-        # 폴백한다(무회귀). HeyGen 경로는 lazy talking_photo 등록을 동반한다.
-        if _hedra_enabled():
+        # 교수자 본인 얼굴(포토) 경로 — 가능하면 VisionStory(사진으로 아바타 1회 생성 후
+        # 재사용, 계정 한도 없음)로 렌더한다. VisionStory 미설정/이미지 미확보면 기존
+        # HeyGen Talking Photo 로 폴백한다(무회귀). HeyGen 경로는 lazy talking_photo 등록 동반.
+        if _visionstory_enabled():
             own_face_img = await _own_face_image_bytes(user, db)
         if own_face_img is not None:
-            use_hedra = True
+            use_vs = True
         else:
             # 2026-06-01: select 는 default 만 저장하고, preview 진입 시 lazy 등록한다.
             talking_photo_id = await _ensure_photo_avatar_id(user, db)
@@ -721,25 +726,36 @@ async def create_avatar_preview(
             status="processing", voice_id=user.photo_avatar_preview_voice_id
         )
 
-    # 새 렌더 시작: 샘플 텍스트 → TTS → (본인 얼굴=Hedra 사진+음성 / 그 외=HeyGen).
+    # 새 렌더 시작: 샘플 텍스트 → TTS → (본인 얼굴=VisionStory 아바타 / 그 외=HeyGen).
     from app.services.pipeline import tts
-    from app.services.pipeline.hedra import HedraError, submit_talking_video
     from app.services.pipeline.heygen import HeyGenError, create_video
+    from app.services.pipeline.visionstory import (
+        VisionStoryError,
+        create_avatar,
+        submit_talking_video,
+    )
 
     # 미리보기 대상이 교수자 본인 목소리(IVC 클론)면 v3 가 아니라 multilingual_v2
     # +클론 튜닝 세팅으로 합성한다(클론 fidelity 안정화).
     is_cloned = bool(voice_id and user.cloned_voice_id and voice_id == user.cloned_voice_id)
     try:
         result = await tts.synthesize(render_text, voice_id=voice_id, cloned=is_cloned)
-        if use_hedra and own_face_img is not None:
-            # 본인 얼굴 — Hedra 에 사진+음성을 그대로 넘겨 렌더(아바타 등록 없음).
-            # job id 에 "hedra:" 접두를 붙여 GET 폴링이 Hedra 상태를 조회하게 한다.
-            gen_id = await submit_talking_video(
-                image_bytes=own_face_img[0],
-                image_ctype=own_face_img[1],
+        if use_vs and own_face_img is not None:
+            # 본인 얼굴 — VisionStory 아바타를 1회 생성해 재사용하고, 그 아바타로 영상을
+            # 만든다. job id 에 "visionstory:" 접두를 붙여 GET 폴링이 VisionStory 상태를
+            # 조회하게 한다. 소스 이미지(룩/프로필)가 바뀌면 source_key 가 달라져 재생성.
+            source_key = _own_face_source_key(user)
+            avatar_id = user.visionstory_avatar_id
+            if not avatar_id or user.visionstory_avatar_source != source_key:
+                avatar_id = await create_avatar(own_face_img[0], own_face_img[1])
+                user.visionstory_avatar_id = avatar_id
+                user.visionstory_avatar_source = source_key
+                await db.commit()  # 생성 즉시 캐시(이후 단계 실패해도 재생성 방지).
+            vs_video_id = await submit_talking_video(
+                avatar_id=avatar_id,
                 audio_bytes=result.audio_bytes,
             )
-            video_id = f"{_HEDRA_PREVIEW_PREFIX}{gen_id}"
+            video_id = f"{_VS_PREVIEW_PREFIX}{vs_video_id}"
         else:
             stored_audio_url = s3_svc.upload_audio_bytes(
                 result.audio_bytes, f"avatar-preview-{user.id}"
@@ -750,7 +766,7 @@ async def create_avatar_preview(
                 callback_id=f"avatar-preview:{user.id}",
                 **character_kwargs,
             )
-    except (HeyGenError, HedraError, tts.TTSError) as e:
+    except (HeyGenError, VisionStoryError, tts.TTSError) as e:
         return AvatarPreviewResponse(
             status="failed",
             voice_id=voice_id,
@@ -796,18 +812,21 @@ async def get_avatar_preview(
     if not vid:
         return AvatarPreviewResponse(status="not_started")
 
-    from app.services.pipeline.hedra import HedraError, get_generation_status
     from app.services.pipeline.heygen import HeyGenError, get_video_status
+    from app.services.pipeline.visionstory import (
+        VisionStoryError,
+        get_generation_status,
+    )
 
-    # job id 가 "hedra:" 접두면 Hedra 상태를, 아니면 HeyGen 상태를 조회한다.
+    # job id 가 "visionstory:" 접두면 VisionStory 상태를, 아니면 HeyGen 상태를 조회한다.
     # 두 함수 모두 {status, video_url, ...} 동일 dict 를 돌려줘 이후 처리는 공통이다.
-    is_hedra = vid.startswith(_HEDRA_PREVIEW_PREFIX)
+    is_vs = vid.startswith(_VS_PREVIEW_PREFIX)
     try:
-        if is_hedra:
-            st = await get_generation_status(vid[len(_HEDRA_PREVIEW_PREFIX):])
+        if is_vs:
+            st = await get_generation_status(vid[len(_VS_PREVIEW_PREFIX):])
         else:
             st = await get_video_status(vid)
-    except (HeyGenError, HedraError):
+    except (HeyGenError, VisionStoryError):
         # 일시적 조회 실패 — 계속 진행 중으로 보고 다음 폴링을 기다린다.
         return AvatarPreviewResponse(
             status="processing", voice_id=user.photo_avatar_preview_voice_id
@@ -1351,7 +1370,7 @@ async def upload_own_face_look(
 
     AI 룩 생성(페르소나/복장/배경/표정)을 대체하는 경로 — HeyGen/OpenAI 호출 없이
     원본을 S3 에 저장하고 ``ready`` + ``saved`` 룩 1개를 만든다. Q&A 답변·미리보기는
-    본인 얼굴 렌더(Hedra)에서 이 이미지를 매 렌더 그대로 사용한다(아바타 등록·한도 없음).
+    이 이미지로 VisionStory 아바타를 1회 생성해 재사용한다(계정 아바타 한도 없음).
     """
     content = await file.read()
     if len(content) > _MAX_OWN_FACE_PHOTO:

@@ -13,7 +13,7 @@ interface AvatarViewerModalProps {
   /**
    * "이 룩으로 아바타 제작" — 이 룩/아바타를 상단 "룩" 슬롯으로 선택한다(제작 대상).
    * 강의에 바로 적용하지 않는다 — 음성을 고른 뒤 "룩과 목소리 아바타 제작"에서
-   * (본인 얼굴=Hedra / 표준=HeyGen) 합성한다.
+   * (본인 얼굴=VisionStory / 표준=HeyGen) 합성한다.
    */
   onUseForBuild: (id: string) => void;
   /** 룩 이름 저장(연필). avatar.isLook 일 때만 노출. */
