@@ -1011,17 +1011,35 @@ export default function StudioWizardPage() {
       // ① 슬라이드(스크립트·음성·속도) ② 추천 질문(Q&A) 답변 아바타 — 두 가지를
       // 점검해 누락·변경된 부분만 새로 만든다(미변경=비용 0, PPT 재업로드 불필요).
       if (genDone && videoId) {
-        // 아직 만들어지지 않은(대기/실패) 추천 질문 — "다시 제작" 이 함께 완성한다.
-        const pendingSeed = seedQuestions.filter(
-          (q) => !!q.status && q.status !== "ready" && q.status !== "rendering",
-        ).length;
-        const seedLine = pendingSeed
-          ? `② 추천 질문 답변 영상 — 변경됨, ${pendingSeed}개 모두 새로 작업`
-          : "② 추천 질문 답변 영상 — 기존과 동일(작업 없음)";
+        // 점검 — 새로 만들어야 할(대기/실패) 추천 질문과 그 번호를 모은다. status 가
+        // undefined 인 신규 입력 행은 아직 저장 전이라 점검 대상에서 제외한다. 질문/답변을
+        // 고치거나(upsert 가 pending 으로 되돌림) 아바타를 바꾸면(seed 클립 초기화) pending
+        // 이 되므로, 이 집합이 "이번에 새로 만들 Q&A"다.
+        const seedToRender = seedQuestions
+          .map((q, i) => ({ q, n: i + 1 }))
+          .filter(
+            ({ q }) => !!q.status && q.status !== "ready" && q.status !== "rendering",
+          );
+        const seedTotal = seedQuestions.filter((q) => !!q.status).length;
+        const pendingSeed = seedToRender.length;
+        const avatarName = lecture.avatar_name?.trim() || "기본 아바타";
+
+        // ② Q&A 질문·답변 — 바뀐(또는 새) 항목 번호까지 명시.
+        const qaLine = pendingSeed
+          ? `② Q&A 질문·답변 — ${seedTotal}개 중 ${pendingSeed}개 새로 작업` +
+            ` (${seedToRender.map(({ n }) => n).join(", ")}번)`
+          : "② Q&A 질문·답변 — 변경 없음(작업 없음)";
+        // ③ Q&A 아바타 — 어떤 아바타로 답변 영상을 만드는지 명시(아바타 종류 점검).
+        const avatarLine = pendingSeed
+          ? `③ Q&A 아바타 — ${avatarName} · 위 답변 영상을 이 아바타로 새로 제작`
+          : `③ Q&A 아바타 — ${avatarName} · 현재 아바타로 이미 완료`;
+
         const ok = window.confirm(
-          "강의를 점검해 바뀐 부분만 새로 만듭니다:\n\n" +
-            "① 슬라이드(스크립트·음성·자막) — 수정한 슬라이드만 다시 합성(안 바꿨으면 작업 없음)\n" +
-            seedLine +
+          "‘다시 제작’ 점검 결과:\n\n" +
+            "① 슬라이드 — 수정한 슬라이드만 다시 합성(안 바꿨으면 작업 없음)\n" +
+            qaLine +
+            "\n" +
+            avatarLine +
             "\n\n계속할까요?",
         );
         if (!ok) return;
