@@ -139,7 +139,8 @@ export interface LectureAvatarInfo {
 
 /**
  * GET /api/lectures/{id} — "현재 지정된 아바타" 표시에 필요한 필드만 추린다.
- * deferred(미배포)/404 면 null 을 돌려 화면이 조용히 비워지게 한다.
+ * 표시 전용이라 어떤 실패(미배포·404·네트워크)에서도 throw 하지 않고 null 을 돌려
+ * 칩이 조용히 비워지게 한다(페이지 동작에 영향 없음).
  */
 export async function getLectureAvatar(
   lectureId: string,
@@ -157,9 +158,8 @@ export async function getLectureAvatar(
       avatar_preview_url: data.avatar_preview_url ?? null,
       avatar_preview_video_url: data.avatar_preview_video_url ?? null,
     };
-  } catch (err) {
-    if (isDeferredError(err)) return null;
-    throw err;
+  } catch {
+    return null;
   }
 }
 

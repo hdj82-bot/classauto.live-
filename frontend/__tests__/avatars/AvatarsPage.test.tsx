@@ -313,11 +313,14 @@ describe("AvatarsPage", () => {
     await waitFor(() => expect(applyBtn.disabled).toBe(false));
 
     // 강의에 적용 → 룩(avatar_id) + 음성(voice_id) PATCH + studio 복귀.
+    // avatar_id PATCH 에는 표시용 미리보기 URL(avatar_preview_url 등)이 함께 실리므로
+    // objectContaining 으로 avatar_id 만 검증한다(미리보기 키 추가에 견고).
     fireEvent.click(applyBtn);
     await waitFor(() =>
-      expect(apiPatch).toHaveBeenCalledWith("/api/lectures/lec-1", {
-        avatar_id: "look_1",
-      }),
+      expect(apiPatch).toHaveBeenCalledWith(
+        "/api/lectures/lec-1",
+        expect.objectContaining({ avatar_id: "look_1" }),
+      ),
     );
     await waitFor(() =>
       expect(apiPatch).toHaveBeenCalledWith("/api/lectures/lec-1", {
