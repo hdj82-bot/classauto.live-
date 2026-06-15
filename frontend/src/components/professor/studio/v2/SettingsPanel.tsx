@@ -1081,17 +1081,21 @@ function SeedQuestionCard({
         <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
           사전 대답
         </label>
-        {/* 긴 답변(영어 등)도 한눈에 보이도록 넉넉한 높이 + 세로 스크롤·리사이즈.
-            내용이 잘리지 않고 maxLength 도 없으며(백엔드 2000자까지 저장), 길면 스크롤된다. */}
+        {/* 답변은 권장 300~800자(아바타 발화 분량 적정선) — 백엔드와 동일하게 800자 상한.
+            넉넉한 높이 + 세로 스크롤·리사이즈로 한눈에 보이게 한다. */}
         <textarea
           value={item.answer}
           onChange={(e) => onChange({ answer: e.target.value })}
-          placeholder="이 질문이 들어오면 아바타가 말할 답변. 비워 두면 강의 자료로 자동 작성됩니다."
+          placeholder="이 질문이 들어오면 아바타가 말할 답변(권장 300~800자). 비워 두면 강의 자료로 자동 작성됩니다."
           rows={6}
-          maxLength={2000}
+          maxLength={800}
           aria-label={`예상 질문 ${index + 1} 사전 대답`}
           style={{ ...textareaStyle, minHeight: 120, maxHeight: 320, overflowY: "auto" }}
         />
+        {/* 글자 수 표시 — 권장 범위(300~800) 안에 있도록 돕는다. */}
+        <span style={{ fontSize: 10.5, color: "var(--text-faint)", textAlign: "right" }}>
+          {item.answer.length}/800
+        </span>
       </div>
 
       {/* 카드별 자동 생성 — 직접 입력 대신 AI 로 채울 수 있다. 질문이 있으면 답변만,

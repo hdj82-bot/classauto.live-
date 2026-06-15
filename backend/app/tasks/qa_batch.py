@@ -765,11 +765,11 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
                 continue
             answer = generated
 
-        # 저장은 교수자 입력 스키마 상한(seed_question.answer max_length=2000)까지 원문
+        # 저장은 교수자 입력 스키마 상한(seed_question.answer max_length=800)까지 원문
         # 그대로 둔다 — 렌더 상한(QA_AVATAR_MAX_ANSWER_CHARS)으로 자르지 않는다. 렌더에
         # 넘기는 길이는 _submit_cluster 가 그 상한으로 따로 자르므로, 여기서 자르면 편집기에
         # 보이는 원문까지 영구 손상된다(2026-06-15 사용자 보고: 답변 뒷부분 짤림).
-        row.answer_text = answer[:2000]
+        row.answer_text = answer[:800]
         row.question_embedding = qa_avatar.embed_question(row.question_text)
 
         try:
