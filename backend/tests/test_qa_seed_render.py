@@ -232,7 +232,7 @@ def test_seed_render_preserves_long_instructor_answer(sync_db, mock_render, monk
     from app.tasks import qa_batch
 
     prof, _c, lec = _seed_lecture(sync_db)
-    long_answer = "A" * 900  # 옛 상한(400)보다 길고 입력 상한(2000) 이내
+    long_answer = "A" * 700  # 옛 상한(400)보다 길고 새 상한(800) 이내
     row = QAAnswerCache(
         lecture_id=lec.id, instructor_id=prof.id,
         question_text="긴 답변이 필요한 질문?", answer_text=long_answer,
