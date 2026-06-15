@@ -132,10 +132,18 @@ class Settings(BaseSettings):
     # 키가 비어 있거나 MOCK 이면 HeyGen 표준 아바타로 폴백한다(서비스 연속성).
     VISIONSTORY_API_KEY: str = ""
     VISIONSTORY_BASE_URL: str = "https://openapi.visionstory.ai"
-    # 토킹 모델 id (GET /api/v1/models 로 확인). V-Talk 기본.
-    VISIONSTORY_MODEL_ID: str = "vs_talk_v1"
-    VISIONSTORY_RESOLUTION: str = "720p"  # "480p" | "720p" | "1080p"
+    # 본인 아바타 제작 모델 — 항상 V-Character 3.0("vs_character_v3", 큰 동작·생동감)으로
+    # 고정한다(교수자 선택 없음 — 2026-06-15 정책). GET /api/v1/models 기준:
+    #   vs_talk_v1(립싱크 위주) / vs_character_v1(2.0) / vs_character_v3(3.0).
+    VISIONSTORY_MODEL_ID: str = "vs_character_v3"
+    # 본인 아바타 제작은 항상 720P 고정(교수자 선택 없음). vs_character_v3 는 720p/1080p 지원.
+    VISIONSTORY_RESOLUTION: str = "720p"  # "720p" | "1080p" (vs_character_v3)
     VISIONSTORY_ASPECT_RATIO: str = "16:9"  # "16:9" | "9:16" | "1:1"
+    # 캐릭터 표현(emotion) — 웹앱 "모션"은 공개 API 에 없고 emotion 5종만 가능하다
+    # (cheerful/angry/marketing/news/singing). 교수자 강의 톤(엄숙·차분)에 가장 가까운
+    # "news"(뉴스 앵커 톤)를 기본값으로 항상 적용한다(교수자 선택 없음 — 2026-06-15 정책).
+    # 비우면 emotion 을 payload 에서 생략한다(모델이 거부하면 빈 문자열로 끌 수 있음).
+    VISIONSTORY_EMOTION: str = "news"
     # 영상 1초당 USD 환산(회계용 근사치). VisionStory 는 크레딧 과금이라 정확치는 응답
     # cost_credit 으로 본다.
     VISIONSTORY_COST_USD_PER_SECOND: float = 0.033

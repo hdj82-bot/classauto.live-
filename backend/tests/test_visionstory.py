@@ -98,9 +98,10 @@ def test_submit_video_builds_audio_script(monkeypatch):
     """POST /api/v1/video 페이로드에 avatar_id·model·audio_script(base64)·해상도 구성."""
     monkeypatch.setattr(settings, "VISIONSTORY_MOCK", False)
     monkeypatch.setattr(settings, "VISIONSTORY_API_KEY", "sk-vs-test")
-    monkeypatch.setattr(settings, "VISIONSTORY_MODEL_ID", "vs_talk_v1")
+    monkeypatch.setattr(settings, "VISIONSTORY_MODEL_ID", "vs_character_v3")
     monkeypatch.setattr(settings, "VISIONSTORY_RESOLUTION", "720p")
     monkeypatch.setattr(settings, "VISIONSTORY_ASPECT_RATIO", "16:9")
+    monkeypatch.setattr(settings, "VISIONSTORY_EMOTION", "news")
 
     captured: dict = {}
 
@@ -131,9 +132,10 @@ def test_submit_video_builds_audio_script(monkeypatch):
     assert captured["path"] == "/api/v1/video"
     body = captured["json"]
     assert body["avatar_id"] == "av-123"
-    assert body["model_id"] == "vs_talk_v1"
+    assert body["model_id"] == "vs_character_v3"  # 항상 V-Character 3.0
     assert body["resolution"] == "720p"
     assert body["aspect_ratio"] == "16:9"
+    assert body["emotion"] == "news"  # 엄숙·차분 톤 기본값
     # 합성한 음성을 그대로 쓰도록 voice_change=false, base64 inline_data 로 전달.
     audio = body["audio_script"]
     assert audio["voice_change"] is False
