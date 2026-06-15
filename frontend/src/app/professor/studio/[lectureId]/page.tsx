@@ -1016,13 +1016,13 @@ export default function StudioWizardPage() {
           (q) => !!q.status && q.status !== "ready" && q.status !== "rendering",
         ).length;
         const seedLine = pendingSeed
-          ? `② 추천 질문 답변 아바타 — 아직 안 만든 ${pendingSeed}개 생성`
-          : "② 추천 질문 — 모두 준비됨(변경 없음)";
+          ? `② 추천 질문 답변 영상 — 변경됨, ${pendingSeed}개 모두 새로 작업`
+          : "② 추천 질문 답변 영상 — 기존과 동일(작업 없음)";
         const ok = window.confirm(
-          "강의를 점검해 누락·변경된 부분만 새로 만듭니다:\n" +
-            "① 슬라이드(스크립트·음성·자막) — 수정·변경된 슬라이드만 다시 합성\n" +
+          "강의를 점검해 바뀐 부분만 새로 만듭니다:\n\n" +
+            "① 슬라이드(스크립트·음성·자막) — 수정한 슬라이드만 다시 합성(안 바꿨으면 작업 없음)\n" +
             seedLine +
-            "\n\n(PPT 재업로드 불필요 · 바뀐 부분만 비용 · 변경 없으면 비용 0)\n계속할까요?",
+            "\n\n계속할까요?",
         );
         if (!ok) return;
         try {
