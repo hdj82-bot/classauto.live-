@@ -1068,14 +1068,14 @@ export default function AvatarsPage() {
           t={t}
         />
 
-        {/* 아바타 제작 방식 — "교수자 본인 아바타"(본인 사진 업로드 → Hedra) vs
+        {/* 아바타 제작 방식 — "교수자 본인 아바타"(본인 사진 업로드 → VisionStory) vs
             "타인 아바타"(플랫폼 제공 HeyGen 샘플). 토글이 아래 제작 카드와 갤러리·
             라이브러리 구분을 함께 전환한다. */}
         <AvatarCreateTypeToggle value={createType} onChange={setCreateType} t={t} />
 
         {createType === "photo" ? (
           // 교수자 본인 아바타 — 준비한 본인 사진을 직접 업로드(AI 룩 생성 폐지).
-          // Q&A 답변은 이 얼굴로 Hedra 합성한다.
+          // Q&A 답변은 이 얼굴로 VisionStory 합성한다.
           <OwnPhotoUploadCard
             onUpload={handleUploadOwnPhoto}
             uploading={uploadingOwnPhoto}

@@ -123,23 +123,25 @@ class Settings(BaseSettings):
     HEYGEN_DAILY_BUDGET_USD: float = 3.0
     HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
 
-    # ── Hedra (본인 얼굴 Q&A 렌더 — 사진+음성 per-render, 계정 아바타 한도 없음) ──
+    # ── VisionStory (본인 얼굴 Q&A·미리보기 렌더 — V-Talk) ───────────────────────
     # HeyGen Photo Avatar 는 계정당 3개 한도라 다수 사용자에게 본인 얼굴을 줄 수 없다.
-    # Hedra(Character-3)는 렌더할 때마다 이미지+음성을 넘기는 방식이라 등록 한도가
-    # 없어 사용자 수만큼 확장된다. 강의에 '교수자 본인 아바타(룩)'를 적용한 Q&A 에 쓴다
-    # (본인/타인은 강의에 적용한 avatar_id 가 결정 — qa_batch._is_own_face_lecture).
+    # VisionStory 는 사진으로 아바타를 1회 생성(avatar_id)한 뒤 그 아바타로 영상을
+    # 만든다(등록 한도 없음 → 사용자 수만큼 확장). 교수자별 avatar_id 는
+    # users.visionstory_avatar_id 에 캐시해 재사용한다. 강의에 '교수자 본인 아바타'를
+    # 적용한 Q&A 에 쓴다(본인/타인은 적용 avatar_id 가 결정 — _is_own_face_lecture).
     # 키가 비어 있거나 MOCK 이면 HeyGen 표준 아바타로 폴백한다(서비스 연속성).
-    HEDRA_API_KEY: str = ""
-    HEDRA_BASE_URL: str = "https://api.hedra.com/web-app/public"
-    # Character-3 모델 id. 비우면 런타임에 GET /models 로 자동 탐색(이름에 "character")한다.
-    HEDRA_MODEL_ID: str = ""
-    HEDRA_RESOLUTION: str = "720p"  # "540p" | "720p"
-    HEDRA_ASPECT_RATIO: str = "16:9"  # "16:9" | "9:16" | "1:1"
-    # 영상 1초당 USD 환산(720p ≈ 6 credits/sec, $30/5400cr → 약 $0.033/sec). 회계용.
-    HEDRA_COST_USD_PER_SECOND: float = 0.033
-    # mock: 켜면 실제 Hedra 호출 0 — 제출/폴링을 placeholder 로 시뮬레이션(로컬/테스트).
-    HEDRA_MOCK: bool = False
-    HEDRA_MOCK_VIDEO_URL: str = ""
+    VISIONSTORY_API_KEY: str = ""
+    VISIONSTORY_BASE_URL: str = "https://openapi.visionstory.ai"
+    # 토킹 모델 id (GET /api/v1/models 로 확인). V-Talk 기본.
+    VISIONSTORY_MODEL_ID: str = "vs_talk_v1"
+    VISIONSTORY_RESOLUTION: str = "720p"  # "480p" | "720p" | "1080p"
+    VISIONSTORY_ASPECT_RATIO: str = "16:9"  # "16:9" | "9:16" | "1:1"
+    # 영상 1초당 USD 환산(회계용 근사치). VisionStory 는 크레딧 과금이라 정확치는 응답
+    # cost_credit 으로 본다.
+    VISIONSTORY_COST_USD_PER_SECOND: float = 0.033
+    # mock: 켜면 실제 VisionStory 호출 0 — 제출/폴링을 placeholder 로 시뮬레이션.
+    VISIONSTORY_MOCK: bool = False
+    VISIONSTORY_MOCK_VIDEO_URL: str = ""
 
     # ── 아바타 Q&A 캐시 (docs/planning/08 §5, 09 §5) ─────────────
     # 실시간 HeyGen 렌더 금지(지연). 질문은 항상 즉시 RAG 텍스트로 답하고, 겹치는

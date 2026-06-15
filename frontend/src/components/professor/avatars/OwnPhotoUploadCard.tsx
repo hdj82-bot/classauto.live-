@@ -18,7 +18,7 @@ interface OwnPhotoUploadCardProps {
  * 교수자가 직접 준비한 사진을 그대로 본인 아바타 룩으로 업로드하는 카드.
  *
  * 업로드한 사진은 라이브러리에 본인 아바타로 추가되고, Q&A 답변·미리보기는 이 얼굴로
- * Hedra 합성된다(아바타 등록·계정 한도 없음). 형식·용량(30MB)만 1차 검증해 부모에게
+ * VisionStory 합성된다(아바타 1회 생성 후 재사용·계정 한도 없음). 형식·용량(30MB)만 1차 검증해 부모에게
  * 파일을 넘긴다.
  */
 export default function OwnPhotoUploadCard({

@@ -489,7 +489,7 @@ async def approve_video(
 
     segments = video.script.segments
     lecture = await db.get(Lecture, video.lecture_id)
-    # 아바타는 강의에 적용된 것만 쓴다(교수자 본인=Hedra / 타인=HeyGen 선택이 명시적으로
+    # 아바타는 강의에 적용된 것만 쓴다(교수자 본인=VisionStory / 타인=HeyGen 선택이 명시적으로
     # lecture.avatar_id 에 저장됨). 과거엔 비어 있으면 교수자 기본 룩(본인 얼굴)으로
     # 폴백했는데, 그러면 타인 아바타를 골라도 "가장 최근에 만든 본인 룩"이 자동 채용되는
     # 문제가 있었다(2026-06-15 사용자 보고). 비어 있으면 create_video 가 gender 기본
