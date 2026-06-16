@@ -1,6 +1,7 @@
 """Video / Script 서비스."""
 import logging
 import uuid
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import select
@@ -555,11 +556,99 @@ def _render_voice_matches(render, cur_voice_id, cur_voice_speed) -> bool:
     return abs(float(render.voice_speed) - float(cur_voice_speed)) < 1e-6
 
 
+@dataclass
+class RerenderInspection:
+    """'다시 제작' 사전 점검 결과 — 실제 작업 전 무엇이 바뀌었는지 보고용.
+
+    dry_run 호출은 DB 를 전혀 건드리지 않고 이 값만 돌려준다. 프론트는 이걸로
+    "① 슬라이드 — N장 중 a,b번 재합성, 나머지 재사용" 같은 **정확한** 점검 글귀를
+    만든다(과거의 고정 문구 대신).
+    """
+
+    slides_total: int = 0
+    # 재합성 대상 슬라이드 번호(1-based, 사람이 읽는 표시용). 빈 리스트면 변경 없음.
+    changed_slide_numbers: list[int] = field(default_factory=list)
+    reused_slides: int = 0  # 변경 없이 재사용(비용 0)되는 슬라이드 수
+    avatar_id: str = ""
+    avatar_name: str | None = None
+
+
+async def _inspect_rerender(
+    db: AsyncSession,
+    video: Video,
+    professor_id: uuid.UUID,
+) -> tuple["RerenderInspection", list[tuple[dict, object | None]]]:
+    """변경 분류(읽기 전용) — DB 를 mutate 하지 않는다.
+
+    반환: (점검 결과, 재합성이 필요한 (세그먼트, 매칭 렌더行|None) 리스트). 두 번째
+    값은 실제 제작 경로에서 행 생성/리셋·enqueue 에 그대로 쓴다(분류를 한 곳에 둬
+    dry-run 과 실제 제작이 절대 어긋나지 않게 한다 — 같은 row 객체를 재사용).
+    """
+    from app.models.lecture import Lecture  # noqa: PLC0415
+    from app.models.video_render import RenderStatus, VideoRender  # noqa: PLC0415
+
+    segments = video.script.segments
+    lecture = await db.get(Lecture, video.lecture_id)
+    avatar_id = (lecture.avatar_id if lecture else None) or ""
+
+    existing = await db.execute(
+        select(VideoRender)
+        .where(VideoRender.lecture_id == video.lecture_id)
+        .order_by(VideoRender.created_at)
+    )
+    latest_by_slide: dict[int, VideoRender] = {}
+    for r in existing.scalars().all():
+        if r.slide_number is not None:
+            latest_by_slide[int(r.slide_number)] = r
+
+    cur_voice_id = (lecture.voice_id or None) if lecture else None
+    cur_voice_speed = (getattr(lecture, "voice_speed", None) or 1.3) if lecture else 1.3
+
+    needs_render: list[tuple[dict, object | None]] = []
+    changed_slide_numbers: list[int] = []
+    reused_ready = 0
+    for seg in segments:
+        if not isinstance(seg, dict):
+            continue
+        script_text = seg.get("text") or ""
+        slide_number = seg.get("slide_index")
+        render = (
+            latest_by_slide.get(int(slide_number))
+            if slide_number is not None
+            else None
+        )
+        # 변경 없음(텍스트+음성+속도) + 이미 완료 → 재사용(비용 0).
+        if (
+            render is not None
+            and render.status == RenderStatus.ready
+            and render.audio_url
+            and (render.script_text or "") == script_text
+            and _render_voice_matches(render, cur_voice_id, cur_voice_speed)
+        ):
+            reused_ready += 1
+            continue
+        needs_render.append((seg, render))
+        if slide_number is not None:
+            # 0-based slide_index → 사람이 읽는 1-based 번호.
+            changed_slide_numbers.append(int(slide_number) + 1)
+
+    inspection = RerenderInspection(
+        slides_total=reused_ready + len(needs_render),
+        changed_slide_numbers=changed_slide_numbers,
+        reused_slides=reused_ready,
+        avatar_id=avatar_id,
+        avatar_name=(lecture.avatar_name if lecture else None),
+    )
+    return inspection, needs_render
+
+
 async def rerender_video(
     db: AsyncSession,
     video_id: uuid.UUID,
     professor_id: uuid.UUID,
-) -> tuple[Video, int]:
+    *,
+    dry_run: bool = False,
+) -> tuple[Video, int, RerenderInspection]:
     """이미 제작 완료(done)된 강의를 다시 제작(재생성)한다.
 
     approve 는 pending_review 에서만 가능(아니면 409)이라, 한 번 done 이 된
@@ -572,7 +661,11 @@ async def rerender_video(
     없거나 오디오가 없는) 슬라이드만 audio_url 을 비워 render_slide 의 TTS
     idempotency(`tts_already_done`) 를 풀어 새로 합성한다. 그 뒤 그 항목만 enqueue.
 
-    반환: (video, 재렌더 대상 구간 수). 0 이면 변경 없음(상태 불변, 비용 0).
+    ``dry_run=True`` 면 **사전 점검 전용** — DB 를 전혀 건드리지 않고(행 생성·상태
+    전환·enqueue 없음) 변경 분류만 돌려준다. 프론트의 '다시 제작' 점검 다이얼로그가
+    실제 변경분(어느 슬라이드가 재합성되는지)을 정확히 보여주는 데 쓴다.
+
+    반환: (video, 재렌더 대상 구간 수, 점검 결과). 0 이면 변경 없음(상태 불변, 비용 0).
     """
     video = await _get_video_with_script(db, video_id)
     if video is None:
@@ -600,61 +693,28 @@ async def rerender_video(
             detail="스크립트가 비어 있습니다.",
         )
 
-    from app.models.lecture import Lecture  # noqa: PLC0415
+    # 변경 분류(읽기 전용) — dry-run 과 실제 제작이 동일한 판정을 쓰게 한곳에 둔다.
+    inspection, needs_render = await _inspect_rerender(db, video, professor_id)
+
+    # 사전 점검만 — 아무 것도 바꾸지 않고 결과만 돌려준다(비용 0, 상태 불변).
+    if dry_run:
+        return video, len(needs_render), inspection
+
     from app.models.video_render import RenderStatus, VideoRender  # noqa: PLC0415
 
-    segments = video.script.segments
-    lecture = await db.get(Lecture, video.lecture_id)
-    # 아바타는 강의에 적용된 것만 쓴다(approve_video 와 동일 — 본인 룩 자동 폴백 제거).
-    avatar_id = (lecture.avatar_id if lecture else None) or ""
-
-    # 기존 렌더 — 슬라이드 번호별 최신 1개(created_at 오름차순이므로 마지막이 최신).
-    existing = await db.execute(
-        select(VideoRender)
-        .where(VideoRender.lecture_id == video.lecture_id)
-        .order_by(VideoRender.created_at)
-    )
-    latest_by_slide: dict[int, VideoRender] = {}
-    for r in existing.scalars().all():
-        if r.slide_number is not None:
-            latest_by_slide[int(r.slide_number)] = r
-
-    # 강의의 현재 보이스/속도 — render 에 기록된 합성 당시 값과 비교해 음성/속도
-    # 변경도 감지한다(텍스트가 그대로여도 보이스·속도를 바꿨으면 재합성해야 한다).
-    cur_voice_id = (lecture.voice_id or None) if lecture else None
-    cur_voice_speed = (getattr(lecture, "voice_speed", None) or 1.3) if lecture else 1.3
-
-    # 변경된 구간만 재합성한다(재과금 최소화). 발화 텍스트·보이스·속도가 모두 그대로이고
-    # 이미 완료(ready+오디오)된 슬라이드는 기존 음성을 재사용하므로 비용이 들지 않는다.
-    # 바뀐 슬라이드만 audio_url 을 비워 TTS 를 새로 합성한다.
+    # 변경된 구간만 재합성한다(재과금 최소화). 바뀐 슬라이드만 audio_url 을 비워
+    # TTS 를 새로 합성하고, 그 항목만 enqueue 한다. render 는 점검 단계에서 찾아둔
+    # 같은 row 객체를 재사용한다(재조회 없음).
     to_enqueue: list[tuple[str, str]] = []
-    reused_ready = 0  # 변경 없이 재사용된(이미 ready+음성) 슬라이드 수
-    for seg in segments:
-        if not isinstance(seg, dict):
-            continue
+    for seg, render in needs_render:
         script_text = seg.get("text") or ""
         slide_number = seg.get("slide_index")
-        render = (
-            latest_by_slide.get(int(slide_number))
-            if slide_number is not None
-            else None
-        )
-        # 변경 없음(텍스트+음성+속도) + 이미 완료 → 재사용(비용 0).
-        if (
-            render is not None
-            and render.status == RenderStatus.ready
-            and render.audio_url
-            and (render.script_text or "") == script_text
-            and _render_voice_matches(render, cur_voice_id, cur_voice_speed)
-        ):
-            reused_ready += 1
-            continue
         if render is None:
             # 세그먼트가 늘었거나 매칭 렌더 없음 → 새 행.
             render = VideoRender(
                 lecture_id=video.lecture_id,
                 instructor_id=professor_id,
-                avatar_id=avatar_id,
+                avatar_id=inspection.avatar_id,
                 tts_provider="elevenlabs",
                 script_text=script_text,
                 slide_number=slide_number,
@@ -676,16 +736,16 @@ async def rerender_video(
     # 이게 없으면 "다시 제작"은 0(변경 없음)을 돌려주고 미리보기는 계속 '준비 중'이라
     # (slideshow is_ready = status==done) 교수자가 어느 쪽으로도 빠져나갈 수 없다.
     if not to_enqueue:
-        if reused_ready > 0 and video.status == VideoStatus.rendering:
+        if inspection.reused_slides > 0 and video.status == VideoStatus.rendering:
             video.status = VideoStatus.done
             await db.commit()
             await db.refresh(video)
             logger.info(
                 "rerender: 모든 슬라이드 ready 인데 rendering 에 갇힌 Video 를 done 으로 승격 "
                 "(video_id=%s, slides=%d)",
-                video.id, reused_ready,
+                video.id, inspection.reused_slides,
             )
-        return video, 0
+        return video, 0, inspection
 
     video.status = VideoStatus.rendering
     video.script.approved_at = datetime.now(tz=timezone.utc)
@@ -699,7 +759,7 @@ async def rerender_video(
     for rid, text in to_enqueue:
         render_slide.delay(rid, text, str(professor_id))
 
-    return video, len(to_enqueue)
+    return video, len(to_enqueue), inspection
 
 
 # ── 보관 처리 ─────────────────────────────────────────────────────────────────

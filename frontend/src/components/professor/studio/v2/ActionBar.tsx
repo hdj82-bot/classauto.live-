@@ -17,6 +17,8 @@ export interface ActionBarProps {
   onPrev: () => void;
   onGenerate: () => void;
   generating?: boolean;
+  /** generating 중 버튼 라벨. 기본 "제작 중…". 사전 점검 등 다른 작업이면 교체. */
+  busyLabel?: string;
   /** 기본 "슬라이드 쇼 제작". 필요 시 호출부에서 교체. */
   ctaLabel?: string;
   /** "미리보기" — 제작된 강의를 학생과 동일한 플레이어로 새 탭에서 검토. */
@@ -61,6 +63,7 @@ export default function ActionBar({
   onPrev,
   onGenerate,
   generating = false,
+  busyLabel = "제작 중…",
   ctaLabel,
   onPreview,
   canPreview = false,
@@ -132,7 +135,7 @@ export default function ActionBar({
             </svg>
           }
         >
-          {generating ? "제작 중…" : (ctaLabel ?? "슬라이드 쇼 제작")}
+          {generating ? busyLabel : (ctaLabel ?? "슬라이드 쇼 제작")}
         </PrimaryButton>
       </div>
     </div>

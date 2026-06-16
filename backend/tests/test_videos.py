@@ -424,6 +424,67 @@ async def test_rerender_done_video_no_changes_stays_done(
 
 
 @pytest.mark.asyncio
+async def test_rerender_dry_run_reports_diff_without_mutating(
+    client, professor, lecture, db
+):
+    """dry_run=true 는 DB 를 건드리지 않고 실제 변경분만 정확히 보고한다.
+
+    슬라이드 2장 중 1장만 발화를 고친 상태 → 점검은 '1장 변경(2번)·1장 재사용' 을
+    돌려주고, 상태 전환·합성 enqueue 는 일어나지 않는다(비용 0)."""
+    from unittest.mock import patch
+
+    from app.models.video import Video, VideoScript
+    from app.models.video_render import RenderStatus, VideoRender
+
+    segments = [
+        {"slide_index": 0, "text": "그대로인 발화", "start_seconds": 0, "end_seconds": 10},
+        {"slide_index": 1, "text": "수정된 발화", "start_seconds": 10, "end_seconds": 20},
+    ]
+    lecture.avatar_name = "Sabine Office Front 2"
+    video = Video(id=uuid.uuid4(), lecture_id=lecture.id, status=VideoStatus.done)
+    db.add(video)
+    await db.flush()
+    db.add(VideoScript(
+        id=uuid.uuid4(), video_id=video.id,
+        ai_segments=segments, segments=list(segments),
+    ))
+    # 0번 슬라이드는 텍스트 일치(재사용), 1번은 옛 텍스트로 렌더돼 변경 대상.
+    db.add(VideoRender(
+        id=uuid.uuid4(), lecture_id=lecture.id, instructor_id=professor.id,
+        avatar_id="avatar-x", status=RenderStatus.ready,
+        audio_url="https://s3/audio/0.mp3", script_text="그대로인 발화",
+        slide_number=0,
+    ))
+    db.add(VideoRender(
+        id=uuid.uuid4(), lecture_id=lecture.id, instructor_id=professor.id,
+        avatar_id="avatar-x", status=RenderStatus.ready,
+        audio_url="https://s3/audio/1.mp3", script_text="옛 발화",
+        slide_number=1,
+    ))
+    await db.flush()
+
+    with patch("app.tasks.render.render_slide.delay") as mock_delay:
+        resp = await client.post(
+            f"/api/videos/{video.id}/rerender?dry_run=true",
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["dry_run"] is True
+    assert data["rerendered_segments"] == 1
+    assert data["slides_total"] == 2
+    assert data["changed_slide_numbers"] == [2]  # 1-based 표시
+    assert data["reused_slides"] == 1
+    assert data["avatar_name"] == "Sabine Office Front 2"
+    # 점검만 — 상태 전환·합성 enqueue 가 절대 없어야 한다(비용 0).
+    assert data["status"] == "done"
+    mock_delay.assert_not_called()
+
+    await db.refresh(video)
+    assert video.status == VideoStatus.done  # 점검은 상태를 바꾸지 않는다.
+
+
+@pytest.mark.asyncio
 async def test_rerender_detects_voice_change(client, professor, lecture, db):
     """텍스트가 그대로여도 음성(보이스/속도)을 바꿨으면 해당 슬라이드를 재합성한다."""
     from unittest.mock import patch
