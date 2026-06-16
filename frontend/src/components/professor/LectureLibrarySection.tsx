@@ -177,6 +177,15 @@ export default function LectureLibrarySection({
     [router],
   );
 
+  // 카드에서 바로 학습 데이터 분석 리포트로 — 학습자 시청·퀴즈 정답률·Q&A·집중도를
+  // 종합 시각화한 화면(/professor/analytics/{id}). 이 플랫폼의 핵심 가치 화면이다.
+  const handleAnalyze = useCallback(
+    (id: string) => {
+      router.push(`/professor/analytics/${id}`);
+    },
+    [router],
+  );
+
   // 공개/비공개 전환 후 — 목록 state 의 해당 강의 is_published 를 즉시 갱신(배지·버튼 반영).
   const handleVisibilityChanged = useCallback(
     (id: string, isPublished: boolean) => {
@@ -443,6 +452,7 @@ export default function LectureLibrarySection({
                       onDeleted={handleDeleted}
                       onPreview={handlePreview}
                       onShare={handleShare}
+                      onAnalyze={handleAnalyze}
                       onVisibilityChanged={handleVisibilityChanged}
                     />
                   </div>
