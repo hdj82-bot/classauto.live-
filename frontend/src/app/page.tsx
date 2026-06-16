@@ -44,13 +44,14 @@ import "./demo/demo-v3.css";
 // 수도 함께 갱신한다.
 //  - 좌측(인문계열) = 중국어 필수 문장성분
 //  - 우측(자연계열) = 코딩의 기초 (영어 음성 + 한국어 자막)
-const SOCIAL_DEMO_LECTURE_HREF = "/lecture/중국어-필수-문장성분-f7dda164";
+const SOCIAL_DEMO_LECTURE_HREF =
+  "/lecture/중국어-문장-성분과-어순한국어-음성중국어-자막-96f7569b";
 const SOCIAL_DEMO_LECTURE_CARD = {
   tagline: "A · Liberal Arts",
-  metaLine: "실제 강의 · 영어 음성 + 한국어 자막",
+  metaLine: "실제 강의 · 한국어 음성 + 중국어 자막",
   title: "중국어 필수 문장성분",
   subtitle:
-    "한국어와 중국어의 문장성분 차이를 다루는 실제 제작 강의입니다. 학생 화면 그대로 영어 음성·한국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
+    "한국어와 중국어의 문장성분 차이를 다루는 실제 제작 강의입니다. 학생 화면 그대로 한국어 음성·중국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
   statSlides: "12 슬라이드",
   statSecondary: "AI 아바타 Q&A",
 };
