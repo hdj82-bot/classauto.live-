@@ -18,6 +18,7 @@ from app.services.pipeline.retriever import (
     search_similar_script,
     search_similar_slides,
 )
+from app.services.pipeline.text_cleanup import strip_cross_lang_gloss
 from app.services.pipeline.translator import _lang_name
 
 logger = logging.getLogger(__name__)
@@ -60,16 +61,20 @@ _HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s*", re.MULTILINE)
 
 
 def _strip_markdown(text: str) -> str:
-    """답변에서 거슬리는 마크다운 서식 기호를 제거한다(내용은 보존).
+    """답변/질문에서 거슬리는 마크다운 서식 기호 + 한·중 병기 괄호를 제거한다(내용 보존).
 
     - ``**굵게**`` / ``__강조__`` → 내용만 남기고 기호 제거.
     - 줄머리 ``#`` ``##`` ``###`` 제목 표시 제거.
+    - ``주어(主语)``·``大学生(대학생)`` 같은 '한국어(중국어)'·'중국어(한국어)' 병기 괄호
+      제거(교수자 요청 2026-06-16: 중국어를 쓸 거면 중국어 단어만, 병기 금지). 프롬프트로도
+      금지하지만 모델이 어겨도 안전하도록 생성 직후 결정적으로 제거한다.
     `-` 목록·줄바꿈 등 텍스트로 자연스럽게 읽히는 구조는 그대로 둔다.
     """
     if not text:
         return text
     text = text.replace("**", "").replace("__", "")
     text = _HEADING_RE.sub("", text)
+    text = strip_cross_lang_gloss(text)
     return text.strip()
 
 QA_SYSTEM_PROMPT = """\

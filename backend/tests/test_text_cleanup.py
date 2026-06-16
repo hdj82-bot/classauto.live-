@@ -3,6 +3,7 @@ import pytest
 
 from app.services.pipeline.text_cleanup import (
     split_by_language,
+    strip_cross_lang_gloss,
     strip_pinyin_annotations,
 )
 
@@ -42,6 +43,43 @@ def test_preserves_korean_and_hanja_glosses_in_parens() -> None:
 def test_empty_and_none_safe() -> None:
     assert strip_pinyin_annotations("") == ""
     assert strip_pinyin_annotations(None) is None  # type: ignore[arg-type]
+
+
+# ── strip_cross_lang_gloss: '한국어(중국어)' / '중국어(한국어)' 병기 제거 ────────
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        # 한글단어(한자) → 한글만 (교수자 보고 사례: 주어(主语) 등)
+        ("주어(主语), 서술어(谓语), 목적어(宾语)", "주어, 서술어, 목적어"),
+        ("부사어(状语), 관형어(定语), 보어(补语)", "부사어, 관형어, 보어"),
+        ("학습(學習)은 중요하다", "학습은 중요하다"),
+        # 한자단어(한글) → 한자만
+        ("大学生(대학생)", "大学生"),
+        ("我吃饭(나는 밥을 먹는다)", "我吃饭"),
+        # 전각 괄호도 제거
+        ("주어（主语）", "주어"),
+    ],
+)
+def test_strips_cross_lang_gloss(raw: str, expected: str) -> None:
+    assert strip_cross_lang_gloss(raw) == expected
+
+
+def test_cross_lang_preserves_same_language_and_other_globs() -> None:
+    # 같은 언어 설명 괄호(괄호 안 한글)는 한글단어 뒤에서 보존 — 한자가 없으므로.
+    assert strip_cross_lang_gloss("주어(문장의 주체)") == "주어(문장의 주체)"
+    # 영어 약어 풀이 등 한자가 없는 괄호는 보존.
+    assert strip_cross_lang_gloss("GDP(국내총생산)") == "GDP(국내총생산)"
+    # 괄호 안에 한·중이 섞이면(애매) 건드리지 않는다.
+    assert strip_cross_lang_gloss("주어(主语 등 핵심)") == "주어(主语 등 핵심)"
+    # 순수 한국어/순수 중국어 문장은 그대로.
+    assert strip_cross_lang_gloss("안녕하세요. 어순을 배웁니다.") == "안녕하세요. 어순을 배웁니다."
+
+
+def test_cross_lang_empty_and_none_safe() -> None:
+    assert strip_cross_lang_gloss("") == ""
+    assert strip_cross_lang_gloss(None) is None  # type: ignore[arg-type]
 
 
 # ── split_by_language ────────────────────────────────────────────────────────
