@@ -317,9 +317,12 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   }, [user]);
 
   // "다시 보지 않기" — 즉시 숨기고 서버에 영구 스킵 기록(fire-and-forget).
+  // 비로그인(익명) 시청자는 서버 플래그가 없고 markOnboarded 가 인증 필요(401 →
+  // /auth/login 리다이렉트)라 호출하지 않는다. 익명은 컴포넌트 sessionStorage 가드로
+  // 같은 세션 내 재노출만 막으면 충분하다.
   const handleDismissOnboardingForever = () => {
     setShowOnboarding(false);
-    userApi.markOnboarded().catch(() => {});
+    if (user) userApi.markOnboarded().catch(() => {});
   };
 
   // ─── 강의 fetch ───
