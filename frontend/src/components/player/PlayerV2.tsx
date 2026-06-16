@@ -372,8 +372,14 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   }, [lecture, user, durationSec, preview]);
 
   // ─── 인터스티셜 퀴즈 목록 fetch (타임스탬프 트리거용, 정답·해설 미포함) ───
+  // 학생 전용 엔드포인트(/quiz/playback)는 require_student 라, 비로그인이 호출하면 401
+  // → 전역 인터셉터가 /auth/login 으로 튕긴다. 홍보용 익명 시청(발행 강의)이 튜토리얼
+  // 직후 로그인 화면으로 끊기던 원인. 세션·집중도와 동일하게 비로그인은 이 호출을
+  // 건너뛴다(익명은 세션이 없어 퀴즈를 제출할 수도 없으므로 기능 손실 없음). 교수자
+  // 미리보기(preview)는 user 없이도 전용 preview 경로로 호출한다.
   useEffect(() => {
     if (!lecture?.id) return;
+    if (!preview && !user) return;
     let cancelled = false;
     (async () => {
       const quizzes = await getPlaybackQuizzes(lecture.id, preview);
@@ -382,7 +388,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     return () => {
       cancelled = true;
     };
-  }, [lecture?.id, preview]);
+  }, [lecture?.id, preview, user]);
 
   // ─── 추천(사전 제작) 질문 fetch — 클립 보유분만, 클릭 시 사전 제작 영상 재생 ───
   useEffect(() => {
