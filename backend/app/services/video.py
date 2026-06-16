@@ -577,15 +577,27 @@ async def _inspect_rerender(
     db: AsyncSession,
     video: Video,
     professor_id: uuid.UUID,
-) -> tuple["RerenderInspection", list[tuple[dict, object | None]]]:
+) -> tuple["RerenderInspection", list[tuple[dict, object | None]], list[object]]:
     """변경 분류(읽기 전용) — DB 를 mutate 하지 않는다.
 
-    반환: (점검 결과, 재합성이 필요한 (세그먼트, 매칭 렌더行|None) 리스트). 두 번째
-    값은 실제 제작 경로에서 행 생성/리셋·enqueue 에 그대로 쓴다(분류를 한 곳에 둬
-    dry-run 과 실제 제작이 절대 어긋나지 않게 한다 — 같은 row 객체를 재사용).
+    반환: (점검 결과, 재합성이 필요한 (세그먼트, 매칭 렌더行|None) 리스트, **cue 백필**
+    대상 렌더 리스트). 두 번째 값은 실제 제작 경로에서 행 생성/리셋·enqueue 에 그대로
+    쓴다(분류를 한 곳에 둬 dry-run 과 실제 제작이 절대 어긋나지 않게 한다 — 같은 row
+    객체를 재사용).
+
+    세 번째(cue 백필): 텍스트·음성이 그대로라 **재사용**되는(재합성 안 하는) 슬라이드
+    중, 음원은 있으나 자막 정밀 싱크 cue 가 비어 있는 렌더다. 재합성 없이 정렬만
+    다시 돌려 cue 를 채우도록 render_slide 를 enqueue 한다(음성-자막 싱크 복구).
     """
+    from app.core.config import settings  # noqa: PLC0415
     from app.models.lecture import Lecture  # noqa: PLC0415
     from app.models.video_render import RenderStatus, VideoRender  # noqa: PLC0415
+
+    # 슬라이드쇼 본문 + 정렬 활성일 때만 cue 백필 의미가 있다(영상 굽기 모드 제외).
+    cue_sync_mode = (
+        settings.LECTURE_BODY_PROVIDER == "slideshow"
+        and settings.SUBTITLE_ALIGNMENT_ENABLED
+    )
 
     segments = video.script.segments
     lecture = await db.get(Lecture, video.lecture_id)
@@ -605,6 +617,7 @@ async def _inspect_rerender(
     cur_voice_speed = (getattr(lecture, "voice_speed", None) or 1.3) if lecture else 1.3
 
     needs_render: list[tuple[dict, object | None]] = []
+    cue_backfill: list[object] = []
     changed_slide_numbers: list[int] = []
     reused_ready = 0
     for seg in segments:
@@ -626,6 +639,9 @@ async def _inspect_rerender(
             and _render_voice_matches(render, cur_voice_id, cur_voice_speed)
         ):
             reused_ready += 1
+            # 재사용하지만 자막 cue 가 비면 → 재합성 없이 cue 만 백필(싱크 복구).
+            if cue_sync_mode and not getattr(render, "subtitle_cues", None):
+                cue_backfill.append(render)
             continue
         needs_render.append((seg, render))
         if slide_number is not None:
@@ -639,7 +655,7 @@ async def _inspect_rerender(
         avatar_id=avatar_id,
         avatar_name=(lecture.avatar_name if lecture else None),
     )
-    return inspection, needs_render
+    return inspection, needs_render, cue_backfill
 
 
 async def rerender_video(
@@ -694,13 +710,23 @@ async def rerender_video(
         )
 
     # 변경 분류(읽기 전용) — dry-run 과 실제 제작이 동일한 판정을 쓰게 한곳에 둔다.
-    inspection, needs_render = await _inspect_rerender(db, video, professor_id)
+    inspection, needs_render, cue_backfill = await _inspect_rerender(
+        db, video, professor_id
+    )
 
     # 사전 점검만 — 아무 것도 바꾸지 않고 결과만 돌려준다(비용 0, 상태 불변).
     if dry_run:
         return video, len(needs_render), inspection
 
+    from app.tasks.render import render_slide  # noqa: PLC0415
     from app.models.video_render import RenderStatus, VideoRender  # noqa: PLC0415
+
+    # 재사용(재합성 안 함) 슬라이드 중 cue 가 빈 것은 음원을 그대로 두고 render_slide
+    # 만 enqueue 한다 — TTS 는 idempotent skip 되고, 그 안에서 정렬만 돌려 cue 를
+    # 백필한다(음성-자막 정밀 싱크 복구, 재과금 없음). 변경 슬라이드 수(아래)와 무관해
+    # 점검 글귀에는 영향 없다. cue 가 채워지면 다음 점검부터는 대상에서 빠진다.
+    for r in cue_backfill:
+        render_slide.delay(str(r.id), r.script_text or "", str(professor_id))
 
     # 변경된 구간만 재합성한다(재과금 최소화). 바뀐 슬라이드만 audio_url 을 비워
     # TTS 를 새로 합성하고, 그 항목만 enqueue 한다. render 는 점검 단계에서 찾아둔
@@ -753,8 +779,6 @@ async def rerender_video(
 
     await db.commit()
     await db.refresh(video)
-
-    from app.tasks.render import render_slide  # noqa: PLC0415
 
     for rid, text in to_enqueue:
         render_slide.delay(rid, text, str(professor_id))
