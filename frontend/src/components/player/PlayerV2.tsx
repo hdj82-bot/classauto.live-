@@ -375,14 +375,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   }, [lecture, user, durationSec, preview]);
 
   // ─── 인터스티셜 퀴즈 목록 fetch (타임스탬프 트리거용, 정답·해설 미포함) ───
-  // 학생 전용 엔드포인트(/quiz/playback)는 require_student 라, 비로그인이 호출하면 401
-  // → 전역 인터셉터가 /auth/login 으로 튕긴다. 홍보용 익명 시청(발행 강의)이 튜토리얼
-  // 직후 로그인 화면으로 끊기던 원인. 세션·집중도와 동일하게 비로그인은 이 호출을
-  // 건너뛴다(익명은 세션이 없어 퀴즈를 제출할 수도 없으므로 기능 손실 없음). 교수자
-  // 미리보기(preview)는 user 없이도 전용 preview 경로로 호출한다.
+  // /quiz/playback 은 선택 인증으로 바뀌어(발행 강의는 익명도 조회) 비로그인 홍보
+  // 시청에서도 퀴즈가 영상 중간에 뜬다. 정답·해설은 응답에 없고, 익명은 세션이 없어
+  // 제출 시 안내만 표시된다(채점은 로그인 학생만). 교수자 미리보기는 preview 경로.
   useEffect(() => {
     if (!lecture?.id) return;
-    if (!preview && !user) return;
     let cancelled = false;
     (async () => {
       const quizzes = await getPlaybackQuizzes(lecture.id, preview);
@@ -391,7 +388,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     return () => {
       cancelled = true;
     };
-  }, [lecture?.id, preview, user]);
+  }, [lecture?.id, preview]);
 
   // ─── 추천(사전 제작) 질문 fetch — 클립 보유분만, 클릭 시 사전 제작 영상 재생 ───
   useEffect(() => {
@@ -533,9 +530,16 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const answerQuiz = async (quiz: PlaybackQuiz, userAnswer: string) => {
     if (quizSubmitting || quizResult !== null) return;
 
-    // 미리보기(세션 없음): 채점·기록 없이 안내만 오버레이에 표시.
+    // 세션 없음 — 채점·기록 없이 안내만 표시. 교수자 미리보기 vs 비로그인(홍보 익명
+    // 시청)을 구분한다: 미리보기는 "학생이 응답" 안내, 익명은 로그인 유도.
     if (!sessionId) {
-      setQuizResult(t("student.playerV2.quiz.previewNote"));
+      setQuizResult(
+        t(
+          preview
+            ? "student.playerV2.quiz.previewNote"
+            : "student.playerV2.quiz.demoNote",
+        ),
+      );
       return;
     }
 
@@ -1142,8 +1146,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   </span>
                 </div>
                 <div className={styles.controlsRight}>
-                  {preview && (
-                    <div className={styles.avSettingsWrap}>
+                  {/* 자막·속도 설정 — 미리보기·학생·익명 모두에게 노출(자막 모양·속도는
+                      시청자 로컬 환경설정). 단 '위치'는 강의에 저장돼 학생 화면에 반영되므로
+                      미리보기(교수자)에서만 보인다. */}
+                  <div className={styles.avSettingsWrap}>
                       <button
                         type="button"
                         className={styles.ctrl}
@@ -1248,28 +1254,33 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                                   setCapScale(Number(parseFloat(e.target.value).toFixed(2)))
                                 }
                               />
-                              {/* 위치 — 자막을 끌어서 옮긴다(강의에 저장 → 학생 화면 반영). */}
-                              <div className={styles.avField}>
-                                <span className={styles.avLabel}>위치</span>
-                                <div className={styles.avBtns}>
-                                  <button
-                                    type="button"
-                                    className={styles.avChip}
-                                    onClick={() => {
-                                      setCapPos(null);
-                                      void saveCapPos(null);
-                                    }}
-                                    disabled={!capPos}
-                                  >
-                                    기본 위치로
-                                  </button>
-                                </div>
-                              </div>
-                              <p className={styles.avHint}>
-                                {capPos
-                                  ? "자막을 끌어서 위치를 옮길 수 있어요. 위치는 강의에 저장돼 학생 화면에도 적용됩니다."
-                                  : "영상 위 자막을 끌어서 원하는 위치에 놓으세요. (강의에 저장 → 학생 화면 반영)"}
-                              </p>
+                              {/* 위치 — 자막을 끌어서 옮긴다(강의에 저장 → 학생 화면 반영).
+                                  강의에 영구 저장되므로 미리보기(교수자)에서만 노출. */}
+                              {preview && (
+                                <>
+                                  <div className={styles.avField}>
+                                    <span className={styles.avLabel}>위치</span>
+                                    <div className={styles.avBtns}>
+                                      <button
+                                        type="button"
+                                        className={styles.avChip}
+                                        onClick={() => {
+                                          setCapPos(null);
+                                          void saveCapPos(null);
+                                        }}
+                                        disabled={!capPos}
+                                      >
+                                        기본 위치로
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <p className={styles.avHint}>
+                                    {capPos
+                                      ? "자막을 끌어서 위치를 옮길 수 있어요. 위치는 강의에 저장돼 학생 화면에도 적용됩니다."
+                                      : "영상 위 자막을 끌어서 원하는 위치에 놓으세요. (강의에 저장 → 학생 화면 반영)"}
+                                  </p>
+                                </>
+                              )}
                             </div>
 
                             {/* 음성 빠르기 */}
@@ -1330,7 +1341,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                         </>
                       )}
                     </div>
-                  )}
                   {preview && (
                     <button
                       type="button"

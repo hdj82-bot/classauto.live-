@@ -1425,6 +1425,7 @@
         "chatPickHint": "Pick an answer from the options above.",
         "leadIn": "Let's pause for a quick check-in quiz.",
         "previewNote": "Not graded in preview — students respond right here.",
+        "demoNote": "Not graded in trial viewing — log in to get instant answers and explanations.",
         "continue": "Continue"
       },
       "deploy": {
