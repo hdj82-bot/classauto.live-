@@ -1,10 +1,31 @@
 import { describe, it, expect } from "vitest";
 import {
+  detectCaptionScript,
   pickActiveCaption,
   pickActiveCaptionWithCues,
   splitIntoSentences,
 } from "@/components/player/captionTiming";
 import type { SubtitleCue } from "@/components/player/useSlideshowPlayback";
+
+describe("detectCaptionScript", () => {
+  it("detects Korean when Hangul syllables are present", () => {
+    expect(detectCaptionScript("오늘은 번역 오류를 분석합니다.")).toBe("ko");
+  });
+
+  it("treats Korean-with-Han-emphasis as Korean (Hangul wins)", () => {
+    // 한국어 본문 + 한자 강조(飜譯) — 한글이 있으면 한국어로 본다.
+    expect(detectCaptionScript("飜譯의 오류를 봅니다")).toBe("ko");
+  });
+
+  it("detects Chinese when only Han characters are present", () => {
+    expect(detectCaptionScript("今天我们分析翻译错误。")).toBe("zh");
+  });
+
+  it("returns null for Latin-only text", () => {
+    expect(detectCaptionScript("Today we analyze errors.")).toBeNull();
+    expect(detectCaptionScript("")).toBeNull();
+  });
+});
 
 describe("splitIntoSentences", () => {
   it("splits Korean sentences on terminal punctuation", () => {
