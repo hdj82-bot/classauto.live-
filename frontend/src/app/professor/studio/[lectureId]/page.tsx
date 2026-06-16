@@ -919,17 +919,19 @@ export default function StudioWizardPage() {
           return;
         }
 
-        const generated = await generateSeedQuestions(lectureId);
+        // 다른 카드에 이미 채워진 질문들 — 백엔드가 이 주제를 피해 강의의 또 다른 핵심을
+        // 뽑게 한다. 매 카드가 독립 호출이라 이를 넘기지 않으면 모델이 "가장 중요한 핵심"
+        // (예: 어순)을 매번 #1 로 다시 뽑아 3카드가 같은 주제로 채워진다.
+        const otherQuestions = seedQuestions
+          .filter((_, i) => i !== index)
+          .map((q) => q.question.trim())
+          .filter(Boolean);
+        const generated = await generateSeedQuestions(lectureId, otherQuestions);
         if (generated.length === 0) {
           toast("강의 자료가 아직 준비되지 않아 질문을 만들 수 없어요.", "error");
           return;
         }
-        const used = new Set(
-          seedQuestions
-            .filter((_, i) => i !== index)
-            .map((q) => q.question.trim().toLowerCase())
-            .filter(Boolean),
-        );
+        const used = new Set(otherQuestions.map((q) => q.toLowerCase()));
         const pick =
           generated.find((g) => !used.has(g.question.trim().toLowerCase())) ??
           generated[0];

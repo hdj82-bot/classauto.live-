@@ -137,13 +137,17 @@ export interface GeneratedSeedQuestion {
  * (저장·렌더하지 않음). 교수자가 "질문과 답변 자동 생성" 버튼으로 호출 → 받은
  * 질문·답변을 카드에 채워 검토·수정 후 저장한다. 발화 언어로 작성된다. 미배포/404
  * 시 throw → 호출부가 toast.
+ *
+ * ``exclude``: 이미 다른 카드에 채워진 질문들. 넘기면 백엔드가 그 주제를 피해 강의의
+ * 또 다른 핵심을 뽑는다(카드별 생성이 같은 어순 질문만 반복하던 문제 방지).
  */
 export async function generateSeedQuestions(
   lectureId: string,
+  exclude: string[] = [],
 ): Promise<GeneratedSeedQuestion[]> {
   const { data } = await api.post<{
     questions?: { question: string; answer: string }[];
-  }>(`/api/lectures/${lectureId}/seed-questions/generate`);
+  }>(`/api/lectures/${lectureId}/seed-questions/generate`, { exclude });
   return (data.questions ?? []).map((q) => ({
     question: q.question ?? "",
     answer: q.answer ?? "",
