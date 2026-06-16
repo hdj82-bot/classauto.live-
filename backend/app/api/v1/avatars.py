@@ -634,6 +634,75 @@ async def upload_profile_photo(
     )
 
 
+@router.delete(
+    "/api/avatars/me/photo-avatar",
+    response_model=dict,
+    summary="본인 사진 아바타(Talking Photo) 삭제 — 업로드 사진·캐시 정리",
+)
+async def delete_own_photo_avatar(
+    user: User = Depends(require_professor),
+    db: AsyncSession = Depends(get_db),
+):
+    """교수자가 직접 올린 프로필 사진으로 만든 '본인 아바타'(``photo_avatar_id``)를
+    라이브러리에서 완전히 제거한다.
+
+    이 항목은 ``GET /api/avatars`` 가 ``user.photo_avatar_id`` 로 합성하는
+    ``is_custom`` 카드라 룩(PhotoAvatarLook)이 아니다 — 그래서 ``delete_look`` 으로는
+    지워지지 않았다(404 후 목록 재조회에서 부활하던 버그). 이 엔드포인트가 사진
+    본체와 모든 파생 캐시를 함께 비워 카드가 다시 나타나지 않게 한다:
+
+    - HeyGen Talking Photo 슬롯 회수(best-effort) + S3 원본 사진 삭제(best-effort)
+    - ``photo_avatar_id`` / ``photo_avatar_look_id`` / ``profile_image_url`` 해제
+    - 그 사진으로 만든 VisionStory 아바타 캐시가 있으면(소스 일치) 무효화
+    - '움직이는 미리보기' 캐시(``photo_avatar_preview_*``) 무효화
+
+    라이브러리 룩(PhotoAvatarLook)·기본 룩 선택은 건드리지 않는다(별개 항목).
+    """
+    from urllib.parse import urlparse
+
+    from app.services.pipeline.heygen import delete_talking_photo
+
+    old_photo_avatar_id = user.photo_avatar_id
+    old_profile_url = user.profile_image_url
+
+    # HeyGen Talking Photo 슬롯 회수 — best-effort(이미 삭제·통신 오류여도 진행).
+    if old_photo_avatar_id:
+        try:
+            await delete_talking_photo(old_photo_avatar_id)
+        except Exception:  # noqa: BLE001 — 회수는 best-effort
+            logger.warning(
+                "본인 아바타 삭제: HeyGen talking photo 회수 실패(무시) — %s",
+                old_photo_avatar_id,
+            )
+
+    # S3 원본 사진 삭제(우리 버킷 객체일 때만) — best-effort.
+    if old_profile_url:
+        key = urlparse(old_profile_url).path.lstrip("/")
+        if key:
+            try:
+                s3_svc.delete_file(key)
+            except Exception:  # noqa: BLE001
+                logger.warning("본인 아바타 삭제: S3 원본 삭제 실패(무시) — %s", key)
+
+    # 그 사진으로 만든 VisionStory 아바타 캐시가 있으면(소스 일치) 무효화 — 다음 렌더가
+    # 남아 있는 소스(기본 룩 등)로 재생성한다. 소스가 다르면(룩 기반) 건드리지 않는다.
+    if user.visionstory_avatar_source and user.visionstory_avatar_source == old_profile_url:
+        user.visionstory_avatar_id = None
+        user.visionstory_avatar_source = None
+
+    user.photo_avatar_id = None
+    user.photo_avatar_look_id = None
+    user.profile_image_url = None
+    # 사라진 얼굴로 만든 '움직이는 미리보기' 캐시는 무효.
+    user.photo_avatar_preview_url = None
+    user.photo_avatar_preview_video_id = None
+    user.photo_avatar_preview_voice_id = None
+    user.photo_avatar_preview_text = None
+    user.photo_avatar_preview_avatar_id = None
+    await db.commit()
+    return {"ok": True}
+
+
 @router.post(
     "/api/avatars/me/preview",
     response_model=AvatarPreviewResponse,
