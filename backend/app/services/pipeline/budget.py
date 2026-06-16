@@ -124,8 +124,12 @@ def qa_renders_used_this_month(
     디버깅으로 여러 번 재렌더해도 그 강의는 1로 센다. 아직 배포(is_published)되지
     않은 제작 중 강의는 제외 — 제작 과정의 렌더는 한도를 소모하지 않고 실제 배포한
     강의만 월 한도에 포함한다(2026-06-14 사용자 결정). "실제 제출된 렌더"만 보도록
-    대표 행(heygen_job_id 보유)만 센다(failed 도 이미 제출·과금됐을 수 있어 포함).
+    대표 행(heygen_job_id 보유)만 센다. **실패(status=failed)는 제외**한다(2026-06-16
+    사용자 결정) — 실패한 렌더만 있는 강의는 월 '강의' 슬롯을 소모하지 않는다(고쳐
+    다시 만드는 재시도를 한도가 막지 않게).
     """
+    from app.services.pipeline import qa_avatar  # noqa: PLC0415
+
     month_start = _month_start(now)
     total = db.execute(
         select(func.count(func.distinct(QAAnswerCache.lecture_id)))
@@ -134,6 +138,7 @@ def qa_renders_used_this_month(
         .where(
             QAAnswerCache.instructor_id == instructor_id,
             QAAnswerCache.heygen_job_id.isnot(None),
+            QAAnswerCache.status != qa_avatar.STATUS_FAILED,
             QAAnswerCache.created_at >= month_start,
             Lecture.is_published == True,  # noqa: E712
         )

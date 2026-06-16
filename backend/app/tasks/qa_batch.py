@@ -533,7 +533,10 @@ def _lecture_renders_used_this_month(db, lecture_id) -> int:
     09 §5: "아바타 Q&A 영상당 렌더 = 영상 전체에서 3렌더". 교수자 월 한도(6)와 별개로
     한 영상이 여러 밤의 배치에 걸쳐 3렌더를 초과하지 않도록 영상 단위로도 막는다.
     교수자 한도(budget.qa_renders_used_this_month)와 동일 기준 — 대표 행(heygen_job_id
-    보유)만 세고, 실패도 포함(이미 제출·과금됐을 수 있음)해 재시도 폭주를 막는다.
+    보유)만 센다. **실패(status=failed)는 제외**한다(2026-06-16 사용자 결정): 잘못 만든
+    Q&A 를 고쳐 다시 만드는 건 새 슬롯이 아니라 같은 클립의 재시도이므로, 실패가 월
+    한도를 영구 소모해 "한도 소진"으로 재시도를 막던 구조를 바로잡는다. 재시도 폭주는
+    제출 직전 ``assert_qa_render_budget``($ 서킷 브레이커)가 따로 막는다.
     """
     from sqlalchemy import func, select
 
@@ -543,6 +546,7 @@ def _lecture_renders_used_this_month(db, lecture_id) -> int:
         select(func.count(QAAnswerCache.id)).where(
             QAAnswerCache.lecture_id == lecture_id,
             QAAnswerCache.heygen_job_id.isnot(None),
+            QAAnswerCache.status != qa_avatar.STATUS_FAILED,
             QAAnswerCache.created_at >= _month_start(),
         )
     ).scalar()
@@ -703,6 +707,14 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         if _r.status == qa_avatar.STATUS_FAILED:
             _r.status = qa_avatar.STATUS_PENDING
             _r.error_message = None
+            # 실패 렌더는 한도를 소모하지 않는다(2026-06-16 사용자 결정) — 재시도하면
+            # 새 클립으로 다시 제출되므로, 이전 실패 제출 표식(heygen_job_id·cluster_key·
+            # 영상 URL)을 비워 _lecture_renders_used_this_month / qa_renders_used_this_month
+            # 의 '제출된 렌더' 카운트에서 빠지게 한다. 안 그러면 failed→pending 으로 바뀐
+            # 뒤에도 옛 job_id 가 남아 한도를 계속 점유, 재시도가 '한도 소진'으로 막힌다.
+            _r.heygen_job_id = None
+            _r.cluster_key = None
+            _r.s3_video_url = None
     if rows:
         db.commit()
 

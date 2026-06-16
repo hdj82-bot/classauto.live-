@@ -541,6 +541,43 @@ def test_limit_zero_marks_failed_with_quota_message(sync_db, mock_render, monkey
     assert "한도" in (row.error_message or "")  # 조용한 '대기' 가 아니라 사유 표시
 
 
+def test_failed_renders_do_not_consume_lecture_cap(sync_db, mock_render, monkeypatch):
+    """실패한 Q&A 렌더는 영상당 한도를 소모하지 않는다 — 재시도가 '한도 소진'으로 안 막힘.
+
+    회귀(2026-06-16 사용자 결정): 종전엔 실패 렌더도 heygen_job_id 보유로 카운트돼,
+    한 영상의 3렌더가 모두 실패하면 limit=0 → 재시도가 전부 '한도 소진'으로 막혔다
+    (잘못 만들면 영상 통째로 다시 만들어야 하는 구조). 실패는 한도에서 제외한다.
+    """
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    prof, _c, lec = _seed_lecture(sync_db)  # 일반 계정(무제한 아님)
+    # 직전 시도에서 3개(영상당 캡=3)가 모두 failed(제출 표식 heygen_job_id 보유)로 박힘.
+    for i in range(3):
+        sync_db.add(QAAnswerCache(
+            lecture_id=lec.id, instructor_id=prof.id, question_text=f"질문 {i}",
+            answer_text="사전 답변", status=qa_avatar.STATUS_FAILED,
+            error_message="이전 실패", heygen_job_id=f"job-old-{i}",
+            origin=qa_avatar.ORIGIN_SEED,
+        ))
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    # 실패가 한도를 소모하지 않으므로 3개 모두 재시도 제출(한도 소진 차단 없음).
+    assert result == {"submitted": 3, "failed": 0}
+    rows = sync_db.query(QAAnswerCache).all()
+    assert all(r.status == qa_avatar.STATUS_RENDERING for r in rows)
+    # 재시도는 새 job 으로 제출 — 옛 실패 job_id 는 비워졌다.
+    assert all(
+        r.heygen_job_id and not r.heygen_job_id.startswith("job-old") for r in rows
+    )
+
+
 # ── 4. 야간 배치(_submit_pending)는 instructor_seed 를 건너뛴다 ─────────────────
 
 
