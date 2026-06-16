@@ -72,7 +72,7 @@ def render_slide(
     import asyncio
     from app.models.lecture import Lecture, VoiceGender
     from app.models.user import User
-    from app.services.pipeline.tts import synthesize
+    from app.services.pipeline.tts import build_subtitle_cues_for_audio, synthesize
     from app.services.pipeline.heygen import create_video
     from app.services.pipeline.budget import assert_heygen_budget, BudgetExceededError
     from app.services.cost_tracker import estimate_tts_cost_usd
@@ -201,6 +201,34 @@ def render_slide(
                 "TTS idempotent skip — audio_url 및 S3 객체 존재: render_id=%s, key=%s",
                 render_id, s3_audio_key,
             )
+            # ── 자막 정밀 싱크 cue 백필(재합성 없음) ──
+            # 음원은 이미 있으나 cue 가 비면(정렬 기능 도입 전 렌더·정렬 일시 실패·
+            # '다시 제작'에서 텍스트 그대로라 TTS 건너뜀) 기존 음원으로 Forced
+            # Alignment 만 다시 돌려 cue 를 채운다. 이게 없으면 플레이어가 영구히
+            # 글자수 추정으로 폴백해 음성-자막이 어긋난다(발화 속도 무관 → 리드값
+            # 조정으로도 안 맞음). 슬라이드쇼 본문만 해당. 비용/idempotency 불변.
+            if (
+                slideshow_mode
+                and not render.subtitle_cues
+                and (script_text or "").strip()
+            ):
+                try:
+                    existing_audio = s3_svc.download_file(s3_audio_key)
+                    backfilled = loop.run_until_complete(
+                        build_subtitle_cues_for_audio(existing_audio, script_text)
+                    )
+                    if backfilled:
+                        render.subtitle_cues = backfilled
+                        db.commit()
+                        logger.info(
+                            "자막 cue 백필 완료(재합성 없음) — render_id=%s, %d문장",
+                            render_id, len(backfilled),
+                        )
+                except Exception as exc:  # noqa: BLE001 — 백필 실패가 렌더를 막지 않게.
+                    logger.warning(
+                        "자막 cue 백필 실패(무시) — render_id=%s, error=%s",
+                        render_id, exc,
+                    )
 
         # ── 슬라이드쇼 모드: HeyGen 렌더 없이 음성만으로 완료 ──
         # 본문은 슬라이드 이미지 + 이 구간 TTS 음성 + 타임라인(VideoScript.segments)을

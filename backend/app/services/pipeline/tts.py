@@ -663,6 +663,26 @@ def _flush_cue(
     )
 
 
+async def build_subtitle_cues_for_audio(
+    audio_bytes: bytes, text: str
+) -> list[dict] | None:
+    """기존 음원 + transcript 로 자막 정밀 싱크 cue 를 만든다(**재합성 없이**).
+
+    render 태스크가 '음원은 이미 있으나 cue 가 없는' 렌더의 cue 를 백필할 때 쓴다
+    — 정렬 기능 도입 전에 만들어진 음원, 또는 '다시 제작'에서 텍스트가 그대로라
+    재합성을 건너뛴(=TTS idempotency) 슬라이드가 그 대상이다. Forced Alignment 는
+    합성과 별개 단계라, 음원을 다시 만들지 않고 정렬만 돌려 cue 를 채울 수 있다.
+
+    ``SUBTITLE_ALIGNMENT_ENABLED`` 가 꺼져 있거나 입력이 비면 None 을 돌려준다.
+    실패는 ``_build_subtitle_cues`` 가 삼켜 None 으로 degrade 한다(렌더를 막지 않음).
+    """
+    if not settings.SUBTITLE_ALIGNMENT_ENABLED:
+        return None
+    if not audio_bytes or not (text or "").strip():
+        return None
+    return await _build_subtitle_cues(audio_bytes, text)
+
+
 # ── 후방 호환 헬퍼 ───────────────────────────────────────────────────────────
 # 기존 caller 와 외부 단위 테스트가 이 이름들을 import 한다. 새 클라이언트 모듈을
 # 위임 호출하도록 구현해 시그니처와 도메인 예외 변환 동작만 보존한다.

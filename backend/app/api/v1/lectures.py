@@ -413,6 +413,7 @@ async def generate_seed_questions_endpoint(
 )
 async def render_seed_questions_endpoint(
     lecture_id: uuid.UUID,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
     professor: User = Depends(require_professor),
 ):
@@ -420,6 +421,10 @@ async def render_seed_questions_endpoint(
 
     렌더는 비동기(celery)로 진행되며, 진척은 GET 폴링으로 확인한다. 저장(PUT)은
     호출 직전에 끝낸 상태를 가정한다. 비소유 404, 파이프라인 미처리면 400.
+
+    ``force=true`` 면 이미 완성(ready)된 답변 클립도 pending 으로 되돌려 **현재 아바타/
+    음성으로 강제 재생성**한다. 아바타를 같은 값으로 다시 골라(_reset_seed_renders 가
+    안 불려 변경 감지가 안 됨) 답변 영상이 옛 아바타로 남았을 때 빠져나오는 경로다.
     """
     from app.celery_app import celery  # noqa: PLC0415
     from app.models.lecture import Lecture  # noqa: PLC0415
@@ -432,6 +437,15 @@ async def render_seed_questions_endpoint(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="강의 파이프라인이 아직 처리되지 않았습니다.",
         )
+
+    if force:
+        # 완성(ready)/진행(rendering) 클립을 pending 으로 되돌린다(렌더 아바타/음성 변경
+        # 반영). 렌더 태스크가 pending 을 현재 아바타로 다시 만든다. 아바타 변경 PATCH 와
+        # 동일 무효화 헬퍼를 재사용.
+        from app.services.lecture import _reset_seed_renders  # noqa: PLC0415
+
+        await _reset_seed_renders(db, lecture_id)
+        await db.commit()
 
     celery.send_task(
         "app.tasks.qa_batch.render_seed_questions",

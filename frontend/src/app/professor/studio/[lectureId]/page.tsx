@@ -1084,21 +1084,74 @@ export default function StudioWizardPage() {
           ? `③ Q&A 아바타 — ${avatarName} · 위 답변 영상을 이 아바타로 새로 제작`
           : `③ Q&A 아바타 — ${avatarName} · 현재 아바타로 이미 완료`;
 
-        // 셋 다 변경 없음 → 확인창 없이 "작업 없음" 만 안내(불필요한 제작 과정 생략).
-        // 단, rendering 에 갇힌 강의를 done 으로 풀어주기 위해 실제 rerender 는 한 번 호출.
         const nothingToDo = changedSlides.length === 0 && pendingSeed === 0;
-        if (!nothingToDo) {
-          const ok = window.confirm(
-            "‘다시 제작’ 점검 결과:\n\n" +
+
+        // 변경 없음 — 그냥 끝내지 않고 'Q&A 답변 강제 재생성'을 제안한다. 아바타를 같은
+        // 값으로 다시 고르면(또는 무효화 사각지대) 점검이 변경을 못 잡아 답변 영상이 옛
+        // 아바타로 남는데, 이 경로로 빠져나온다. 강제 재생성은 ready 클립도 pending 으로
+        // 되돌려 현재 아바타/음성으로 다시 만든다.
+        if (nothingToDo) {
+          const forceQa = window.confirm(
+            "‘다시 제작’ 점검 결과 — 변경 사항이 없어요.\n\n" +
               slideLine +
               "\n" +
               qaLine +
               "\n" +
               avatarLine +
-              "\n\n계속할까요?",
+              "\n\n아바타·음성을 바꿨는데 Q&A 답변 영상이 그대로라면, 현재 아바타로 " +
+              "답변을 강제로 다시 만들 수 있어요.\n\n지금 Q&A 답변을 강제로 다시 만들까요?",
           );
-          if (!ok) return;
+          if (forceQa) {
+            try {
+              await renderSeedQuestions(lectureId, { force: true });
+              setSeedAwaitingRender(true);
+              void reloadSeedQuestions();
+              // 슬라이드는 이미 완성 — 모달은 Q&A 진행만 보인다.
+              setGenDone(false);
+              setGenStalled(false);
+              lastProgressRef.current = { completed: -1, at: 0 };
+              setGenPercent(100);
+              setGenStage(2);
+              setGenCompleted(slides.length);
+              setGenOpen(true);
+              setRenderPollNonce((n) => n + 1);
+            } catch {
+              toast(
+                "Q&A 답변 강제 재생성을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
+                "error",
+              );
+            }
+            return;
+          }
+          // 강제 재생성 거절 — rendering 에 갇힌 강의 done 회복만 위해 rerender 한 번 호출.
+          try {
+            const { data } = await api.post<{ status?: string }>(
+              `/api/videos/${videoId}/rerender`,
+            );
+            if (data?.status === "done") {
+              setVideoStatus("done");
+              setGenDone(true);
+            }
+          } catch {
+            /* 무시 — 안내만 */
+          }
+          toast(
+            "점검 완료 — 변경된 부분이 없어요. 미리보기로 확인하세요.",
+            "success",
+          );
+          return;
         }
+
+        const ok = window.confirm(
+          "‘다시 제작’ 점검 결과:\n\n" +
+            slideLine +
+            "\n" +
+            qaLine +
+            "\n" +
+            avatarLine +
+            "\n\n계속할까요?",
+        );
+        if (!ok) return;
         try {
           const { data } = await api.post<{
             rerendered_segments?: number;
@@ -1215,6 +1268,38 @@ export default function StudioWizardPage() {
     reloadSeedQuestions,
     slides,
   ]);
+
+  // Q&A 답변 강제 재생성 — 이미 완성(ready)된 클립도 현재 아바타/음성으로 다시 만든다.
+  // 아바타를 같은 값으로 다시 골라(또는 무효화 사각지대) '다시 제작'이 변경을 못 잡아
+  // 답변 영상이 옛 아바타로 남을 때 빠져나오는 명시 경로(SettingsPanel 버튼 + '다시 제작'
+  // 변경없음 분기에서 호출).
+  const handleForceRenderSeed = useCallback(async () => {
+    if (!lectureId || !videoId) return;
+    const ok = window.confirm(
+      "현재 아바타·음성으로 Q&A 답변 영상을 모두 다시 만들까요?\n\n" +
+        "이미 완성된 답변도 새로 만들어집니다(아바타·음성 변경 반영).",
+    );
+    if (!ok) return;
+    try {
+      await renderSeedQuestions(lectureId, { force: true });
+      setSeedAwaitingRender(true);
+      void reloadSeedQuestions();
+      // 슬라이드는 이미 완성 — 모달은 Q&A 진행만 보인다.
+      setGenDone(false);
+      setGenStalled(false);
+      lastProgressRef.current = { completed: -1, at: 0 };
+      setGenPercent(100);
+      setGenStage(2);
+      setGenCompleted(slides.length);
+      setGenOpen(true);
+      setRenderPollNonce((n) => n + 1);
+    } catch {
+      toast(
+        "Q&A 답변 강제 재생성을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
+        "error",
+      );
+    }
+  }, [lectureId, videoId, slides.length, reloadSeedQuestions, toast]);
 
   // 멈춤 시 "다시 시도" — 진행 중(아직 done 아님)에 정체된 렌더를 재가동한다.
   // rerender 엔드포인트는 rendering 상태도 받으며, 완료(ready)된 슬라이드는
@@ -1606,6 +1691,7 @@ export default function StudioWizardPage() {
         onChangeSeedQuestion={handleChangeSeedQuestion}
         onPreviewSeed={handlePreviewSeed}
         onAutoGenerateSeedQuestion={handleAutoGenerateSeedQuestion}
+        onForceRenderSeed={handleForceRenderSeed}
       />
 
       <div style={{ gridColumn: "1 / -1" }}>
