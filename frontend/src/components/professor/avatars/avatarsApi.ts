@@ -662,6 +662,24 @@ export async function deleteMyLook(lookId: string): Promise<{ ok: boolean }> {
   }
 }
 
+/**
+ * DELETE /api/avatars/me/photo-avatar — 직접 올린 프로필 사진으로 만든 '본인
+ * 아바타'(GET /api/avatars 의 is_custom 카드)를 삭제한다. 룩(PhotoAvatarLook)이
+ * 아니라 user.photo_avatar_id 합성 항목이므로 deleteMyLook 으로는 지워지지 않는다
+ * (404 → 목록 재조회에서 부활하던 버그). 백엔드가 사진·캐시를 함께 비운다.
+ */
+export async function deleteOwnPhotoAvatar(): Promise<{ ok: boolean }> {
+  try {
+    const { data } = await api.delete<{ ok: boolean }>(
+      "/api/avatars/me/photo-avatar",
+    );
+    return { ok: data?.ok ?? true };
+  } catch (err) {
+    if (isDeferredError(err)) return { ok: true };
+    throw err;
+  }
+}
+
 // ── 최근 선택한 아바타 (GET/POST /api/avatars/me/recent) ───────────────────────
 //
 // 가장 최근에 고른 아바타/룩 id 를 서버에 영속화한다(localStorage 미사용). 다음

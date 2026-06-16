@@ -26,6 +26,7 @@ import {
   createSavedAvatar,
   deleteMyLook,
   deleteMyVoice,
+  deleteOwnPhotoAvatar,
   deleteSavedAvatar,
   deleteStandardAvatar,
   getLectureAvatar,
@@ -886,17 +887,23 @@ export default function AvatarsPage() {
       ) {
         return;
       }
-      // 낙관적 제거 — 룩(라이브러리 본체)·본인 아바타·표준 아바타에서 동시에 뺀다.
+      // 항목 종류 판별 — 삭제 엔드포인트가 셋으로 갈린다(잘못 보내면 404 후 부활).
+      //  ① 표준 아바타: 등록 레코드 id(recordId)로 삭제.
+      //  ② 룩(PhotoAvatarLook): 그 id 로 삭제.
+      //  ③ 본인 사진 아바타: GET /api/avatars 의 is_custom 합성 카드(=photo_avatar_id).
+      //     룩이 아니므로 전용 엔드포인트로 사진·캐시까지 비워야 다시 안 나타난다.
       const std = standardAvatars.find((s) => s.avatar_id === id);
+      const isLook = looks.some((l) => l.id === id);
+      // 낙관적 제거 — 룩(라이브러리 본체)·본인 아바타·표준 아바타에서 동시에 뺀다.
       setLooks((prev) => prev.filter((l) => l.id !== id));
       setStandardAvatars((prev) => prev.filter((s) => s.avatar_id !== id));
       setAvatars((prev) => prev.filter((a) => !(a.is_custom && a.id === id)));
       setSelectedId((prev) => (prev === id ? null : prev));
       setRecentId((prev) => (prev === id ? null : prev));
       try {
-        // 표준 아바타는 등록 레코드 id(recordId)로, 룩은 그 id 로 삭제한다.
         if (std) await deleteStandardAvatar(std.id);
-        else await deleteMyLook(id);
+        else if (isLook) await deleteMyLook(id);
+        else await deleteOwnPhotoAvatar();
         toast(t("cardDeleteSuccess"), "success");
       } catch {
         toast(t("cardDeleteError"), "error");
@@ -905,7 +912,7 @@ export default function AvatarsPage() {
         await refreshAvatars();
       }
     },
-    [t, toast, refreshAvatars, standardAvatars],
+    [t, toast, refreshAvatars, standardAvatars, looks],
   );
 
   const handleRename = useCallback(
