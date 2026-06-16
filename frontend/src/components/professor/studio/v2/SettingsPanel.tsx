@@ -808,31 +808,6 @@ export default function SettingsPanel({
               </p>
             )}
 
-            {/* 생성 완료 — 모든 클립이 ready 면 안내(별도 승인 단계 없이 '슬라이드 쇼
-                제작'으로 함께 만들어진다). */}
-            {seedAllReady && (
-              <div
-                role="status"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "8px 12px",
-                  borderRadius: 9,
-                  border: "1px solid rgba(27,127,75,0.35)",
-                  background: "rgba(27,127,75,0.10)",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "#1B7F4B",
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 6 9 17l-5-5" />
-                </svg>
-                아바타 답변 영상 준비 완료 — 각 질문 ‘미리보기’로 확인
-              </div>
-            )}
-
             {/* 강제 재생성 — 답변 클립이 준비됐는데 아바타·음성을 바꿔 다시 만들고
                 싶을 때. 같은 아바타를 다시 골라 '다시 제작'이 변경을 못 잡는 경우의
                 구제 경로(현재 아바타/음성으로 ready 클립을 강제 재렌더). */}
@@ -1294,9 +1269,11 @@ function SeedQuestionCard({
         </button>
       )}
       {item.status === "failed" && (
+        // 백엔드/제공자(VisionStory·HeyGen)의 원시 오류 문자열(예: "VisionStory
+        // 렌더 제출 오류 [403]: 30302…")은 교수자에게 의미가 없고 혼란만 주므로
+        // 노출하지 않는다. 항상 사람이 읽을 수 있는 고정 안내만 보여준다.
         <p style={{ margin: 0, fontSize: 11, color: "#B42318", lineHeight: 1.5 }}>
-          {item.error_message ||
-            "생성에 실패했어요. 질문이 강의 범위 밖이거나 한도를 초과했을 수 있습니다."}
+          생성에 실패했어요. 잠시 후 ‘답변 자동 생성’으로 다시 시도해주세요.
         </p>
       )}
     </div>
