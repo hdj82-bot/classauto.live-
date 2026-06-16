@@ -180,9 +180,13 @@ export async function generateSeedAnswer(
  */
 export async function renderSeedQuestions(
   lectureId: string,
+  opts?: { force?: boolean },
 ): Promise<SeedQuestionsResult> {
+  // force=true → 이미 완성(ready)된 답변 클립도 pending 으로 되돌려 현재 아바타/음성
+  // 으로 강제 재생성한다(같은 아바타를 다시 골라 변경 감지가 안 될 때 사용).
+  const qs = opts?.force ? "?force=true" : "";
   const { data } = await api.post<SeedQuestionsWire>(
-    `/api/lectures/${lectureId}/seed-questions/render`,
+    `/api/lectures/${lectureId}/seed-questions/render${qs}`,
   );
   return _parse(data, false);
 }
