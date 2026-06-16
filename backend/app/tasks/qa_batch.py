@@ -749,7 +749,25 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         from app.models.user import User as _User
 
         professor = db.query(_User).filter(_User.id == instructor_id).first()
-        if _resolve_character(db, loop, lecture, professor) is None:
+        # 렌더 provider 를 실제 제출(_submit_cluster)과 **동일하게** 판정한다. 본인 얼굴
+        # 강의가 VisionStory 로 렌더되면 HeyGen talking_photo 가 전혀 필요 없다.
+        #
+        # [버그 2026-06-16] 종전엔 provider 와 무관하게 _resolve_character 를 호출했는데,
+        # 그게 본인 얼굴 강의에서 _ensure_talking_photo_sync 로 **HeyGen 에 사진 아바타를
+        # 등록**한다. VisionStory 로 이전(HeyGen 아바타 전량 삭제)한 뒤에도 seed 렌더(=‘다시
+        # 제작’)마다 HeyGen 에 아바타가 되살아나고, HeyGen 사진 아바타 3개 한도(401028)에
+        # 걸려 Q&A 렌더가 통째로 실패했다. VisionStory 경로일 땐 HeyGen 을 건드리지 않는다.
+        own_face_img = (
+            _own_face_image(db, professor)
+            if (_is_own_face_lecture(db, lecture, professor) and _visionstory_enabled())
+            else None
+        )
+        use_vs = own_face_img is not None
+        # 표준/레거시 HeyGen 경로일 때만 본인 아바타(또는 표준 폴백) 확보를 사전 점검한다.
+        own_avatar_unready = (not use_vs) and (
+            _resolve_character(db, loop, lecture, professor) is None
+        )
+        if own_avatar_unready:
             for row in rows:
                 row.status = qa_avatar.STATUS_FAILED
                 row.error_message = (
