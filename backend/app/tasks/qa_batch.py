@@ -265,17 +265,37 @@ def _visionstory_enabled() -> bool:
     return bool((settings.VISIONSTORY_API_KEY or "").strip()) or settings.VISIONSTORY_MOCK
 
 
-def _own_face_source_key(professor) -> str | None:
-    """VisionStory 아바타 캐시 키 — 기본 룩 id 우선, 없으면 프로필 이미지 URL."""
+def _own_face_look_id(professor, lecture=None) -> str | None:
+    """VisionStory 가 쓸 본인 룩 id — **강의에 지정한 룩(lecture.avatar_id) 우선**,
+    없으면 교수자 기본 룩.
+
+    [버그 2026-06-16] 종전엔 항상 photo_avatar_default_look_id(전역 기본 룩)만 써서,
+    강의마다 다른 룩을 골라도 VisionStory 답변 영상이 늘 기본 룩 얼굴로 나왔다
+    ("내가 지정한 아바타가 아니다"). 이 강의에 적용한 룩을 우선 쓴다. (use_vs 분기
+    안에서만 호출되므로 avatar_id 는 이미 본인 룩으로 판정된 값이다.)
+    """
+    av = (lecture.avatar_id or None) if lecture is not None else None
+    if av:
+        return av
+    return professor.photo_avatar_default_look_id if professor is not None else None
+
+
+def _own_face_source_key(professor, lecture=None) -> str | None:
+    """VisionStory 아바타 캐시 키 — 지정 룩 id 우선, 없으면 프로필 이미지 URL.
+
+    캐시 키가 바뀌면(=다른 룩을 골랐으면) VisionStory 아바타를 새 룩 이미지로 다시
+    생성한다(_submit_cluster 의 source 비교).
+    """
     if professor is None:
         return None
-    return professor.photo_avatar_default_look_id or professor.profile_image_url
+    return _own_face_look_id(professor, lecture) or professor.profile_image_url
 
 
-def _own_face_image(db, professor) -> tuple[bytes, str] | None:
-    """본인 얼굴 소스 이미지(룩 우선, 없으면 프로필 사진) → (bytes, ctype). 실패면 None.
+def _own_face_image(db, professor, lecture=None) -> tuple[bytes, str] | None:
+    """본인 얼굴 소스 이미지(지정 룩 우선, 없으면 프로필 사진) → (bytes, ctype). 실패면 None.
 
-    VisionStory 아바타를 생성할 때 이 이미지를 쓴다(아바타는 1회 생성 후 재사용).
+    VisionStory 아바타를 생성할 때 이 이미지를 쓴다. **강의에 지정한 룩**의 이미지를
+    써야 답변 영상이 교수자가 고른 얼굴로 나온다(2026-06-16 수정).
     """
     if professor is None:
         return None
@@ -284,7 +304,7 @@ def _own_face_image(db, professor) -> tuple[bytes, str] | None:
     from app.services.pipeline import s3 as s3_svc
 
     url = None
-    look_id = professor.photo_avatar_default_look_id
+    look_id = _own_face_look_id(professor, lecture)
     if look_id:
         from app.models.photo_avatar import LookStatus, PhotoAvatarLook
 
@@ -355,7 +375,7 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
     # HeyGen 표준. (전역 qa_use_own_face 플래그가 아니라 적용 아바타로 판정 — 2026-06-15
     # 사용자 보고: 타인 아바타를 골라도 Q&A 가 본인 얼굴로 섞여 나옴.)
     use_vs = _is_own_face_lecture(db, _lecture, _professor) and _visionstory_enabled()
-    own_face_img = _own_face_image(db, _professor) if use_vs else None
+    own_face_img = _own_face_image(db, _professor, _lecture) if use_vs else None
     use_vs = use_vs and own_face_img is not None
 
     character = None
@@ -405,7 +425,7 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
 
             # 교수자별 VisionStory 아바타를 1회 생성해 재사용한다(매 렌더 재생성 금지).
             # 소스 이미지(룩/프로필)가 바뀌면 source_key 가 달라져 재생성한다.
-            source_key = _own_face_source_key(_professor)
+            source_key = _own_face_source_key(_professor, _lecture)
             avatar_id = _professor.visionstory_avatar_id
             if not avatar_id or _professor.visionstory_avatar_source != source_key:
                 avatar_id = loop.run_until_complete(
@@ -770,7 +790,7 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         # 제작’)마다 HeyGen 에 아바타가 되살아나고, HeyGen 사진 아바타 3개 한도(401028)에
         # 걸려 Q&A 렌더가 통째로 실패했다. VisionStory 경로일 땐 HeyGen 을 건드리지 않는다.
         own_face_img = (
-            _own_face_image(db, professor)
+            _own_face_image(db, professor, lecture)
             if (_is_own_face_lecture(db, lecture, professor) and _visionstory_enabled())
             else None
         )
