@@ -1,12 +1,20 @@
-"""TTS 파이프라인 (ElevenLabs primary + Google Cloud TTS fallback).
+"""TTS 파이프라인 (ElevenLabs eleven_v3 전용 — 폴백 없음).
 
-orchestrator. 실 HTTP 호출은 ``elevenlabs_client`` / ``google_tts_client`` 가
-담당하며, 이 모듈은 다음 책임만 갖는다.
+orchestrator. 실 HTTP 호출은 ``elevenlabs_client`` 가 담당하며, 이 모듈은 다음
+책임만 갖는다.
 
-1. 1차: ElevenLabs (settings.ELEVENLABS_VOICE_ID 또는 호출자가 넘긴 cloned voice).
-2. 2차: ElevenLabs 가 ``ElevenLabsError`` 계열을 raise 하면 Google TTS 로 폴백.
-3. 두 provider 모두 실패하면 ``TTSError`` 로 통합 raise.
-4. 폴백 발생 시 별도 WARNING 로그 + (선택) cost_logs.metadata 에 reason 기록.
+정책(2026-06-16 교수자): 모든 음성(교수자 본인 음성·AI 아바타 음성)은 ElevenLabs
+eleven_v3 로만 합성한다.
+- v2(eleven_multilingual_v2)·언어 구간분리 합성으로의 폴백을 두지 않는다.
+- Google TTS 등 ElevenLabs 가 아닌 다른 서비스로의 폴백도 두지 않는다.
+- 합성 실패는 다른 경로로 우회하지 않고 ``TTSError`` 로 그대로 올려(원인이 로그·응답에
+  드러나게) 렌더를 멈춘다 — v3 가 아닌 음성을 절대 내보내지 않기 위함.
+
+책임:
+1. ElevenLabs eleven_v3 합성(settings.ELEVENLABS_MODEL_ID_ZH / 클론은 _CLONE).
+2. 실패 시 ``TTSError`` raise (폴백 없음).
+3. 발화 속도 후처리(v3 는 speed 미지원 → ffmpeg atempo).
+4. (선택) 자막 정밀 싱크 cue(Forced Alignment).
 5. (선택) S3 또는 로컬 파일로 audio bytes 저장.
 
 후방 호환:
@@ -27,11 +35,8 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from app.core.config import settings
-from app.services.pipeline import elevenlabs_client, google_tts_client
-from app.services.pipeline.text_cleanup import (
-    split_by_language,
-    strip_pinyin_annotations,
-)
+from app.services.pipeline import elevenlabs_client
+from app.services.pipeline.text_cleanup import strip_pinyin_annotations
 
 if TYPE_CHECKING:
     import uuid
@@ -47,10 +52,10 @@ class TTSResult:
     """합성 결과.
 
     audio_bytes: mp3 audio
-    provider: "elevenlabs" | "google_tts"
+    provider: "elevenlabs" (eleven_v3 전용 — 폴백 없음)
     duration_seconds: 호출+합성에 걸린 wall-clock (오디오 길이 아님)
     text_chars: 입력 텍스트 글자수 (단가 계산 / 회계용)
-    fallback_reason: ElevenLabs 실패로 Google 로 폴백한 경우 예외 클래스명+메시지
+    fallback_reason: 폴백 정책 제거로 항상 None(회계 스키마 호환 위해 필드만 유지).
     """
 
     def __init__(
@@ -115,60 +120,44 @@ async def synthesize(
 
     # 한자 뒤 병음 괄호 표기는 합성기가 로마자를 그대로 읽어 발음을 깨뜨린다.
     # 생성 단계에서 1차 제거하지만, 이미 병음이 박힌 기존 스크립트·교수자 수동
-    # 편집본도 깨끗하게 발화되도록 합성 직전에 한 번 더 제거한다(ElevenLabs·
-    # Google 폴백·미리듣기 모두 이 경로를 거친다).
+    # 편집본도 깨끗하게 발화되도록 합성 직전에 한 번 더 제거한다(본 합성·미리듣기
+    # 모두 이 경로를 거친다).
     text = strip_pinyin_annotations(text)
 
+    # 폴백을 두지 않으므로 fallback_reason 은 항상 None(회계 스키마 호환 위해 필드만 유지).
     fallback_reason: str | None = None
-    speed_provider = "elevenlabs"
+    speed_provider = "elevenlabs_v3"
     start = time.monotonic()
     try:
-        # 중국어가 섞인 스크립트는 eleven_v3 단일 호출(코드스위칭)로 합성해 한·중
-        # 전환을 한 음원에서 처리한다(구간 분리·이어붙임 없음 → 멈춤/끊김 제거).
-        # 순수 한국어 등은 기존 multilingual_v2. v3 실패 시 v2 구간 분리로 폴백.
+        # 모든 음성을 eleven_v3 단일 호출로 합성한다 — 문장 안 한·중 전환(코드스위칭)을
+        # 한 음원에서 처리(구간 분리·이어붙임 없음 → 멈춤/끊김·발음 깨짐 제거). 정책상
+        # v2·Google 폴백을 두지 않는다.
         audio_bytes, speed_provider = await _elevenlabs_primary(
             text, voice_id=voice_id, gender=gender, speed=speed, cloned=cloned,
         )
         provider = "elevenlabs"
         logger.info(
-            "ElevenLabs TTS 합성 성공: chars=%d, voice_id=%s, gender=%s, speed=%s, "
-            "cloned=%s, path=%s",
-            len(text), voice_id or "<default>", gender or "<default>", speed or 1.0,
-            cloned, speed_provider,
+            "ElevenLabs v3 TTS 합성 성공: chars=%d, voice_id=%s, gender=%s, speed=%s, cloned=%s",
+            len(text), voice_id or "<default>", gender or "<default>", speed or 1.0, cloned,
         )
+    except TTSError:
+        raise  # 이미 통합 예외 — 이중 래핑 방지.
     except Exception as exc:
-        # ElevenLabsError 뿐 아니라 httpx.ConnectError 등 변환 안 된 네트워크 예외도
-        # Google 폴백으로 흘려보낸다. (과거엔 ElevenLabsError 만 잡아, 연결오류가
-        # 그대로 새어 호출부에서 핸들링 안 된 500 — 미리듣기에서 CORS 없는 500 →
-        # 브라우저 "연결 불가" — 의 원인이 됐다.)
-        fallback_reason = f"{type(exc).__name__}: {exc}"
-        logger.warning(
-            "ElevenLabs 합성 실패 → Google TTS 폴백 트리거: %s", fallback_reason,
+        # ElevenLabs 실패(인증 401·쿼터 429·5xx·연결오류 등) 또는 v3 미설정. 폴백 금지
+        # 정책에 따라 다른 provider(Google)·다른 모델(v2)로 우회하지 않고, 단일 TTSError
+        # 로 그대로 올린다 — v3 가 아닌 음성을 절대 내보내지 않는다. 호출부는 렌더 실패로
+        # 처리하고, 실패 원인(메시지)이 로그·응답에 그대로 드러난다.
+        reason = f"{type(exc).__name__}: {exc}"
+        logger.error(
+            "ElevenLabs v3 합성 실패 — 폴백 금지 정책으로 렌더 중단(v2/Google 미사용): %s",
+            reason,
         )
-        try:
-            audio_bytes = await _run_google_tts(text, speed=speed)
-            provider = "google_tts"
-            speed_provider = "google_tts"
-            logger.info(
-                "Google TTS 폴백 합성 성공: chars=%d, original_failure=%s",
-                len(text), fallback_reason,
-            )
-        except Exception as g_exc:
-            # Google 도 어떤 이유로든 실패하면 단일 TTSError 로 통합 — synthesize 는
-            # TTSError 외 예외를 절대 밖으로 흘리지 않는다(호출부 핸들링 단순화).
-            logger.error(
-                "TTS 양쪽 provider 모두 실패: elevenlabs=%s, google=%s",
-                fallback_reason, g_exc,
-            )
-            raise TTSError(
-                f"TTS 폴백도 실패: elevenlabs={fallback_reason}; google={g_exc}"
-            ) from g_exc
+        raise TTSError(f"ElevenLabs v3 합성 실패: {reason}") from exc
     elapsed = time.monotonic() - start
 
     # ── 발화 속도 후처리 (ffmpeg atempo) ──────────────────────────────────
-    # provider 가 네이티브로 적용하지 못한 속도를 ffmpeg 로 추가 가속/감속한다.
-    # multilingual_v2 는 0.7~1.2 네이티브, Google 은 speaking_rate, eleven_v3 는
-    # speed 미지원이라 네이티브 1.0 → 전량 atempo 로 적용(speed_provider 로 구분).
+    # eleven_v3 는 speed 를 API 로 지원하지 않아 네이티브 적용분이 1.0 → 목표 배율
+    # 전량을 ffmpeg atempo 로 적용한다.
     audio_bytes = await _postprocess_speed(audio_bytes, speed, speed_provider)
 
     # ── 자막 정밀 싱크 cue (선택) ─────────────────────────────────────────
@@ -226,16 +215,16 @@ async def synthesize(
     return result
 
 
-# ── ElevenLabs 1차 합성 (전체 v3 / 실패 시 multilingual_v2 폴백) ──────────────
-# 사이트의 모든 음성을 eleven_v3 로 합성한다(사용자 정책). v3 는 한 번의 합성으로
-# 문장 안 한·중 언어 전환(code-switching)까지 처리하므로 구간 분리·이어붙임이
-# 불필요하고 한국어·중국어 모두 자연스럽다. v3 미지원 항목(speed, use_speaker_boost)은
-# voice_settings 에 넣지 않고, 속도는 합성 후 atempo 로 적용한다.
-_V3_MAX_CHARS = 5000  # eleven_v3 단일 요청 글자 한도
+# ── ElevenLabs eleven_v3 전용 합성 (폴백 없음) ──────────────────────────────────
+# 정책(2026-06-16 교수자): 모든 음성(교수자 본인 음성·AI 아바타 음성)을 eleven_v3 로만
+# 합성한다. v3 는 한 번의 합성으로 문장 안 한·중 언어 전환(code-switching)까지 처리하므로
+# 구간 분리·이어붙임이 불필요하고 한국어·중국어 모두 자연스럽다. v3 미지원 항목(speed,
+# use_speaker_boost)은 voice_settings 에 넣지 않고, 속도는 합성 후 atempo 로 적용한다.
+# v2(multilingual_v2)·언어 구간분리·Google TTS 등 어떤 폴백도 두지 않는다(실패 시 raise).
 
 
 def _is_v3_model(model_id: str | None) -> bool:
-    """모델 id 가 eleven_v3 인지(클론 경로의 v3/v2 분기용)."""
+    """모델 id 가 eleven_v3 인지."""
     return (model_id or "").strip().lower() == "eleven_v3"
 
 
@@ -246,166 +235,47 @@ def _v3_voice_settings() -> dict[str, Any]:
     return {"stability": 0.5}
 
 
-def _clone_voice_settings() -> dict[str, Any]:
-    """클론(IVC) 음성 합성용 voice_settings (multilingual_v2). similarity_boost 를
-    높여(기본 0.85) 원본 목소리 재현을 강화하고, stability 0.45 로 약간의 표현력을
-    남긴다. 모두 ``settings.ELEVENLABS_CLONE_*`` 로 운영 튜닝 가능."""
-    return {
-        "stability": settings.ELEVENLABS_CLONE_STABILITY,
-        "similarity_boost": settings.ELEVENLABS_CLONE_SIMILARITY_BOOST,
-        "style": settings.ELEVENLABS_CLONE_STYLE,
-        "use_speaker_boost": settings.ELEVENLABS_CLONE_USE_SPEAKER_BOOST,
-    }
-
-
 async def _elevenlabs_primary(
     text: str,
     *,
     voice_id: str | None,
     gender: str | None,
-    speed: float | None,
+    speed: float | None,  # noqa: ARG001 — v3 는 speed 미지원; 합성 후 atempo 로 적용.
     cloned: bool = False,
 ) -> tuple[bytes, str]:
-    """ElevenLabs 1차 합성. 반환 ``(audio_bytes, speed_provider)``.
+    """ElevenLabs eleven_v3 단일 호출 합성. 반환 ``(audio_bytes, "elevenlabs_v3")``.
 
-    - **클론(IVC) 음성(cloned=True)**: v3 를 건너뛰고 ``ELEVENLABS_MODEL_ID_CLONE``
-      (multilingual_v2)+클론 튜닝 세팅으로 합성한다. v3 는 similarity_boost 등
-      클론 튜닝 키를 무시해 본인 목소리 재현이 약해지기 때문. multilingual_v2 는
-      네이티브 speed(0.7~1.2)도 지원하므로 ``speed_provider="elevenlabs"``.
-    - **일반 음성**: ``ELEVENLABS_MODEL_ID_ZH``(eleven_v3) 단일 호출로 합성한다
-      (사이트 전체 v3 정책 — 한·중 코드스위칭 한 번에 처리). speed 는 안 보내고
-      atempo 로 처리하므로 ``speed_provider="elevenlabs_v3"``.
-    - v3 호출 실패 시 multilingual_v2 경로로 폴백한다(중국어 섞인 텍스트는 구간
-      분리로 발음 보존 — 회귀 방지). ``speed_provider="elevenlabs"``.
-    - ``ELEVENLABS_MODEL_ID_ZH`` 가 비었거나 5000자 초과면 v2 경로를 쓴다.
+    정책(2026-06-16 교수자): 교수자 본인 음성(클론)·AI 아바타 음성 모두 eleven_v3 로만
+    합성한다. v2(multilingual_v2)·언어 구간분리, Google TTS 등 어떤 폴백도 두지 않는다 —
+    v3 가 아닌 음성을 내보내지 않기 위함. 합성 실패는 예외로 그대로 올려 호출부
+    (synthesize)가 TTSError 로 변환·렌더를 멈춘다.
+
+    speed 는 v3 가 API 로 지원하지 않으므로 보내지 않고, 합성 후 atempo 로 적용한다
+    (speed_provider="elevenlabs_v3"). 클론도 v3 의 stability 만 쓰며, similarity_boost
+    등 v2 전용 튜닝키는 싣지 않는다(v3 가 무시).
     """
-    # ── 클론(IVC) 전용 경로 ───────────────────────────────────────────────────
-    # 1순위: ELEVENLABS_MODEL_ID_CLONE 이 v3 면 v3 단일 호출(코드스위칭·자연스러운
-    #         운율). v3 는 speed 미지원이라 atempo 로 처리 → speed_provider="elevenlabs_v3".
-    # 2순위(폴백): multilingual_v2 + 클론 튜닝 세팅(원본 목소리 닮음 우선) + 언어
-    #         구간 분리. v3 실패 시 또는 CLONE 모델이 v2 일 때.
-    if cloned:
-        clone_model = (
-            settings.ELEVENLABS_MODEL_ID_CLONE or settings.ELEVENLABS_MODEL_ID
-        ).strip()
-        if _is_v3_model(clone_model) and len(text) <= _V3_MAX_CHARS:
-            try:
-                audio = await elevenlabs_client.synthesize(
-                    text,
-                    voice_id=voice_id,
-                    gender=gender,
-                    model_id=clone_model,
-                    voice_settings=_v3_voice_settings(),
-                )
-                logger.info(
-                    "클론(IVC) v3 합성 성공: model=%s, chars=%d", clone_model, len(text),
-                )
-                return audio, "elevenlabs_v3"
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "클론 v3 합성 실패 → multilingual_v2(+클론 튜닝) 폴백: %s", exc,
-                )
-        v2_model = (settings.ELEVENLABS_MODEL_ID or "eleven_multilingual_v2").strip()
-        clone_settings = _clone_voice_settings()
-        logger.info(
-            "클론(IVC) v2 합성: model=%s, similarity_boost=%.2f, stability=%.2f, chars=%d",
-            v2_model, clone_settings["similarity_boost"],
-            clone_settings["stability"], len(text),
+    # 클론은 _CLONE, 일반은 _ZH 모델을 쓴다(둘 다 기본값 eleven_v3).
+    model_v3 = (
+        settings.ELEVENLABS_MODEL_ID_CLONE if cloned else settings.ELEVENLABS_MODEL_ID_ZH
+    ).strip()
+    if not _is_v3_model(model_v3):
+        # v3 전용 정책인데 설정이 v3 가 아니면 — 폴백으로 우회하지 않고 명확히 실패한다.
+        key = "ELEVENLABS_MODEL_ID_CLONE" if cloned else "ELEVENLABS_MODEL_ID_ZH"
+        raise TTSError(
+            f"음성은 eleven_v3 전용 정책인데 {key}={model_v3!r} 가 v3 가 아닙니다 — "
+            f"'{key}=eleven_v3' 로 설정하세요(v2/타 서비스 폴백 금지)."
         )
-        audio = await _elevenlabs_synthesize_segmented(
-            text, voice_id=voice_id, gender=gender, speed=speed,
-            model_id=v2_model, voice_settings=clone_settings,
-        )
-        return audio, "elevenlabs"
-
-    model_v3 = (settings.ELEVENLABS_MODEL_ID_ZH or "").strip()
-    if model_v3 and len(text) <= _V3_MAX_CHARS:
-        try:
-            audio = await elevenlabs_client.synthesize(
-                text,
-                voice_id=voice_id,
-                gender=gender,
-                model_id=model_v3,
-                voice_settings=_v3_voice_settings(),
-            )
-            logger.info(
-                "ElevenLabs 합성 모델 확정: model=%s, chars=%d", model_v3, len(text),
-            )
-            return audio, "elevenlabs_v3"
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "eleven_v3 합성 실패 → %s 폴백: %s",
-                settings.ELEVENLABS_MODEL_ID, exc,
-            )
-    audio = await _elevenlabs_synthesize_segmented(
-        text, voice_id=voice_id, gender=gender, speed=speed,
+    audio = await elevenlabs_client.synthesize(
+        text,
+        voice_id=voice_id,
+        gender=gender,
+        model_id=model_v3,
+        voice_settings=_v3_voice_settings(),
     )
     logger.info(
-        "ElevenLabs 합성 모델 확정: model=%s (v3 미사용/폴백), chars=%d",
-        settings.ELEVENLABS_MODEL_ID, len(text),
+        "ElevenLabs v3 합성: model=%s, cloned=%s, chars=%d", model_v3, cloned, len(text),
     )
-    return audio, "elevenlabs"
-
-
-# ── 언어 구간 분리 합성 (중국어 발음 정확화) ─────────────────────────────────────
-# eleven_multilingual_v2 는 합성 요청마다 언어를 하나로 자동 판별한다. 한국어가
-# 대부분인 문장에 한자가 섞이면 전체가 한국어로 판정돼 한자가 한국어 한자음
-# (我→'아')으로 발음된다. 한자 구간을 떼어 따로 합성하면(격리된 한자 텍스트는
-# 중국어로 판별) 같은 voice_id 로도 만다린이 정확히 나온다. 합성 후 ffmpeg 로
-# 이어붙인다. 폴백(Google)은 전체 텍스트 단위 유지 — 비상 degrade 경로이며
-# (자격증명 미설정 시) 현재 비활성. 중국어 발음 정확성은 1차 ElevenLabs 가 책임.
-_SEGMENT_SYNTH_CONCURRENCY = 4
-
-
-async def _elevenlabs_synthesize_segmented(
-    text: str,
-    *,
-    voice_id: str | None,
-    gender: str | None,
-    speed: float | None,
-    model_id: str | None = None,
-    voice_settings: dict[str, Any] | None = None,
-) -> bytes:
-    """언어 구간별로 ElevenLabs 합성 후 오디오를 이어붙여 반환.
-
-    순수 한국어/중국어(구간 1개) 텍스트는 분리 없이 한 번에 합성한다(기존 동작
-    동일). 혼합 텍스트만 구간별로 나눠 합성하고 ``_concat_mp3`` 로 병합한다.
-    어느 한 구간이라도 실패하면 예외가 그대로 전파돼 호출부(synthesize)의 Google
-    폴백으로 흘러간다.
-
-    model_id/voice_settings: 주어지면 모든 구간 호출에 그대로 전달한다(클론 경로가
-    multilingual_v2 + 클론 튜닝 세팅을 강제할 때 사용). None 이면 elevenlabs_client
-    기본값(ELEVENLABS_MODEL_ID + 기본 세팅)을 쓴다.
-    """
-    extra: dict[str, Any] = {}
-    if model_id:
-        extra["model_id"] = model_id
-    if voice_settings is not None:
-        extra["voice_settings"] = voice_settings
-
-    segments = split_by_language(text)
-    if len(segments) <= 1:
-        return await elevenlabs_client.synthesize(
-            text, voice_id=voice_id, gender=gender, speed=speed, **extra,
-        )
-
-    zh_count = sum(1 for lang, _ in segments if lang == "zh")
-    logger.info(
-        "혼합 언어 스크립트 구간 분리 합성: 총 %d구간(중국어 %d) — 구간별 합성 후 병합",
-        len(segments), zh_count,
-    )
-
-    sem = asyncio.Semaphore(_SEGMENT_SYNTH_CONCURRENCY)
-
-    async def _one(chunk: str) -> bytes:
-        async with sem:
-            return await elevenlabs_client.synthesize(
-                chunk, voice_id=voice_id, gender=gender, speed=speed, **extra,
-            )
-
-    # gather 는 입력 순서를 보존하므로 구간 순서대로 이어붙일 수 있다.
-    parts = await asyncio.gather(*(_one(chunk) for _, chunk in segments))
-    return await asyncio.to_thread(_concat_mp3, list(parts))
+    return audio, "elevenlabs_v3"
 
 
 def _concat_mp3(parts: list[bytes]) -> bytes:
@@ -471,23 +341,19 @@ def _concat_mp3(parts: list[bytes]) -> bytes:
 # ElevenLabs voice_settings.speed 가 네이티브로 적용 가능한 범위(0.7~1.2). 그 밖의
 # 배율은 합성 음원을 ffmpeg(atempo)로 시간축 가속/감속해 맞춘다.
 _ELEVENLABS_NATIVE_SPEED = (0.7, 1.2)
-_GOOGLE_NATIVE_SPEED = (0.25, 4.0)
 _FFMPEG_TIMEOUT_SEC = 60
 
 
 def _provider_native_speed(target: float, provider: str) -> float:
     """provider 가 합성 단계에서 실제 적용한 속도 배율(클램프 반영)."""
+    if provider == "elevenlabs_v3":
+        # eleven_v3 는 speed 를 안 보내므로 네이티브 적용분이 없다(1.0) → 목표 배율
+        # 전체를 ffmpeg atempo 로 적용한다(현재 모든 합성이 v3).
+        return 1.0
     if provider == "elevenlabs":
         lo, hi = _ELEVENLABS_NATIVE_SPEED
-    elif provider == "elevenlabs_v3":
-        # eleven_v3 는 speed 를 안 보내므로 네이티브 적용분이 없다(1.0) → 목표 배율
-        # 전체를 ffmpeg atempo 로 적용한다.
-        return 1.0
-    elif provider == "google_tts":
-        lo, hi = _GOOGLE_NATIVE_SPEED
-    else:
-        return target
-    return min(hi, max(lo, target))
+        return min(hi, max(lo, target))
+    return target
 
 
 def _atempo_chain(factor: float) -> str:
@@ -575,21 +441,6 @@ async def _postprocess_speed(
         target, native, residual,
     )
     return await asyncio.to_thread(_apply_atempo, audio_bytes, residual)
-
-
-async def _run_google_tts(text: str, *, speed: float | None = None) -> bytes:
-    """Google TTS (gRPC sync) 를 비동기 컨텍스트에서 실행 — 스레드 오프로드.
-
-    speed: 발화 속도 배율. 1.0(기본)·None 이면 speaking_rate 를 넘기지 않고
-           기본 호출(elevenlabs 분기와 동일하게 1.0 은 미지정). 그 외에는
-           Google speaking_rate(유효범위 0.25~4.0 로 클램프)로 전달한다.
-    """
-    if speed is None or abs(float(speed) - 1.0) < 1e-9:
-        return await asyncio.to_thread(google_tts_client.synthesize, text)
-    rate = max(0.25, min(4.0, float(speed)))
-    return await asyncio.to_thread(
-        lambda: google_tts_client.synthesize(text, speaking_rate=rate)
-    )
 
 
 # ── 자막 정밀 싱크 cue 생성 ──────────────────────────────────────────────────────
@@ -684,8 +535,8 @@ async def build_subtitle_cues_for_audio(
 
 
 # ── 후방 호환 헬퍼 ───────────────────────────────────────────────────────────
-# 기존 caller 와 외부 단위 테스트가 이 이름들을 import 한다. 새 클라이언트 모듈을
-# 위임 호출하도록 구현해 시그니처와 도메인 예외 변환 동작만 보존한다.
+# 기존 caller 와 외부 단위 테스트가 이 이름을 import 한다. ElevenLabs 위임 호출로
+# 시그니처와 도메인 예외 변환 동작만 보존한다(Google 위임 헬퍼는 폴백 금지 정책으로 제거).
 
 
 async def _elevenlabs_synthesize(text: str) -> TTSResult:
@@ -705,22 +556,6 @@ async def _elevenlabs_synthesize(text: str) -> TTSResult:
     return TTSResult(
         audio_bytes=audio,
         provider="elevenlabs",
-        duration_seconds=elapsed,
-        text_chars=len(text),
-    )
-
-
-def _google_tts_synthesize(text: str) -> TTSResult:
-    """``google_tts_client.synthesize`` 위임. GoogleTTSError → TTSError."""
-    start = time.monotonic()
-    try:
-        audio = google_tts_client.synthesize(text)
-    except google_tts_client.GoogleTTSError as exc:
-        raise TTSError(f"Google TTS 호출 실패: {exc}") from exc
-    elapsed = time.monotonic() - start
-    return TTSResult(
-        audio_bytes=audio,
-        provider="google_tts",
         duration_seconds=elapsed,
         text_chars=len(text),
     )
