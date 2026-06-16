@@ -1,17 +1,12 @@
-"""TTS orchestrator + 도메인 예외 변환 단위 테스트.
+"""TTS orchestrator 단위 테스트 (ElevenLabs eleven_v3 전용 — 폴백 없음).
 
-새 구조:
-- tts.synthesize: ElevenLabs 시도 → 실패 시 Google TTS 폴백 → 둘 다 실패 시 TTSError
-- elevenlabs_client / google_tts_client 의 도메인 예외를 패치해 흐름만 검증
-- 실 HTTP 호출은 test_tts_clients.py (respx) 에서 검증
+정책(2026-06-16 교수자): 모든 음성은 ElevenLabs eleven_v3 로만 합성한다.
+- v2(multilingual_v2)·언어 구간분리 폴백 없음.
+- Google TTS 등 타 서비스 폴백 없음.
+- 합성 실패는 다른 경로로 우회하지 않고 ``TTSError`` 로 그대로 올린다.
 
-DoD 매핑 (요건):
-1. ElevenLabs 성공                       → test_synthesize_elevenlabs_success
-2. ElevenLabs 5xx → 폴백                 → test_synthesize_falls_back_on_elevenlabs_server_error
-3. 폴백도 실패                           → test_synthesize_raises_when_both_providers_fail
-4. 쿼터 (429)                            → test_synthesize_falls_back_on_quota_error
-5. voice cloning 분기                     → test_synthesize_passes_custom_voice_id_through
-6. 비용 기록                              → test_synthesize_records_cost_when_sessionmaker_given
+elevenlabs_client 의 도메인 예외를 패치해 흐름만 검증한다. 실 HTTP 호출은
+test_tts_clients.py (respx) 에서 검증.
 """
 from __future__ import annotations
 
@@ -22,12 +17,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.services.pipeline import elevenlabs_client, google_tts_client, tts
+from app.services.pipeline import elevenlabs_client, tts
 from app.services.pipeline.tts import (
     TTSError,
     TTSResult,
     _elevenlabs_synthesize,
-    _google_tts_synthesize,
     _parse_audio_duration,
     synthesize,
 )
@@ -48,13 +42,13 @@ def test_tts_result_basic():
 def test_tts_result_with_extras():
     r = TTSResult(
         audio_bytes=b"a",
-        provider="google_tts",
+        provider="elevenlabs",
         duration_seconds=0.8,
         text_chars=42,
-        fallback_reason="ElevenLabsServerError: oops",
+        subtitle_cues=[{"start": 0.0, "end": 1.0, "text": "안녕"}],
     )
     assert r.text_chars == 42
-    assert r.fallback_reason and "ElevenLabsServerError" in r.fallback_reason
+    assert r.subtitle_cues and r.subtitle_cues[0]["text"] == "안녕"
 
 
 # ── _parse_audio_duration ────────────────────────────────────────────────────
@@ -79,7 +73,7 @@ def test_parse_audio_duration_invalid():
     assert _parse_audio_duration(headers) is None
 
 
-# ── synthesize: 1차 (ElevenLabs) 성공 경로 ─────────────────────────────────
+# ── synthesize: ElevenLabs v3 성공 경로 ─────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -87,9 +81,7 @@ async def test_synthesize_elevenlabs_success():
     with patch.object(
         elevenlabs_client, "synthesize", new_callable=AsyncMock,
         return_value=b"el-audio",
-    ) as el_mock, patch.object(
-        google_tts_client, "synthesize", side_effect=AssertionError("Google 호출되면 안 됨"),
-    ):
+    ) as el_mock:
         result = await synthesize("안녕하세요")
 
     assert result.provider == "elevenlabs"
@@ -116,73 +108,52 @@ async def test_synthesize_passes_custom_voice_id_through():
     assert kwargs.get("voice_id") == cloned_voice
 
 
-# ── synthesize: 2차 폴백 (Google TTS) 경로 ─────────────────────────────────
+# ── synthesize: 폴백 금지 — ElevenLabs 실패는 곧 TTSError ───────────────────
+# 정책상 v2·Google 등 다른 경로로 우회하지 않고, 실패 원인을 그대로 올린다.
 
 
 @pytest.mark.asyncio
-async def test_synthesize_falls_back_on_elevenlabs_server_error():
-    """ElevenLabs 5xx → ElevenLabsServerError → Google 호출."""
-    el_exc = elevenlabs_client.ElevenLabsServerError("HTTP 502 retries exhausted")
-
-    def google_sync(text):  # google_tts_client.synthesize 는 sync
-        return b"google-audio"
-
+async def test_synthesize_raises_on_elevenlabs_server_error():
+    """ElevenLabs 5xx → 폴백 없이 TTSError(원인 포함)."""
     with patch.object(
-        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=el_exc,
-    ), patch.object(google_tts_client, "synthesize", side_effect=google_sync) as g_mock:
-        result = await synthesize("폴백 발동")
-
-    assert result.provider == "google_tts"
-    assert result.audio_bytes == b"google-audio"
-    assert result.fallback_reason is not None
-    assert "ElevenLabsServerError" in result.fallback_reason
-    g_mock.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_synthesize_falls_back_on_quota_error():
-    """ElevenLabs 쿼터 초과 (429) → ElevenLabsQuotaError → Google 호출."""
-    el_exc = elevenlabs_client.ElevenLabsQuotaError("HTTP 429 quota")
-
-    with patch.object(
-        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=el_exc,
-    ), patch.object(
-        google_tts_client, "synthesize", return_value=b"google-quota-fallback",
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        side_effect=elevenlabs_client.ElevenLabsServerError("HTTP 502 retries exhausted"),
     ):
-        result = await synthesize("쿼터 폴백")
-
-    assert result.provider == "google_tts"
-    assert result.audio_bytes == b"google-quota-fallback"
-    assert result.fallback_reason and "ElevenLabsQuotaError" in result.fallback_reason
+        with pytest.raises(TTSError, match="ElevenLabs v3 합성 실패"):
+            await synthesize("실패 케이스")
 
 
 @pytest.mark.asyncio
-async def test_synthesize_falls_back_on_auth_error():
-    """ElevenLabs 401 (auth) 도 일관되게 폴백 — 운영 중 한 provider 가 죽어도 영상 생성 지속."""
+async def test_synthesize_raises_on_quota_error():
+    """ElevenLabs 429 → 폴백 없이 TTSError."""
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+        side_effect=elevenlabs_client.ElevenLabsQuotaError("HTTP 429 quota"),
+    ):
+        with pytest.raises(TTSError, match="ElevenLabsQuotaError"):
+            await synthesize("쿼터 실패")
+
+
+@pytest.mark.asyncio
+async def test_synthesize_raises_on_auth_error():
+    """ElevenLabs 401 → 폴백 없이 TTSError(다른 provider 로 우회 금지)."""
     with patch.object(
         elevenlabs_client, "synthesize", new_callable=AsyncMock,
         side_effect=elevenlabs_client.ElevenLabsAuthError("ELEVENLABS_API_KEY invalid"),
-    ), patch.object(
-        google_tts_client, "synthesize", return_value=b"auth-fallback",
     ):
-        result = await synthesize("auth 폴백")
-
-    assert result.provider == "google_tts"
-    assert result.fallback_reason and "ElevenLabsAuthError" in result.fallback_reason
+        with pytest.raises(TTSError, match="ElevenLabsAuthError"):
+            await synthesize("auth 실패")
 
 
 @pytest.mark.asyncio
-async def test_synthesize_raises_when_both_providers_fail():
-    """ElevenLabs 5xx → Google 도 5xx → TTSError 통합."""
+async def test_synthesize_raises_on_non_domain_elevenlabs_error():
+    """ElevenLabsError 가 아닌 예외(예: httpx.ConnectError)도 폴백 없이 TTSError 로 올린다."""
     with patch.object(
         elevenlabs_client, "synthesize", new_callable=AsyncMock,
-        side_effect=elevenlabs_client.ElevenLabsServerError("HTTP 503"),
-    ), patch.object(
-        google_tts_client, "synthesize",
-        side_effect=google_tts_client.GoogleTTSServerError("INTERNAL"),
+        side_effect=httpx.ConnectError("connection refused"),
     ):
-        with pytest.raises(TTSError, match="폴백도 실패"):
-            await synthesize("실패 케이스")
+        with pytest.raises(TTSError, match="ConnectError"):
+            await synthesize("연결오류")
 
 
 @pytest.mark.asyncio
@@ -234,31 +205,6 @@ async def test_synthesize_records_cost_when_sessionmaker_given():
 
 
 @pytest.mark.asyncio
-async def test_synthesize_cost_records_fallback_reason():
-    """폴백 발동 시 cost_tracker.record_tts_cost 에 fallback_reason 전달."""
-    fake_sessionmaker = MagicMock(name="SessionLocal")
-    render_id = uuid.uuid4()
-
-    with patch.object(
-        elevenlabs_client, "synthesize", new_callable=AsyncMock,
-        side_effect=elevenlabs_client.ElevenLabsQuotaError("HTTP 429"),
-    ), patch.object(
-        google_tts_client, "synthesize", return_value=b"g",
-    ), patch("app.services.cost_tracker.record_tts_cost", return_value=True) as cost_mock:
-        await synthesize(
-            "폴백 비용",
-            sessionmaker=fake_sessionmaker,
-            video_render_id=render_id,
-        )
-
-    cost_mock.assert_called_once()
-    _, kwargs = cost_mock.call_args
-    assert kwargs["provider"] == "google_tts"
-    assert kwargs["fallback_reason"] is not None
-    assert "ElevenLabsQuotaError" in kwargs["fallback_reason"]
-
-
-@pytest.mark.asyncio
 async def test_synthesize_skips_cost_when_not_provided():
     """sessionmaker 가 None 이면 record_tts_cost 호출하지 않음."""
     with patch.object(
@@ -269,7 +215,7 @@ async def test_synthesize_skips_cost_when_not_provided():
     cost_mock.assert_not_called()
 
 
-# ── 후방 호환 헬퍼 (_elevenlabs_synthesize / _google_tts_synthesize) ────────
+# ── 후방 호환 헬퍼 (_elevenlabs_synthesize) ─────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -295,30 +241,12 @@ async def test_elevenlabs_synthesize_helper_translates_errors():
             await _elevenlabs_synthesize("hi")
 
 
-def test_google_tts_synthesize_helper_wraps_audio():
-    with patch.object(
-        google_tts_client, "synthesize", return_value=b"g-bytes",
-    ):
-        result = _google_tts_synthesize("안녕")
-    assert result.provider == "google_tts"
-    assert result.audio_bytes == b"g-bytes"
-
-
-def test_google_tts_synthesize_helper_translates_errors():
-    with patch.object(
-        google_tts_client, "synthesize",
-        side_effect=google_tts_client.GoogleTTSServerError("503"),
-    ):
-        with pytest.raises(TTSError, match="Google TTS"):
-            _google_tts_synthesize("hi")
-
-
-# ── 발화 속도(speed) 전달 ────────────────────────────────────────────────────
+# ── 발화 속도(speed): v3 는 API 미전달 + atempo 후처리 ──────────────────────
 
 
 @pytest.mark.asyncio
 async def test_synthesize_v3_applies_speed_via_atempo_not_api():
-    """전체 v3 정책: v3 는 speed 를 API 로 안 보내고(미지원) ffmpeg atempo 로 적용한다."""
+    """v3 는 speed 를 API 로 안 보내고(미지원) ffmpeg atempo 로 적용한다."""
     captured: dict = {}
 
     def fake_el(text, **kwargs):
@@ -343,67 +271,34 @@ async def test_synthesize_v3_applies_speed_via_atempo_not_api():
     assert result.audio_bytes == b"sped"
 
 
+# ── eleven_v3 단일 호출 (한·중 코드스위칭) ───────────────────────────────────
+
+
 @pytest.mark.asyncio
-async def test_google_fallback_receives_speaking_rate_for_non_default_speed():
-    """비기본 speed 면 Google 폴백에 speaking_rate 로 전달된다."""
-    el_exc = elevenlabs_client.ElevenLabsServerError("5xx")
+async def test_synthesize_korean_only_is_single_v3_call():
+    """순수 한국어도 eleven_v3 단일 호출(구간 분리 없음)."""
     captured: dict = {}
 
-    def google_sync(text, **kwargs):
-        captured.update(kwargs)
-        return b"g"
+    def fake_el(text, **kwargs):
+        captured["model_id"] = kwargs.get("model_id")
+        captured["calls"] = captured.get("calls", 0) + 1
+        return b"ko-audio"
 
     with patch.object(
-        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=el_exc,
-    ), patch.object(google_tts_client, "synthesize", side_effect=google_sync):
-        result = await synthesize("폴백 속도", speed=0.8)
-
-    assert result.provider == "google_tts"
-    assert captured.get("speaking_rate") == 0.8
-
-
-@pytest.mark.asyncio
-async def test_synthesize_falls_back_on_non_domain_elevenlabs_error():
-    """ElevenLabsError 가 아닌 예외(예: httpx.ConnectError)도 Google 폴백으로 흘린다.
-
-    과거엔 ElevenLabsError 만 잡아, 변환 안 된 연결오류가 그대로 새어 호출부에서
-    핸들링 안 된 500(미리듣기 CORS 누수)을 유발했다.
-    """
-    import httpx
-
-    conn_err = httpx.ConnectError("connection refused")
-    with patch.object(
-        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=conn_err,
-    ), patch.object(google_tts_client, "synthesize", return_value=b"google-after-connerr"):
-        result = await synthesize("연결오류 폴백")
-
-    assert result.provider == "google_tts"
-    assert result.audio_bytes == b"google-after-connerr"
-    assert "ConnectError" in (result.fallback_reason or "")
-
-
-# ── 언어 구간 분리 합성 (중국어 발음 정확화) ─────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_synthesize_korean_only_is_single_elevenlabs_call():
-    """순수 한국어는 구간이 1개 → ElevenLabs 1회 호출(기존 동작 유지)."""
-    with patch.object(
-        elevenlabs_client, "synthesize", new_callable=AsyncMock,
-        return_value=b"ko-audio",
-    ) as el_mock:
+        elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=fake_el,
+    ):
         result = await synthesize("안녕하세요. 어순을 배웁니다.")
 
     assert result.audio_bytes == b"ko-audio"
-    el_mock.assert_awaited_once()
+    assert captured["model_id"] == "eleven_v3"
+    assert captured["calls"] == 1
 
 
 @pytest.mark.asyncio
 async def test_synthesize_mixed_uses_v3_single_call():
-    """중국어가 섞인 스크립트는 eleven_v3 단일 호출(코드스위칭)로 합성한다.
+    """중국어가 섞인 스크립트도 eleven_v3 단일 호출(코드스위칭)로 합성한다.
 
-    구간 분리/이어붙임 없이 한 번에 → 끊김 없음. model_id 가 v3 로 전달되고
-    합성이 1회만 일어나는지(분리 안 함) 검증.
+    구간 분리/이어붙임 없이 한 번에 → 끊김·발음 깨짐 없음.
     """
     captured: dict = {}
 
@@ -426,51 +321,26 @@ async def test_synthesize_mixed_uses_v3_single_call():
 
 
 @pytest.mark.asyncio
-async def test_synthesize_v3_failure_falls_back_to_v2_segmentation():
-    """v3 합성 실패 시 v2 구간 분리로 폴백한다(Google 까지 안 가고 ElevenLabs 유지)."""
+async def test_synthesize_v3_failure_raises_no_v2_fallback():
+    """v3 합성 실패 시 v2 구간 분리로 폴백하지 않고 TTSError 로 올린다(폴백 금지)."""
 
     def fake_el(text, **kwargs):
         if kwargs.get("model_id") == "eleven_v3":
             raise elevenlabs_client.ElevenLabsServerError("v3 down")
-        return b"seg"  # v2 구간 합성은 성공
+        raise AssertionError("v3 외 모델(v2) 로 재시도하면 안 됨")
 
     with patch.object(
         elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=fake_el,
-    ), patch.object(
-        tts, "_concat_mp3", side_effect=lambda parts: b"".join(parts),
-    ), patch.object(
-        google_tts_client, "synthesize",
-        side_effect=AssertionError("Google 폴백까지 가면 안 됨"),
     ):
-        result = await synthesize('여기서 "我"는 나는 입니다.')
+        with pytest.raises(TTSError, match="ElevenLabs v3 합성 실패"):
+            await synthesize('여기서 "我"는 나는 입니다.')
 
-    assert result.provider == "elevenlabs"   # v2 폴백 성공 → ElevenLabs 유지
-    assert result.fallback_reason is None    # Google 폴백 아님
-    assert b"seg" in result.audio_bytes
+
+# ── 클론(IVC) 음성: v3 전용 (폴백 없음) ──────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_synthesize_mixed_falls_back_to_google_when_elevenlabs_down():
-    """중국어 혼합 텍스트에서 v3·v2 둘 다 ElevenLabs 실패 → 전체 텍스트 Google 폴백."""
-    with patch.object(
-        elevenlabs_client, "synthesize", new_callable=AsyncMock,
-        side_effect=elevenlabs_client.ElevenLabsServerError("5xx"),
-    ), patch.object(
-        google_tts_client, "synthesize", return_value=b"google-whole",
-    ):
-        result = await synthesize('"我"는 나는 이라는 뜻입니다.')
-
-    assert result.provider == "google_tts"
-    assert result.audio_bytes == b"google-whole"
-    assert result.fallback_reason and "ElevenLabsServerError" in result.fallback_reason
-
-
-# ── 클론(IVC) 음성: v3 우선 + 실패 시 multilingual_v2(+클론 튜닝) 폴백 ──────────
-# 2026-06-05 결정: 클론도 v3 로 합성(자연스러운 운율 우선). v3 실패 시에만 v2 폴백.
-
-
-@pytest.mark.asyncio
-async def test_synthesize_cloned_tries_v3_first():
+async def test_synthesize_cloned_uses_v3():
     """cloned=True 면 (기본 CLONE=eleven_v3) v3 단일 호출로 합성한다.
 
     v3 는 stability 만 의미가 있어 클론 튜닝키(similarity_boost 등)는 싣지 않는다.
@@ -492,41 +362,35 @@ async def test_synthesize_cloned_tries_v3_first():
 
     assert result.provider == "elevenlabs"
     assert result.audio_bytes == b"clone-audio"
-    assert captured["model_id"] == "eleven_v3"   # v3 우선
+    assert captured["model_id"] == "eleven_v3"   # v3 전용
     assert captured["calls"] == 1                 # 한 번에(코드스위칭) 합성
-    # v3 는 stability 만 — 클론 튜닝키를 싣지 않는다.
     assert "similarity_boost" not in captured["voice_settings"]
 
 
 @pytest.mark.asyncio
-async def test_synthesize_cloned_falls_back_to_v2_when_v3_fails():
-    """클론 v3 합성이 실패하면 multilingual_v2 + 클론 튜닝 세팅으로 폴백한다."""
+async def test_synthesize_cloned_v3_failure_raises_no_v2_fallback():
+    """클론 v3 합성이 실패해도 v2 로 폴백하지 않고 TTSError 로 올린다(폴백 금지)."""
     seen: list = []
 
     def fake_el(text, **kwargs):
         model = kwargs.get("model_id")
-        seen.append((model, kwargs.get("voice_settings")))
+        seen.append(model)
         if model == "eleven_v3":
-            raise RuntimeError("v3 down")
-        return b"v2-audio"
+            raise elevenlabs_client.ElevenLabsServerError("v3 down")
+        raise AssertionError("v3 외 모델(v2) 로 재시도하면 안 됨")
 
     with patch.object(
         elevenlabs_client, "synthesize", new_callable=AsyncMock, side_effect=fake_el,
-    ), patch.object(tts, "_concat_mp3", side_effect=lambda parts: b"".join(parts)):
-        result = await synthesize(
-            "안녕하세요. 본인 목소리.", voice_id="cloned-voice-1", cloned=True,
-        )
+    ):
+        with pytest.raises(TTSError, match="ElevenLabs v3 합성 실패"):
+            await synthesize(
+                "안녕하세요. 본인 목소리.", voice_id="cloned-voice-1", cloned=True,
+            )
 
-    assert result.provider == "elevenlabs"
-    assert result.audio_bytes == b"v2-audio"
-    models = [m for m, _ in seen]
-    assert models[0] == "eleven_v3"                 # v3 먼저 시도
-    assert "eleven_multilingual_v2" in models       # 실패 후 v2 폴백
-    # v2 폴백은 클론 튜닝 세팅(원본 목소리 닮음)을 사용한다.
-    v2_settings = next(vs for m, vs in seen if m == "eleven_multilingual_v2")
-    assert v2_settings["similarity_boost"] == 0.85
-    assert v2_settings["stability"] == 0.45
-    assert v2_settings["use_speaker_boost"] is True
+    assert seen == ["eleven_v3"]  # v3 만 시도, v2 재시도 없음
+
+
+# ── _concat_mp3 (mp3 결합 유틸 — 자막/병합 등에서 재사용 가능) ────────────────
 
 
 def test_concat_mp3_single_and_empty():
