@@ -204,6 +204,12 @@ export default function GenerationModal({
   });
 
   const doneCount = bars.filter((b) => b.tone === "done").length;
+  // 추천 질문(Q&A) 답변 실패 개수 — 슬라이드 쇼가 끝나도 Q&A 가 실패했으면 "완성"
+  // 으로 축하하지 않고 사실대로 알린다(실패를 완성으로 숨기지 않는다).
+  const qaFailedCount = qaItems.filter((q) => q?.status === "failed").length;
+  const qaReadyCount = qaItems.filter((q) => q?.status === "ready").length;
+  // done(슬라이드 완료) 이면서 Q&A 가 하나라도 실패 → '부분 완료'. 축하·confetti 금지.
+  const hasFailure = done && qaFailedCount > 0;
 
   return (
     <div
@@ -243,8 +249,8 @@ export default function GenerationModal({
           </div>
         )}
 
-        {/* Confetti — done 일 때만 */}
-        {done && (
+        {/* Confetti — 완전 성공일 때만(Q&A 실패가 있으면 축하하지 않는다). */}
+        {done && !hasFailure && (
           <div
             style={{
               position: "absolute",
@@ -302,7 +308,11 @@ export default function GenerationModal({
                 color: "var(--text)",
               }}
             >
-              {done ? "슬라이드 쇼가 완성되었어요!" : "슬라이드 쇼 만드는 중…"}
+              {!done
+                ? "슬라이드 쇼 만드는 중…"
+                : hasFailure
+                  ? "슬라이드 쇼는 완성됐어요 — 단, Q&A 답변 일부 실패"
+                  : "슬라이드 쇼가 완성되었어요!"}
             </h2>
             <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
               {lectureTitle} · 슬라이드 {slideCount}장
@@ -314,6 +324,25 @@ export default function GenerationModal({
                 <span style={{ ...tabularStyle }}> · 예상 {eta}</span>
               ) : null}
             </div>
+            {hasFailure && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: "rgba(180,35,24,0.08)",
+                  border: "1px solid rgba(180,35,24,0.2)",
+                  color: "#B42318",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                추천 질문 답변 <b>{qaFailedCount}개 실패</b>
+                {qaReadyCount > 0 ? ` (성공 ${qaReadyCount}개)` : ""}. 슬라이드 쇼는
+                정상이지만 실패한 Q&A 답변 영상은 만들어지지 않았어요. 각 추천 질문
+                카드에 표시된 <b>실패 사유</b>를 확인하고 ‘다시 제작’으로 재시도하세요.
+              </div>
+            )}
           </div>
 
           {/* 단계별 가로 바 */}
