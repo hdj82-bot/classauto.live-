@@ -347,6 +347,33 @@ def test_seed_render_own_face_visionstory_never_registers_heygen(
     assert (row.heygen_job_id or "").startswith("visionstory:")
 
 
+def test_own_face_look_id_prefers_lecture_designated_look():
+    """VisionStory 본인 룩 선택 — 강의에 지정한 룩(lecture.avatar_id)을 기본 룩보다 우선.
+
+    회귀(2026-06-16 사용자 보고): 강의마다 다른 룩을 골라도 답변 영상이 늘 기본 룩
+    얼굴로 나왔다("내가 지정한 아바타가 아니다"). 지정 룩을 우선 쓴다.
+    """
+    from app.tasks import qa_batch
+
+    class _Prof:
+        photo_avatar_default_look_id = "default-look"
+        profile_image_url = "https://s3/profile.jpg"
+
+    class _Lec:
+        avatar_id = "designated-look"
+
+    # 강의에 지정한 룩이 있으면 그것을 쓴다(기본 룩이 아니라).
+    assert qa_batch._own_face_look_id(_Prof(), _Lec()) == "designated-look"
+    # 강의 아바타 미지정 → 교수자 기본 룩으로 폴백.
+    class _LecNone:
+        avatar_id = None
+    assert qa_batch._own_face_look_id(_Prof(), _LecNone()) == "default-look"
+    # lecture 인자 없음 → 기본 룩(무회귀).
+    assert qa_batch._own_face_look_id(_Prof(), None) == "default-look"
+    # source_key 도 지정 룩을 반영(다른 룩 선택 시 VisionStory 아바타 재생성 유도).
+    assert qa_batch._own_face_source_key(_Prof(), _Lec()) == "designated-look"
+
+
 def test_resolve_character_falls_back_to_standard_avatar(sync_db, monkeypatch):
     """본인 얼굴(Talking Photo) 미확보 시 표준 아바타로 폴백해 Q&A 가 막히지 않는다."""
     from app.models.lecture import VoiceGender
