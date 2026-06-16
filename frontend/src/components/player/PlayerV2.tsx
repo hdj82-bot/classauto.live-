@@ -7,6 +7,7 @@ import { useSlideshowPlayback } from "./useSlideshowPlayback";
 import {
   pickActiveCaptionWithCues,
   DEFAULT_CAPTION_LEAD_SECONDS,
+  detectCaptionScript,
 } from "./captionTiming";
 import type { SubtitleCue, SubtitlePosition } from "./useSlideshowPlayback";
 import { tokens as tokenStorage } from "@/lib/tokens";
@@ -118,9 +119,13 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // ── 미리보기 자막·속도 사용자 조절 (재생성 없이 즉시 반영) ──────────────────
   // 음성/자막 언어·TTS 마다 체감 동기가 달라, 교수자가 미리보기에서 직접 맞춘다.
   const [avSettingsOpen, setAvSettingsOpen] = useState(false);
+  // 자막 폰트 — 언어별 기본값: 한국어=프리텐다드, 중국어(한자)=명조(serif). 폰트는
+  // 강의에 저장되지 않는 공통 기본값이라(미리보기·학생 동일), 로드 시 자막 내용으로
+  // 언어를 추정해 적용한다. 교수자가 칩으로 직접 고르면 그 선택을 유지한다(아래 ref).
   const [capFont, setCapFont] = useState<"sans" | "serif" | "pretendard">(
-    "sans",
+    "pretendard",
   );
+  const capFontUserSetRef = useRef(false);
   const [capColor, setCapColor] = useState<string>("#ffffff");
   const [capScale, setCapScale] = useState(1); // 0.7 ~ 1.6
   const [voiceRate, setVoiceRate] = useState(1); // 0.5 ~ 2.0 (음성 빠르기)
@@ -163,6 +168,21 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   useEffect(() => {
     setCapPos(loadedCapPos);
   }, [loadedCapPos]);
+
+  // 자막 언어별 기본 폰트 — 한국어=프리텐다드, 중국어(한자)=명조. 자막 내용으로 언어를
+  // 추정해 적용한다(교수자가 칩으로 직접 고른 경우엔 그 선택을 유지). 학생 화면엔 폰트
+  // 칩이 없으므로 이 추정 기본값이 곧 학생이 보는 자막 폰트가 된다.
+  const slides = player.slides;
+  useEffect(() => {
+    if (capFontUserSetRef.current) return;
+    const sample = slides
+      .map((s) => s.subtitle_text || s.text || "")
+      .join(" ")
+      .slice(0, 2000);
+    const script = detectCaptionScript(sample);
+    if (script === "zh") setCapFont("serif");
+    else if (script === "ko") setCapFont("pretendard");
+  }, [slides]);
 
   // 미리보기에서 교수자가 자막을 끌어 놓으면(또는 '기본 위치로') 강의에 저장한다.
   // 폰트/색/크기는 미리보기 임시값이지만 위치는 학생 화면에 반영돼야 하므로 PATCH.
@@ -1156,21 +1176,30 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                                   <button
                                     type="button"
                                     className={`${styles.avChip} ${capFont === "sans" ? styles.avChipOn : ""}`}
-                                    onClick={() => setCapFont("sans")}
+                                    onClick={() => {
+                                      capFontUserSetRef.current = true;
+                                      setCapFont("sans");
+                                    }}
                                   >
                                     고딕
                                   </button>
                                   <button
                                     type="button"
                                     className={`${styles.avChip} ${capFont === "serif" ? styles.avChipOn : ""}`}
-                                    onClick={() => setCapFont("serif")}
+                                    onClick={() => {
+                                      capFontUserSetRef.current = true;
+                                      setCapFont("serif");
+                                    }}
                                   >
                                     명조
                                   </button>
                                   <button
                                     type="button"
                                     className={`${styles.avChip} ${capFont === "pretendard" ? styles.avChipOn : ""}`}
-                                    onClick={() => setCapFont("pretendard")}
+                                    onClick={() => {
+                                      capFontUserSetRef.current = true;
+                                      setCapFont("pretendard");
+                                    }}
                                   >
                                     프리텐다드
                                   </button>

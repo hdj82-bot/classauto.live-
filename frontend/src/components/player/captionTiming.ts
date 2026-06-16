@@ -11,6 +11,18 @@
  */
 import type { SubtitleCue } from "./useSlideshowPlayback";
 
+/**
+ * 자막 텍스트의 주요 문자 체계 감지 — 자막 기본 폰트를 언어에 맞춰 고르기 위함.
+ * 한글 음절이 있으면 한국어(`"ko"`), 없고 한자(CJK)가 있으면 중국어(`"zh"`).
+ * 한국어 본문에 한자 강조가 섞여도 한글이 있으면 ko 로 잡힌다(중국어엔 한글이 없음).
+ * 어느 쪽도 아니면(라틴 등) null — 호출부가 기본 폰트를 유지한다.
+ */
+export function detectCaptionScript(text: string): "ko" | "zh" | null {
+  if (/[가-힣]/.test(text)) return "ko"; // 한글 음절
+  if (/[一-鿿㐀-䶿]/.test(text)) return "zh"; // 한자(CJK 통합 + 확장 A)
+  return null;
+}
+
 /** 절(clause) 단위로 더 쪼갤 때의 최소 길이 — 이보다 짧으면 그대로 둔다. */
 const CLAUSE_SPLIT_MIN = 28;
 /** 절 경계 — 한국어·중국어 쉼표/구분점/세미콜론 뒤에서 끊는다. */
