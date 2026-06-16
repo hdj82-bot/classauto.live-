@@ -54,6 +54,9 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
 
   // 하트비트 전송
   useEffect(() => {
+    // 세션이 없으면(비로그인 익명 시청) 인증 필요한 heartbeat 를 호출하지 않는다.
+    // 호출 시 401 → 전역 인터셉터가 /auth/login 으로 튕겨 익명 시청이 끊긴다.
+    if (!sessionId) return;
     heartbeatTimer.current = setInterval(async () => {
       if (isPaused) return;
       try {
@@ -76,6 +79,8 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
 
   // 무반응 감지
   useEffect(() => {
+    // 세션이 없으면(익명) 인증 필요한 no-response 를 호출하지 않는다(401 방지).
+    if (!sessionId) return;
     noResponseTimer.current = setInterval(async () => {
       if (isPaused) return;
       const elapsed = Date.now() - lastResponseRef.current;
