@@ -88,6 +88,21 @@ class GenerateSeedAnswerResponse(BaseModel):
     in_scope: bool = Field(..., description="강의 자료 범위 안 질문 여부")
 
 
+class GenerateSeedQuestionsRequest(BaseModel):
+    """POST .../seed-questions/generate 본문(선택).
+
+    ``exclude``: 이미 다른 카드에 들어 있는 질문들. 프론트가 카드별로 1개씩 생성할 때,
+    이미 만든 질문의 주제를 피해 강의의 또 다른 핵심을 뽑게 하려고 넘긴다(같은 어순 질문이
+    3카드에 반복되던 문제 방지). 본문이 없거나 비어 있으면 평소대로 가장 중요한 핵심부터 뽑는다.
+    """
+
+    exclude: list[Annotated[str, Field(max_length=500)]] = Field(
+        default_factory=list,
+        max_length=SEED_QUESTIONS_MAX,
+        description="이미 만든(피해야 할) 질문 목록 — 이 주제와 겹치지 않는 질문을 생성한다.",
+    )
+
+
 class GeneratedSeedQuestion(BaseModel):
     """AI 가 자동 선정한 핵심 질문 1건 + 사전 답변."""
 
