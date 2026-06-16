@@ -166,6 +166,9 @@ export default function StudioWizardPage() {
   const [genPercent, setGenPercent] = useState(0);
   const [genStage, setGenStage] = useState<1 | 2 | 3 | 4>(1);
   const [genDone, setGenDone] = useState(false);
+  // '다시 제작' 클릭 직후 서버에 변경분을 묻는(dry-run) 동안 true — 버튼을 '점검 중…'
+  // 으로 잠가 중복 클릭을 막고, 실제로 점검이 일어남을 사용자에게 보여준다.
+  const [inspecting, setInspecting] = useState(false);
   // 제작 완료(viewable) 여부 — 재방문 시에도 미리보기 버튼을 켜기 위해 video 상태를 보관.
   const [videoStatus, setVideoStatus] = useState<string | null>(null);
   // 실제로 ready 까지 끝난 슬라이드 수 — 진행 정보 박스의 "X / N 슬라이드" 에
@@ -843,23 +846,28 @@ export default function StudioWizardPage() {
   // 서버 기준으로 사전 질문 목록을 다시 불러와 상태(status·preview_url)를 갱신한다.
   // 영상 생성 직후 + 렌더 진척 폴링에서 사용. 편집 중 디바운스 저장이 대기 중이면
   // 건너뛰어(seedSaveRef) 입력 값 손실을 막는다.
-  const reloadSeedQuestions = useCallback(async () => {
-    if (!lectureId || seedSaveRef.current) return;
+  const reloadSeedQuestions = useCallback(async (): Promise<
+    SeedQuestionDraft[] | null
+  > => {
+    if (!lectureId || seedSaveRef.current) return null;
     try {
       const { seedQuestions: fresh } = await getSeedQuestions(lectureId);
-      setSeedQuestions(
-        fresh.map((q) => ({
-          id: q.id,
-          question: q.question,
-          answer: q.answer,
-          status: q.status,
-          has_clip: q.has_clip,
-          preview_url: q.preview_url,
-          error_message: q.error_message,
-        })),
-      );
+      const mapped: SeedQuestionDraft[] = fresh.map((q) => ({
+        id: q.id,
+        question: q.question,
+        answer: q.answer,
+        status: q.status,
+        has_clip: q.has_clip,
+        preview_url: q.preview_url,
+        error_message: q.error_message,
+      }));
+      setSeedQuestions(mapped);
+      // 호출부가 서버 기준 최신 상태를 즉시 쓸 수 있게 반환한다('다시 제작' 점검에서
+      // setState 의 비동기 갱신을 기다리지 않고 ②③ 줄을 정확히 만들기 위함).
+      return mapped;
     } catch {
       /* 미배포/네트워크 — 다음 주기에 재시도 */
+      return null;
     }
   }, [lectureId]);
 
@@ -1011,19 +1019,61 @@ export default function StudioWizardPage() {
       // ① 슬라이드(스크립트·음성·속도) ② 추천 질문(Q&A) 답변 아바타 — 두 가지를
       // 점검해 누락·변경된 부분만 새로 만든다(미변경=비용 0, PPT 재업로드 불필요).
       if (genDone && videoId) {
-        // 점검 — 새로 만들어야 할(대기/실패) 추천 질문과 그 번호를 모은다. status 가
-        // undefined 인 신규 입력 행은 아직 저장 전이라 점검 대상에서 제외한다. 질문/답변을
-        // 고치거나(upsert 가 pending 으로 되돌림) 아바타를 바꾸면(seed 클립 초기화) pending
-        // 이 되므로, 이 집합이 "이번에 새로 만들 Q&A"다.
-        const seedToRender = seedQuestions
+        // ── 실제 사전 점검(dry-run) ────────────────────────────────────────
+        // 고정 문구가 아니라 **서버에 실제 변경분을 묻는다**. dry_run 은 DB 를 전혀
+        // 건드리지 않고(비용 0) 어느 슬라이드가 재합성되는지·재사용 개수·현재 아바타를
+        // 돌려준다. Q&A 는 서버 기준 최신 seedQuestions 로 다시 점검한다(아바타를 바꾸면
+        // 백엔드가 seed 클립을 pending 으로 무효화하므로, 화면의 옛 상태가 아니라
+        // 새로 받아온 상태로 판정해야 정확하다).
+        setInspecting(true);
+        let preview: {
+          changed_slide_numbers?: number[];
+          slides_total?: number;
+          reused_slides?: number;
+          avatar_name?: string | null;
+        };
+        let freshSeeds: SeedQuestionDraft[];
+        try {
+          const [{ data }, reloaded] = await Promise.all([
+            api.post<{
+              changed_slide_numbers?: number[];
+              slides_total?: number;
+              reused_slides?: number;
+              avatar_name?: string | null;
+            }>(`/api/videos/${videoId}/rerender?dry_run=true`),
+            reloadSeedQuestions(),
+          ]);
+          preview = data;
+          freshSeeds = reloaded ?? seedQuestions;
+        } catch {
+          toast("변경 사항 점검에 실패했어요. 잠시 후 다시 시도해 주세요.", "error");
+          return;
+        } finally {
+          setInspecting(false);
+        }
+
+        // 새로 만들어야 할(대기/실패) 추천 질문과 그 번호. status 가 undefined 인 신규
+        // 입력 행은 아직 저장 전이라 제외한다. 질문/답변을 고치거나(upsert→pending)
+        // 아바타를 바꾸면(seed 클립 초기화) pending 이 되므로 이 집합이 "새로 만들 Q&A".
+        const seedToRender = freshSeeds
           .map((q, i) => ({ q, n: i + 1 }))
           .filter(
             ({ q }) => !!q.status && q.status !== "ready" && q.status !== "rendering",
           );
-        const seedTotal = seedQuestions.filter((q) => !!q.status).length;
+        const seedTotal = freshSeeds.filter((q) => !!q.status).length;
         const pendingSeed = seedToRender.length;
-        const avatarName = lecture.avatar_name?.trim() || "기본 아바타";
+        const avatarName =
+          preview.avatar_name?.trim() || lecture.avatar_name?.trim() || "기본 아바타";
+        const changedSlides = preview.changed_slide_numbers ?? [];
+        const slidesTotal = preview.slides_total ?? slides.length;
+        const reusedSlides =
+          preview.reused_slides ?? Math.max(0, slidesTotal - changedSlides.length);
 
+        // ① 슬라이드 — 실제 변경된 슬라이드 번호·재사용 개수까지 명시.
+        const slideLine = changedSlides.length
+          ? `① 슬라이드 — ${slidesTotal}장 중 ${changedSlides.length}장 다시 합성` +
+            ` (${changedSlides.join(", ")}번)${reusedSlides ? `, ${reusedSlides}장 재사용` : ""}`
+          : `① 슬라이드 — 변경 없음(${slidesTotal}장 모두 이미 완료, 작업 없음)`;
         // ② Q&A 질문·답변 — 바뀐(또는 새) 항목 번호까지 명시.
         const qaLine = pendingSeed
           ? `② Q&A 질문·답변 — ${seedTotal}개 중 ${pendingSeed}개 새로 작업` +
@@ -1034,15 +1084,21 @@ export default function StudioWizardPage() {
           ? `③ Q&A 아바타 — ${avatarName} · 위 답변 영상을 이 아바타로 새로 제작`
           : `③ Q&A 아바타 — ${avatarName} · 현재 아바타로 이미 완료`;
 
-        const ok = window.confirm(
-          "‘다시 제작’ 점검 결과:\n\n" +
-            "① 슬라이드 — 수정한 슬라이드만 다시 합성(안 바꿨으면 작업 없음)\n" +
-            qaLine +
-            "\n" +
-            avatarLine +
-            "\n\n계속할까요?",
-        );
-        if (!ok) return;
+        // 셋 다 변경 없음 → 확인창 없이 "작업 없음" 만 안내(불필요한 제작 과정 생략).
+        // 단, rendering 에 갇힌 강의를 done 으로 풀어주기 위해 실제 rerender 는 한 번 호출.
+        const nothingToDo = changedSlides.length === 0 && pendingSeed === 0;
+        if (!nothingToDo) {
+          const ok = window.confirm(
+            "‘다시 제작’ 점검 결과:\n\n" +
+              slideLine +
+              "\n" +
+              qaLine +
+              "\n" +
+              avatarLine +
+              "\n\n계속할까요?",
+          );
+          if (!ok) return;
+        }
         try {
           const { data } = await api.post<{
             rerendered_segments?: number;
@@ -1560,6 +1616,8 @@ export default function StudioWizardPage() {
           canPrev={activeIndex > 0}
           onPrev={handlePrev}
           onGenerate={handleGenerate}
+          generating={inspecting}
+          busyLabel="점검 중…"
           ctaLabel={genDone ? "다시 제작" : "슬라이드 쇼 제작"}
           onPreview={() => {
             // 제작된 강의를 학생과 동일한 플레이어로 새 탭에서 검토(미발행도 소유자는 조회 가능).

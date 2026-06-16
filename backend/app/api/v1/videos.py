@@ -270,6 +270,7 @@ async def approve_video(
 )
 async def rerender_video(
     video_id: uuid.UUID,
+    dry_run: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_professor),
 ):
@@ -277,16 +278,27 @@ async def rerender_video(
 
     - `done`/`rendering` → `rendering` 으로 전환하고 전 구간 TTS 를 재합성
     - 스크립트·음성 수정분이 반영됨. 비용이 다시 발생하므로 프론트에서 확인 후 호출.
+    - `dry_run=true` 면 **사전 점검 전용** — DB 를 건드리지 않고(상태 전환·합성 없음)
+      어느 슬라이드가 재합성되는지(`changed_slide_numbers`)·재사용 개수·현재 아바타만
+      돌려준다. 프론트의 '다시 제작' 점검 다이얼로그가 실제 변경분을 정확히 보여주는 데 쓴다.
     """
-    video, count = await video_svc.rerender_video(
+    video, count, inspection = await video_svc.rerender_video(
         db=db,
         video_id=video_id,
         professor_id=current_user.id,
+        dry_run=dry_run,
     )
     return {
         "id": str(video.id),
         "status": video.status.value,
         "rerendered_segments": count,
+        "dry_run": dry_run,
+        # 사전 점검 결과 — 프론트가 정확한 점검 글귀를 만드는 데 쓴다.
+        "slides_total": inspection.slides_total,
+        "changed_slide_numbers": inspection.changed_slide_numbers,
+        "reused_slides": inspection.reused_slides,
+        "avatar_id": inspection.avatar_id,
+        "avatar_name": inspection.avatar_name,
     }
 
 
