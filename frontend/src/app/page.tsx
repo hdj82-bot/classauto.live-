@@ -39,9 +39,11 @@ import "./demo/demo-v3.css";
  *   - docs/planning/04-demo-page.md — /demo 스펙 (히어로 카피 정합)
  *   - docs/design-system/colors.md §1 — light beige + gold dual-surface
  */
-// 대문 좌측 인문계열 카드 = 교수자가 실제 제작·공개한 강의(중국어번역작문 2주차).
-// 이 강의가 비공개/삭제되면 링크가 깨지므로, 데모 강의를 바꾸면 슬러그·텍스트도
-// 함께 갱신한다. (우측 자연계열 카드는 종전대로 /demo mock 유지.)
+// 대문의 두 분야 카드 = 교수자가 실제 제작·공개한 강의로 직행한다(데모 mock 아님).
+// 강의가 비공개/삭제되면 링크가 깨지므로, 데모 강의를 바꾸면 슬러그·텍스트·슬라이드
+// 수도 함께 갱신한다.
+//  - 좌측(인문계열) = 중국어 필수 문장성분
+//  - 우측(자연계열) = 코딩의 기초 (영어 음성 + 한국어 자막)
 const SOCIAL_DEMO_LECTURE_HREF = "/lecture/중국어-필수-문장성분-f7dda164";
 const SOCIAL_DEMO_LECTURE_CARD = {
   tagline: "A · Liberal Arts",
@@ -53,18 +55,31 @@ const SOCIAL_DEMO_LECTURE_CARD = {
   statSecondary: "AI 아바타 Q&A",
 };
 
+const NATURAL_DEMO_LECTURE_HREF =
+  "/lecture/코딩의-기초영문음성한국어자막-648873e7";
+const NATURAL_DEMO_LECTURE_CARD = {
+  tagline: "B · Computer Science",
+  metaLine: "실제 강의 · 영어 음성 + 한국어 자막",
+  title: "코딩의 기초",
+  subtitle:
+    "프로그래밍 입문 개념을 다루는 실제 제작 강의입니다. 학생 화면 그대로 영어 음성·한국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
+  statSlides: "10 슬라이드",
+  statSecondary: "AI 아바타 Q&A",
+};
+
 export default function LandingPage() {
   const { t: tHub } = useLandingI18n();
   const { t: tCommon } = useMarketingI18n();
   const router = useRouter();
 
-  // 분야 카드 선택. 좌측 인문계열(social)은 교수자가 실제 제작·공개한 강의
-  // (중국어번역작문 2주차) 학생 화면으로 직행한다. 우측 자연계열(natural)은
-  // 종전대로 /demo mock 으로 deep-link 한다(?field=X 자동 진입).
+  // 분야 카드 선택. 두 카드 모두 교수자가 실제 제작·공개한 강의 학생 화면으로
+  // 직행한다(좌측=중국어 필수 문장성분, 우측=코딩의 기초). '시작하기' = 곧장 영상.
   const handleSelectField = useCallback(
     (f: DemoField) => {
       if (f === "social") {
         router.push(SOCIAL_DEMO_LECTURE_HREF);
+      } else if (f === "natural") {
+        router.push(NATURAL_DEMO_LECTURE_HREF);
       } else {
         router.push(`/demo?field=${f}`);
       }
@@ -269,7 +284,11 @@ export default function LandingPage() {
                 onSelect={handleSelectField}
                 override={{ ...SOCIAL_DEMO_LECTURE_CARD, glyph: <BookGlyph /> }}
               />
-              <FieldSelectCard field="natural" onSelect={handleSelectField} />
+              <FieldSelectCard
+                field="natural"
+                onSelect={handleSelectField}
+                override={NATURAL_DEMO_LECTURE_CARD}
+              />
             </div>
           </div>
         </section>
