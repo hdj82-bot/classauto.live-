@@ -324,7 +324,8 @@ def _parse_seed_questions_json(raw: str, n: int) -> list[dict]:
 
 
 def generate_seed_questions(
-    db: Session, task_id: str, n: int = 3, lang: str = "ko"
+    db: Session, task_id: str, n: int = 3, lang: str = "ko",
+    exclude: list[str] | None = None,
 ) -> list[dict]:
     """강의 발화 스크립트에서 가장 중요한 핵심 질문 n개와 각 사전 답변을 ``lang`` 으로 생성.
 
@@ -334,6 +335,11 @@ def generate_seed_questions(
     (answer_question)·사전 답변과 동일한 정책(2026-06-12). 질문·답변 언어는 발화 언어(lang)와
     항상 같다. 동일·표기만 다른 중복은 파싱 단계에서 한 번 더 제거하므로, 결과가 n개보다
     적을 수 있다(중복 대신 서로 다른 질문만 남긴다).
+
+    ``exclude``: 이미 다른 카드에 들어 있는 질문들. 프론트는 카드별로 1개씩 생성하는데
+    (page.tsx handleAutoGenerateSeedQuestion), 매 호출이 독립적이라 모델이 "가장 중요한
+    핵심"(예: 어순)을 매번 #1 로 다시 뽑아, 표현만 다른 같은 주제가 3카드에 반복되던 문제를
+    막는다. 이 목록의 주제·내용과 명백히 다른(겹치지 않는) 질문을 만들도록 프롬프트에 싣는다.
 
     반환 ``[{"question": ..., "answer": ...}]`` (최대 n개). 스크립트가 없거나
     Claude 오류/파싱 실패면 빈 리스트(프론트는 빈 결과를 토스트로 안내).
@@ -346,12 +352,24 @@ def generate_seed_questions(
         # 발화 스크립트가 없으면(파이프라인 미완 등) 생성 불가.
         return []
 
+    # 이미 만든 질문(다른 카드)들 — 이 주제들을 피해 강의의 또 다른 핵심을 뽑게 한다.
+    exclude_clean = [q.strip() for q in (exclude or []) if q and q.strip()]
+    exclude_block = ""
+    if exclude_clean:
+        listed = "\n".join(f"- {q}" for q in exclude_clean)
+        exclude_block = (
+            "\n\n## 이미 만든 질문 (반드시 피하기)\n"
+            f"{listed}\n"
+            "위 질문들과 같은 주제·핵심을 다루거나 표현만 바꾼 질문은 절대 만들지 마세요. "
+            "위 목록과 분명히 다른, 강의의 또 다른 핵심을 짚는 질문을 만드세요."
+        )
+
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=60.0)
     try:
         response = _claude_seed_questions_call(
             client,
             _seed_questions_system_prompt(_lang_name(lang), n),
-            f"## 강의 발화 스크립트 (전체)\n{context}\n\n"
+            f"## 강의 발화 스크립트 (전체)\n{context}{exclude_block}\n\n"
             f"위 발화 스크립트 전체를 읽고, 이 강의에서 가장 중요한 핵심 {n}가지를 골라 학생이 "
             f"물을 만한 질문 {n}개와 각 사전 답변을 만들어 주세요. {n}개 질문은 반드시 서로 다른 "
             f"핵심을 짚어야 하며, 중복되거나 비슷해서는 안 됩니다. 정확히 {n}개의 항목을 JSON "

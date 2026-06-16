@@ -29,6 +29,7 @@ from app.schemas.seed_question import (
     GeneratedSeedQuestion,
     GenerateSeedAnswerRequest,
     GenerateSeedAnswerResponse,
+    GenerateSeedQuestionsRequest,
     GenerateSeedQuestionsResponse,
     SeedQuestionItem,
     SeedQuestionsRequest,
@@ -372,6 +373,7 @@ async def generate_seed_answer_endpoint(
 )
 async def generate_seed_questions_endpoint(
     lecture_id: uuid.UUID,
+    payload: GenerateSeedQuestionsRequest = GenerateSeedQuestionsRequest(),
     db: AsyncSession = Depends(get_db),
     professor: User = Depends(require_professor),
 ):
@@ -380,6 +382,9 @@ async def generate_seed_questions_endpoint(
     "질문과 답변 자동 생성" 버튼이 호출 → 교수자가 받은 질문·답변을 검토·수정 후
     PUT 으로 저장한다(여기서는 저장하지 않음). 발화 언어(`lecture.voice_lang`)로
     작성되므로 영어 강의면 질문·답변도 영어. 비소유 404, 파이프라인 미처리면 400.
+
+    ``payload.exclude``: 이미 다른 카드에 있는 질문들. 카드별 생성 시 그 주제를 피해
+    강의의 또 다른 핵심을 뽑게 해, 같은 주제(예: 어순)가 여러 카드에 반복되는 것을 막는다.
     """
     from app.models.lecture import Lecture  # noqa: PLC0415
     from app.services.pipeline.qa import generate_seed_questions  # noqa: PLC0415
@@ -394,11 +399,14 @@ async def generate_seed_questions_endpoint(
             detail="강의 파이프라인이 아직 처리되지 않았습니다.",
         )
     voice_lang = (lecture.voice_lang if lecture else None) or "ko"
+    exclude = list(payload.exclude)
     loop = asyncio.get_event_loop()
 
     def _work() -> GenerateSeedQuestionsResponse:
         with SyncSessionLocal() as sdb:
-            pairs = generate_seed_questions(sdb, task_id, n=3, lang=voice_lang)
+            pairs = generate_seed_questions(
+                sdb, task_id, n=3, lang=voice_lang, exclude=exclude
+            )
             return GenerateSeedQuestionsResponse(
                 questions=[GeneratedSeedQuestion(**p) for p in pairs]
             )
