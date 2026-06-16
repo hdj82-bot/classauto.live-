@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { api } from "@/lib/api";
 import { invalidateProfessorData } from "@/lib/professorData";
 import { useToast } from "@/components/ui/Toast";
@@ -38,9 +38,63 @@ interface Props {
    * 바로 보낸다. 미리보기→배포하기를 거치지 않고 공유 링크·QR·게시 토글에 직행.
    */
   onShare?: (id: string) => void;
+  /**
+   * "데이터 분석" 클릭 시 — 완료 강의의 학습 분석 리포트
+   * (/professor/analytics/{id})로 이동. 학습자 시청·퀴즈 정답률·Q&A·집중도를
+   * 종합 시각화한 화면으로, 이 플랫폼의 핵심 가치다. 제작 중 강의에는
+   * 분석할 데이터가 없으므로 노출하지 않는다.
+   */
+  onAnalyze?: (id: string) => void;
   /** 공개/비공개 전환 성공 후 — 부모가 목록 state 의 is_published 를 갱신. */
   onVisibilityChanged?: (id: string, isPublished: boolean) => void;
   padding?: number;
+}
+
+// 버튼 톤별 hover 그림자 — 버튼 자체 색과 어울리는 컬러 글로우로 입체감을 준다.
+const GOLD_SHADOW = "0 6px 18px rgba(184, 131, 8, 0.28)";
+const GOLD_SHADOW_STRONG = "0 8px 22px rgba(184, 131, 8, 0.40)";
+const NEUTRAL_SHADOW = "0 6px 16px rgba(15, 23, 42, 0.14)";
+const SUCCESS_SHADOW = "0 6px 16px rgba(16, 185, 129, 0.28)";
+const DANGER_SHADOW = "0 6px 16px rgba(185, 28, 28, 0.22)";
+
+/** 사용자가 모션 축소를 선호하는지 (입체 hover 의 이동 효과 생략 판단). */
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+/**
+ * 카드 액션 버튼에 입체 hover/press 인터랙션을 부여하는 마우스 핸들러 묶음.
+ *
+ * - hover: 살짝 떠오르며(-2px) 버튼 톤에 맞춘 컬러 그림자로 입체감.
+ * - press: 눌리는 느낌(0px 으로 복귀).
+ * - leave: 원상 복귀.
+ *
+ * transform·box-shadow 의 전이는 버튼의 `motion-safe:transition` 클래스가
+ * 처리하므로, 모션 축소 환경에서는 이동을 생략하고 그림자만 준다. disabled
+ * 버튼(공개 전환 중 등)은 효과를 적용하지 않는다.
+ */
+function liftHandlers(shadow: string) {
+  const lift = (el: HTMLButtonElement) => {
+    if (el.disabled) return;
+    el.style.boxShadow = shadow;
+    if (!prefersReducedMotion()) el.style.transform = "translateY(-2px)";
+  };
+  return {
+    onMouseEnter: (e: MouseEvent<HTMLButtonElement>) => lift(e.currentTarget),
+    onMouseLeave: (e: MouseEvent<HTMLButtonElement>) => {
+      e.currentTarget.style.boxShadow = "";
+      e.currentTarget.style.transform = "";
+    },
+    onMouseDown: (e: MouseEvent<HTMLButtonElement>) => {
+      if (e.currentTarget.disabled || prefersReducedMotion()) return;
+      e.currentTarget.style.transform = "translateY(0)";
+    },
+    onMouseUp: (e: MouseEvent<HTMLButtonElement>) => lift(e.currentTarget),
+  };
 }
 
 /**
@@ -56,6 +110,7 @@ export default function LectureCard({
   onDeleted,
   onPreview,
   onShare,
+  onAnalyze,
   onVisibilityChanged,
   padding = 20,
 }: Props) {
@@ -256,6 +311,7 @@ export default function LectureCard({
               onClick={() => onPreview!(lecture.id)}
               className="flex-1 rounded-lg motion-safe:transition"
               style={primaryButtonStyle}
+              {...liftHandlers(GOLD_SHADOW)}
             >
               {t("lectureCard.preview")}
             </button>
@@ -265,10 +321,52 @@ export default function LectureCard({
               onClick={() => onContinue(lecture.id)}
               className="flex-1 rounded-lg motion-safe:transition"
               style={primaryButtonStyle}
+              {...liftHandlers(GOLD_SHADOW)}
             >
               {isProduction
                 ? t("lectureCard.continueCreating")
                 : t("lectureCard.openLecture")}
+            </button>
+          )}
+          {/* 데이터 분석 — 완료 강의의 학습 분석 리포트(/professor/analytics/{id})로
+              직행. 학습자 시청·퀴즈 정답률·Q&A·집중도를 종합 시각화한, 이 플랫폼의
+              핵심 화면이다. solid gold 로 카드의 1차 가치 액션임을 시각적으로 강조하고,
+              제작 중 강의(분석할 데이터 없음)에는 노출하지 않는다. */}
+          {!isProduction && onAnalyze && (
+            <button
+              type="button"
+              onClick={() => onAnalyze(lecture.id)}
+              className="inline-flex items-center gap-1.5 rounded-lg motion-safe:transition"
+              aria-label={t("lectureCard.analyzeAria", { title: lecture.title })}
+              style={{
+                padding: "8px 12px",
+                fontSize: 12,
+                fontWeight: 700,
+                color: "#fff",
+                background:
+                  "linear-gradient(135deg, var(--gold-on-light, #b88308) 0%, #9a6f06 100%)",
+                border: "1px solid var(--gold-on-light, #b88308)",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+              {...liftHandlers(GOLD_SHADOW_STRONG)}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="13"
+                height="13"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.4}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 21V10" />
+                <path d="M12 21V4" />
+                <path d="M19 21v-7" />
+              </svg>
+              {t("lectureCard.analyze")}
             </button>
           )}
           {/* 배포 — 완료 강의를 "강의 배포" 페이지로 직행(공유 링크·QR·게시 토글).
@@ -288,6 +386,7 @@ export default function LectureCard({
                 cursor: "pointer",
                 whiteSpace: "nowrap",
               }}
+              {...liftHandlers(GOLD_SHADOW)}
             >
               배포
             </button>
@@ -306,6 +405,7 @@ export default function LectureCard({
                 border: "1px solid var(--line-strong)",
                 cursor: "pointer",
               }}
+              {...liftHandlers(NEUTRAL_SHADOW)}
             >
               {t("lectureCard.openStudio")}
             </button>
@@ -329,6 +429,9 @@ export default function LectureCard({
               opacity: publishing ? 0.6 : 1,
               whiteSpace: "nowrap",
             }}
+            {...liftHandlers(
+              lecture.is_published ? NEUTRAL_SHADOW : SUCCESS_SHADOW,
+            )}
           >
             {publishing ? "…" : lecture.is_published ? "비공개로" : "공개"}
           </button>
@@ -346,6 +449,7 @@ export default function LectureCard({
               border: "1px solid var(--line)",
               cursor: "pointer",
             }}
+            {...liftHandlers(DANGER_SHADOW)}
           >
             {t("lectureCard.delete")}
           </button>
