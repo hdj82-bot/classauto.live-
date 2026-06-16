@@ -287,6 +287,66 @@ def test_seed_render_fails_when_avatar_unavailable(sync_db, mock_render, monkeyp
         assert r.heygen_job_id is None  # 렌더(제출) 자체를 하지 않는다.
 
 
+def test_seed_render_own_face_visionstory_never_registers_heygen(
+    sync_db, mock_render, monkeypatch
+):
+    """본인 얼굴 + VisionStory 강의의 seed 렌더는 HeyGen talking_photo 를 만들지 않는다.
+
+    회귀(2026-06-16 사용자 보고): 사전점검이 provider 와 무관하게 _resolve_character 를
+    호출해, 본인 얼굴 강의에서 _ensure_talking_photo_sync 가 HeyGen 에 사진 아바타를
+    등록했다. VisionStory 로 이전(HeyGen 아바타 전량 삭제)한 뒤에도 ‘다시 제작’마다
+    HeyGen 에 아바타가 되살아나 3개 한도(401028)로 Q&A 가 통째로 실패했다.
+    """
+    import app.services.pipeline.visionstory as vs_mod
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    monkeypatch.setattr(settings, "VISIONSTORY_MOCK", True)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    # 강의에 본인 얼굴(=교수자 talking_photo_id)을 적용 → 본인 얼굴 경로.
+    prof.photo_avatar_id = "tp-own"
+    lec.avatar_id = "tp-own"
+    # VisionStory 가 쓸 본인 얼굴 이미지는 확보된다고 가정(S3 다운로드 우회).
+    monkeypatch.setattr(
+        qa_batch, "_own_face_image", lambda *a, **k: (b"img", "image/png")
+    )
+
+    # 핵심 단언 — HeyGen talking_photo 등록은 절대 호출되면 안 된다.
+    def _must_not_register(*_a, **_k):
+        raise AssertionError("VisionStory 경로인데 HeyGen talking_photo 를 등록함")
+
+    monkeypatch.setattr(qa_batch, "_ensure_talking_photo_sync", _must_not_register)
+
+    async def _mk_avatar(*_a, **_k):
+        return "vs-avatar-1"
+
+    async def _mk_video(*_a, **_k):
+        return "vs-video-1"
+
+    monkeypatch.setattr(vs_mod, "create_avatar", _mk_avatar)
+    monkeypatch.setattr(vs_mod, "submit_talking_video", _mk_video)
+
+    _seed(sync_db, lec, prof, "이 강의의 핵심 개념은?")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 1
+    row = (
+        sync_db.query(QAAnswerCache)
+        .filter(QAAnswerCache.origin == qa_avatar.ORIGIN_SEED)
+        .first()
+    )
+    assert row.status == qa_avatar.STATUS_RENDERING
+    # VisionStory 로 제출됐다는 표식(접두) — HeyGen 경로가 아니다.
+    assert (row.heygen_job_id or "").startswith("visionstory:")
+
+
 def test_resolve_character_falls_back_to_standard_avatar(sync_db, monkeypatch):
     """본인 얼굴(Talking Photo) 미확보 시 표준 아바타로 폴백해 Q&A 가 막히지 않는다."""
     from app.models.lecture import VoiceGender
