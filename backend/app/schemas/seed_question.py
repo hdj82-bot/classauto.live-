@@ -42,9 +42,10 @@ class SeedQuestionInput(BaseModel):
     """PUT 항목 — 교수자가 입력하는 질문 + (선택) 사전 대답."""
 
     question: Annotated[str, Field(max_length=500)] = Field(..., description="질문 텍스트")
-    # 권장 답변 길이 300~800자(아바타 발화 분량 적정선 — 2026-06-15). 800자 초과 입력은 거부.
-    answer: Annotated[str, Field(max_length=800)] = Field(
-        "", description="사전 대답(권장 300~800자). 비우면 영상 생성 시 강의 자료 기반 RAG 로 자동 생성."
+    # 답변 길이 상한 400자(어느 언어로 만들든 동일 — VisionStory 렌더 영상 초당 과금이라
+    # 답변이 길수록 비용↑, 2026-06-16 사용자 결정). 400자 초과 입력은 거부.
+    answer: Annotated[str, Field(max_length=400)] = Field(
+        "", description="사전 대답(400자 이하). 비우면 영상 생성 시 강의 자료 기반 RAG 로 자동 생성."
     )
 
 

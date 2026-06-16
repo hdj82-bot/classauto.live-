@@ -46,7 +46,9 @@ def _lecture_voice_settings(db, lecture_id, instructor_id) -> dict:
         else (str(lecture.voice_gender) if lecture and lecture.voice_gender else "male")
     )
     voice_id = (lecture.voice_id or None) if lecture else None
-    voice_speed = (getattr(lecture, "voice_speed", None) if lecture else None) or 1.3
+    # Q&A 답변은 슬라이드 내레이션 속도와 무관하게 항상 QA_AVATAR_VOICE_SPEED(기본 1.2배)
+    # 로 발화한다 — 빠를수록 렌더 영상이 짧아져 VisionStory 비용이 준다(2026-06-16 결정).
+    voice_speed = settings.QA_AVATAR_VOICE_SPEED
     avatar_scale = (getattr(lecture, "avatar_scale", None) if lecture else None) or 1.0
     avatar_id = (lecture.avatar_id or None) if lecture else None
 
@@ -842,10 +844,10 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
                 continue
             answer = generated
 
-        # 저장은 교수자 입력 스키마 상한(seed_question.answer max_length=800)까지 원문
-        # 그대로 둔다 — 렌더 상한(QA_AVATAR_MAX_ANSWER_CHARS)으로 자르지 않는다. 렌더에
-        # 넘기는 길이는 _submit_cluster 가 그 상한으로 따로 자르므로, 여기서 자르면 편집기에
-        # 보이는 원문까지 영구 손상된다(2026-06-15 사용자 보고: 답변 뒷부분 짤림).
+        # 저장은 원문 그대로 둔다 — 렌더 상한(QA_AVATAR_MAX_ANSWER_CHARS=400)으로 자르지
+        # 않는다. 여기서 자르면 편집기에 보이는 원문이 손상된다(2026-06-15 버그). 교수자
+        # 입력은 스키마가 이미 ≤400 이라 손실이 없고, 자동 생성 답변의 안전 상한으로만 800
+        # 을 둔다. 실제 렌더에 넘기는 길이는 _submit_cluster 가 400 으로 따로 자른다(=비용 상한).
         row.answer_text = answer[:800]
         row.question_embedding = qa_avatar.embed_question(row.question_text)
 

@@ -180,11 +180,16 @@ class Settings(BaseSettings):
     # 클러스터가 렌더 대상이 되기 위한 최소 누적 질문 수(1회성 잡음 질문 렌더 방지).
     QA_AVATAR_MIN_CLUSTER_SIZE: int = 1
     # 아바타 답변 길이 상한(글자) — 렌더 TTS 에 넘기는 답변을 자른다. 교수자 입력
-    # 스키마(seed_question.answer max_length=800)와 일치시켜, 교수자가 적은 답변이
-    # 그대로 발화되게 한다. 권장 답변 길이는 300~800자(2026-06-15 사용자 결정 — 2000 은
-    # 발화가 너무 길다). 변동비(렌더 길이)는 이 상한 × 발화 속도로 결정되므로, 비용을
-    # 더 죄어야 하면 이 값을 낮춘다(낮춰도 저장된 answer_text 원문은 보존됨 — qa_batch 참조).
-    QA_AVATAR_MAX_ANSWER_CHARS: int = 800
+    # 스키마(seed_question.answer max_length=400)와 일치시켜, 교수자가 적은 답변이
+    # 그대로 발화되게 한다. 어느 언어로 만들든 400자 이하로 제한한다(2026-06-16 사용자
+    # 결정 — VisionStory 는 렌더 영상 초당 과금이라 답변이 길수록 비용이 커진다). 변동비
+    # (렌더 길이)는 이 상한 × 발화 속도로 결정되므로, 비용을 더 죄어야 하면 이 값을
+    # 낮춘다(낮춰도 저장된 answer_text 원문은 보존됨 — qa_batch 참조).
+    QA_AVATAR_MAX_ANSWER_CHARS: int = 400
+    # Q&A 답변 아바타의 발화 속도(배). 슬라이드 내레이션과 별개로 Q&A 답변은 항상 이
+    # 속도로 렌더한다 — 빠를수록 영상이 짧아져 VisionStory 비용이 줄기 때문(2026-06-16
+    # 사용자 결정: 기본 1.2배). ElevenLabs voice_settings.speed 실효 범위(0.7~1.2)의 상단.
+    QA_AVATAR_VOICE_SPEED: float = 1.2
     # 야간 배치 실행 시각(UTC 시). 기본 18시(UTC) = KST 03:00 — 일일 백업(03 UTC) 이후.
     QA_AVATAR_BATCH_HOUR_UTC: int = 18
 

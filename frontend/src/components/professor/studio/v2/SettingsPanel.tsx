@@ -1183,20 +1183,20 @@ function SeedQuestionCard({
         <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
           사전 대답
         </label>
-        {/* 답변은 권장 300~800자(아바타 발화 분량 적정선) — 백엔드와 동일하게 800자 상한.
-            넉넉한 높이 + 세로 스크롤·리사이즈로 한눈에 보이게 한다. */}
+        {/* 답변은 400자 이하 — 백엔드와 동일 상한. VisionStory 는 렌더 영상 초당 과금이라
+            답변이 길수록 비용↑이므로 어떤 언어로 쓰든 400자로 제한한다. */}
         <textarea
           value={item.answer}
           onChange={(e) => onChange({ answer: e.target.value })}
-          placeholder="이 질문이 들어오면 아바타가 말할 답변(권장 300~800자). 비워 두면 강의 자료로 자동 작성됩니다."
+          placeholder="이 질문이 들어오면 아바타가 말할 답변(400자 이하). 비워 두면 강의 자료로 자동 작성됩니다."
           rows={6}
-          maxLength={800}
+          maxLength={400}
           aria-label={`예상 질문 ${index + 1} 사전 대답`}
           style={{ ...textareaStyle, minHeight: 120, maxHeight: 320, overflowY: "auto" }}
         />
-        {/* 글자 수 표시 — 권장 범위(300~800) 안에 있도록 돕는다. */}
+        {/* 글자 수 표시 — 400자 상한 안에 있도록 돕는다. */}
         <span style={{ fontSize: 10.5, color: "var(--text-faint)", textAlign: "right" }}>
-          {item.answer.length}/800
+          {item.answer.length}/400
         </span>
       </div>
 

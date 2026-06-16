@@ -906,7 +906,11 @@ export default function StudioWizardPage() {
             return;
           }
           setSeedQuestions((prev) => {
-            const next = prev.map((q, i) => (i === index ? { ...q, answer } : q));
+            // 답변 상한 400자(백엔드 스키마와 동일) — 자동 생성이 더 길게 나와도
+            // 저장(PUT) 422 를 막고 렌더 비용을 묶는다.
+            const next = prev.map((q, i) =>
+              i === index ? { ...q, answer: answer.slice(0, 400) } : q,
+            );
             scheduleSeedSave(next);
             return next;
           });
@@ -938,7 +942,7 @@ export default function StudioWizardPage() {
         setSeedQuestions((prev) => {
           const next = prev.map((q, i) =>
             i === index
-              ? { ...q, question: pick.question, answer: pick.answer }
+              ? { ...q, question: pick.question, answer: pick.answer.slice(0, 400) }
               : q,
           );
           scheduleSeedSave(next);
