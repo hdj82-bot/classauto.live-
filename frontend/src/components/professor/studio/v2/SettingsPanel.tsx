@@ -92,12 +92,6 @@ export interface SettingsPanelProps {
    * 직접 입력/자동 생성을 고를 수 있다.
    */
   onAutoGenerateSeedQuestion?: (index: number) => Promise<void>;
-  /**
-   * "현재 아바타로 답변 다시 만들기" — 이미 완성(ready)된 클립을 현재 아바타/음성으로
-   * 강제 재생성한다. 아바타를 바꿨는데 답변 영상이 그대로일 때(변경 감지 사각지대)
-   * 빠져나오는 경로. 부모가 force 렌더를 호출한다.
-   */
-  onForceRenderSeed?: () => void;
 }
 
 const settingsStyle: CSSProperties = {
@@ -412,7 +406,6 @@ export default function SettingsPanel({
   onChangeSeedQuestion,
   onPreviewSeed,
   onAutoGenerateSeedQuestion,
-  onForceRenderSeed,
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
@@ -808,37 +801,11 @@ export default function SettingsPanel({
               </p>
             )}
 
-            {/* 강제 재생성 — 답변 클립이 준비됐는데 아바타·음성을 바꿔 다시 만들고
-                싶을 때. 같은 아바타를 다시 골라 '다시 제작'이 변경을 못 잡는 경우의
-                구제 경로(현재 아바타/음성으로 ready 클립을 강제 재렌더). */}
-            {seedAllReady && onForceRenderSeed && (
-              <button
-                type="button"
-                onClick={onForceRenderSeed}
-                title="현재 아바타·음성으로 답변 영상을 다시 만듭니다"
-                style={{
-                  marginTop: 8,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 6,
-                  padding: "8px 12px",
-                  borderRadius: 9,
-                  border: "1px solid var(--line-strong)",
-                  background: "var(--bg-card)",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: "var(--text)",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M23 4v6h-6" />
-                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                </svg>
-                현재 아바타로 답변 다시 만들기
-              </button>
-            )}
+            {/* '강제 재생성(현재 아바타로 답변 다시 만들기)' 버튼은 제거됨(2026-06-16).
+                이미 완성(ready)된 답변 클립까지 통째로 다시 렌더해 VisionStory 크레딧이
+                낭비됐다. 특정 답변을 다시 만들려면 그 카드를 삭제(×) 후 다시 추가한다 —
+                그러면 그 항목만 pending 으로 새로 렌더되고 완성된 답변은 보존된다.
+                (아바타·음성을 바꾼 경우엔 PATCH 가 자동으로 seed 클립을 무효화한다.) */}
           </div>
         </details>
       </div>
