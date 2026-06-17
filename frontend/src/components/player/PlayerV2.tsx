@@ -144,6 +144,33 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // 전체화면은 영상 영역만이 아니라 플레이어 전체(영상+Q&A 패널)를 대상으로 한다.
   // stageRef(.video)만 전체화면하면 우측 채팅이 사라지고 슬라이드가 레터박스된다.
   const playerRef = useRef<HTMLDivElement | null>(null);
+  // 강의 화면 ↔ Q&A 채팅 좌우 비율(데스크탑). 경계 핸들을 드래그해 바꾼다.
+  // 0.3~0.8 로 클램프. CSS 변수 --stage-basis 로 .stage 폭에 전달한다(모바일은
+  // 미디어쿼리가 세로 스택으로 덮어써 이 값은 무시된다).
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [stageRatio, setStageRatio] = useState(0.6);
+  const resizingRef = useRef(false);
+  const startResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    resizingRef.current = true;
+  }, []);
+  const moveResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizingRef.current) return;
+    const rect = bodyRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return;
+    const ratio = (e.clientX - rect.left) / rect.width;
+    setStageRatio(Math.min(0.8, Math.max(0.3, ratio)));
+  }, []);
+  const endResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizingRef.current) return;
+    resizingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* no-op */
+    }
+  }, []);
   const handleProgressRef = useRef<(sec: number) => void>(() => {});
   const handleProgress = useCallback(
     (sec: number) => handleProgressRef.current(sec),
@@ -606,9 +633,36 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     } else {
-      el.requestFullscreen?.().catch(() => {});
+      el.requestFullscreen?.()
+        .then(() => {
+          // 모바일: 전체화면 진입 시 가로로 회전(세로 스택은 영상이 너무 납작해
+          // 보기 힘들다). 지원 브라우저(주로 Android)만 적용되고, 미지원(데스크탑·
+          // iOS Safari)에선 reject 돼 조용히 무시된다.
+          const orientation = screen.orientation as ScreenOrientation & {
+            lock?: (o: "landscape") => Promise<void>;
+          };
+          orientation?.lock?.("landscape").catch(() => {});
+        })
+        .catch(() => {});
     }
   };
+
+  // 전체화면을 벗어나면(컨트롤 버튼·시스템 뒤로가기·ESC 모두 포함) 가로 잠금을 푼다.
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) {
+        try {
+          (
+            screen.orientation as ScreenOrientation & { unlock?: () => void }
+          )?.unlock?.();
+        } catch {
+          /* no-op */
+        }
+      }
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
 
   // ─── 배포하기(미리보기 전용) — 강의 발행 후 학생 링크·QR 모달 표시 ───
   const openDeploy = async () => {
@@ -813,7 +867,13 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         </header>
 
         {/* Body */}
-        <div className={styles.body}>
+        <div
+          className={styles.body}
+          ref={bodyRef}
+          style={
+            { "--stage-basis": `${stageRatio * 100}%` } as React.CSSProperties
+          }
+        >
           <div className={styles.stage}>
             <div className={styles.video} ref={stageRef}>
               {/* 본문 = 슬라이드쇼: 현재 슬라이드 이미지 + 숨겨진 구간 음성 + 자막. */}
@@ -1463,6 +1523,19 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
               </div>
             </div>
           </div>
+
+          {/* 강의 화면 ↔ Q&A 채팅 경계 핸들 — 잡고 좌우로 끌어 비율 조절(데스크탑).
+              모바일(세로 스택)에선 CSS 로 숨긴다. */}
+          <div
+            className={styles.resizer}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="강의 화면과 채팅창 비율 조절"
+            onPointerDown={startResize}
+            onPointerMove={moveResize}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+          />
 
           {/* Q&A panel */}
           <aside className={styles.qa} aria-label={t("student.playerV2.qaTitle")}>
