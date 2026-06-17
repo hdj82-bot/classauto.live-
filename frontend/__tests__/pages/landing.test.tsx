@@ -31,7 +31,7 @@ describe("LandingPage (v2 — 짧은 게이트웨이)", () => {
 
   it("renders the field showcase with both demo cards", () => {
     renderWithI18n(<LandingPage />);
-    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
+    expect(screen.getByText("예시 강의를 살펴보세요")).toBeTruthy();
     expect(screen.getByTestId("demo-field-social")).toBeTruthy();
     expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
   });
