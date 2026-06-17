@@ -431,8 +431,8 @@
       "cta": "Apply for beta"
     },
     "fieldSelectV3": {
-      "title": "Pick one of the two fields",
-      "subtitle": "Humanities and natural sciences — compare how the same guardrails play out in two very different lectures.",
+      "title": "Explore our example lectures",
+      "subtitle": "See how ClassAuto works through these example lectures.",
       "social": {
         "tagline": "A · Liberal Arts",
         "metaLine": "Humanities · {minutes}-min clip",
@@ -654,8 +654,8 @@
       "bottomTail": "."
     },
     "demoFieldShowcase": {
-      "title": "Pick one of the two fields",
-      "subtitle": "Humanities and natural sciences — compare how the same guardrails play out in two very different lectures."
+      "title": "Explore our example lectures",
+      "subtitle": "See how ClassAuto works through these example lectures."
     },
     "demoTrustStrip": {
       "ariaLabel": "Data protection notice",

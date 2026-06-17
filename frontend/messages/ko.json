@@ -431,8 +431,8 @@
       "cta": "베타 신청"
     },
     "fieldSelectV3": {
-      "title": "두 분야 중 하나를 골라주세요",
-      "subtitle": "인문계열과 자연계열 — 같은 가드레일이 어떻게 다른 강의에 적용되는지 비교해보세요.",
+      "title": "예시 강의를 살펴보세요",
+      "subtitle": "예시 강의를 통해 ClassAuto 서비스를 이해할 수 있습니다",
       "social": {
         "tagline": "A · Liberal Arts",
         "metaLine": "인문계열 · {minutes}분 클립",
@@ -654,8 +654,8 @@
       "bottomTail": "로 다음 강의를 다듬습니다."
     },
     "demoFieldShowcase": {
-      "title": "두 분야 중 하나를 골라주세요",
-      "subtitle": "인문계열과 자연계열 — 같은 가드레일이 어떻게 다른 강의에 적용되는지 비교해보세요."
+      "title": "예시 강의를 살펴보세요",
+      "subtitle": "예시 강의를 통해 ClassAuto 서비스를 이해할 수 있습니다"
     },
     "demoTrustStrip": {
       "ariaLabel": "데이터 보호 안내",

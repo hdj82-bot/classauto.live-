@@ -29,7 +29,7 @@ describe("LandingPage 통합", () => {
       screen.getByText(/교수자의 의도가 모든 결정에 반영되는 AI 강의 플랫폼/),
     ).toBeTruthy();
     // 분야 쇼케이스 헤딩 + 카드 2장
-    expect(screen.getByText("두 분야 중 하나를 골라주세요")).toBeTruthy();
+    expect(screen.getByText("예시 강의를 살펴보세요")).toBeTruthy();
     expect(screen.getByTestId("demo-field-social")).toBeTruthy();
     expect(screen.getByTestId("demo-field-natural")).toBeTruthy();
     // v1 시그니처 카피는 회귀하지 않아야 한다
