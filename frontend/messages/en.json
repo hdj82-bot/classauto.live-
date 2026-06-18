@@ -410,7 +410,21 @@
       "open": "New",
       "triaged": "Triaged",
       "resolved": "Resolved"
-    }
+    },
+    "auditTitle": "Audit log",
+    "auditLoadingLabel": "Loading audit log...",
+    "auditLoadError": "Failed to load audit log.",
+    "auditEmpty": "No operator actions recorded.",
+    "auditColTime": "Time",
+    "auditColActor": "Operator",
+    "auditColAction": "Action",
+    "auditColTarget": "Target",
+    "auditColDetail": "Detail",
+    "auditFilterActorPlaceholder": "Search operator email",
+    "auditFilterActionPlaceholder": "Filter by action",
+    "auditPrev": "Prev",
+    "auditNext": "Next",
+    "auditPageInfo": "Page {page} · {total} total"
   },
   "feedback": {
     "buttonLabel": "Feedback",

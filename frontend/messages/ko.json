@@ -410,7 +410,21 @@
       "open": "신규",
       "triaged": "확인됨",
       "resolved": "해결됨"
-    }
+    },
+    "auditTitle": "감사 로그",
+    "auditLoadingLabel": "감사 로그 로딩 중...",
+    "auditLoadError": "감사 로그를 불러올 수 없습니다.",
+    "auditEmpty": "기록된 운영자 행위가 없습니다.",
+    "auditColTime": "시각",
+    "auditColActor": "운영자",
+    "auditColAction": "행위",
+    "auditColTarget": "대상",
+    "auditColDetail": "상세",
+    "auditFilterActorPlaceholder": "운영자 이메일 검색",
+    "auditFilterActionPlaceholder": "행위(action) 필터",
+    "auditPrev": "이전",
+    "auditNext": "다음",
+    "auditPageInfo": "{page} 페이지 · 총 {total}건"
   },
   "feedback": {
     "buttonLabel": "피드백",

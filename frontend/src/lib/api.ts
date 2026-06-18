@@ -244,3 +244,23 @@ export const feedbackApi = {
   adminSetStatus: (id: string, status: string) =>
     api.patch<FeedbackItem>(`/api/v1/admin/feedback/${encodeURIComponent(id)}`, { status }),
 };
+
+export interface AuditLogItem {
+  id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+// 운영자 감사 로그(스펙 13 · E) — 읽기 전용. require_admin.
+export const auditApi = {
+  list: (params: { page?: number; action?: string; actor?: string }) =>
+    api.get<{ total: number; page: number; limit: number; logs: AuditLogItem[] }>(
+      "/api/v1/admin/audit",
+      { params },
+    ),
+};
