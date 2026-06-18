@@ -839,6 +839,16 @@ export default function SettingsPanel({
                 현재 아바타로 답변 다시 만들기
               </button>
             )}
+
+            {/* C-2(스펙 13): 강의당 아바타 제작 횟수 상한 사전 안내. 성공한 제작만
+                카운트되며, 상한 도달 시 재제작이 차단된다(차단 메시지는 page.tsx 가
+                429 응답을 받아 토스트로 표시). */}
+            {seedAllReady && onForceRenderSeed && (
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                본인·표준 아바타 수정은 강의당 재제작 4회로 제한됩니다. 성공한 제작만
+                카운트되니 신중히 진행해 주세요.
+              </p>
+            )}
           </div>
         </details>
       </div>
