@@ -15,6 +15,11 @@ class CostCategory(str, enum.Enum):
     llm_summary = "LLM_SUMMARY"
     stt = "STT"
     tts = "TTS"
+    # Q&A 아바타 렌더(HeyGen 퍼블릭 / VisionStory 본인 얼굴) 비용. QA 렌더는
+    # VideoRender 가 없어 render_cost_logs(video_render_id FK)에 못 들어가므로,
+    # lecture_id 키의 platform_cost_logs 에 이 카테고리로 적재한다(운영자 비용
+    # 대시보드 과소집계 해소 — qa_batch._record_qa_render_cost).
+    avatar_qa = "AVATAR_QA"
     other = "OTHER"
 
 
