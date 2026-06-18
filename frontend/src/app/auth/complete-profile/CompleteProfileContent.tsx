@@ -37,6 +37,8 @@ export default function CompleteProfileContent() {
   const [school, setSchool] = useState("");
   const [department, setDepartment] = useState("");
   const [studentNumber, setStudentNumber] = useState("");
+  // G(스펙 13): 교수자 베타 모니터링 동의. 미동의면 가입 불가(백엔드 422). 학생 무관.
+  const [betaConsented, setBetaConsented] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const exchangedRef = useRef(false);
@@ -85,9 +87,12 @@ export default function CompleteProfileContent() {
 
   const { tempToken, email, name, role } = profile;
   const isStudent = role === "student";
-  const isValid = isStudent
-    ? studentNumber.trim().length >= 4
-    : school.trim().length > 0 && department.trim().length > 0;
+  // 교수자는 베타 모니터링 동의가 필수(G). 학생은 무관.
+  const consentOk = isStudent || betaConsented;
+  const isValid =
+    (isStudent
+      ? studentNumber.trim().length >= 4
+      : school.trim().length > 0 && department.trim().length > 0) && consentOk;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,7 +104,11 @@ export default function CompleteProfileContent() {
         temp_token: tempToken,
         ...(isStudent
           ? { student_number: studentNumber.trim() }
-          : { school: school.trim(), department: department.trim() }),
+          : {
+              school: school.trim(),
+              department: department.trim(),
+              beta_consented: betaConsented,
+            }),
       });
       login(data.access_token);
       router.replace("/dashboard");
@@ -204,6 +213,50 @@ export default function CompleteProfileContent() {
                     />
                   </div>
                 </div>
+
+                {/* G(스펙 13): 베타 모니터링 동의 — 교수자만, 미동의 시 가입 불가. */}
+                <label
+                  htmlFor="cp-consent"
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "flex-start",
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(10, 10, 10, 0.12)",
+                    background: "rgba(10, 10, 10, 0.02)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    id="cp-consent"
+                    type="checkbox"
+                    checked={betaConsented}
+                    onChange={(e) => setBetaConsented(e.target.checked)}
+                    style={{
+                      marginTop: 2,
+                      width: 18,
+                      height: 18,
+                      accentColor: "#B88308",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 4,
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      color: "rgba(10, 10, 10, 0.7)",
+                    }}
+                  >
+                    <strong style={{ color: "rgba(10, 10, 10, 0.9)", fontWeight: 600 }}>
+                      {t("student.completeProfileV2.betaConsentLabel")}
+                    </strong>
+                    {t("student.completeProfileV2.betaConsentNotice")}
+                  </span>
+                </label>
               </>
             )}
 

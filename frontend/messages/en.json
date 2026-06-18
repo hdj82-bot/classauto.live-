@@ -1333,6 +1333,8 @@
       "submit": "Complete sign-up",
       "submitting": "Signing up…",
       "error": "Something went wrong. Please try again.",
+      "betaConsentLabel": "I agree to the beta monitoring terms (required)",
+      "betaConsentNotice": "During the beta, usage data such as the lectures you create, activity, and API costs may be aggregated and reviewed by the operator to improve the service. I agree to the beta terms that apply until the official launch.",
       "loading": "Verifying Google credentials…"
     },
     "onboardingV2": {
