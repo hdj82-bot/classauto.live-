@@ -13,7 +13,7 @@ pytest.ini 의 ``asyncio_mode = auto`` 로 async test 는 자동 마킹된다.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import select
