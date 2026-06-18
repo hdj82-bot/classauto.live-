@@ -401,6 +401,36 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     })();
   }, [lecture, user, durationSec, preview]);
 
+  // ─── 재생 구간 히트맵 계측 (스펙 11 §F, 10 §3.1) ───
+  // 슬라이드 진입/완료 이벤트를 watch_events 로 적재한다(분석 대시보드 §F 의 1차 자료,
+  // 소급 수집 불가). 로그인 학생의 실제 세션(sessionId)에서만 발생하며 익명·미리보기는
+  // sessionId 가 null 이라 no-op. 학습 흐름과 무관한 fire-and-forget — 실패·예외는 전부
+  // 삼켜 재생에 영향 주지 않는다. 슬라이드가 바뀔 때 직전 슬라이드 완료(+체류시간)와
+  // 새 슬라이드 진입을 함께 보낸다.
+  const watchSlideRef = useRef<{ index: number; enteredAt: number } | null>(null);
+  useEffect(() => {
+    if (!sessionId || !currentSlide) return;
+    const idx = currentSlide.slide_index;
+    const prev = watchSlideRef.current;
+    if (prev && prev.index === idx) return;
+    const now = Date.now();
+    const events: Record<string, unknown>[] = [];
+    if (prev) {
+      events.push({
+        event_type: "segment_complete",
+        slide_index: prev.index,
+        meta: { dwell_seconds: Math.max(0, Math.round((now - prev.enteredAt) / 1000)) },
+      });
+    }
+    events.push({ event_type: "segment_enter", slide_index: idx });
+    watchSlideRef.current = { index: idx, enteredAt: now };
+    void api
+      .post("/api/v1/dashboard/watch-events", { session_id: sessionId, events })
+      .catch(() => {
+        /* 분석 계측 실패는 무시 — 재생에 영향 없음 */
+      });
+  }, [currentSlide, sessionId]);
+
   // ─── 인터스티셜 퀴즈 목록 fetch (타임스탬프 트리거용, 정답·해설 미포함) ───
   // /quiz/playback 은 선택 인증으로 바뀌어(발행 강의는 익명도 조회) 비로그인 홍보
   // 시청에서도 퀴즈가 영상 중간에 뜬다. 정답·해설은 응답에 없고, 익명은 세션이 없어

@@ -21,10 +21,33 @@
       "attendance": "Attendance distribution",
       "studentGrid": "Per-student progress",
       "scores": "Accuracy heatmap",
+      "summary": "Summary",
       "engagement": "Learner engagement",
+      "attention": "Attention analysis",
       "watch": "Watch heatmap",
       "qa": "Q&A trend",
       "cost": "Cost meter"
+    },
+    "attention": {
+      "score": "Class average attention",
+      "scoreUnit": "pts",
+      "studentCount": "{count}",
+      "empty": "No attention data yet.",
+      "emptyDesc": "Once students watch the lecture, the focused/moderate/distracted split and score appear.",
+      "bucket": {
+        "focused": "Focused",
+        "moderate": "Moderate",
+        "distracted": "Distracted"
+      }
+    },
+    "summary": {
+      "wrongValue": "{count}x",
+      "wrongLabel": "Most-missed",
+      "wrongSub": "{count} missed questions",
+      "noResponseLabel": "No-response events",
+      "noResponseSub": "No reaction to prompts",
+      "outOfScopeLabel": "Out-of-scope questions",
+      "outOfScopeSub": "Outside lecture material"
     },
     "studentGrid": {
       "empty": "No student progress data yet.",

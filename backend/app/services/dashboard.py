@@ -155,8 +155,55 @@ async def get_scores(db: AsyncSession, lecture_id: uuid.UUID) -> dict:
     }
 
 
+# ── 집중도 점수 (스펙 11 §D) ──────────────────────────────────────────────────
+#
+# learning_sessions 의 딴짓 신호를 0~100 점으로 환산하는 가중 감점식. 베타 데이터로
+# 보정할 수 있게 가중치를 상단 상수로 모았다(산식 문서화 요구 — 11 §D, 02 §6 동일 기준).
+# 100 에서 시작해 경고·무반응·정지비율·네트워크 불안정을 감점한다. 각 항목은 cap 을
+# 둬 한 신호가 점수를 0 으로 깔아뭉개지 않게 한다.
+_ATTN_WARNING_PENALTY = 12      # 경고 1회당 감점(cap 5회)
+_ATTN_WARNING_CAP = 5
+_ATTN_NO_RESPONSE_PENALTY = 8   # 무반응 1회당 감점(cap 5회)
+_ATTN_NO_RESPONSE_CAP = 5
+_ATTN_PAUSE_MAX_PENALTY = 20    # 정지비율(정지/총시간) 0.5 이상이면 최대 감점
+_ATTN_NETWORK_PENALTY = 5       # 네트워크 불안정(딴짓 아닌 환경 요인 — 가벼운 감점)
+# 분포 버킷 경계.
+_ATTN_FOCUSED_MIN = 70
+_ATTN_MODERATE_MIN = 40
+
+
+def _attention_score(session) -> int:
+    """단일 세션의 집중도 점수(0~100). 가중 감점식 — 위 상수 참조."""
+    score = 100.0
+    score -= min(session.warning_level or 0, _ATTN_WARNING_CAP) * _ATTN_WARNING_PENALTY
+    score -= min(session.no_response_cnt or 0, _ATTN_NO_RESPONSE_CAP) * _ATTN_NO_RESPONSE_PENALTY
+    total = session.total_sec or 0
+    if total > 0:
+        ratio = min((session.total_pause_seconds or 0) / total, 0.5)
+        score -= (ratio / 0.5) * _ATTN_PAUSE_MAX_PENALTY
+    if session.is_network_unstable:
+        score -= _ATTN_NETWORK_PENALTY
+    return max(0, min(100, round(score)))
+
+
+def _attention_aggregate(sessions: list) -> dict:
+    """세션 집합 → 평균 집중도 점수 + 집중/보통/산만 분포(도넛용)."""
+    if not sessions:
+        return {"score": 0, "distribution": {"focused": 0, "moderate": 0, "distracted": 0}}
+    scores = [_attention_score(s) for s in sessions]
+    dist = {"focused": 0, "moderate": 0, "distracted": 0}
+    for sc in scores:
+        if sc >= _ATTN_FOCUSED_MIN:
+            dist["focused"] += 1
+        elif sc >= _ATTN_MODERATE_MIN:
+            dist["moderate"] += 1
+        else:
+            dist["distracted"] += 1
+    return {"score": round(sum(scores) / len(scores)), "distribution": dist}
+
+
 async def get_engagement(db: AsyncSession, lecture_id: uuid.UUID) -> dict:
-    """참여도 분석 (역질문 반응률, 무반응 기록)."""
+    """참여도 분석 (역질문 반응률, 무반응 기록, 집중도 점수)."""
     sess_result = await db.execute(
         select(LearningSession)
         .where(LearningSession.lecture_id == lecture_id)
@@ -212,6 +259,8 @@ async def get_engagement(db: AsyncSession, lecture_id: uuid.UUID) -> dict:
             "totalQAQuestions": total_qa,
             "overallResponseRate": round(responded_qa / total_qa * 100, 2) if total_qa > 0 else 0,
             "totalNoResponseEvents": total_no_response,
+            # D(스펙 11 §F/§D): 집중도 점수(0~100) + 집중/보통/산만 분포.
+            "attention": _attention_aggregate(sessions),
         },
         "students": students,
         # 재생 구간 히트맵 raw (G1) — 프론트 분석 페이지가 body.slides 를 감지하면

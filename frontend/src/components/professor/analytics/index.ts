@@ -6,6 +6,8 @@
  */
 export { default as AttendanceChart } from "./AttendanceChart";
 export { default as StudentProgressGrid } from "./StudentProgressGrid";
+export { default as AttentionScore } from "./AttentionScore";
+export { default as SummaryCards } from "./SummaryCards";
 export { default as ScoreHeatmap } from "./ScoreHeatmap";
 export { default as EngagementCurve } from "./EngagementCurve";
 export { default as CostMeter } from "./CostMeter";

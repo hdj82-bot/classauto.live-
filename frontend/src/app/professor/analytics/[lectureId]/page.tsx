@@ -9,6 +9,8 @@ import { useI18n } from "@/contexts/I18nContext";
 import {
   AttendanceChart,
   StudentProgressGrid,
+  AttentionScore,
+  SummaryCards,
   ScoreHeatmap,
   EngagementCurve,
   CsvExportButton,
@@ -44,7 +46,9 @@ type SectionKey =
   | "attendance"
   | "studentGrid"
   | "scores"
+  | "summary"
   | "engagement"
+  | "attention"
   | "watch"
   | "qa"
   | "cost";
@@ -253,12 +257,22 @@ export default function LectureAnalyticsPage() {
         )}
       </Section>
 
+      {/* G (스펙 11 §G): 요약 카드 — 빈번 오답·무반응·범위 외 질문(기존 집계 재활용). */}
+      <Section id="summary" title={t("section.summary")}>
+        <SummaryCards scores={scores} engagement={engagement} qa={qa} />
+      </Section>
+
       <Section id="engagement" title={t("section.engagement")}>
         {engagement ? (
           <EngagementCurve data={engagement} />
         ) : (
           <FallbackPanel sectionKey="engagement" />
         )}
+      </Section>
+
+      {/* D (스펙 11 §D): 집중 분석 도넛 + 점수 — engagement.summary.attention. */}
+      <Section id="attention" title={t("section.attention")}>
+        <AttentionScore data={engagement?.summary.attention ?? null} />
       </Section>
 
       <Section id="watch" title={t("section.watch")}>

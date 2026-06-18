@@ -65,6 +65,13 @@ export interface EngagementStudent {
   responseRate: number | null;
 }
 
+export interface AttentionSummary {
+  /** 학급 평균 집중도 점수(0~100). */
+  score: number;
+  /** 집중/보통/산만 학생 수 분포(도넛). */
+  distribution: { focused: number; moderate: number; distracted: number };
+}
+
 export interface EngagementData {
   lecture_id: string;
   summary: {
@@ -72,6 +79,8 @@ export interface EngagementData {
     totalQAQuestions: number;
     overallResponseRate: number;
     totalNoResponseEvents: number;
+    /** D(스펙 11 §D): 집중도 점수 + 분포. 구버전 응답엔 없을 수 있어 optional. */
+    attention?: AttentionSummary;
   };
   students: EngagementStudent[];
 }
