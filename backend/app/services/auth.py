@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import httpx
 from jose import JWTError
@@ -183,6 +183,8 @@ async def create_user_from_google(
     school: str | None = None,
     department: str | None = None,
     student_number: str | None = None,
+    cohort: str | None = None,
+    beta_consented_at: datetime | None = None,
 ) -> User:
     user = User(
         id=uuid.uuid4(),
@@ -193,6 +195,8 @@ async def create_user_from_google(
         school=school,
         department=department,
         student_number=student_number,
+        cohort=cohort,
+        beta_consented_at=beta_consented_at,
     )
     db.add(user)
     await db.commit()

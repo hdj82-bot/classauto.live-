@@ -65,6 +65,11 @@ class CompleteProfileRequest(BaseModel):
     # ── 학습자 전용 (기존 동작 유지) ───────────────────────────────────
     student_number: str | None = Field(default=None, max_length=50)
 
+    # ── 베타 모니터링 동의 (교수자 전용, G) ────────────────────────────
+    # 교수자 가입은 베타 약관(모니터링 고지) 동의가 필수다. True 면 가입 시
+    # users.beta_consented_at 을 기록한다. 학생 가입은 이 값과 무관(불변).
+    beta_consented: bool = Field(default=False)
+
     @field_validator("name", "school", "department", "student_number", mode="before")
     @classmethod
     def _empty_string_to_none(cls, v):

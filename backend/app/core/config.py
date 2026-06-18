@@ -120,8 +120,18 @@ class Settings(BaseSettings):
     # mock 완료 처리 시 사용할 placeholder 영상 URL (비우면 mock 렌더는 완료되지 않음).
     HEYGEN_MOCK_VIDEO_URL: str = ""
     # 예산 서킷 브레이커 — create_video 직전 누적 HeyGen 비용 검사. 0 이면 해당 한도 비활성.
-    HEYGEN_DAILY_BUDGET_USD: float = 3.0
-    HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
+    # ── C(스펙 13): 베타 규모로 상향 (2026-06-18) ──────────────────────────────
+    # 종전 기본값(일$3/월$15)은 개발용이라 베타에선 즉시 BudgetExceededError 로
+    # 모든 교수자의 렌더가 전면 차단된다. 베타 규모로 상향한다.
+    # 산정 공식: 월예산 ≈ 테스터 수 × 테스터당 월 강의 수 × 강의당 평균 비용 × 안전계수.
+    #   강의 본문은 slideshow(HeyGen 미사용) — 비용은 Q&A 아바타(강의당 ≤3클립)에서 발생.
+    #   강의당 평균 ~$5~8, 20명 × 월 8강의 ≈ $800~1,280, ×1.5~2 안전계수 → 월 ~$2,000.
+    #   기본값을 $2,500 로 둬 초기 베타(약 20~30명) + 성장 여유를 확보한다.
+    # ⚠️ 실제 운영값은 .env.production 의 환경변수로 override 해 코드 재배포 없이
+    #    조정한다(테스터가 늘면 env 만 올린다). 실질 하드캡은 HeyGen 계정 잔액
+    #    (auto-refill OFF)이며 이 브레이커는 사고(재시도 루프·대량 생성) 2차 방어선.
+    HEYGEN_DAILY_BUDGET_USD: float = 200.0
+    HEYGEN_MONTHLY_BUDGET_USD: float = 2500.0
 
     # ── VisionStory (본인 얼굴 Q&A·미리보기 렌더 — V-Talk) ───────────────────────
     # HeyGen Photo Avatar 는 계정당 3개 한도라 다수 사용자에게 본인 얼굴을 줄 수 없다.

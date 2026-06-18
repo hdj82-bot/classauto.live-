@@ -30,6 +30,9 @@ class ProfessorInvite(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     # 현재는 'professor' 고정. 향후 역할 확장 대비 컬럼으로 보관.
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="professor")
+    # 베타 코호트 태그(예: "2026-08"). 운영자가 초대 발급 시 지정(없으면 NULL).
+    # 가입 시 생성된 교수자 users.cohort 로 복사된다(services/invite.consume_invite).
+    cohort: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # 발급한 운영자. 유저 삭제 시 초대 기록은 남기되 FK 만 비운다.
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
