@@ -278,7 +278,8 @@ async def test_complete_profile_professor_invite_not_reusable(client, db):
     """이미 사용된 초대로 재가입 시도 → 403 (단일 사용)."""
     email = "reuse@test.ac.kr"
     inv = await create_invite(db, email=email, created_by=None)
-    body = {"school": "경기대", "department": "중어중문학과"}
+    # G: 교수자 가입은 동의 필수. (2번째 호출은 초대 재사용으로 동의 검사 전에 403.)
+    body = {"school": "경기대", "department": "중어중문학과", "beta_consented": True}
     token1 = _temp_token(
         "professor", sub="google-prof-202", email=email, invite=inv.token
     )
