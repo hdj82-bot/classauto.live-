@@ -42,6 +42,7 @@ interface LectureMeta {
 
 type SectionKey =
   | "attendance"
+  | "studentGrid"
   | "scores"
   | "engagement"
   | "watch"
@@ -236,7 +237,7 @@ export default function LectureAnalyticsPage() {
       </Section>
 
       {/* E (스펙 11 §E): 학생 개별 진척도 그리드 — attendance 데이터 재활용. */}
-      <Section id="student-grid" title={t("section.studentGrid")}>
+      <Section id="studentGrid" title={t("section.studentGrid")}>
         {attendance ? (
           <StudentProgressGrid data={attendance} />
         ) : (
