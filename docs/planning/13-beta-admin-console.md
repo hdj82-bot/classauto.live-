@@ -266,20 +266,28 @@ ClassAuto 디자인 토큰을 그대로 따른다. 추가할 화면:
 ---
 
 ## 5. 수용 기준 체크리스트
-- [ ] 계정주(`role=admin`)로 로그인 시에만 신규 어드민 엔드포인트가 200, 그 외 403.
-- [ ] **교수자**는 유효 초대 없이는 가입 불가 / **학생**은 강의 링크로 변함없이 가입 가능(회귀 없음).
-- [ ] `/admin/beta-overview` 가 교수자별 강의수 + 이번달·누적·월평균 지출(두 비용 테이블 합산)을 반환.
-- [ ] `/admin/costs` 의 `total_cost_usd` = `render_cost_logs + platform_cost_logs` 합.
-- [ ] `/admin/funnel` 5단계 카운트·전이율 반환.
-- [ ] 역할 변경/유저 삭제/초대 생성·삭제가 `admin_audit_logs` 에 1행씩 남음.
-- [ ] 교수·학생이 `POST /api/v1/feedback` 제출 → `/admin/feedback` 에 노출.
-- [ ] 신규 교수자 가입 시 `cohort` 설정 + `beta_consented_at` 기록(동의 없이는 가입 불가).
-- [ ] HeyGen 예산값이 베타 규모로 상향됨(C-1: config.py 기본 250/600, Railway 미설정 확인).
-- [ ] 강의당 아바타 재렌더 6회째(첫 1+재제작 5) 시도 시 `AvatarRerenderQuotaError` 로 차단,
-      성공 5회까지만 허용. **실패/취소 렌더는 카운트 안 됨.** HeyGen·VisionStory 동일 동작.
-- [ ] 면제 계정(`QA_AVATAR_UNLIMITED_EMAILS`)은 재렌더 무제한.
-- [ ] `POST /admin/lectures/{id}/reset-avatar-rerender` 로 카운터 리셋 + 감사 로그 1행.
-- [ ] `alembic upgrade head` 무오류, 기존 테스트 스위트 그린.
+
+> 갱신 2026-06-18: 백엔드 #513, C-2 #514, 동의 #515, 운영자 콘솔 프론트 #518 머지로 전 항목
+> 구현 완료. (C-2 상한값은 config 기본 5 = 첫 제작 1 + 재제작 4 — 아래 6회째 표기는 5회 허용
+> /6회째 차단의 의미.)
+
+- [x] 계정주(`role=admin`)로 로그인 시에만 신규 어드민 엔드포인트가 200, 그 외 403.
+- [x] **교수자**는 유효 초대 없이는 가입 불가 / **학생**은 강의 링크로 변함없이 가입 가능(회귀 없음).
+- [x] `/admin/beta-overview` 가 교수자별 강의수 + 이번달·누적·월평균 지출(두 비용 테이블 합산)을 반환.
+- [x] `/admin/costs` 의 `total_cost_usd` = `render_cost_logs + platform_cost_logs` 합.
+      *(주의: QA 아바타 렌더 비용은 아직 어느 테이블에도 기록되지 않아 누락 — DEPLOYMENT_PROGRESS
+      2026-06-18 "알려진 갭" 참조. 두 테이블 합산 로직 자체는 구현됨.)*
+- [x] `/admin/funnel` 5단계 카운트·전이율 반환.
+- [x] 역할 변경/유저 삭제/초대 생성·삭제가 `admin_audit_logs` 에 1행씩 남음.
+- [x] 교수·학생이 `POST /api/v1/feedback` 제출 → `/admin/feedback` 에 노출.
+- [x] 신규 교수자 가입 시 `cohort` 설정 + `beta_consented_at` 기록(동의 없이는 가입 불가 — 프론트 #515).
+- [x] HeyGen 예산값이 베타 규모로 상향됨(C-1: config.py 기본 250/600, Railway 미설정 확인).
+- [x] 강의당 아바타 재렌더 상한(첫 제작 1 + 재제작 4 = 5회) 초과 시 `AvatarRerenderQuotaError`/429 로
+      차단. **실패/취소(제출 실패) 패스는 카운트 안 됨.** HeyGen·VisionStory 동일(둘 다 _submit_cluster 경유).
+      해석: '성공 완료 시 +1' 을 '성공 제출 시 +1' 로 구현(패스에 단일 완료 이벤트 없음).
+- [x] 면제 계정(`QA_AVATAR_UNLIMITED_EMAILS`)은 재렌더 무제한.
+- [x] `POST /admin/lectures/{id}/reset-avatar-rerender` 로 카운터 리셋 + 감사 로그 1행.
+- [x] `alembic upgrade head` 무오류, 기존 테스트 스위트 그린(CI).
 
 ---
 
