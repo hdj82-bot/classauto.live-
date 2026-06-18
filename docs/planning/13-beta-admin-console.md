@@ -120,17 +120,53 @@ async def spend_by_instructor(db, since=None) -> dict[uuid.UUID, float]:
 - **성능**: `platform_cost_logs.created_at` 에 인덱스가 없으면 월별 GROUP BY 핫패스용으로
   마이그레이션 `0056` 에서 `ix_platform_cost_logs_created_at` 추가(선택, 행 많아지면 필수).
 
-### C. 예산값 베타 규모로 상향  *(설정 변경 — 배포 전 즉시)*
-현재 기본값이 베타에 치명적으로 낮음 → 그대로 두면 서킷브레이커가 걸려 **모든 교수자의 렌더가
-차단**된다(`BudgetExceededError`).
-- `app/core/config.py`:
-  - `HEYGEN_DAILY_BUDGET_USD` / `HEYGEN_MONTHLY_BUDGET_USD` 상향.
-  - `QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR` 검토(8 유지 또는 상향).
-- **반드시 `.env.production` 에서 환경변수로 설정**(코드 기본값은 보수적으로 두되 운영값은 env override).
-- 산정 공식(계정주가 결정):
-  `월예산 ≈ 예상 테스터 수 × 테스터당 월 강의 수 × 강의당 평균 HeyGen 비용 × 안전계수(1.5~2)`.
-  예상 비용을 모르면 **첫 주 소수 인원으로 실측**(A/B 뷰가 바로 그 실측치를 보여줌) 후 조정.
-- 서킷브레이커가 걸리면 테스터에게 렌더 실패로 보이므로, 베타에선 **넉넉히 잡고 A/D 뷰로 모니터링**한다.
+### C. 아바타 비용 가드레일  *(배포 전 필수)*
+
+#### C-1. 예산 서킷브레이커 값 상향  *(설정 — 확인/완료)*
+기존 기본값이 베타에 치명적으로 낮았음(`HEYGEN_DAILY=3 / MONTHLY=15`) → 그대로면 전역 $ 한도에
+걸려 **모든 교수자 렌더 차단**(`BudgetExceededError`).
+- **확정 사실(2026-06 점검)**: Railway 3개 서비스(backend/celery-worker/celery-beat) 모두
+  `HEYGEN_*_BUDGET_USD` **미설정** → `app/core/config.py` 기본값이 그대로 적용된다.
+  `HEYGEN_COST_USD_PER_SECOND` 는 세 서비스 모두 **`0.0083`**(실측 ≈ $0.50/분)으로 일치.
+- **조치(완료)**: `config.py` 기본값
+  `HEYGEN_DAILY_BUDGET_USD = 250.0`, `HEYGEN_MONTHLY_BUDGET_USD = 600.0`.
+  단가 0.0083 기준이라 월 600 은 약 1,200분 여유 → 20명 베타에 충분.
+- `QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR`(8) 유지.
+- **주의**: 이 전역 $ 브레이커는 `service="heygen"` 만 합산 → **VisionStory(본인 얼굴) 비용은
+  포함 안 됨.** VisionStory 는 별도 $ 브레이커가 없다. 그 공백은 아래 C-2(재렌더 횟수 상한)가 메운다.
+
+#### C-2. 강의당 아바타 재렌더 상한  *(신규 — 배포 전 필수, 마이그레이션 `0057`)*
+**문제**: 월 렌더 쿼터(`QA_AVATAR_MONTHLY_RENDERS_PER_INSTRUCTOR`)는 **"배포된 강의 수"** 를 세지
+**"재렌더 횟수"** 를 세지 않는다. 같은 강의를 결과가 맘에 안 들어 여러 번 다시 뽑으면 슬롯은 1로
+치지만 **비용은 매번 발생**한다. 특히 VisionStory(본인 얼굴, $ 브레이커 없음)는 이 재렌더 폭주를
+막을 장치가 전무.
+
+→ **강의 단위로 아바타 렌더 "횟수" 자체에 상한**을 둔다. **HeyGen(퍼블릭)·VisionStory(본인 얼굴)
+둘 다 동일 적용.**
+
+**규칙**:
+- 설정 `AVATAR_RERENDER_MAX_PER_LECTURE: int = 5` (`config.py`). **첫 제작 1 + 재제작 4 = 총 5회.**
+  교수자 안내 문구는 "재제작 4회까지".
+- **카운트 단위 = 강의 + 렌더 패스**(개별 클립 아님). 한 번의 "재제작"이 클러스터 3개를 렌더해도 그
+  패스는 **1로 센다.** 제공자(heygen/visionstory) 구분 없이 그 강의의 아바타 렌더 패스 총합.
+- **성공(과금된) 패스만 카운트.** `status=failed`/`cancelled` 은 제외(기존 쿼터 정책과 동일,
+  2026-06-16). 본인 잘못 아닌 실패로 교수자가 막히지 않게.
+- **면제**: `QA_AVATAR_UNLIMITED_EMAILS`(계정주·테스트 계정) 재사용 → 무제한.
+- **저장/카운트**: 마이그레이션 `0057` 로 `lectures.avatar_render_count INT NOT NULL DEFAULT 0` 추가.
+  아바타 렌더 패스가 **성공 완료될 때**(웹훅/폴링 완료 경로)에 +1. (완료 전 다발 제출 in-flight edge 는
+  전역 $ 브레이커 + 교수자 월 쿼터로 2차 방어 — 베타 허용.)
+- **게이트 지점**: 강의 아바타 렌더 제출 진입부(`budget.assert_qa_render_budget` 호출 자리 인근)에
+  `assert_avatar_rerender_quota(db, lecture_id)` 추가. 초과 시 신규 예외
+  `AvatarRerenderQuotaError`(`BudgetExceededError` 계열) → API 가 명확한 4xx + 메시지 반환.
+- **운영자 오버라이드**: `POST /api/v1/admin/lectures/{lecture_id}/reset-avatar-rerender`
+  (`require_admin`) 로 카운터 0 리셋 → 베타에서 계정주가 개별 허용. 이 행위는 **E 감사 로그에 기록**
+  (`action="lecture.reset_avatar_rerender"`).
+
+**프론트 2단계 안내**:
+- **사전**(아바타/스튜디오 페이지): "본인/표준 아바타 수정은 **강의당 재제작 4회**로 제한됩니다.
+  성공한 제작만 카운트되니 신중히 진행해 주세요." + 남은 횟수 표시.
+- **상한 도달**(차단): "이 강의의 아바타 제작 횟수를 모두 사용했습니다. 추가 제작이 필요하면 운영자에게
+  문의해 주세요."
 
 ### D. 활성화 퍼널  *(read only, 마이그레이션 없음)*
 **신규 엔드포인트** `GET /api/v1/admin/funnel` — 단계별 카운트(코호트 필터 선택):
@@ -222,6 +258,7 @@ ClassAuto 디자인 토큰을 그대로 따른다. 추가할 화면:
 0054  feedbacks                   (F)
 0055  cohort + consent 컬럼        (G)  # users.cohort, users.beta_consented_at, professor_invites.cohort
 0056  ix_platform_cost_logs_created_at  (B, 선택/성능)
+0057  lectures.avatar_render_count      (C-2)  # INT NOT NULL DEFAULT 0
 ```
 각 파일은 기존 `00XX_*.py` 형식(Revision ID/Revises/한글 docstring/upgrade·downgrade) 준수.
 적용: `docker compose exec backend alembic upgrade head`.
@@ -237,7 +274,11 @@ ClassAuto 디자인 토큰을 그대로 따른다. 추가할 화면:
 - [ ] 역할 변경/유저 삭제/초대 생성·삭제가 `admin_audit_logs` 에 1행씩 남음.
 - [ ] 교수·학생이 `POST /api/v1/feedback` 제출 → `/admin/feedback` 에 노출.
 - [ ] 신규 교수자 가입 시 `cohort` 설정 + `beta_consented_at` 기록(동의 없이는 가입 불가).
-- [ ] `.env.production` 의 HeyGen 예산값이 베타 규모로 상향됨(서킷브레이커 조기 차단 없음).
+- [ ] HeyGen 예산값이 베타 규모로 상향됨(C-1: config.py 기본 250/600, Railway 미설정 확인).
+- [ ] 강의당 아바타 재렌더 6회째(첫 1+재제작 5) 시도 시 `AvatarRerenderQuotaError` 로 차단,
+      성공 5회까지만 허용. **실패/취소 렌더는 카운트 안 됨.** HeyGen·VisionStory 동일 동작.
+- [ ] 면제 계정(`QA_AVATAR_UNLIMITED_EMAILS`)은 재렌더 무제한.
+- [ ] `POST /admin/lectures/{id}/reset-avatar-rerender` 로 카운터 리셋 + 감사 로그 1행.
 - [ ] `alembic upgrade head` 무오류, 기존 테스트 스위트 그린.
 
 ---
@@ -245,4 +286,7 @@ ClassAuto 디자인 토큰을 그대로 따른다. 추가할 화면:
 ## 6. 범위 외 (이번 작업 아님)
 - 사용자 임퍼서네이션("이 유저로 보기") — 겨울 수정 때 검토.
 - 결제/구독 로직 변경, 신규 가격 정책.
-- 교수자별 **개별 $ 하드캡**(현재 전역 $ 브레이커 + 교수자별 렌더 "수" 한도로 충분, 베타 한정).
+- 교수자별 **개별 $ 하드캡** — 베타 한정으로 보류. 재렌더 폭주는 C-2(강의당 횟수 상한)가 막고,
+  전체 비용은 전역 $ 브레이커(HeyGen) + 교수자 월 쿼터로 충분.
+- **VisionStory 전용 $ 서킷브레이커** — 보류. C-2 의 강의당 재렌더 상한 + 교수자 월 쿼터로
+  본인 얼굴 비용이 횟수 기준으로 봉인되므로 베타엔 불필요. 정식 런칭 전 사용량 보고 재검토.
