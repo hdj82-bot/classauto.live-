@@ -167,6 +167,9 @@ export const authApi = {
     school?: string;
     department?: string;
     student_number?: string;
+    // G(스펙 13): 교수자 베타 모니터링 동의. 백엔드가 교수자 가입 시 필수로 검증한다
+    // (미동의 422). 학생 가입은 이 값과 무관.
+    beta_consented?: boolean;
   }) => api.post<{ access_token: string }>("/api/auth/complete-profile", body),
 
   // refresh_token 쿠키는 서버가 만료 처리하므로 body 불필요
