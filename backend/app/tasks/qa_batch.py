@@ -498,6 +498,53 @@ def _mark_cluster_failed(db, cluster_key, error: str | None) -> None:
     db.flush()
 
 
+def _record_qa_render_cost(rep, *, is_vs: bool, duration, mock: bool) -> None:
+    """완료된 Q&A 아바타 렌더 1건(클러스터 대표)의 비용을 platform_cost_logs 에 적재.
+
+    QA 렌더는 VideoRender 가 없어 render_cost_logs(video_render_id FK)에 못 들어가,
+    그동안 어느 비용 테이블에도 기록되지 않아 운영자 비용 대시보드(/admin/costs·
+    beta-overview)가 QA 렌더 비용을 **과소집계**했다. lecture_id 키의 CostLog
+    (category=AVATAR_QA)로 적재해 두 비용 테이블 합산(스펙 13 §B)에 자동 포함시킨다.
+
+    - 클러스터 형제는 같은 클립을 공유하므로 **대표 행 1건당 1회**만 기록(비용=클립 1개).
+    - rendering→ready 전이 시점에만 호출돼(이후 폴링은 rendering 쿼리에서 빠짐) 사실상 멱등.
+    - **별도 세션으로 커밋**(record_once_committed 패턴) — 비용 기록 실패가 배치 본
+      트랜잭션(ready 전이)을 오염시키지 않게 격리한다.
+    - MOCK 은 실비용 0 → 기록 생략. duration 미상이면 estimate 가 0 을 반환(0 행도 무방).
+    """
+    if mock or rep.lecture_id is None:
+        return
+    from app.models.cost_log import CostCategory, CostLog
+    from app.services.pipeline.heygen import estimate_cost_usd as _heygen_cost
+    from app.services.pipeline.visionstory import estimate_cost_usd as _vs_cost
+
+    provider = "visionstory" if is_vs else "heygen"
+    cost = (_vs_cost(duration) if is_vs else _heygen_cost(duration)) or 0.0
+    lecture_id = rep.lecture_id
+    rep_id = rep.id
+    cluster_key = rep.cluster_key or ""
+    sdb = SyncSessionLocal()
+    try:
+        sdb.add(
+            CostLog(
+                lecture_id=lecture_id,
+                category=CostCategory.avatar_qa,
+                model=provider,
+                cost_usd=float(cost),
+                memo=f"qa_avatar cache={rep_id} cluster={cluster_key}",
+            )
+        )
+        sdb.commit()
+    except Exception as exc:  # noqa: BLE001 — 비용 기록 실패가 렌더 완료를 막지 않게.
+        sdb.rollback()
+        logger.warning(
+            "Q&A 렌더 비용 기록 실패(무시): cache_id=%s, provider=%s, error=%s",
+            rep_id, provider, exc,
+        )
+    finally:
+        sdb.close()
+
+
 def _poll_inflight(loop, db) -> tuple[int, int]:
     """status=rendering 인 대표 행(heygen_job_id 보유)을 폴링해 ready/failed 로 전이.
 
@@ -539,6 +586,7 @@ def _poll_inflight(loop, db) -> tuple[int, int]:
                     s3_svc.upload_from_url(video_url, str(rep.lecture_id))
                 )
             _mark_cluster_ready(db, rep, s3_url, duration)
+            _record_qa_render_cost(rep, is_vs=is_vs, duration=duration, mock=mock)
             completed += 1
         elif status_data.get("status") == "failed":
             _mark_cluster_failed(db, rep.cluster_key, status_data.get("error", "HeyGen Q&A 렌더 실패"))
