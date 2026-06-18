@@ -26,16 +26,16 @@ export default function AttentionScore({ data }: { data: AttentionSummary | null
     return <EmptyState title={t("attention.empty")} description={t("attention.emptyDesc")} />;
   }
 
-  // 도넛 — 둘레를 분포 비율로 나눠 stroke-dasharray 로 그린다.
+  // 도넛 — 둘레를 분포 비율로 나눠 stroke-dasharray 로 그린다. 누적 오프셋은
+  // 가변 변수 재할당(React 컴파일러 금지) 대신 '앞 세그먼트 합'으로 계산한다.
   const R = 52;
   const C = 2 * Math.PI * R;
-  let offset = 0;
-  const arcs = SEGMENTS.map((seg) => {
-    const count = dist![seg.key];
+  const counts = SEGMENTS.map((seg) => dist![seg.key]);
+  const arcs = SEGMENTS.map((seg, i) => {
+    const count = counts[i];
     const frac = count / total;
-    const arc = { ...seg, count, dash: frac * C, gap: C - frac * C, off: offset };
-    offset += frac * C;
-    return arc;
+    const prevFrac = counts.slice(0, i).reduce((a, b) => a + b, 0) / total;
+    return { ...seg, count, dash: frac * C, gap: C - frac * C, off: prevFrac * C };
   });
 
   const scoreColor =
