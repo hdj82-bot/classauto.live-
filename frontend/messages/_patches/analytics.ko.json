@@ -21,10 +21,33 @@
       "attendance": "출석 분포",
       "studentGrid": "학생 개별 진척도",
       "scores": "정답률 히트맵",
+      "summary": "요약",
       "engagement": "학습자 참여도",
+      "attention": "집중 분석",
       "watch": "재생 구간 히트맵",
       "qa": "Q&A 트렌드",
       "cost": "비용 미터"
+    },
+    "attention": {
+      "score": "학급 평균 집중도",
+      "scoreUnit": "점",
+      "studentCount": "{count}명",
+      "empty": "아직 집중도 데이터가 없습니다.",
+      "emptyDesc": "학생이 강의를 시청하면 집중/보통/산만 분포와 점수가 표시됩니다.",
+      "bucket": {
+        "focused": "집중",
+        "moderate": "보통",
+        "distracted": "산만"
+      }
+    },
+    "summary": {
+      "wrongValue": "{count}회",
+      "wrongLabel": "최다 오답",
+      "wrongSub": "오답 문항 {count}개",
+      "noResponseLabel": "무반응 이벤트",
+      "noResponseSub": "역질문에 반응 없음",
+      "outOfScopeLabel": "범위 외 질문",
+      "outOfScopeSub": "강의 자료 밖 질문"
     },
     "studentGrid": {
       "empty": "아직 학생 진척 데이터가 없습니다.",
