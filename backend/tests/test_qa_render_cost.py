@@ -47,14 +47,17 @@ def _lecture(db) -> uuid.UUID:
         email=f"{uuid.uuid4().hex[:6]}@t.ac.kr", name="교수", role=UserRole.professor,
         is_active=True,
     )
-    db.add(prof); db.flush()
+    db.add(prof)
+    db.flush()
     course = Course(id=uuid.uuid4(), instructor_id=prof.id, title="강좌")
-    db.add(course); db.flush()
+    db.add(course)
+    db.flush()
     lec = Lecture(
         id=uuid.uuid4(), course_id=course.id, title="강의",
         slug=f"slug-{uuid.uuid4().hex}", order=1,
     )
-    db.add(lec); db.commit()
+    db.add(lec)
+    db.commit()
     return lec.id
 
 
