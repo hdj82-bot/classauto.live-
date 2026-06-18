@@ -19,11 +19,32 @@
     "lectureRetry": "Retry",
     "section": {
       "attendance": "Attendance distribution",
+      "studentGrid": "Per-student progress",
       "scores": "Accuracy heatmap",
       "engagement": "Learner engagement",
       "watch": "Watch heatmap",
       "qa": "Q&A trend",
       "cost": "Cost meter"
+    },
+    "studentGrid": {
+      "empty": "No student progress data yet.",
+      "emptyDesc": "Once students start the lecture, per-student progress appears here.",
+      "filterAll": "All ({count})",
+      "filterIncomplete": "Incomplete ({count})",
+      "filterNotStarted": "Not started ({count})",
+      "filterAtRisk": "At risk ({count})",
+      "sortWeakest": "Weakest first",
+      "sortName": "By name",
+      "progress": "Progress",
+      "badgeLive": "Live",
+      "badgeVod": "VOD",
+      "statusCompleted": "Completed",
+      "statusInProgress": "In progress",
+      "statusNotStarted": "Not started",
+      "riskAtRisk": "At risk",
+      "riskHint": "Under 50% progress or not started",
+      "noNumber": "No ID",
+      "noName": "No name"
     },
     "attendance": {
       "summaryTotal": "Total",
