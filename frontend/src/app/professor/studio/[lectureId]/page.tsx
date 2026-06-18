@@ -1287,7 +1287,12 @@ export default function StudioWizardPage() {
     );
     if (!ok) return;
     try {
-      await renderSeedQuestions(lectureId, { force: true });
+      // C-2: 성공 응답에 강의당 남은 제작 횟수가 실려 온다. 무제한 계정은 매우 큰
+      // sentinel(9999) 이므로 그때는 안내하지 않는다.
+      const res = await renderSeedQuestions(lectureId, { force: true });
+      if (res.avatarRerenderMax > 0 && res.avatarRerenderRemaining < 100) {
+        toast(`아바타 제작 ${res.avatarRerenderRemaining}회 남았습니다.`, "info");
+      }
       setSeedAwaitingRender(true);
       void reloadSeedQuestions();
       // 슬라이드는 이미 완성 — 모달은 Q&A 진행만 보인다.
@@ -1299,11 +1304,20 @@ export default function StudioWizardPage() {
       setGenCompleted(slides.length);
       setGenOpen(true);
       setRenderPollNonce((n) => n + 1);
-    } catch {
-      toast(
-        "Q&A 답변 강제 재생성을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
-        "error",
-      );
+    } catch (err) {
+      // C-2: 강의당 제작 횟수 상한 도달 시 백엔드가 429 + 명확한 사유를 준다.
+      // 그 사유를 그대로 보여 주고(일반 오류로 뭉뚱그리지 않음), 그 외는 일반 메시지.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response
+        ?.data?.detail;
+      if (status === 429 && detail) {
+        toast(detail, "error");
+      } else {
+        toast(
+          "Q&A 답변 강제 재생성을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
+          "error",
+        );
+      }
     }
   }, [lectureId, videoId, slides.length, reloadSeedQuestions, toast]);
 
