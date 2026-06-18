@@ -1,12 +1,54 @@
 # 배포 진행 상황 (Deployment Progress)
 
 > 이 문서는 [DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) 진행 체크포인트입니다.
-> 마지막 업데이트: **2026-06-05**
+> 마지막 업데이트: **2026-06-18**
 >
-> ⚠️ **읽는 법(2026-06-05)**: 이 문서는 변경 이력 누적형입니다. **최신 실상태의 단일 기준은 바로 아래
-> "2026-06-05 현재 상태(SUPERSEDES)" 단락**입니다. 그 아래 2026-05-16/05-17 기록(특히 "Phase 5
-> 스모크 = 단일 블로커" 류 서술)은 **당시 시점의 역사 기록**이며, 프로덕션이 라이브가 된 현재는
-> 그 "단일 블로커" 프레이밍이 **더 이상 유효하지 않습니다**(아래 정정 참조).
+> ⚠️ **읽는 법**: 이 문서는 변경 이력 누적형입니다. **최신 실상태의 단일 기준은 바로 아래
+> "2026-06-18 현재 상태(SUPERSEDES)" 단락**입니다. 그 아래 2026-06-05·05-16/05-17 기록은
+> **당시 시점의 역사 기록**입니다.
+
+---
+
+## 2026-06-18 현재 상태 (SUPERSEDES — 이 단락이 최신 단일 기준)
+
+**프로덕션 라이브 유지.** 06-05 이후 베타 운영자 콘솔(스펙 13)과 분석 대시보드(스펙 11)
+보강이 들어갔다. 2026년 8월 교수진 베타가 목표.
+
+**스펙 13 — 베타 운영자 콘솔 (A~G) 완료**
+- 백엔드 A~G (#513): 테스터 사용량 롤업·비용 통합·활성화 퍼널·감사 로그·인앱 피드백·
+  코호트/동의 컬럼·HeyGen 예산 250/600 상향.
+- C-2 강의당 아바타 재제작 상한 (#514·#516): `lectures.avatar_render_count`(0057) +
+  게이트(첫 제작 1+재제작 4=5회) + 재제작 엔드포인트 429 + 운영자 리셋. **VisionStory(본인
+  얼굴)는 전역 $ 브레이커가 없어 이 횟수 상한이 유일한 방어선.** 성공 제출 패스만 카운트.
+- G 동의 (#515): complete-profile 에 베타 모니터링 동의 체크박스 — **이 머지 전까지 교수자
+  신규 가입이 백엔드 422 로 막혀 있던 것을 해소(핫픽스)**.
+- 운영자 콘솔 프론트 (#518): `/admin/beta`(개요 테이블+퍼널+드릴다운)·`/admin/feedback`
+  (인박스)·`/admin/audit`(감사 로그) + 전역 피드백 버튼(교수/학생 공통).
+
+**스펙 11 — 분석 대시보드 보강**
+- E 학생 개별 진척도 그리드 + 위험 배지 (#517).
+- F 재생 구간 히트맵 계측 + D 집중도 점수(0~100·도넛) + G 요약 카드 (#519, **머지 대기**).
+  - F: 학생 플레이어가 watch-events 를 보내지 않던 갭을 PlayerV2 계측으로 연결(fire-and-forget).
+  - D: `dashboard._attention_score`(가중 감점식, 상수 문서화) → `engagement.summary.attention`.
+
+**관측**: Prometheus 3종(CELERY_TASK_COUNT·EXTERNAL_API_CALLS·EXTERNAL_API_DURATION)은
+**이미 와이어링 완료**(celery 시그널 + `@track_external_api`). 05-16 의 "死코드" 메모는 해소됨.
+
+**알려진 갭 / 후속**
+- ⚠️ **QA 아바타 렌더 비용 미기록** — HeyGen·VisionStory Q&A 렌더는 `RenderCostLog`
+  (video_render_id FK)에 들어갈 수 없고 어디에도 비용이 기록되지 않는다. 그래서 운영자 비용
+  대시보드(/admin/costs·beta-overview)가 **QA 렌더 비용을 누락(과소 집계)**한다. 해소안:
+  QA 렌더 완료(`qa_batch._poll_inflight`) 시 `platform_cost_logs`(CostLog, lecture_id 키)에
+  신규 카테고리(예: `AVATAR_QA`)로 기록(provider별 `estimate_cost_usd(duration)`). 이게
+  **VisionStory $ 서킷 브레이커의 선행 조건**이기도 하다(브레이커가 합산할 데이터 확보).
+- **VisionStory 전용 $ 브레이커** — 위 비용 기록 위에서 HeyGen 브레이커(`assert_heygen_budget`)
+  와 동형으로 추가. 스펙 13 §6 이 정식 런칭 전으로 보류, C-2 가 베타 폭주를 이미 차단하므로
+  베타엔 불요. 정식 전 사용량 보고 재검토.
+- 스펙 11 후속(테이블 필요): C 성취율 추이(`cohort_daily_metrics`+일배치), B 전주 대비 델타,
+  H-3 목표 달성률(`learning_goals`), H-4 격려 액션(`instructor_actions`), G 빈번 질문어(한/중
+  키워드 추출), A PDF export.
+- 외부 업타임 모니터를 `/health/deep` 에 연결(워커 사망 감지) — [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) §8.
+- React #418 hydration(추적 [#167](https://github.com/hdj82-bot/classauto.live-/issues/167)) — recoverable, 하드 블로커 아님.
 
 ---
 
