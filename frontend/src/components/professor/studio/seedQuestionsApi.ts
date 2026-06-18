@@ -123,6 +123,9 @@ export async function getSeedQuestions(
       max: 3,
       usedThisMonth: 0,
       remaining: 0,
+      avatarRenderCount: 0,
+      avatarRerenderRemaining: 0,
+      avatarRerenderMax: 0,
       deferred: true,
     };
   }
