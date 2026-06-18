@@ -220,7 +220,7 @@ async def test_audit_logs_role_change_and_delete(client, admin, db, student):
     assert "user.update_role" in actions
     assert "user.delete" in actions
     # actor 이메일 스냅샷이 남는다.
-    role_log = next(l for l in resp.json()["logs"] if l["action"] == "user.update_role")
+    role_log = next(lg for lg in resp.json()["logs"] if lg["action"] == "user.update_role")
     assert role_log["actor_email"] == admin.email
     assert role_log["detail"]["to"] == "professor"
 
@@ -248,7 +248,7 @@ async def test_audit_logs_invite_create_delete(client, admin, db):
     )
     assert resp.status_code == 200
     assert resp.json()["total"] >= 1
-    assert all(l["action"] == "invite.create" for l in resp.json()["logs"])
+    assert all(lg["action"] == "invite.create" for lg in resp.json()["logs"])
 
 
 async def test_audit_forbidden(client, professor):
