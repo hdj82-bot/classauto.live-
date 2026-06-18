@@ -399,7 +399,35 @@
     "betaDrilldownConsentNo": "미동의",
     "betaDrilldownLoadError": "테스터 상세를 불러올 수 없습니다.",
     "betaDrilldownEmpty": "강의가 없습니다.",
-    "betaNever": "—"
+    "betaNever": "—",
+    "feedbackTitle": "피드백",
+    "feedbackLoadingLabel": "피드백 로딩 중...",
+    "feedbackLoadError": "피드백을 불러올 수 없습니다.",
+    "feedbackStatusError": "상태 변경에 실패했습니다.",
+    "feedbackFilterAll": "전체 상태",
+    "feedbackEmpty": "아직 피드백이 없습니다.",
+    "feedbackStatus": {
+      "open": "신규",
+      "triaged": "확인됨",
+      "resolved": "해결됨"
+    }
+  },
+  "feedback": {
+    "buttonLabel": "피드백",
+    "title": "피드백 보내기",
+    "subtitle": "버그·개선 아이디어·헷갈린 점을 알려주세요. 베타 운영자에게 바로 전달됩니다.",
+    "placeholder": "무엇이든 적어주세요…",
+    "submit": "보내기",
+    "submitting": "보내는 중...",
+    "close": "닫기",
+    "thanks": "소중한 피드백 감사합니다!",
+    "error": "전송에 실패했습니다. 다시 시도해주세요.",
+    "category": {
+      "bug": "버그",
+      "idea": "아이디어",
+      "confusing": "헷갈려요",
+      "other": "기타"
+    }
   },
   "demo": {
     "meta": {

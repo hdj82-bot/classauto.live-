@@ -399,7 +399,35 @@
     "betaDrilldownConsentNo": "Not consented",
     "betaDrilldownLoadError": "Failed to load tester detail.",
     "betaDrilldownEmpty": "No lectures.",
-    "betaNever": "—"
+    "betaNever": "—",
+    "feedbackTitle": "Feedback",
+    "feedbackLoadingLabel": "Loading feedback...",
+    "feedbackLoadError": "Failed to load feedback.",
+    "feedbackStatusError": "Failed to change status.",
+    "feedbackFilterAll": "All statuses",
+    "feedbackEmpty": "No feedback yet.",
+    "feedbackStatus": {
+      "open": "New",
+      "triaged": "Triaged",
+      "resolved": "Resolved"
+    }
+  },
+  "feedback": {
+    "buttonLabel": "Feedback",
+    "title": "Send feedback",
+    "subtitle": "Tell us about bugs, ideas, or anything confusing. It goes straight to the beta operator.",
+    "placeholder": "Write anything…",
+    "submit": "Send",
+    "submitting": "Sending...",
+    "close": "Close",
+    "thanks": "Thanks for your feedback!",
+    "error": "Failed to send. Please try again.",
+    "category": {
+      "bug": "Bug",
+      "idea": "Idea",
+      "confusing": "Confusing",
+      "other": "Other"
+    }
   },
   "demo": {
     "meta": {
