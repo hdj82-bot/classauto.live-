@@ -11,6 +11,7 @@ from app.api.deps import (
     get_current_user_optional,
     require_professor,
 )
+from app.core.config import settings
 from app.db.session import SyncSessionLocal, get_db
 from app.models.embedding import SlideEmbedding
 from app.models.user import User
@@ -236,12 +237,18 @@ async def get_lecture_video(
 # 세션으로 하고, seed 작업은 별도 동기 세션에서 실행한다(qa.py ask_question 패턴).
 
 
-def _seed_questions_response(sdb, instructor_id, rows) -> SeedQuestionsResponse:
-    """현재 사전 질문 행 + 이번 달 렌더 한도/사용량을 응답으로 투영.
+def _seed_questions_response(
+    sdb, instructor_id, rows, lecture_id=None
+) -> SeedQuestionsResponse:
+    """현재 사전 질문 행 + 이번 달 렌더 한도/사용량 + 강의당 제작 횟수를 응답으로 투영.
 
     answer 는 교수자가 입력한 사전 대답(없으면 ""=RAG 자동 생성 예정).
     preview_url 은 ready 인 행의 클립 presigned URL(점검용 재생).
+    ``lecture_id`` 가 주어지면(없으면 rows 에서 추론) 강의당 아바타 제작 횟수(C-2)를
+    함께 투영해 프론트가 "재제작 N회 남음"·차단 안내에 쓰게 한다.
     """
+    if lecture_id is None and rows:
+        lecture_id = rows[0].lecture_id
     items = [
         SeedQuestionItem(
             id=str(r.id),
@@ -256,11 +263,27 @@ def _seed_questions_response(sdb, instructor_id, rows) -> SeedQuestionsResponse:
         )
         for r in rows
     ]
+    from app.services.pipeline.budget import (  # noqa: PLC0415
+        avatar_render_count,
+        avatar_rerender_remaining,
+    )
+
+    rerender_count = (
+        avatar_render_count(sdb, lecture_id) if lecture_id is not None else 0
+    )
+    rerender_remaining = (
+        avatar_rerender_remaining(sdb, lecture_id, instructor_id)
+        if lecture_id is not None
+        else 0
+    )
     return SeedQuestionsResponse(
         questions=items,
         max=qa_avatar.SEED_QUESTIONS_MAX,
         used_this_month=qa_renders_used_this_month(sdb, instructor_id),
         remaining=qa_render_quota_remaining(sdb, instructor_id),
+        avatar_render_count=rerender_count,
+        avatar_rerender_remaining=rerender_remaining,
+        avatar_rerender_max=settings.AVATAR_RERENDER_MAX_PER_LECTURE,
     )
 
 
@@ -285,7 +308,7 @@ async def get_seed_questions(
     def _work():
         with SyncSessionLocal() as sdb:
             rows = qa_avatar.list_seed_questions(sdb, lecture_id)
-            return _seed_questions_response(sdb, instructor_id, rows)
+            return _seed_questions_response(sdb, instructor_id, rows, lecture_id)
 
     return await loop.run_in_executor(None, _work)
 
@@ -318,7 +341,7 @@ async def put_seed_questions(
                 sdb, lecture_id, instructor_id, items
             )
             sdb.commit()
-            return _seed_questions_response(sdb, instructor_id, rows)
+            return _seed_questions_response(sdb, instructor_id, rows, lecture_id)
 
     return await loop.run_in_executor(None, _work)
 
@@ -446,6 +469,27 @@ async def render_seed_questions_endpoint(
             detail="강의 파이프라인이 아직 처리되지 않았습니다.",
         )
 
+    # ── C-2: 강의당 아바타 제작 횟수 상한 (docs/planning/13 §C-2) ──
+    # 면제 계정(QA_AVATAR_UNLIMITED_EMAILS)·상한 비활성(<=0)은 통과. 첫 제작(count 0)은
+    # 항상 통과하고, 누적 제작 패스가 상한에 도달하면 재제작을 4xx 로 막는다. 카운트는
+    # 렌더 태스크(qa_batch._render_seed_questions)가 패스 성공 제출 시 +1 한다(여기서
+    # 올리지 않음 — 제출 실패 패스를 소모하지 않기 위해).
+    _email = (professor.email or "").strip().lower()
+    _cap = settings.AVATAR_RERENDER_MAX_PER_LECTURE
+    if (
+        _cap
+        and _cap > 0
+        and _email not in settings.qa_avatar_unlimited_email_set
+        and (lecture.avatar_render_count or 0) >= _cap
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "이 강의의 아바타 제작 횟수를 모두 사용했습니다. 추가 제작이 "
+                "필요하면 운영자에게 문의해 주세요."
+            ),
+        )
+
     if force:
         # 완성(ready)/진행(rendering) 클립을 pending 으로 되돌린다(렌더 아바타/음성 변경
         # 반영). 렌더 태스크가 pending 을 현재 아바타로 다시 만든다. 아바타 변경 PATCH 와
@@ -466,7 +510,7 @@ async def render_seed_questions_endpoint(
     def _work() -> SeedQuestionsResponse:
         with SyncSessionLocal() as sdb:
             rows = qa_avatar.list_seed_questions(sdb, lecture_id)
-            return _seed_questions_response(sdb, instructor_id, rows)
+            return _seed_questions_response(sdb, instructor_id, rows, lecture_id)
 
     return await loop.run_in_executor(None, _work)
 
