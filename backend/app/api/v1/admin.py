@@ -7,16 +7,19 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import extract, func, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
 from app.core.redis import get_redis
 from app.db.session import get_db
+from app.models.admin_audit_log import AdminAuditLog
 from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.user import User, UserRole
-from app.models.video_render import RenderCostLog, VideoRender
+from app.models.video_render import VideoRender
+from app.services import admin_analytics
+from app.services.admin_audit import log_admin_action
 
 logger = logging.getLogger(__name__)
 
@@ -146,20 +149,47 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
 
+    old_role = user.role.value
+    old_is_active = user.is_active
+    role_changed = False
+
     if role is not None:
         try:
-            user.role = UserRole(role)
+            new_role = UserRole(role)
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"유효하지 않은 역할: {role}. (professor, student, admin)",
             )
+        role_changed = new_role.value != old_role
+        user.role = new_role
 
     if is_active is not None:
         user.is_active = is_active
 
     await db.flush()
     await db.commit()
+
+    # E: god-mode 추적 — 역할 변경/활성 상태 변경을 감사 로그에 남긴다.
+    if role_changed:
+        await log_admin_action(
+            db,
+            _admin,
+            "user.update_role",
+            target_type="user",
+            target_id=str(user.id),
+            detail={"email": user.email, "from": old_role, "to": user.role.value},
+        )
+    if is_active is not None and is_active != old_is_active:
+        await log_admin_action(
+            db,
+            _admin,
+            "user.set_active",
+            target_type="user",
+            target_id=str(user.id),
+            detail={"email": user.email, "from": old_is_active, "to": user.is_active},
+        )
+
     return {
         "id": str(user.id),
         "email": user.email,
@@ -193,6 +223,17 @@ async def delete_user(
     user.is_active = False
     await db.flush()
     await db.commit()
+
+    # E: god-mode 추적 — 유저 (소프트)삭제를 감사 로그에 남긴다.
+    await log_admin_action(
+        db,
+        _admin,
+        "user.delete",
+        target_type="user",
+        target_id=str(user.id),
+        detail={"email": user.email},
+    )
+
     return {
         "id": str(user.id),
         "email": user.email,
@@ -215,50 +256,28 @@ async def get_costs(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """전체 API 비용 집계 (서비스별/월별, 최근 12개월).
+    """전체 API 비용 집계 (서비스별/월별, 최근 12개월) — B: 두 비용 테이블 통합.
 
-    T6: ``WHERE created_at >= today - 365d`` 로 입력 행 수를 제한.
-    월별/서비스별 집계 모두 동일 윈도우 적용 — by_service 가 by_month 합과 일치하도록.
-    인덱스 ``ix_render_cost_logs_created_at`` (0014) 가 시간 필터 핫 패스를 백킹.
+    ``render_cost_logs`` (HeyGen/VisionStory 등) 와 ``platform_cost_logs``
+    (LLM/STT/TTS 등)를 **모두 합산**한다. 종전엔 render 만 집계해 LLM 비용이
+    빠졌다. 각 by_service 행에 ``source``(render/platform)를 남겨 검증 가능하게 한다.
+
+    T6: ``WHERE created_at >= today - 365d`` 로 입력 행 수를 제한(두 테이블 동일 윈도우).
+    인덱스 ``ix_render_cost_logs_created_at`` (0014) / ``ix_platform_cost_logs_created_at``
+    (0056) 가 시간 필터 핫 패스를 백킹.
     """
     start_date = datetime.now(timezone.utc) - timedelta(days=COSTS_WINDOW_DAYS)
-
-    # 서비스별 합계 — 최근 12개월 윈도우
-    by_service_stmt = (
-        select(RenderCostLog.service, func.sum(RenderCostLog.cost_usd))
-        .where(RenderCostLog.created_at >= start_date)
-        .group_by(RenderCostLog.service)
-        .order_by(func.sum(RenderCostLog.cost_usd).desc())
-    )
-    by_service_rows = (await db.execute(by_service_stmt)).all()
-
-    # 월별 합계 — 최근 12개월 (인덱스: render_cost_logs(created_at) — 0014)
-    by_month_stmt = (
-        select(
-            extract("year", RenderCostLog.created_at).label("year"),
-            extract("month", RenderCostLog.created_at).label("month"),
-            func.sum(RenderCostLog.cost_usd).label("total"),
-        )
-        .where(RenderCostLog.created_at >= start_date)
-        .group_by("year", "month")
-        .order_by(text("year DESC, month DESC"))
-        .limit(12)
-    )
-    by_month_rows = (await db.execute(by_month_stmt)).all()
-
-    total_cost = sum(row[1] or 0 for row in by_service_rows)
+    breakdown = await admin_analytics.spend_breakdown(db, since=start_date, month_limit=12)
 
     return {
-        "total_cost_usd": round(total_cost, 4),
+        "total_cost_usd": breakdown["total_cost_usd"],
         "window_days": COSTS_WINDOW_DAYS,
+        # 기존 프론트 호환: service 키 유지 + source 추가(render/platform).
         "by_service": [
-            {"service": row[0], "cost_usd": round(row[1] or 0, 4)}
-            for row in by_service_rows
+            {"service": row["name"], "source": row["source"], "cost_usd": row["cost_usd"]}
+            for row in breakdown["by_service"]
         ],
-        "by_month": [
-            {"year": int(row.year), "month": int(row.month), "cost_usd": round(row.total or 0, 4)}
-            for row in by_month_rows
-        ],
+        "by_month": breakdown["by_month"],
     }
 
 
@@ -352,3 +371,154 @@ async def get_heygen_health(_admin: User = Depends(require_admin)):
     except HeyGenError as e:
         result["error"] = str(e)
     return result
+
+
+# ── A: GET /api/v1/admin/beta-overview ───────────────────────────────────────
+
+
+@router.get("/beta-overview")
+async def get_beta_overview(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    cohort: str | None = Query(default=None),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """베타 테스터(교수자)별 사용량·지출 롤업 (A).
+
+    교수자별 강의/렌더 수 + 이번달·누적·월평균 지출(두 비용 테이블 합산) +
+    마지막 활동. ``?cohort=`` 필터, 페이지네이션.
+    """
+    rows = await admin_analytics.instructor_rollup(db, cohort=cohort)
+    total = len(rows)
+    start = (page - 1) * limit
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "cohort": cohort,
+        "instructors": rows[start : start + limit],
+    }
+
+
+# ── A: GET /api/v1/admin/users/{user_id}/usage ───────────────────────────────
+
+
+@router.get("/users/{user_id}/usage")
+async def get_user_usage(
+    user_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """단일 테스터 드릴다운 — 강의 목록 + 월별 지출 시계열 (A)."""
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다.")
+
+    # 강의 목록(소유 강좌의 강의). 강좌명·발행 여부 포함.
+    lec_rows = (
+        await db.execute(
+            select(
+                Lecture.id,
+                Lecture.title,
+                Lecture.is_published,
+                Lecture.created_at,
+                Lecture.updated_at,
+                Course.title,
+            )
+            .join(Course, Lecture.course_id == Course.id)
+            .where(Course.instructor_id == user_id)
+            .order_by(Lecture.updated_at.desc())
+        )
+    ).all()
+    lectures = [
+        {
+            "id": str(r[0]),
+            "title": r[1],
+            "is_published": r[2],
+            "created_at": r[3].isoformat() if r[3] else None,
+            "updated_at": r[4].isoformat() if r[4] else None,
+            "course_title": r[5],
+        }
+        for r in lec_rows
+    ]
+
+    monthly_spend = await admin_analytics.instructor_monthly_spend(db, user_id)
+    spend_total = sum(m["cost_usd"] for m in monthly_spend)
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "name": user.name,
+        "role": user.role.value,
+        "cohort": user.cohort,
+        "beta_consented_at": user.beta_consented_at.isoformat()
+        if user.beta_consented_at
+        else None,
+        "lectures_count": len(lectures),
+        "lectures": lectures,
+        "spend_total_usd": round(spend_total, 4),
+        "monthly_spend": monthly_spend,
+    }
+
+
+# ── D: GET /api/v1/admin/funnel ──────────────────────────────────────────────
+
+
+@router.get("/funnel")
+async def get_funnel(
+    cohort: str | None = Query(default=None),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """베타 활성화 퍼널 — 5단계 카운트 + 단계별 전이율 (D). ``?cohort=`` 필터."""
+    return await admin_analytics.funnel(db, cohort=cohort)
+
+
+# ── E: GET /api/v1/admin/audit ───────────────────────────────────────────────
+
+
+@router.get("/audit")
+async def list_audit_logs(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    action: str | None = Query(default=None),
+    actor: str | None = Query(default=None, description="actor 이메일 부분 일치"),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """운영자 감사 로그 목록 (E) — 페이지네이션, action/actor 필터."""
+    stmt = select(AdminAuditLog)
+    count_stmt = select(func.count()).select_from(AdminAuditLog)
+
+    filters = []
+    if action:
+        filters.append(AdminAuditLog.action == action)
+    if actor:
+        filters.append(AdminAuditLog.actor_email.ilike(f"%{actor.strip().lower()}%"))
+    for f in filters:
+        stmt = stmt.where(f)
+        count_stmt = count_stmt.where(f)
+
+    total = (await db.execute(count_stmt)).scalar() or 0
+    stmt = stmt.order_by(AdminAuditLog.created_at.desc()).offset((page - 1) * limit).limit(limit)
+    rows = (await db.execute(stmt)).scalars().all()
+
+    return {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "logs": [
+            {
+                "id": str(a.id),
+                "actor_id": str(a.actor_id) if a.actor_id else None,
+                "actor_email": a.actor_email,
+                "action": a.action,
+                "target_type": a.target_type,
+                "target_id": a.target_id,
+                "detail": a.detail,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in rows
+        ],
+    }

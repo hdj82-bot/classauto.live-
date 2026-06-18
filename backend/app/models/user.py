@@ -102,6 +102,15 @@ class User(Base):
     onboarded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # 베타 코호트 태그(예: "2026-08", "2026-09"). 교수자는 초대의 cohort 를 가입 시
+    # 복사받는다(services/invite + auth). NULL = 미분류. 운영자 콘솔의 코호트 필터·
+    # 이탈 분석에 쓴다.
+    cohort: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # 베타 모니터링 동의(PIPA) 시각. 교수자 가입 시 동의 체크 시 기록한다. NULL =
+    # 미동의(베타 동안 교수자는 동의 없이는 가입 불가 — 학생 흐름과 무관).
+    beta_consented_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

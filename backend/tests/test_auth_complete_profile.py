@@ -168,7 +168,8 @@ async def test_complete_profile_rejects_too_long_name(client):
 async def test_complete_profile_professor_with_invite(client, db):
     """교수자 가입 — 유효한 초대(이메일 일치) 가 있으면 가입 성공 + 초대 소비."""
     email = "prof-legacy@test.ac.kr"
-    inv = await create_invite(db, email=email, created_by=None)
+    # G: 초대에 cohort 를 지정 — 가입 시 users.cohort 로 전파되는지 함께 검증.
+    inv = await create_invite(db, email=email, created_by=None, cohort="2026-08")
     token = _temp_token(
         "professor", sub="google-prof-100", email=email,
         name="기본 교수", invite=inv.token,
@@ -179,6 +180,7 @@ async def test_complete_profile_professor_with_invite(client, db):
             "temp_token": token,
             "school": "서울대",
             "department": "중어중문학과",
+            "beta_consented": True,  # G: 교수자 가입은 동의 필수
         },
     )
     assert resp.status_code == 201
@@ -189,6 +191,9 @@ async def test_complete_profile_professor_with_invite(client, db):
     assert user.school == "서울대"
     assert user.department == "중어중문학과"
     assert user.name == "기본 교수"
+    # G: 초대 cohort 가 복사되고 동의 시각이 기록된다.
+    assert user.cohort == "2026-08"
+    assert user.beta_consented_at is not None
     # 초대가 단일 사용 처리됐는지 — used_at/used_by 채워짐.
     refreshed = (
         await db.execute(
@@ -215,6 +220,7 @@ async def test_complete_profile_professor_with_form_name(client, db):
             "school": "경기대",
             "department": "중어중문학과",
             "locale": "ko",
+            "beta_consented": True,  # G: 교수자 가입은 동의 필수
         },
     )
     assert resp.status_code == 201
@@ -272,7 +278,8 @@ async def test_complete_profile_professor_invite_not_reusable(client, db):
     """이미 사용된 초대로 재가입 시도 → 403 (단일 사용)."""
     email = "reuse@test.ac.kr"
     inv = await create_invite(db, email=email, created_by=None)
-    body = {"school": "경기대", "department": "중어중문학과"}
+    # G: 교수자 가입은 동의 필수. (2번째 호출은 초대 재사용으로 동의 검사 전에 403.)
+    body = {"school": "경기대", "department": "중어중문학과", "beta_consented": True}
     token1 = _temp_token(
         "professor", sub="google-prof-202", email=email, invite=inv.token
     )
