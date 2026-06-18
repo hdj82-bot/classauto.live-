@@ -120,8 +120,8 @@ class Settings(BaseSettings):
     # mock 완료 처리 시 사용할 placeholder 영상 URL (비우면 mock 렌더는 완료되지 않음).
     HEYGEN_MOCK_VIDEO_URL: str = ""
     # 예산 서킷 브레이커 — create_video 직전 누적 HeyGen 비용 검사. 0 이면 해당 한도 비활성.
-    HEYGEN_DAILY_BUDGET_USD: float = 3.0
-    HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
+    HEYGEN_DAILY_BUDGET_USD: float = 250.0
+    HEYGEN_MONTHLY_BUDGET_USD: float = 600.0
 
     # ── VisionStory (본인 얼굴 Q&A·미리보기 렌더 — V-Talk) ───────────────────────
     # HeyGen Photo Avatar 는 계정당 3개 한도라 다수 사용자에게 본인 얼굴을 줄 수 없다.
