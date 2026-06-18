@@ -216,3 +216,54 @@ export const userApi = {
   /** 온보딩 안내 영구 스킵(다시 보지 않기). */
   markOnboarded: () => api.post<MeResponse>("/api/v1/users/me/onboarded"),
 };
+
+export interface FeedbackItem {
+  id: string;
+  user_id: string | null;
+  user_email: string | null;
+  role: string;
+  category: string;
+  message: string;
+  lecture_id: string | null;
+  page: string | null;
+  status: "open" | "triaged" | "resolved";
+  created_at: string;
+}
+
+// 인앱 피드백(스펙 13 · F). 제출은 로그인 유저(교수/학생) 공통, 목록/상태변경은
+// 운영자 전용(백엔드 require_admin 강제).
+export const feedbackApi = {
+  submit: (body: {
+    category: string;
+    message: string;
+    lecture_id?: string;
+    page?: string;
+  }) => api.post<FeedbackItem>("/api/v1/feedback", body),
+  adminList: (params: { page?: number; status?: string; category?: string; role?: string }) =>
+    api.get<{ total: number; page: number; limit: number; feedback: FeedbackItem[] }>(
+      "/api/v1/admin/feedback",
+      { params },
+    ),
+  adminSetStatus: (id: string, status: string) =>
+    api.patch<FeedbackItem>(`/api/v1/admin/feedback/${encodeURIComponent(id)}`, { status }),
+};
+
+export interface AuditLogItem {
+  id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+// 운영자 감사 로그(스펙 13 · E) — 읽기 전용. require_admin.
+export const auditApi = {
+  list: (params: { page?: number; action?: string; actor?: string }) =>
+    api.get<{ total: number; page: number; limit: number; logs: AuditLogItem[] }>(
+      "/api/v1/admin/audit",
+      { params },
+    ),
+};
