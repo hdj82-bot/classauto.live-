@@ -8,6 +8,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useI18n } from "@/contexts/I18nContext";
 import {
   AttendanceChart,
+  StudentProgressGrid,
   ScoreHeatmap,
   EngagementCurve,
   CsvExportButton,
@@ -229,6 +230,15 @@ export default function LectureAnalyticsPage() {
       >
         {attendance ? (
           <AttendanceChart data={attendance} />
+        ) : (
+          <FallbackPanel sectionKey="attendance" />
+        )}
+      </Section>
+
+      {/* E (스펙 11 §E): 학생 개별 진척도 그리드 — attendance 데이터 재활용. */}
+      <Section id="student-grid" title={t("section.studentGrid")}>
+        {attendance ? (
+          <StudentProgressGrid data={attendance} />
         ) : (
           <FallbackPanel sectionKey="attendance" />
         )}
