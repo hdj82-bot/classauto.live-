@@ -605,6 +605,122 @@ def test_failed_renders_do_not_consume_lecture_cap(sync_db, mock_render, monkeyp
     )
 
 
+# ── 3-b. C-2: 강의당 아바타 제작(렌더 패스) 횟수 상한 ──────────────────────────
+
+
+def test_rerender_pass_counts_as_one_regardless_of_clusters(
+    sync_db, mock_render, monkeypatch
+):
+    """한 번의 제작이 클러스터/클립 3개를 렌더해도 강의 카운터는 +1 만 증가(패스=1)."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    prof, _c, lec = _seed_lecture(sync_db)
+    for i in range(3):  # 질문 1건 = 단독 클러스터 → 3 제출
+        _seed(sync_db, lec, prof, f"질문 {i}")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 3
+    sync_db.refresh(lec)
+    assert lec.avatar_render_count == 1  # 클립 3개여도 패스는 1
+
+
+def test_rerender_cap_blocks_after_max(sync_db, mock_render, monkeypatch):
+    """상한(여기선 2)에 도달하면 다음 제작은 렌더 없이 failed + 사유로 차단된다."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    monkeypatch.setattr(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 2)
+    prof, _c, lec = _seed_lecture(sync_db)
+    _seed(sync_db, lec, prof, "질문")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        # 패스 1·2 — 성공(각 +1) → count 2 도달.
+        for _ in range(2):
+            # 다음 패스를 위해 ready/rendering 을 pending 으로 되돌릴 필요 없이,
+            # _render_seed_questions 는 pending+failed 만 잡으므로 새 질문을 매번 추가.
+            r = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+            assert r["submitted"] >= 1
+            # 다음 패스용 새 질문(이전 질문은 rendering 으로 빠짐).
+            _seed(sync_db, lec, prof, f"추가 {_}")
+            sync_db.commit()
+        sync_db.refresh(lec)
+        assert lec.avatar_render_count == 2
+
+        # 패스 3 — 상한 도달 → 차단.
+        blocked = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert blocked["submitted"] == 0
+    assert blocked.get("blocked") == "rerender_cap"
+    sync_db.refresh(lec)
+    assert lec.avatar_render_count == 2  # 차단된 패스는 카운트하지 않음
+    # 차단된 패스의 pending 질문은 사유와 함께 failed.
+    pendings = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.status == qa_avatar.STATUS_PENDING
+    ).count()
+    assert pendings == 0
+    blocked_row = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.status == qa_avatar.STATUS_FAILED
+    ).first()
+    assert blocked_row is not None
+    assert "제작 횟수" in (blocked_row.error_message or "")
+
+
+def test_failed_submit_pass_does_not_increment_count(sync_db, mock_render, monkeypatch):
+    """제출이 전부 실패한 패스(본인 아바타 미확보 등)는 강의 카운터를 올리지 않는다."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    monkeypatch.setattr(qa_batch, "_resolve_character", lambda *a, **k: None)
+    prof, _c, lec = _seed_lecture(sync_db)
+    _seed(sync_db, lec, prof, "질문")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 0
+    sync_db.refresh(lec)
+    assert lec.avatar_render_count == 0  # 비용 미발생 → 상한 미소모
+
+
+def test_unlimited_account_bypasses_rerender_cap(sync_db, mock_render, monkeypatch):
+    """면제 계정은 상한에 막히지 않고, 카운터도 올리지 않는다(무제한)."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    monkeypatch.setattr(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 1)
+    prof, _c, lec = _seed_lecture(sync_db)
+    prof.email = "unlimited@t.ac.kr"
+    monkeypatch.setattr(settings, "QA_AVATAR_UNLIMITED_EMAILS", "unlimited@t.ac.kr")
+    lec.avatar_render_count = 5  # 이미 상한 초과 상태여도
+    _seed(sync_db, lec, prof, "질문")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 1  # 상한 무시(면제)
+    sync_db.refresh(lec)
+    assert lec.avatar_render_count == 5  # 면제 계정은 카운트 증가 안 함
+
+
 # ── 4. 야간 배치(_submit_pending)는 instructor_seed 를 건너뛴다 ─────────────────
 
 

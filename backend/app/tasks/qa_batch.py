@@ -708,7 +708,10 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
     """
     from app.models.lecture import Lecture
     from app.services.pipeline.budget import (
+        AvatarRerenderQuotaError,
         QARenderQuotaError,
+        assert_avatar_rerender_quota,
+        increment_avatar_render_count,
         instructor_has_unlimited_qa,
         qa_can_render_lecture,
     )
@@ -739,6 +742,29 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
             _r.s3_video_url = None
     if rows:
         db.commit()
+
+    # ── C-2: 강의당 아바타 제작 횟수 상한 게이트 ──
+    # 이번 제작이 강의당 상한(AVATAR_RERENDER_MAX_PER_LECTURE)을 넘으면 렌더하지 않고
+    # 명확한 사유로 failed 표시한다(피드백 0 = 가장 혼란). 동기 재제작 엔드포인트
+    # (lectures.py)가 이미 4xx 로 1차 차단하지만, 승인(approve) 경로·직접 호출의
+    # 백스톱으로 여기서도 강제한다. 면제 계정·상한 비활성은 통과(첫 제작 count 0 도 통과).
+    if rows:
+        try:
+            assert_avatar_rerender_quota(db, lecture_id, instructor_id)
+        except AvatarRerenderQuotaError as exc:
+            for row in rows:
+                row.status = qa_avatar.STATUS_FAILED
+                row.error_message = (
+                    "이 강의의 아바타 제작 횟수를 모두 사용했습니다. 추가 제작이 "
+                    "필요하면 운영자에게 문의해 주세요."
+                )
+            db.commit()
+            logger.warning(
+                "Q&A 사전질문: 강의당 아바타 제작 횟수 상한 — seed %d개 failed 표시: "
+                "lecture=%s, instructor=%s, %s",
+                len(rows), lecture_id, instructor_id, exc,
+            )
+            return {"submitted": 0, "failed": len(rows), "blocked": "rerender_cap"}
 
     # 렌더 한도 계산.
     #  - 무제한 계정(QA_AVATAR_UNLIMITED_EMAILS, 계정주 포함)은 강의당 월 캡도 면제 —
@@ -866,6 +892,14 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
             lecture_id, instructor_id,
         ):
             submitted += 1
+
+    # ── C-2: 성공한 제작 패스 1건을 강의 카운터에 +1 ──
+    # 클러스터/클립 수와 무관하게 '한 번의 제작'은 1로 센다(이 호출 = 1 패스). 제출이
+    # 하나라도 성공한 경우만 카운트해, 전부 실패(submitted==0)한 패스는 상한을
+    # 소모하지 않는다(실패는 비용 미발생 — 스펙 13 §C-2). 면제 계정은 increment 가
+    # 내부에서 건너뛴다. HeyGen·VisionStory 구분 없이 동일(둘 다 _submit_cluster 경유).
+    if submitted >= 1:
+        increment_avatar_render_count(db, lecture_id, instructor_id)
 
     db.commit()
     result = {"submitted": submitted, "failed": failed}

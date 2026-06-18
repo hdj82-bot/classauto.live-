@@ -522,3 +522,45 @@ async def list_audit_logs(
             for a in rows
         ],
     }
+
+
+# ── C-2: POST /api/v1/admin/lectures/{lecture_id}/reset-avatar-rerender ───────
+
+
+@router.post("/lectures/{lecture_id}/reset-avatar-rerender")
+async def reset_avatar_rerender(
+    lecture_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """강의의 아바타 제작 횟수 카운터를 0 으로 리셋 (C-2 운영자 오버라이드).
+
+    교수자가 강의당 제작 횟수 상한(AVATAR_RERENDER_MAX_PER_LECTURE)에 도달했을 때
+    계정주가 개별 허용한다. 이 행위는 E 감사 로그에 1행 남긴다.
+    """
+    lecture = await db.get(Lecture, lecture_id)
+    if not lecture:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="강의를 찾을 수 없습니다."
+        )
+
+    previous = int(lecture.avatar_render_count or 0)
+    lecture.avatar_render_count = 0
+    await db.flush()
+    await db.commit()
+
+    await log_admin_action(
+        db,
+        _admin,
+        "lecture.reset_avatar_rerender",
+        target_type="lecture",
+        target_id=str(lecture_id),
+        detail={"previous_count": previous, "title": lecture.title},
+    )
+
+    return {
+        "lecture_id": str(lecture_id),
+        "previous_count": previous,
+        "avatar_render_count": 0,
+        "detail": "아바타 제작 횟수가 초기화되었습니다.",
+    }

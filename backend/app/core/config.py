@@ -200,6 +200,14 @@ class Settings(BaseSettings):
     QA_AVATAR_VOICE_SPEED: float = 1.2
     # 야간 배치 실행 시각(UTC 시). 기본 18시(UTC) = KST 03:00 — 일일 백업(03 UTC) 이후.
     QA_AVATAR_BATCH_HOUR_UTC: int = 18
+    # 강의당 아바타 제작(렌더 패스) 횟수 상한 — "첫 제작 1 + 재제작 4 = 총 5회"
+    # (docs/planning/13-beta-admin-console.md §C-2). 월 한도(QA_AVATAR_MONTHLY_…)는
+    # '배포된 강의 수'를 세지 같은 강의의 재제작 횟수를 세지 않아, 결과가 맘에 안 들어
+    # 여러 번 다시 뽑으면 비용이 매번 발생해도 슬롯은 1로만 친다. 특히 VisionStory(본인
+    # 얼굴)는 전역 $ 서킷 브레이커가 없어 이 횟수 상한이 유일한 방어선이다. HeyGen·
+    # VisionStory 둘 다 동일 적용. 성공한 제작 패스만 카운트(실패/취소 제외). 면제
+    # 계정(QA_AVATAR_UNLIMITED_EMAILS)은 무제한. **0 이하면 상한 비활성(무제한)**.
+    AVATAR_RERENDER_MAX_PER_LECTURE: int = 5
 
     # ── 강의 본문 렌더 방식 (docs/planning/08-cost-optimization.md) ──────────────
     # "slideshow"(기본) = 본문을 HeyGen 영상으로 굽지 않고, 슬라이드 이미지 + 구간

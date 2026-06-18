@@ -37,6 +37,10 @@ class QARenderQuotaError(BudgetExceededError):
     """교수자 월 Q&A 아바타 렌더 한도 초과 — 야간 배치 렌더 차단."""
 
 
+class AvatarRerenderQuotaError(BudgetExceededError):
+    """강의당 아바타 제작(렌더 패스) 횟수 상한 초과 — 재제작 차단(C-2)."""
+
+
 def heygen_spend_usd(db: Session, since: datetime) -> float:
     """``since`` 이후 기록된 HeyGen 비용 합계(USD)."""
     total = db.execute(
@@ -224,3 +228,71 @@ def assert_qa_render_budget(
             f"Q&A 아바타 렌더 월 강의 한도 초과: {used}/{cap}"
         )
     assert_heygen_budget(db, now=now)
+
+
+# ── 강의당 아바타 재렌더 상한 (C-2 · docs/planning/13 §C-2) ───────────────────────
+#
+# 교수자 월 한도(qa_renders_used_this_month)는 '배포된 강의 수'를 세지 같은 강의를
+# 여러 번 다시 뽑는 '재제작 횟수'를 세지 않는다 → 결과가 맘에 안 들어 반복 재제작하면
+# 슬롯은 1로 쳐도 비용은 매번 든다. 특히 VisionStory(본인 얼굴)는 전역 $ 서킷
+# 브레이커가 없어 이 횟수 상한이 유일한 방어선이다. lectures.avatar_render_count 에
+# 성공한 제작 패스(클립/클러스터 수 무관, 한 번의 제작=1)를 누적해 상한을 건다.
+# HeyGen·VisionStory 동일 적용. 면제 계정(QA_AVATAR_UNLIMITED_EMAILS)은 무제한.
+
+
+def avatar_render_count(db: Session, lecture_id) -> int:
+    """이 강의의 누적 아바타 제작 패스 수(lectures.avatar_render_count)."""
+    n = db.execute(
+        select(Lecture.avatar_render_count).where(Lecture.id == lecture_id)
+    ).scalar()
+    return int(n or 0)
+
+
+def avatar_rerender_remaining(
+    db: Session, lecture_id, instructor_id
+) -> int:
+    """이 강의에 남은 아바타 제작 횟수. 무제한 계정·상한 비활성은 sentinel."""
+    if instructor_has_unlimited_qa(db, instructor_id):
+        return _UNLIMITED_REMAINING
+    cap = settings.AVATAR_RERENDER_MAX_PER_LECTURE
+    if not cap or cap <= 0:
+        return _UNLIMITED_REMAINING  # 0 이하 = 상한 비활성(무제한)
+    return max(0, cap - avatar_render_count(db, lecture_id))
+
+
+def assert_avatar_rerender_quota(
+    db: Session, lecture_id, instructor_id
+) -> None:
+    """강의당 아바타 제작 횟수가 상한에 도달했으면 ``AvatarRerenderQuotaError``.
+
+    면제 계정·상한 비활성(0 이하)은 통과. 첫 제작(count 0)은 항상 통과한다.
+    """
+    if instructor_has_unlimited_qa(db, instructor_id):
+        return
+    cap = settings.AVATAR_RERENDER_MAX_PER_LECTURE
+    if not cap or cap <= 0:
+        return
+    used = avatar_render_count(db, lecture_id)
+    if used >= cap:
+        logger.warning(
+            "[BUDGET] 강의당 아바타 제작 횟수 상한 초과로 차단: lecture=%s used=%d cap=%d",
+            lecture_id, used, cap,
+        )
+        raise AvatarRerenderQuotaError(
+            f"강의당 아바타 제작 횟수 상한 초과: {used}/{cap}"
+        )
+
+
+def increment_avatar_render_count(
+    db: Session, lecture_id, instructor_id
+) -> None:
+    """성공한 아바타 제작 패스 1건을 강의 카운터에 +1(면제 계정은 건너뜀).
+
+    호출자가 같은 트랜잭션에서 commit 한다. 클러스터/클립 수와 무관하게 '제작
+    패스'당 한 번만 호출해야 한다(_render_seed_questions 가 패스 종료 시 1회 호출).
+    """
+    if instructor_has_unlimited_qa(db, instructor_id):
+        return
+    lecture = db.get(Lecture, lecture_id)
+    if lecture is not None:
+        lecture.avatar_render_count = int(lecture.avatar_render_count or 0) + 1
