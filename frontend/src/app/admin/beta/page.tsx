@@ -103,8 +103,14 @@ export default function AdminBetaPage() {
     setLoading(false);
   }, [cohort, t]);
 
+  // load() 첫 줄에서 동기 setState(setLoading/setError) 하므로, effect 동기 경로에서
+  // 직접 호출하면 react-hooks/set-state-in-effect 린트가 막는다. rAF 로 다음 프레임에
+  // 비동기 실행한다(레포 표준 회피책 — DEPLOYMENT_PROGRESS §v2 CI 함정 참조).
   useEffect(() => {
-    load();
+    const raf = requestAnimationFrame(() => {
+      void load();
+    });
+    return () => cancelAnimationFrame(raf);
   }, [load]);
 
   const toggleRow = async (id: string) => {

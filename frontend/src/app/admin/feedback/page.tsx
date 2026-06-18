@@ -43,8 +43,13 @@ export default function AdminFeedbackPage() {
     setLoading(false);
   }, [statusFilter, t]);
 
+  // load() 첫 줄의 동기 setState 가 effect 동기 경로에서 호출되면 린트가 막으므로
+  // rAF 로 다음 프레임에 비동기 실행한다(레포 표준 회피책).
   useEffect(() => {
-    load();
+    const raf = requestAnimationFrame(() => {
+      void load();
+    });
+    return () => cancelAnimationFrame(raf);
   }, [load]);
 
   const setStatus = async (id: string, status: string) => {
