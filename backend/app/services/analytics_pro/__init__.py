@@ -5,6 +5,14 @@ docs/planning/analytics-spec.md A블록(§2)의 집계·판정·합성데이터 
 API/게이트가 이 패키지 위에 얹힌다.
 """
 from app.services.analytics_pro.analyze import DEFAULT_VIDEO_MINUTES, analyze
+from app.services.analytics_pro.briefing import build_rule_based, generate_briefing
 from app.services.analytics_pro.synthetic import SCENARIOS, generate
 
-__all__ = ["analyze", "generate", "SCENARIOS", "DEFAULT_VIDEO_MINUTES"]
+__all__ = [
+    "analyze",
+    "generate",
+    "generate_briefing",
+    "build_rule_based",
+    "SCENARIOS",
+    "DEFAULT_VIDEO_MINUTES",
+]

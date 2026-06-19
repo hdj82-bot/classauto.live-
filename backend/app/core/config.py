@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     VOICE_SCRIPT_MAX_TOKENS: int = 768
     CLAUDE_INPUT_COST_PER_M: float = 3.00
     CLAUDE_OUTPUT_COST_PER_M: float = 15.00
+    # 학습 분석 PRO(베타 전용) AI 브리핑·학생솔루션(docs/planning/analytics-spec.md
+    # §2.4). 강의×주 1회 수준의 저빈도·고가치 분석이라 다른 경로와 달리 품질 우선
+    # 모델(Sonnet)을 기본으로 둔다(스펙 권장). env 로 즉시 하향 가능. 키 미설정/오류
+    # 시 규칙기반 폴백.
+    ANALYTICS_BRIEFING_MODEL: str = "claude-sonnet-4-6"
+    ANALYTICS_BRIEFING_MAX_TOKENS: int = 1500
 
     # ── OpenAI (임베딩) ─────────────────────────────────────────
     OPENAI_API_KEY: str = ""
