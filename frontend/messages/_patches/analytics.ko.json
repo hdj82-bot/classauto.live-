@@ -229,6 +229,10 @@
       "error": "CSV 내보내기에 실패했습니다.",
       "ariaLabel": "현재 강의의 학습자 진도 CSV 다운로드"
     },
+    "pdf": {
+      "label": "PDF 출력",
+      "ariaLabel": "분석 리포트를 PDF로 출력(브라우저 인쇄)"
+    },
     "legend": {
       "patternHigh": "사선 (정답률 높음)",
       "patternMid": "도트 (정답률 중간)",

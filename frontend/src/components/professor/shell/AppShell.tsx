@@ -73,12 +73,16 @@ export default function ProfessorAppShell({
       : { ...mainBaseStyle, overflowY: "auto" };
 
   return (
-    <div style={shellStyle}>
+    // data-pro-* 마커: 인쇄 시 globals.css @media print 가 셸 크롬(topbar/sidebar)을
+    // 숨기고 100vh/overflow:hidden 을 풀어 본문 전체가 출력되게 한다(분석 PDF, 스펙 11 §A).
+    <div style={shellStyle} data-pro-shell>
       <ProfessorSvgGradients />
       <ProfessorTopbar {...topbar} />
-      <div style={stageStyle}>
+      <div style={stageStyle} data-pro-stage>
         {variant === "default" && <ProfessorSidebar />}
-        <main style={mainStyle}>{children}</main>
+        <main style={mainStyle} data-pro-main>
+          {children}
+        </main>
       </div>
     </div>
   );

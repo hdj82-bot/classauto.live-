@@ -12,6 +12,7 @@ export { default as ScoreHeatmap } from "./ScoreHeatmap";
 export { default as EngagementCurve } from "./EngagementCurve";
 export { default as CostMeter } from "./CostMeter";
 export { default as CsvExportButton } from "./CsvExportButton";
+export { default as PdfExportButton } from "./PdfExportButton";
 export { default as WatchHeatmap } from "./WatchHeatmap";
 export { default as QaTrend } from "./QaTrend";
 export { default as AchievementTrend } from "./AchievementTrend";

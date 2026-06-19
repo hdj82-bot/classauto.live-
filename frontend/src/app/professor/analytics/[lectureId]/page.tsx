@@ -14,6 +14,7 @@ import {
   ScoreHeatmap,
   EngagementCurve,
   CsvExportButton,
+  PdfExportButton,
   WatchHeatmap,
   QaTrend,
   AchievementTrend,
@@ -229,6 +230,7 @@ export default function LectureAnalyticsPage() {
         eyebrow={
           <Link
             href="/professor/analytics"
+            className="print-hide"
             style={{ color: "var(--gold)", textDecoration: "none", fontSize: 11 }}
           >
             ← {t("lectureBack")}
@@ -237,7 +239,9 @@ export default function LectureAnalyticsPage() {
         title={t("lectureTitle", { title: lecture?.title ?? lectureId })}
         subtitle={t("lectureSubtitle")}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="print-hide flex items-center gap-2">
+            {/* 분석 리포트 PDF 출력 — 브라우저 인쇄(스펙 11 §A) */}
+            <PdfExportButton />
             {/* 대면수업 솔루션 보고서(인사이트) — RQ2 핵심 합성 화면으로 이동 */}
             <Link
               href={`/professor/analytics/${lectureId}/report`}
@@ -372,6 +376,7 @@ function Section({
       radius={16}
       role="region"
       aria-labelledby={`analytics-section-${id}`}
+      data-analytics-section
     >
       <header className="mb-5 flex items-center justify-between">
         <h2
