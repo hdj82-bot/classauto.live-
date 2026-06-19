@@ -96,3 +96,37 @@ class LectureAnalysis(BaseModel):
     verdict: Verdict
     verdict_reason: str          # 판정 근거(규칙 기반, 설명 가능)
     recommended_direction: str   # 판정별 권장 방향
+
+
+# ── AI 브리핑·학생 솔루션(§2.4) — 판정은 규칙, 설명은 AI ──────────────────────
+
+
+class Briefing(BaseModel):
+    """AI 대면 수업 운영안(§2.4 briefing). 강의 전체 방향."""
+
+    approach_title: str
+    approach_detail: str        # 왜+어떻게 2~3문장
+    opening_move: str           # 대면 첫 5분 실행 지시 한 문장
+    recommended_minutes: int = Field(..., ge=0, le=180)
+    focus_topics: list[str]     # 1~3개
+
+
+class StudentSolution(BaseModel):
+    """학생별 개인화 처방(§2.4 studentSolutions)."""
+
+    name: str
+    level: str                  # 부진|보통|우수
+    weakness: str               # 약점 한 줄
+    action: str                 # 교수 처방 한 줄
+
+
+class BriefingResult(BaseModel):
+    """``generate_briefing()`` 결과 — analyze 판정 + AI(또는 규칙기반 폴백) 설명.
+
+    ``source`` 로 실제 Claude 생성인지 규칙기반 폴백인지 투명하게 표기한다.
+    """
+
+    verdict_sentence: str
+    briefing: Briefing
+    student_solutions: list[StudentSolution]
+    source: str                 # "claude" | "rule-based-mock"
