@@ -14,6 +14,7 @@ export { default as CostMeter } from "./CostMeter";
 export { default as CsvExportButton } from "./CsvExportButton";
 export { default as WatchHeatmap } from "./WatchHeatmap";
 export { default as QaTrend } from "./QaTrend";
+export { default as AchievementTrend } from "./AchievementTrend";
 export { default as EmptyState } from "./EmptyState";
 export { useAnalyticsI18n } from "./useAnalyticsI18n";
 export type {
@@ -23,4 +24,5 @@ export type {
   CostData,
   QAData,
   WatchHeatmapData,
+  TrendData,
 } from "./types";

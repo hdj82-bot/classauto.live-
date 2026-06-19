@@ -19,6 +19,7 @@
     "lectureRetry": "Retry",
     "section": {
       "attendance": "Attendance distribution",
+      "trend": "Achievement trend",
       "studentGrid": "Per-student progress",
       "scores": "Accuracy heatmap",
       "summary": "Summary",
@@ -27,6 +28,15 @@
       "watch": "Watch heatmap",
       "qa": "Q&A trend",
       "cost": "Cost meter"
+    },
+    "trend": {
+      "empty": "Collecting trend data",
+      "emptyDesc": "The trend appears once at least two daily snapshots accumulate.",
+      "legendCompletion": "Completion rate",
+      "legendAttendance": "Attendance rate",
+      "legendAccuracy": "Avg. accuracy",
+      "latestQa": "Total questions",
+      "latestLearners": "Learners"
     },
     "attention": {
       "score": "Class average attention",

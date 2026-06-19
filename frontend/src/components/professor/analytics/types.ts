@@ -124,6 +124,24 @@ export interface CostData {
 }
 
 /**
+ * 성취율 추이 (스펙 11 §C) — `/api/v1/dashboard/{id}/trend` 응답.
+ * 일배치가 적재한 강의×일자 누적 스냅샷. 비율 3종은 0~100(%).
+ */
+export interface TrendPoint {
+  date: string;
+  completionRate: number;
+  attendanceRate: number;
+  avgAccuracy: number;
+  qaCount: number;
+  activeLearners: number;
+}
+
+export interface TrendData {
+  lecture_id: string;
+  points: TrendPoint[];
+}
+
+/**
  * Watch heatmap raw shape — 백엔드가 아직 노출하지 않는다.
  * BACKEND_ASKS.ANALYTICS.md 에 정리된 협의안. 도착 전까지는 어떤 응답에도
  * 이 키가 없으므로 컴포넌트는 "준비 중" fallback 으로 분기한다.

@@ -12,6 +12,7 @@ from app.api.deps import require_professor, require_student
 from app.db.session import get_db
 from app.models.session import LearningSession
 from app.models.user import User
+from app.services import cohort_metrics as cohort_svc
 from app.services import dashboard as dashboard_svc
 from app.services.lecture import assert_professor_owns_lecture, list_my_lectures
 
@@ -92,6 +93,22 @@ async def get_qa_logs(
 ):
     await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await dashboard_svc.get_qa_logs(db, lecture_id, page, limit)
+
+
+@router.get("/{lecture_id}/trend", summary="성취율 추이 (일자별 스냅샷)")
+async def get_trend(
+    lecture_id: uuid.UUID,
+    days: int = Query(30, ge=1, le=180, description="조회 기간(일), 1~180"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """일배치가 적재한 강의×일자 누적 지표 시계열(스펙 11 §C).
+
+    배포 시점부터 하루 1행씩 쌓이므로 점이 2개 이상 모이기 전까지는 추이가
+    비어 있을 수 있다(소급 수집 불가, 09 §3).
+    """
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await cohort_svc.get_trend(db, lecture_id, days)
 
 
 @router.post("/watch-events", summary="재생 이벤트 배치 적재 (학습자)")
