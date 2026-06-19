@@ -27,6 +27,7 @@
       "attention": "Attention analysis",
       "watch": "Watch heatmap",
       "qa": "Q&A trend",
+      "qaKeywords": "Frequent question terms",
       "cost": "Cost meter"
     },
     "trend": {
@@ -37,6 +38,12 @@
       "legendAccuracy": "Avg. accuracy",
       "latestQa": "Total questions",
       "latestLearners": "Learners"
+    },
+    "qaKeywords": {
+      "empty": "No question terms yet",
+      "emptyDesc": "Frequent keywords appear once students ask Q&A questions.",
+      "countLabel": "mentioned {count}x",
+      "totalLabel": "Analyzed {count} questions"
     },
     "attention": {
       "score": "Class average attention",

@@ -17,6 +17,7 @@ import {
   WatchHeatmap,
   QaTrend,
   AchievementTrend,
+  QaKeywords,
   useAnalyticsI18n,
 } from "@/components/professor/analytics";
 import { useInsightsI18n } from "@/components/professor/analytics/insights";
@@ -35,6 +36,7 @@ import type {
   QAData,
   WatchHeatmapData,
   TrendData,
+  QaKeywordsData,
 } from "@/components/professor/analytics/types";
 
 interface LectureMeta {
@@ -48,6 +50,7 @@ type SectionKey =
   | "attendance"
   | "trend"
   | "studentGrid"
+  | "qaKeywords"
   | "scores"
   | "summary"
   | "engagement"
@@ -88,6 +91,8 @@ export default function LectureAnalyticsPage() {
   const [watch, setWatch] = useState<WatchHeatmapData | null>(null);
   // C(스펙 11 §C): 성취율 추이 — 일배치 스냅샷(독립 best-effort, 페이지 에러 미관여).
   const [trend, setTrend] = useState<TrendData | null>(null);
+  // G(스펙 11 §G): 빈번 질문어 — Q&A 질문 키워드(독립 best-effort).
+  const [qaKeywords, setQaKeywords] = useState<QaKeywordsData | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +126,7 @@ export default function LectureAnalyticsPage() {
         qaRes,
         costRes,
         trendRes,
+        qaKeywordsRes,
       ] = await Promise.allSettled([
         lectureMetaPromise,
         api.get<AttendanceData>(`/api/v1/dashboard/${lectureId}/attendance`),
@@ -131,6 +137,7 @@ export default function LectureAnalyticsPage() {
         api.get<QAData>(`/api/v1/dashboard/${lectureId}/qa?limit=50`),
         api.get<CostData>(`/api/v1/dashboard/${lectureId}/cost`),
         api.get<TrendData>(`/api/v1/dashboard/${lectureId}/trend?days=30`),
+        api.get<QaKeywordsData>(`/api/v1/dashboard/${lectureId}/qa-keywords?top=24`),
       ]);
 
       if (lectureRes.status === "fulfilled" && lectureRes.value) {
@@ -149,6 +156,8 @@ export default function LectureAnalyticsPage() {
       }
       if (qaRes.status === "fulfilled") setQa(qaRes.value.data);
       if (trendRes.status === "fulfilled") setTrend(trendRes.value.data);
+      if (qaKeywordsRes.status === "fulfilled")
+        setQaKeywords(qaKeywordsRes.value.data);
       // costRes 응답은 의도적으로 UI 에 노출하지 않음 (planning/05 §1.1).
       void costRes;
 
@@ -274,6 +283,11 @@ export default function LectureAnalyticsPage() {
       {/* G (스펙 11 §G): 요약 카드 — 빈번 오답·무반응·범위 외 질문(기존 집계 재활용). */}
       <Section id="summary" title={t("section.summary")}>
         <SummaryCards scores={scores} engagement={engagement} qa={qa} />
+      </Section>
+
+      {/* G (스펙 11 §G): 빈번 질문어 — Q&A 질문 키워드 칩(자체 EmptyState). */}
+      <Section id="qaKeywords" title={t("section.qaKeywords")}>
+        <QaKeywords data={qaKeywords} />
       </Section>
 
       <Section id="engagement" title={t("section.engagement")}>
