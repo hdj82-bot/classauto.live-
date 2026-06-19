@@ -16,6 +16,7 @@ import {
   CsvExportButton,
   WatchHeatmap,
   QaTrend,
+  AchievementTrend,
   useAnalyticsI18n,
 } from "@/components/professor/analytics";
 import { useInsightsI18n } from "@/components/professor/analytics/insights";
@@ -33,6 +34,7 @@ import type {
   CostData,
   QAData,
   WatchHeatmapData,
+  TrendData,
 } from "@/components/professor/analytics/types";
 
 interface LectureMeta {
@@ -44,6 +46,7 @@ interface LectureMeta {
 
 type SectionKey =
   | "attendance"
+  | "trend"
   | "studentGrid"
   | "scores"
   | "summary"
@@ -83,6 +86,8 @@ export default function LectureAnalyticsPage() {
   // cost 데이터는 fetch 만 하고 UI 에는 노출하지 않는다 (planning/05 §1.1 비용
   // 표시 금지). 후속 PR 에서 endpoint fetch 자체를 제거 — 그때 import 도 정리.
   const [watch, setWatch] = useState<WatchHeatmapData | null>(null);
+  // C(스펙 11 §C): 성취율 추이 — 일배치 스냅샷(독립 best-effort, 페이지 에러 미관여).
+  const [trend, setTrend] = useState<TrendData | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +120,7 @@ export default function LectureAnalyticsPage() {
         engagementRes,
         qaRes,
         costRes,
+        trendRes,
       ] = await Promise.allSettled([
         lectureMetaPromise,
         api.get<AttendanceData>(`/api/v1/dashboard/${lectureId}/attendance`),
@@ -124,6 +130,7 @@ export default function LectureAnalyticsPage() {
         ),
         api.get<QAData>(`/api/v1/dashboard/${lectureId}/qa?limit=50`),
         api.get<CostData>(`/api/v1/dashboard/${lectureId}/cost`),
+        api.get<TrendData>(`/api/v1/dashboard/${lectureId}/trend?days=30`),
       ]);
 
       if (lectureRes.status === "fulfilled" && lectureRes.value) {
@@ -141,6 +148,7 @@ export default function LectureAnalyticsPage() {
         }
       }
       if (qaRes.status === "fulfilled") setQa(qaRes.value.data);
+      if (trendRes.status === "fulfilled") setTrend(trendRes.value.data);
       // costRes 응답은 의도적으로 UI 에 노출하지 않음 (planning/05 §1.1).
       void costRes;
 
@@ -238,6 +246,12 @@ export default function LectureAnalyticsPage() {
         ) : (
           <FallbackPanel sectionKey="attendance" />
         )}
+      </Section>
+
+      {/* C (스펙 11 §C): 성취율 추이 — 일배치 스냅샷 라인 차트. 자체 EmptyState
+          (수집 중)를 가지므로 무조건 렌더. */}
+      <Section id="trend" title={t("section.trend")}>
+        <AchievementTrend data={trend} />
       </Section>
 
       {/* E (스펙 11 §E): 학생 개별 진척도 그리드 — attendance 데이터 재활용. */}
