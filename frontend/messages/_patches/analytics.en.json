@@ -229,6 +229,10 @@
       "error": "CSV export failed.",
       "ariaLabel": "Download per-student progress CSV for the current lecture"
     },
+    "pdf": {
+      "label": "Export PDF",
+      "ariaLabel": "Export the analytics report as PDF (browser print)"
+    },
     "legend": {
       "patternHigh": "Diagonal (high accuracy)",
       "patternMid": "Dotted (medium accuracy)",
