@@ -18,6 +18,7 @@ export { default as AchievementTrend } from "./AchievementTrend";
 export { default as QaKeywords } from "./QaKeywords";
 export { default as KpiDeltaCards } from "./KpiDeltaCards";
 export { default as GoalTracker } from "./GoalTracker";
+export { default as ActionLog } from "./ActionLog";
 export { default as EmptyState } from "./EmptyState";
 export { useAnalyticsI18n } from "./useAnalyticsI18n";
 export type {
@@ -31,4 +32,5 @@ export type {
   QaKeywordsData,
   KpiDeltaData,
   Goal,
+  InstructorAction,
 } from "./types";
