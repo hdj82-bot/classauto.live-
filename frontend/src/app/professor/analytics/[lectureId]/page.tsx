@@ -19,6 +19,7 @@ import {
   AchievementTrend,
   QaKeywords,
   KpiDeltaCards,
+  GoalTracker,
   useAnalyticsI18n,
 } from "@/components/professor/analytics";
 import { useInsightsI18n } from "@/components/professor/analytics/insights";
@@ -52,6 +53,7 @@ type SectionKey =
   | "attendance"
   | "kpi"
   | "trend"
+  | "goals"
   | "studentGrid"
   | "qaKeywords"
   | "scores"
@@ -275,6 +277,11 @@ export default function LectureAnalyticsPage() {
           (수집 중)를 가지므로 무조건 렌더. */}
       <Section id="trend" title={t("section.trend")}>
         <AchievementTrend data={trend} />
+      </Section>
+
+      {/* H-3 (스펙 11 §H-3): 학습 목표·달성률 — 자체 CRUD(lectureId 만 전달). */}
+      <Section id="goals" title={t("section.goals")}>
+        <GoalTracker lectureId={lectureId} />
       </Section>
 
       {/* E (스펙 11 §E): 학생 개별 진척도 그리드 — attendance 데이터 재활용. */}
