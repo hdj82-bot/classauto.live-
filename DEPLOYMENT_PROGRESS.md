@@ -4,12 +4,53 @@
 > 마지막 업데이트: **2026-06-18**
 >
 > ⚠️ **읽는 법**: 이 문서는 변경 이력 누적형입니다. **최신 실상태의 단일 기준은 바로 아래
-> "2026-06-18 현재 상태(SUPERSEDES)" 단락**입니다. 그 아래 2026-06-05·05-16/05-17 기록은
+> "2026-06-19 현재 상태(SUPERSEDES)" 단락**입니다. 그 아래 2026-06-18·06-05·05-16/05-17 기록은
 > **당시 시점의 역사 기록**입니다.
 
 ---
 
-## 2026-06-18 현재 상태 (SUPERSEDES — 이 단락이 최신 단일 기준)
+## 2026-06-19 현재 상태 (SUPERSEDES — 이 단락이 최신 단일 기준)
+
+**프로덕션 라이브 유지.** 06-18 단락이 "후속(테이블 필요)"·"갭"으로 남겨 둔 항목 대부분이
+그 이후 머지(최신 #526)에서 **이미 해소**됐다. 06-18 단락은 역사 기록으로 강등한다.
+
+**스펙 11 후속 — 일괄 완료** (06-18 §"스펙 11 후속(테이블 필요)" 목록 해소)
+- **B 전주 대비 델타** → `/dashboard/{id}/kpi` + `services/cohort_metrics.py:143~165`(7일 이전 스냅샷 비교).
+- **C 성취율 추이** → `/dashboard/{id}/trend` + `cohort_daily_metrics`(0059) + `tasks/cohort.py` 일배치(beat).
+- **G 빈번 질문어(한/중/영)** → `/dashboard/{id}/qa-keywords` + `services/qa_keywords.py` + `QaKeywords.tsx`.
+- **H-3 목표 달성률** → `/dashboard/{id}/goals` + `learning_goals`(0060) + `services/goals.py`.
+- **H-4 격려·개입 행동 로그** → `instructor_actions`(0061) + `services/instructor_actions.py` (#526, 최신 커밋).
+- **A PDF export** → 브라우저 인쇄 방식(스펙 11 §A, `analytics/[lectureId]/page.tsx` `print-hide`).
+
+**QA 아바타 렌더 비용 기록 — 완료** (06-18 §"알려진 갭" 1번 해소)
+- `0058_add_avatar_qa_cost_category` + `tasks/qa_batch.py:_record_qa_render_cost` 가 완료된 QA 렌더를
+  `platform_cost_logs`(CostLog, `category=AVATAR_QA`, `model=provider`)로 적재. 운영자 비용 대시보드
+  과소집계 해소. **이로써 VisionStory $ 서킷 브레이커의 선행조건(합산 데이터)이 충족됨.**
+
+**React #418 — 실측 계측 완료(원인 수정은 미완)**
+- `lib/hydrationErrorReporter.ts` + `instrumentation-client.ts` 가 hydration 직전 `console.error` 를 감싸
+  recoverable mismatch(418~425)만 골라 Sentry 로 보고(`mechanism=hydration-mismatch` + componentStack +
+  location + lang + SW controller). 정적 분석으로 안 좁혀지던 실원인을 **실측으로 잡기 위한 계측**.
+- **남은 것은 코드가 아님**: Sentry 에서 `mechanism:hydration-mismatch` 이벤트의 componentStack 을 읽어
+  실제 mismatch 컴포넌트를 특정 → 수정. 텔레메트리 도착 전까지 블라인드 수정 불가(추적 [#167](https://github.com/hdj82-bot/classauto.live-/issues/167)).
+
+**코드 정리**
+- `analytics/[lectureId]/page.tsx` 의 `cost` dead-fetch(정책상 UI 비노출) 제거 + `CostData` import·`"cost"` SectionKey 정리.
+- `services/pipeline/openai_image.py` 의 stale `_TODO_REAL_CALL` 도크스트링 정정(실제 gpt-image-2 호출은 이미 구현됨).
+
+**알려진 갭 / 후속 (06-19 기준)**
+- ⚠️ **VisionStory 전용 $ 서킷 브레이커** — 여전히 미구현(전역 $ 브레이커는 `assert_heygen_budget` HeyGen 전용).
+  선행조건(AVATAR_QA 비용기록)은 위에서 충족됨. **권장 기본값: 일 $100 / 월 $300**(계산 근거: VisionStory
+  $0.033/s = HeyGen $0.0167/s 의 ~2배, C-2 강의당 5회 상한이 1차 방어선이고 이 브레이커는 재시도 폭주·버그성
+  대량 렌더 사고를 막는 2차선 — 정상 베타 사용을 막지 않을 만큼 넉넉하되 사고를 수백 달러 선에서 끊는 값).
+  `platform_cost_logs WHERE category=AVATAR_QA AND model='visionstory'` 를 시간 윈도로 합산하면 됨. env 조정 가능.
+- **React #418 root-cause fix** — Sentry 텔레메트리 의존(위 참조).
+- **/demo 영상 자산** — `public/demo/` 에 SVG 포스터만 있고 실제 mp4 부재(`DemoVideo.tsx` TODO). 콘텐츠 생성 과제(보류).
+- 외부 업타임 모니터를 `/health/deep` 에 연결·주1회 `pg_dump` 백업 등 운영 항목 — [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) §8.
+
+---
+
+## 2026-06-18 현재 상태 (역사 기록 — 위 06-19 단락이 SUPERSEDES)
 
 **프로덕션 라이브 유지.** 06-05 이후 베타 운영자 콘솔(스펙 13)과 분석 대시보드(스펙 11)
 보강이 들어갔다. 2026년 8월 교수진 베타가 목표.
