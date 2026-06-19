@@ -153,8 +153,9 @@ class Settings(BaseSettings):
     # 비우면 emotion 을 payload 에서 생략한다(모델이 거부하면 빈 문자열로 끌 수 있음).
     VISIONSTORY_EMOTION: str = "news"
     # 영상 1초당 USD 환산(회계용 근사치). VisionStory 는 크레딧 과금이라 정확치는 응답
-    # cost_credit 으로 본다.
-    VISIONSTORY_COST_USD_PER_SECOND: float = 0.033
+    # cost_credit 으로 본다. 단가 = HeyGen 공용 아바타(HEYGEN_COST_USD_PER_SECOND
+    # 0.0167)의 정확히 2배 = 0.0334 (2026-06-19 사용자 확인).
+    VISIONSTORY_COST_USD_PER_SECOND: float = 0.0334
     # mock: 켜면 실제 VisionStory 호출 0 — 제출/폴링을 placeholder 로 시뮬레이션.
     VISIONSTORY_MOCK: bool = False
     VISIONSTORY_MOCK_VIDEO_URL: str = ""
@@ -200,14 +201,16 @@ class Settings(BaseSettings):
     QA_AVATAR_VOICE_SPEED: float = 1.2
     # 야간 배치 실행 시각(UTC 시). 기본 18시(UTC) = KST 03:00 — 일일 백업(03 UTC) 이후.
     QA_AVATAR_BATCH_HOUR_UTC: int = 18
-    # 강의당 아바타 제작(렌더 패스) 횟수 상한 — "첫 제작 1 + 재제작 4 = 총 5회"
+    # 강의당 아바타 제작(렌더 패스) 횟수 상한 — "첫 제작 1 + 재제작 2 = 총 3회"
     # (docs/planning/13-beta-admin-console.md §C-2). 월 한도(QA_AVATAR_MONTHLY_…)는
     # '배포된 강의 수'를 세지 같은 강의의 재제작 횟수를 세지 않아, 결과가 맘에 안 들어
     # 여러 번 다시 뽑으면 비용이 매번 발생해도 슬롯은 1로만 친다. 특히 VisionStory(본인
     # 얼굴)는 전역 $ 서킷 브레이커가 없어 이 횟수 상한이 유일한 방어선이다. HeyGen·
     # VisionStory 둘 다 동일 적용. 성공한 제작 패스만 카운트(실패/취소 제외). 면제
     # 계정(QA_AVATAR_UNLIMITED_EMAILS)은 무제한. **0 이하면 상한 비활성(무제한)**.
-    AVATAR_RERENDER_MAX_PER_LECTURE: int = 5
+    # 2026-06-19: 5 → 3 으로 하향(첫 제작 1 + 재제작 2). 20명 베타 규모에서 VisionStory
+    # 본인얼굴 렌더의 이론상 천장을 낮추기 위함(전역 $ 브레이커 도입 전 노출 축소).
+    AVATAR_RERENDER_MAX_PER_LECTURE: int = 3
 
     # ── 강의 본문 렌더 방식 (docs/planning/08-cost-optimization.md) ──────────────
     # "slideshow"(기본) = 본문을 HeyGen 영상으로 굽지 않고, 슬라이드 이미지 + 구간

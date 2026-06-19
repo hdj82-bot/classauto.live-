@@ -845,7 +845,7 @@ export default function SettingsPanel({
                 429 응답을 받아 토스트로 표시). */}
             {seedAllReady && onForceRenderSeed && (
               <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.5 }}>
-                본인·표준 아바타 수정은 강의당 재제작 4회로 제한됩니다. 성공한 제작만
+                본인·표준 아바타 수정은 강의당 재제작 2회로 제한됩니다. 성공한 제작만
                 카운트되니 신중히 진행해 주세요.
               </p>
             )}
