@@ -199,6 +199,24 @@ export interface Goal {
 }
 
 /**
+ * 교수자 개입 행동 로그 (스펙 11 §H-4, RQ2) — `/api/v1/dashboard/{id}/actions`.
+ * 격려·권고 채택·메모. 실제 외부 발송 채널은 후속(status='recorded').
+ */
+export type ActionType = "encouragement" | "adopt_recommendation" | "note";
+
+export interface InstructorAction {
+  id: string;
+  lecture_id: string;
+  instructor_id: string;
+  action_type: ActionType;
+  target_user_id: string | null;
+  target_name: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+}
+
+/**
  * Watch heatmap raw shape — 백엔드가 아직 노출하지 않는다.
  * BACKEND_ASKS.ANALYTICS.md 에 정리된 협의안. 도착 전까지는 어떤 응답에도
  * 이 키가 없으므로 컴포넌트는 "준비 중" fallback 으로 분기한다.
