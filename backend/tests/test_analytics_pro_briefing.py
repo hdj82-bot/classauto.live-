@@ -86,8 +86,14 @@ _BODY = {
 }
 
 
+async def _enable(db, user):
+    user.analytics_pro_enabled = True
+    await db.flush()
+
+
 @pytest.mark.asyncio
-async def test_briefing_endpoint_ok(client, professor):
+async def test_briefing_endpoint_ok(client, professor, db):
+    await _enable(db, professor)  # 운영자 토글 on 상태
     resp = await client.post(
         "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
     )
@@ -100,7 +106,8 @@ async def test_briefing_endpoint_ok(client, professor):
 
 
 @pytest.mark.asyncio
-async def test_briefing_endpoint_bad_scenario(client, professor):
+async def test_briefing_endpoint_bad_scenario(client, professor, db):
+    await _enable(db, professor)
     body = {**_BODY, "scenario": "nope"}
     resp = await client.post(
         "/api/v1/analytics-pro/briefing", json=body, headers=make_auth_header(professor)
@@ -109,8 +116,49 @@ async def test_briefing_endpoint_bad_scenario(client, professor):
 
 
 @pytest.mark.asyncio
+async def test_briefing_endpoint_blocked_when_not_enabled(client, professor):
+    # 기본 교수자는 analytics_pro_enabled=False → 운영자 토글 게이트가 403.
+    resp = await client.post(
+        "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_briefing_endpoint_requires_professor(client, student):
     resp = await client.post(
         "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(student)
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_toggle_enables_feature(client, admin, professor):
+    # 토글 엔드포인트가 commit 하면 ORM 객체가 만료되므로, 헤더·id 를 미리 캡처한다
+    # (만료 후 professor.id 접근은 async 세션에서 lazy-load 오류를 낼 수 있음).
+    prof_headers = make_auth_header(professor)
+    prof_id = str(professor.id)
+    admin_headers = make_auth_header(admin)
+
+    # 처음엔 막힘(운영자 미활성).
+    r0 = await client.post(
+        "/api/v1/analytics-pro/briefing", json=_BODY, headers=prof_headers
+    )
+    assert r0.status_code == 403
+
+    # 운영자가 토글 on.
+    rt = await client.post(
+        f"/api/v1/admin/users/{prof_id}/analytics-pro?enabled=true", headers=admin_headers
+    )
+    assert rt.status_code == 200
+    assert rt.json()["analytics_pro_enabled"] is True
+
+    # /me 가 노출 여부를 반영.
+    rme = await client.get("/api/v1/users/me", headers=prof_headers)
+    assert rme.json()["analytics_pro_enabled"] is True
+
+    # 이제 접근 가능.
+    r1 = await client.post(
+        "/api/v1/analytics-pro/briefing", json=_BODY, headers=prof_headers
+    )
+    assert r1.status_code == 200

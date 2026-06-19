@@ -111,6 +111,11 @@ class User(Base):
     beta_consented_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # 베타 학습 분석 PRO(docs/planning/analytics-spec.md) 노출 토글. 운영자가 admin
+    # 콘솔에서 per-user on/off. 기본 false(미노출) — 켠 테스터만 실기능 사용(0062).
+    analytics_pro_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

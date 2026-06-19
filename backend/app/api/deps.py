@@ -116,6 +116,20 @@ async def require_student(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_analytics_pro(user: User = Depends(require_professor)) -> User:
+    """학습 분석 PRO(베타 전용) 접근 — 교수자 + 운영자 토글(analytics_pro_enabled).
+
+    교수자라도 운영자가 켜지 않은 계정은 403. 베타테스터 한정 노출 게이트
+    (docs/planning/analytics-spec.md, 운영자 콘솔에서 per-user on/off).
+    """
+    if not user.analytics_pro_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="학습 분석 PRO 미활성 계정입니다(운영자 활성화 필요).",
+        )
+    return user
+
+
 async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role.value != "admin":
         raise HTTPException(

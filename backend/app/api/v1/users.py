@@ -18,6 +18,8 @@ class MeResponse(BaseModel):
     # 학생 첫 사용 온보딩(영상 시청 4슬라이드 안내)을 "다시 보지 않기" 한 시각.
     # null = 아직 안 함(진입 시 안내 표시). 값이 있으면 영구 스킵.
     onboarded_at: datetime | None
+    # 베타 학습 분석 PRO 노출 여부(운영자 토글). 프론트가 메뉴/페이지 노출 판단에 쓴다.
+    analytics_pro_enabled: bool = False
 
 
 def _to_me(user: User) -> MeResponse:
@@ -25,6 +27,7 @@ def _to_me(user: User) -> MeResponse:
         id=str(user.id),
         role=user.role.value,
         onboarded_at=user.onboarded_at,
+        analytics_pro_enabled=bool(user.analytics_pro_enabled),
     )
 
 
