@@ -175,6 +175,30 @@ export interface QaKeywordsData {
 }
 
 /**
+ * 학습 목표·달성률 (스펙 11 §H-3) — `/api/v1/dashboard/{id}/goals`.
+ * baseline(before) → current(after) → target 비교. progress_pct 0~100.
+ */
+export type GoalMetric =
+  | "completionRate"
+  | "attendanceRate"
+  | "avgAccuracy"
+  | "qaCount";
+
+export interface Goal {
+  id: string;
+  lecture_id: string;
+  metric: GoalMetric;
+  label: string;
+  target_value: number;
+  baseline_value: number | null;
+  current_value: number;
+  progress_pct: number;
+  achieved: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
  * Watch heatmap raw shape — 백엔드가 아직 노출하지 않는다.
  * BACKEND_ASKS.ANALYTICS.md 에 정리된 협의안. 도착 전까지는 어떤 응답에도
  * 이 키가 없으므로 컴포넌트는 "준비 중" fallback 으로 분기한다.
