@@ -24,7 +24,11 @@ from app.core.config import settings
 from app.db.session import SyncSessionLocal
 from app.models.qa_answer_cache import QAAnswerCache
 from app.services.pipeline import qa_avatar
-from app.services.pipeline.budget import BudgetExceededError, assert_qa_render_budget
+from app.services.pipeline.budget import (
+    BudgetExceededError,
+    assert_qa_render_budget,
+    assert_visionstory_budget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -379,6 +383,21 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
     use_vs = _is_own_face_lecture(db, _lecture, _professor) and _visionstory_enabled()
     own_face_img = _own_face_image(db, _professor, _lecture) if use_vs else None
     use_vs = use_vs and own_face_img is not None
+
+    # VisionStory 전역 $ 서킷 브레이커. HeyGen 렌더는 호출부(assert_qa_render_budget →
+    # assert_heygen_budget)가 가드하지만, VS 비용은 platform_cost_logs 로 따로 적재돼 그
+    # 경로엔 안 잡힌다. 제출 직전·상태 전이 전에 일/월 한도를 확인하고, 초과면 렌더하지
+    # 않고 pending 유지(다음 배치·한도 리셋/상향 시 재시도 — character 미준비와 동일 패턴).
+    # failed 로 두지 않는 건 본인 잘못이 아닌 전역 한도이기 때문. mock 은 통과.
+    if use_vs:
+        try:
+            assert_visionstory_budget(db)
+        except BudgetExceededError as exc:
+            logger.warning(
+                "Q&A 배치: VisionStory 예산 차단 — 렌더 보류(pending 유지): cache_id=%s, %s",
+                rep.id, exc,
+            )
+            return False
 
     character = None
     if not use_vs:
