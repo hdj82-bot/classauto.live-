@@ -27,6 +27,7 @@
       "attention": "집중 분석",
       "watch": "재생 구간 히트맵",
       "qa": "Q&A 트렌드",
+      "qaKeywords": "빈번 질문어",
       "cost": "비용 미터"
     },
     "trend": {
@@ -37,6 +38,12 @@
       "legendAccuracy": "평균 정답률",
       "latestQa": "누적 질문 수",
       "latestLearners": "학습자 수"
+    },
+    "qaKeywords": {
+      "empty": "질문어 데이터 없음",
+      "emptyDesc": "학생이 Q&A 질문을 남기면 자주 나온 키워드가 표시됩니다.",
+      "countLabel": "{count}회 언급",
+      "totalLabel": "총 {count}개 질문 분석"
     },
     "attention": {
       "score": "학급 평균 집중도",

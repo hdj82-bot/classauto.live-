@@ -142,6 +142,22 @@ export interface TrendData {
 }
 
 /**
+ * 빈번 질문어 (스펙 11 §G) — `/api/v1/dashboard/{id}/qa-keywords` 응답.
+ * 학생 Q&A 질문에서 추출한 키워드 빈도. lang 으로 한/중/영 칩 구분.
+ */
+export interface QaKeyword {
+  term: string;
+  lang: "ko" | "zh" | "en";
+  count: number;
+}
+
+export interface QaKeywordsData {
+  lecture_id: string;
+  totalQuestions: number;
+  keywords: QaKeyword[];
+}
+
+/**
  * Watch heatmap raw shape — 백엔드가 아직 노출하지 않는다.
  * BACKEND_ASKS.ANALYTICS.md 에 정리된 협의안. 도착 전까지는 어떤 응답에도
  * 이 키가 없으므로 컴포넌트는 "준비 중" fallback 으로 분기한다.

@@ -14,6 +14,7 @@ from app.models.session import LearningSession
 from app.models.user import User
 from app.services import cohort_metrics as cohort_svc
 from app.services import dashboard as dashboard_svc
+from app.services import qa_keywords as qa_keywords_svc
 from app.services.lecture import assert_professor_owns_lecture, list_my_lectures
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -109,6 +110,16 @@ async def get_trend(
     """
     await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await cohort_svc.get_trend(db, lecture_id, days)
+@router.get("/{lecture_id}/qa-keywords", summary="빈번 질문어 (한/중/영 키워드)")
+async def get_qa_keywords(
+    lecture_id: uuid.UUID,
+    top: int = Query(20, ge=1, le=100, description="반환할 상위 키워드 수"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """학생 Q&A 질문에서 자주 등장한 키워드 빈도(스펙 11 §G). 경량 휴리스틱 추출."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await qa_keywords_svc.get_qa_keywords(db, lecture_id, top_n=top)
 
 
 @router.post("/watch-events", summary="재생 이벤트 배치 적재 (학습자)")
