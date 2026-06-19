@@ -76,6 +76,75 @@ def test_zero_limit_disables_that_window():
         assert_heygen_budget(_db())
 
 
+# ── assert_visionstory_budget (본인 얼굴 Q&A 렌더 — platform_cost_logs 합산) ────
+
+
+def test_vs_passes_when_under_limits():
+    from app.services.pipeline.budget import assert_visionstory_budget
+
+    with patch.object(settings, "VISIONSTORY_MOCK", False), \
+         patch.object(settings, "VISIONSTORY_DAILY_BUDGET_USD", 200.0), \
+         patch.object(settings, "VISIONSTORY_MONTHLY_BUDGET_USD", 1500.0), \
+         patch.object(budget, "visionstory_spend_usd", return_value=120.0):
+        assert_visionstory_budget(_db())  # 예외 없어야 함
+
+
+def test_vs_blocks_when_daily_exceeded():
+    from app.services.pipeline.budget import assert_visionstory_budget
+
+    with patch.object(settings, "VISIONSTORY_MOCK", False), \
+         patch.object(settings, "VISIONSTORY_DAILY_BUDGET_USD", 200.0), \
+         patch.object(settings, "VISIONSTORY_MONTHLY_BUDGET_USD", 1500.0), \
+         patch.object(budget, "visionstory_spend_usd", return_value=200.0):
+        with pytest.raises(BudgetExceededError):
+            assert_visionstory_budget(_db())
+
+
+def test_vs_blocks_when_monthly_exceeded():
+    from app.services.pipeline.budget import assert_visionstory_budget
+
+    # 일은 통과(50 < 200), 월만 초과(1600 >= 1500) 하도록 윈도별로 다른 값 반환.
+    def by_window(_db, since):
+        return 1600.0 if since.day == 1 else 50.0
+
+    with patch.object(settings, "VISIONSTORY_MOCK", False), \
+         patch.object(settings, "VISIONSTORY_DAILY_BUDGET_USD", 200.0), \
+         patch.object(settings, "VISIONSTORY_MONTHLY_BUDGET_USD", 1500.0), \
+         patch.object(budget, "visionstory_spend_usd", side_effect=by_window):
+        with pytest.raises(BudgetExceededError):
+            assert_visionstory_budget(_db())
+
+
+def test_vs_mock_mode_skips_check():
+    from app.services.pipeline.budget import assert_visionstory_budget
+
+    # VISIONSTORY_MOCK 이면 합계가 한도를 넘어도 통과해야 한다 (실비용 0).
+    with patch.object(settings, "VISIONSTORY_MOCK", True), \
+         patch.object(settings, "VISIONSTORY_DAILY_BUDGET_USD", 200.0), \
+         patch.object(budget, "visionstory_spend_usd", return_value=9999.0) as spend:
+        assert_visionstory_budget(_db())
+        spend.assert_not_called()
+
+
+def test_vs_zero_limit_disables_that_window():
+    from app.services.pipeline.budget import assert_visionstory_budget
+
+    # 일 한도 0 = 비활성. 월만 검사하고 막힌다(1600 >= 1500).
+    with patch.object(settings, "VISIONSTORY_MOCK", False), \
+         patch.object(settings, "VISIONSTORY_DAILY_BUDGET_USD", 0.0), \
+         patch.object(settings, "VISIONSTORY_MONTHLY_BUDGET_USD", 1500.0), \
+         patch.object(budget, "visionstory_spend_usd", return_value=1600.0):
+        with pytest.raises(BudgetExceededError):
+            assert_visionstory_budget(_db())
+
+    # 둘 다 0 = 완전 비활성 → 통과.
+    with patch.object(settings, "VISIONSTORY_MOCK", False), \
+         patch.object(settings, "VISIONSTORY_DAILY_BUDGET_USD", 0.0), \
+         patch.object(settings, "VISIONSTORY_MONTHLY_BUDGET_USD", 0.0), \
+         patch.object(budget, "visionstory_spend_usd", return_value=9999.0):
+        assert_visionstory_budget(_db())
+
+
 # ── HEYGEN_MOCK: heygen 클라이언트가 실제 API 를 호출하지 않음 ─────────────────
 
 

@@ -91,6 +91,72 @@ def assert_heygen_budget(db: Session, *, now: datetime | None = None) -> None:
             )
 
 
+# ── VisionStory 예산 서킷 브레이커 (본인 얼굴 Q&A 렌더) ───────────────────────
+#
+# HeyGen(`assert_heygen_budget`)은 render_cost_logs(service="heygen")를 합산하지만,
+# VisionStory Q&A 렌더 비용은 VideoRender 가 없어 platform_cost_logs(CostLog,
+# category=AVATAR_QA, model="visionstory")에 적재된다(qa_batch._record_qa_render_cost).
+# 그래서 HeyGen 브레이커가 VS 지출을 전혀 못 잡았고, 본인 얼굴 렌더는 강의당 횟수
+# 상한(C-2)만이 유일한 방어선이었다. 이 함수가 동형의 일/월 $ 2차 방어선을 추가한다.
+
+_VISIONSTORY_PROVIDER = "visionstory"
+
+
+def visionstory_spend_usd(db: Session, since: datetime) -> float:
+    """``since`` 이후 기록된 VisionStory Q&A 렌더 비용 합계(USD)."""
+    from app.models.cost_log import CostCategory, CostLog  # noqa: PLC0415
+
+    total = db.execute(
+        select(func.coalesce(func.sum(CostLog.cost_usd), 0.0)).where(
+            CostLog.category == CostCategory.avatar_qa,
+            CostLog.model == _VISIONSTORY_PROVIDER,
+            CostLog.created_at >= since,
+        )
+    ).scalar()
+    return float(total or 0.0)
+
+
+def assert_visionstory_budget(db: Session, *, now: datetime | None = None) -> None:
+    """일/월 한도 초과 시 ``BudgetExceededError`` 를 raise. 한도 0 이면 해당 검사 비활성.
+
+    ``assert_heygen_budget`` 과 동형. mock 모드(VISIONSTORY_MOCK)는 실비용 0 이라 건너뛴다.
+    한계: 비용은 렌더 완료 시점에 기록되므로 in-flight 다발 제출은 일시 초과할 수 있다
+    (HeyGen 브레이커와 동일 — 강의당 횟수 상한 C-2 가 폭주를 1차로 막는다).
+    """
+    if settings.VISIONSTORY_MOCK:
+        return
+
+    now = now or datetime.now(timezone.utc)
+    daily_limit = settings.VISIONSTORY_DAILY_BUDGET_USD
+    monthly_limit = settings.VISIONSTORY_MONTHLY_BUDGET_USD
+
+    if daily_limit and daily_limit > 0:
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        spent = visionstory_spend_usd(db, day_start)
+        if spent >= daily_limit:
+            logger.error(
+                "[BUDGET] VisionStory 일 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
+                spent, daily_limit,
+            )
+            raise BudgetExceededError(
+                f"VisionStory 일 예산 초과: ${spent:.2f} / ${daily_limit:.2f}"
+            )
+
+    if monthly_limit and monthly_limit > 0:
+        month_start = now.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        spent = visionstory_spend_usd(db, month_start)
+        if spent >= monthly_limit:
+            logger.error(
+                "[BUDGET] VisionStory 월 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
+                spent, monthly_limit,
+            )
+            raise BudgetExceededError(
+                f"VisionStory 월 예산 초과: ${spent:.2f} / ${monthly_limit:.2f}"
+            )
+
+
 # ── Q&A 아바타 한도 (docs/planning/09 §5 개정 2026-06-14) ─────────────────────
 #
 # 한도 단위는 '클립'이 아니라 '배포(is_published)된 강의'다. 베타테스터는 월 8강의.

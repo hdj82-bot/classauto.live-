@@ -158,6 +158,14 @@ class Settings(BaseSettings):
     # mock: 켜면 실제 VisionStory 호출 0 — 제출/폴링을 placeholder 로 시뮬레이션.
     VISIONSTORY_MOCK: bool = False
     VISIONSTORY_MOCK_VIDEO_URL: str = ""
+    # VisionStory 전역 $ 서킷 브레이커(본인 얼굴 Q&A 렌더). HeyGen 과 달리 VS 비용은
+    # platform_cost_logs(category=AVATAR_QA, model='visionstory')에 적재되므로 그 합으로
+    # 일/월 한도를 본다(budget.assert_visionstory_budget). 0 이면 해당 검사 비활성.
+    # 2026-06-19 결정: 일 200 / 월 1500 — 20명 베타 정상 사용(~$960/월) 위, C-2 하향 후
+    # 이론상 최대(~$3.8k) 아래에서 재시도 폭주·버그성 대량 렌더만 끊는 2차 방어선.
+    # (1차 방어선은 강의당 횟수 상한 AVATAR_RERENDER_MAX_PER_LECTURE.)
+    VISIONSTORY_DAILY_BUDGET_USD: float = 200.0
+    VISIONSTORY_MONTHLY_BUDGET_USD: float = 1500.0
 
     # ── 아바타 Q&A 캐시 (docs/planning/08 §5, 09 §5) ─────────────
     # 실시간 HeyGen 렌더 금지(지연). 질문은 항상 즉시 RAG 텍스트로 답하고, 겹치는
