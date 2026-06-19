@@ -12,11 +12,13 @@ from app.api.deps import require_professor, require_student
 from app.db.session import get_db
 from app.models.session import LearningSession
 from app.models.user import User
+from app.schemas.action import ActionCreate, ActionResponse
 from app.schemas.goal import GoalCreate, GoalResponse, GoalUpdate
 from app.services import cohort_metrics as cohort_svc
 from app.services import dashboard as dashboard_svc
 from app.services import goals as goals_svc
 from app.services import qa_keywords as qa_keywords_svc
+from app.services import instructor_actions as actions_svc
 from app.services.lecture import assert_professor_owns_lecture, list_my_lectures
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -173,6 +175,38 @@ async def delete_goal(
 ):
     await assert_professor_owns_lecture(db, lecture_id, user.id)
     await goals_svc.delete_goal(db, lecture_id, goal_id)
+
+
+@router.get(
+    "/{lecture_id}/actions",
+    response_model=list[ActionResponse],
+    summary="교수자 개입 행동 로그 (격려·권고 채택·메모)",
+)
+async def list_actions(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """RQ2 계측 — 교수자가 데이터 기반으로 취한 행동 로그(스펙 11 §H-4)."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await actions_svc.list_actions(db, lecture_id)
+
+
+@router.post(
+    "/{lecture_id}/actions",
+    response_model=ActionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="교수자 개입 행동 기록 (격려 등)",
+)
+async def create_action(
+    lecture_id: uuid.UUID,
+    body: ActionCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """격려 등 개입 행동을 기록한다. 실제 외부 발송 채널은 후속 — status='recorded'."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await actions_svc.create_action(db, lecture_id, user.id, body)
 
 
 @router.get("/{lecture_id}/trend", summary="성취율 추이 (일자별 스냅샷)")

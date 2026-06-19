@@ -357,3 +357,55 @@ input[type="range"].slider-rb:focus-visible::-webkit-slider-thumb {
 input[type="range"].slider-rb:focus-visible::-moz-range-thumb {
   box-shadow: 0 0 0 3px var(--gold-medium, rgba(184, 131, 8, 0.4));
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * 인쇄(PDF 출력) — 분석 리포트 (스펙 11 §A)
+ *
+ * 교수자 앱 셸은 height:100vh; overflow:hidden 이라 그냥 인쇄하면 보이는 영역만
+ * 출력된다. 인쇄 시 셸 크롬(topbar/sidebar)을 숨기고 셸/스테이지/메인의 높이·
+ * overflow 를 풀어 본문 전체가 종이에 흐르게 한다. PDF 라이브러리 도입 없이
+ * window.print → "PDF로 저장" 으로 처리(DEPS 금지 정책).
+ * ────────────────────────────────────────────────────────────────────────── */
+@media print {
+  /* 셸 자체 제약 해제 */
+  [data-pro-shell] {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* 셸 직계 자식 중 stage 외(= topbar, svg defs)는 인쇄 안 함 */
+  [data-pro-shell] > *:not([data-pro-stage]) {
+    display: none !important;
+  }
+  [data-pro-stage] {
+    display: block !important;
+    overflow: visible !important;
+    min-height: 0 !important;
+  }
+  /* stage 직계 자식 중 main 외(= sidebar)는 인쇄 안 함 */
+  [data-pro-stage] > *:not([data-pro-main]) {
+    display: none !important;
+  }
+  [data-pro-main] {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: #fff !important;
+  }
+  /* 조작 UI(버튼·링크 등)는 인쇄 제외 */
+  .print-hide {
+    display: none !important;
+  }
+  /* 차트 색·배경을 그대로 인쇄 */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* 카드가 페이지 경계에서 잘리지 않게 */
+  [data-analytics-section] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  @page {
+    margin: 14mm;
+  }
+}

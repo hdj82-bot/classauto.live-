@@ -22,6 +22,7 @@
       "kpi": "Current KPIs",
       "trend": "Achievement trend",
       "goals": "Learning goals",
+      "actions": "Encouragement & actions",
       "studentGrid": "Per-student progress",
       "scores": "Accuracy heatmap",
       "summary": "Summary",
@@ -41,6 +42,23 @@
       "qaCount": "Total questions",
       "asOf": "As of {date}",
       "asOfWithPrev": "As of {date} · vs last week ({prev})"
+    },
+    "actions": {
+      "recordOnlyNote": "Actions are currently recorded only (for RQ2 metrics). A channel to actually deliver them to students is in preparation.",
+      "targetLabel": "Target learner",
+      "targetClass": "Whole class",
+      "messageLabel": "Encouragement",
+      "messagePlaceholder": "e.g. You're almost through this week — keep going!",
+      "send": "Record",
+      "formError": "Enter a message.",
+      "saveError": "Failed to record.",
+      "empty": "No intervention actions yet",
+      "emptyDesc": "Once you leave encouragement based on the data, the log appears here.",
+      "type": {
+        "encouragement": "Encouragement",
+        "adopt_recommendation": "Adopted",
+        "note": "Note"
+      }
     },
     "goals": {
       "empty": "No learning goals set",
@@ -210,6 +228,10 @@
       "success": "CSV file downloaded.",
       "error": "CSV export failed.",
       "ariaLabel": "Download per-student progress CSV for the current lecture"
+    },
+    "pdf": {
+      "label": "Export PDF",
+      "ariaLabel": "Export the analytics report as PDF (browser print)"
     },
     "legend": {
       "patternHigh": "Diagonal (high accuracy)",
