@@ -19,7 +19,9 @@
     "lectureRetry": "다시 시도",
     "section": {
       "attendance": "출석 분포",
+      "kpi": "현황 KPI",
       "trend": "성취율 추이",
+      "goals": "학습 목표 · 달성률",
       "studentGrid": "학생 개별 진척도",
       "scores": "정답률 히트맵",
       "summary": "요약",
@@ -29,6 +31,39 @@
       "qa": "Q&A 트렌드",
       "qaKeywords": "빈번 질문어",
       "cost": "비용 미터"
+    },
+    "kpi": {
+      "empty": "KPI 데이터 수집 중",
+      "emptyDesc": "일자별 스냅샷이 쌓이면 현황 KPI와 전주 대비 증감이 표시됩니다.",
+      "completionRate": "학습 완료율",
+      "attendanceRate": "출석 인정율",
+      "avgAccuracy": "평균 정답률",
+      "qaCount": "누적 질문 수",
+      "asOf": "{date} 기준",
+      "asOfWithPrev": "{date} 기준 · 전주({prev}) 대비"
+    },
+    "goals": {
+      "empty": "설정된 학습 목표가 없습니다",
+      "emptyDesc": "지표·목표값을 정하면 현재 달성률(시작→현재→목표)이 표시됩니다.",
+      "metricLabel": "지표",
+      "nameLabel": "목표 이름",
+      "namePlaceholder": "예: 중간 전 완료율 80%",
+      "targetLabel": "목표값",
+      "add": "추가",
+      "achieved": "달성",
+      "delete": "삭제",
+      "start": "시작",
+      "now": "현재",
+      "target": "목표",
+      "formError": "이름과 목표값을 입력하세요.",
+      "saveError": "목표 저장에 실패했습니다.",
+      "deleteError": "목표 삭제에 실패했습니다.",
+      "metric": {
+        "completionRate": "학습 완료율",
+        "attendanceRate": "출석 인정율",
+        "avgAccuracy": "평균 정답률",
+        "qaCount": "누적 질문 수"
+      }
     },
     "trend": {
       "empty": "추이 데이터 수집 중",

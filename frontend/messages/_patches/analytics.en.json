@@ -19,7 +19,9 @@
     "lectureRetry": "Retry",
     "section": {
       "attendance": "Attendance distribution",
+      "kpi": "Current KPIs",
       "trend": "Achievement trend",
+      "goals": "Learning goals",
       "studentGrid": "Per-student progress",
       "scores": "Accuracy heatmap",
       "summary": "Summary",
@@ -29,6 +31,39 @@
       "qa": "Q&A trend",
       "qaKeywords": "Frequent question terms",
       "cost": "Cost meter"
+    },
+    "kpi": {
+      "empty": "Collecting KPI data",
+      "emptyDesc": "Current KPIs and week-over-week change appear once daily snapshots accumulate.",
+      "completionRate": "Completion rate",
+      "attendanceRate": "Attendance rate",
+      "avgAccuracy": "Avg. accuracy",
+      "qaCount": "Total questions",
+      "asOf": "As of {date}",
+      "asOfWithPrev": "As of {date} · vs last week ({prev})"
+    },
+    "goals": {
+      "empty": "No learning goals set",
+      "emptyDesc": "Set a metric and target to see progress (start → now → target).",
+      "metricLabel": "Metric",
+      "nameLabel": "Goal name",
+      "namePlaceholder": "e.g. 80% completion before midterm",
+      "targetLabel": "Target",
+      "add": "Add",
+      "achieved": "Achieved",
+      "delete": "Delete",
+      "start": "Start",
+      "now": "Now",
+      "target": "Target",
+      "formError": "Enter a name and target value.",
+      "saveError": "Failed to save the goal.",
+      "deleteError": "Failed to delete the goal.",
+      "metric": {
+        "completionRate": "Completion rate",
+        "attendanceRate": "Attendance rate",
+        "avgAccuracy": "Avg. accuracy",
+        "qaCount": "Total questions"
+      }
     },
     "trend": {
       "empty": "Collecting trend data",

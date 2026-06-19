@@ -16,6 +16,8 @@ export { default as WatchHeatmap } from "./WatchHeatmap";
 export { default as QaTrend } from "./QaTrend";
 export { default as AchievementTrend } from "./AchievementTrend";
 export { default as QaKeywords } from "./QaKeywords";
+export { default as KpiDeltaCards } from "./KpiDeltaCards";
+export { default as GoalTracker } from "./GoalTracker";
 export { default as EmptyState } from "./EmptyState";
 export { useAnalyticsI18n } from "./useAnalyticsI18n";
 export type {
@@ -27,4 +29,6 @@ export type {
   WatchHeatmapData,
   TrendData,
   QaKeywordsData,
+  KpiDeltaData,
+  Goal,
 } from "./types";

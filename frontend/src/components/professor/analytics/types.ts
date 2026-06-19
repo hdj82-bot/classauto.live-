@@ -124,6 +124,23 @@ export interface CostData {
 }
 
 /**
+ * 현황 KPI + 전주 대비 델타 (스펙 11 §B) — `/api/v1/dashboard/{id}/kpi` 응답.
+ * 일자 스냅샷 기반. delta 는 7일 이전 스냅샷이 없으면 null.
+ */
+export interface KpiItem {
+  key: "completionRate" | "attendanceRate" | "avgAccuracy" | "qaCount";
+  current: number;
+  delta: number | null;
+}
+
+export interface KpiDeltaData {
+  lecture_id: string;
+  as_of: string | null;
+  prev_as_of: string | null;
+  kpis: KpiItem[];
+}
+
+/**
  * 성취율 추이 (스펙 11 §C) — `/api/v1/dashboard/{id}/trend` 응답.
  * 일배치가 적재한 강의×일자 누적 스냅샷. 비율 3종은 0~100(%).
  */
@@ -155,6 +172,30 @@ export interface QaKeywordsData {
   lecture_id: string;
   totalQuestions: number;
   keywords: QaKeyword[];
+}
+
+/**
+ * 학습 목표·달성률 (스펙 11 §H-3) — `/api/v1/dashboard/{id}/goals`.
+ * baseline(before) → current(after) → target 비교. progress_pct 0~100.
+ */
+export type GoalMetric =
+  | "completionRate"
+  | "attendanceRate"
+  | "avgAccuracy"
+  | "qaCount";
+
+export interface Goal {
+  id: string;
+  lecture_id: string;
+  metric: GoalMetric;
+  label: string;
+  target_value: number;
+  baseline_value: number | null;
+  current_value: number;
+  progress_pct: number;
+  achieved: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 /**

@@ -18,6 +18,8 @@ import {
   QaTrend,
   AchievementTrend,
   QaKeywords,
+  KpiDeltaCards,
+  GoalTracker,
   useAnalyticsI18n,
 } from "@/components/professor/analytics";
 import { useInsightsI18n } from "@/components/professor/analytics/insights";
@@ -37,6 +39,7 @@ import type {
   WatchHeatmapData,
   TrendData,
   QaKeywordsData,
+  KpiDeltaData,
 } from "@/components/professor/analytics/types";
 
 interface LectureMeta {
@@ -48,7 +51,9 @@ interface LectureMeta {
 
 type SectionKey =
   | "attendance"
+  | "kpi"
   | "trend"
+  | "goals"
   | "studentGrid"
   | "qaKeywords"
   | "scores"
@@ -93,6 +98,8 @@ export default function LectureAnalyticsPage() {
   const [trend, setTrend] = useState<TrendData | null>(null);
   // G(스펙 11 §G): 빈번 질문어 — Q&A 질문 키워드(독립 best-effort).
   const [qaKeywords, setQaKeywords] = useState<QaKeywordsData | null>(null);
+  // B(스펙 11 §B): 현황 KPI + 전주 대비 델타 — 추이와 동일 스냅샷 원자료.
+  const [kpi, setKpi] = useState<KpiDeltaData | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +134,7 @@ export default function LectureAnalyticsPage() {
         costRes,
         trendRes,
         qaKeywordsRes,
+        kpiRes,
       ] = await Promise.allSettled([
         lectureMetaPromise,
         api.get<AttendanceData>(`/api/v1/dashboard/${lectureId}/attendance`),
@@ -138,6 +146,7 @@ export default function LectureAnalyticsPage() {
         api.get<CostData>(`/api/v1/dashboard/${lectureId}/cost`),
         api.get<TrendData>(`/api/v1/dashboard/${lectureId}/trend?days=30`),
         api.get<QaKeywordsData>(`/api/v1/dashboard/${lectureId}/qa-keywords?top=24`),
+        api.get<KpiDeltaData>(`/api/v1/dashboard/${lectureId}/kpi`),
       ]);
 
       if (lectureRes.status === "fulfilled" && lectureRes.value) {
@@ -158,6 +167,7 @@ export default function LectureAnalyticsPage() {
       if (trendRes.status === "fulfilled") setTrend(trendRes.value.data);
       if (qaKeywordsRes.status === "fulfilled")
         setQaKeywords(qaKeywordsRes.value.data);
+      if (kpiRes.status === "fulfilled") setKpi(kpiRes.value.data);
       // costRes 응답은 의도적으로 UI 에 노출하지 않음 (planning/05 §1.1).
       void costRes;
 
@@ -257,10 +267,21 @@ export default function LectureAnalyticsPage() {
         )}
       </Section>
 
+      {/* B (스펙 11 §B): 현황 KPI + 전주 대비 델타 — 추이와 동일 스냅샷 원자료.
+          자체 EmptyState(수집 중)를 가지므로 무조건 렌더. */}
+      <Section id="kpi" title={t("section.kpi")}>
+        <KpiDeltaCards data={kpi} />
+      </Section>
+
       {/* C (스펙 11 §C): 성취율 추이 — 일배치 스냅샷 라인 차트. 자체 EmptyState
           (수집 중)를 가지므로 무조건 렌더. */}
       <Section id="trend" title={t("section.trend")}>
         <AchievementTrend data={trend} />
+      </Section>
+
+      {/* H-3 (스펙 11 §H-3): 학습 목표·달성률 — 자체 CRUD(lectureId 만 전달). */}
+      <Section id="goals" title={t("section.goals")}>
+        <GoalTracker lectureId={lectureId} />
       </Section>
 
       {/* E (스펙 11 §E): 학생 개별 진척도 그리드 — attendance 데이터 재활용. */}
