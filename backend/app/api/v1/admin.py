@@ -564,3 +564,42 @@ async def reset_avatar_rerender(
         "avatar_render_count": 0,
         "detail": "아바타 제작 횟수가 초기화되었습니다.",
     }
+
+
+# ── POST /api/v1/admin/users/{user_id}/analytics-pro ─────────────────────────
+
+
+@router.post("/users/{user_id}/analytics-pro")
+async def set_analytics_pro(
+    user_id: uuid.UUID,
+    enabled: bool = Query(...),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """베타 학습 분석 PRO 노출 토글(per-user, docs/planning/analytics-spec.md).
+
+    운영자가 켠 교수자만 ``/api/v1/analytics-pro/*`` 실기능을 쓴다(require_analytics_pro).
+    이 행위는 E 감사 로그에 1행 남긴다.
+    """
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다."
+        )
+
+    previous = bool(user.analytics_pro_enabled)
+    user.analytics_pro_enabled = enabled
+    await db.flush()
+    await db.commit()
+
+    await log_admin_action(
+        db,
+        _admin,
+        "user.set_analytics_pro",
+        target_type="user",
+        target_id=str(user_id),
+        detail={"previous": previous, "enabled": enabled, "email": user.email},
+    )
+
+    return {"user_id": str(user_id), "analytics_pro_enabled": enabled}

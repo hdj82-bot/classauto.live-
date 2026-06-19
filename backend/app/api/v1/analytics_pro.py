@@ -5,13 +5,13 @@ docs/planning/analytics-spec.md A블록. 마케팅 미리보기(/analytics-examp
 검증한다 — 요청의 ``scenario`` 로 합성 데이터를 만들고, 추후 실 집계가 같은
 ``LectureAnalysis`` 인터페이스로 교체된다.
 
-접근 제어: 현재는 교수자 인증(require_professor). 베타테스터 한정 운영자 토글 게이트는
-후속 Phase 에서 이 라우터에 의존성으로 덧댄다.
+접근 제어: 교수자 + 운영자 토글(``require_analytics_pro``). 운영자가 켠 베타테스터만
+접근 가능(미활성 교수자는 403). 토글은 admin 콘솔에서 per-user on/off.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import require_professor
+from app.api.deps import require_analytics_pro
 from app.models.user import User
 from app.schemas.analytics_pro import BriefingResult, CourseProfile, LectureAnalysis
 from app.services.analytics_pro import SCENARIOS, analyze, generate, generate_briefing
@@ -38,7 +38,7 @@ class BriefingResponse(BaseModel):
 )
 async def post_briefing(
     body: BriefingRequest,
-    _user: User = Depends(require_professor),
+    _user: User = Depends(require_analytics_pro),
 ) -> BriefingResponse:
     """``course_profile`` + 시나리오로 합성 데이터를 만들어 집계·판정·AI 브리핑을 반환.
 
