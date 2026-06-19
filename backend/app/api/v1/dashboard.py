@@ -96,6 +96,20 @@ async def get_qa_logs(
     return await dashboard_svc.get_qa_logs(db, lecture_id, page, limit)
 
 
+@router.get("/{lecture_id}/kpi", summary="현황 KPI + 전주 대비 델타")
+async def get_kpi(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """일자 스냅샷 기반 KPI 4종(완료율·출석·정답률·질문 수) + 전주 대비 증감(스펙 11 §B).
+
+    스냅샷이 2주치 미만이면 델타는 null(현재값만). 추이(`/trend`)와 동일 원자료.
+    """
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await cohort_svc.get_kpi(db, lecture_id)
+
+
 @router.get("/{lecture_id}/trend", summary="성취율 추이 (일자별 스냅샷)")
 async def get_trend(
     lecture_id: uuid.UUID,

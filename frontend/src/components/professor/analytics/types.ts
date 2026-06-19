@@ -124,6 +124,23 @@ export interface CostData {
 }
 
 /**
+ * 현황 KPI + 전주 대비 델타 (스펙 11 §B) — `/api/v1/dashboard/{id}/kpi` 응답.
+ * 일자 스냅샷 기반. delta 는 7일 이전 스냅샷이 없으면 null.
+ */
+export interface KpiItem {
+  key: "completionRate" | "attendanceRate" | "avgAccuracy" | "qaCount";
+  current: number;
+  delta: number | null;
+}
+
+export interface KpiDeltaData {
+  lecture_id: string;
+  as_of: string | null;
+  prev_as_of: string | null;
+  kpis: KpiItem[];
+}
+
+/**
  * 성취율 추이 (스펙 11 §C) — `/api/v1/dashboard/{id}/trend` 응답.
  * 일배치가 적재한 강의×일자 누적 스냅샷. 비율 3종은 0~100(%).
  */

@@ -135,6 +135,55 @@ def snapshot_all(db: Session, day: date | None = None) -> int:
     return len(lecture_ids)
 
 
+# 전주 대비 델타(스펙 11 §B)에서 '전주' 로 보는 간격.
+_WOW_DAYS = 7
+
+
+async def get_kpi(db: AsyncSession, lecture_id: uuid.UUID) -> dict:
+    """현황 KPI + 전주 대비 델타(스펙 11 §B).
+
+    C(성취율 추이)가 적재한 일자 스냅샷을 근거로, 최신 스냅샷을 현재값으로,
+    7일 이전(이하 가장 최근) 스냅샷을 비교 기준으로 삼아 증감을 계산한다.
+    스냅샷이 없으면 ``kpis: []``(수집 중), 전주 스냅샷이 없으면 각 델타는 null.
+    """
+    rows = list(
+        (
+            await db.execute(
+                select(CohortDailyMetric)
+                .where(CohortDailyMetric.lecture_id == lecture_id)
+                .order_by(CohortDailyMetric.metric_date.asc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not rows:
+        return {"lecture_id": str(lecture_id), "as_of": None, "prev_as_of": None, "kpis": []}
+
+    latest = rows[-1]
+    cutoff = latest.metric_date - timedelta(days=_WOW_DAYS)
+    prev = next((r for r in reversed(rows[:-1]) if r.metric_date <= cutoff), None)
+
+    def _kpi(key: str, current: float, previous: float | None) -> dict:
+        return {
+            "key": key,
+            "current": current,
+            "delta": round(current - previous, 2) if previous is not None else None,
+        }
+
+    return {
+        "lecture_id": str(lecture_id),
+        "as_of": latest.metric_date.isoformat(),
+        "prev_as_of": prev.metric_date.isoformat() if prev else None,
+        "kpis": [
+            _kpi("completionRate", latest.completion_rate, prev.completion_rate if prev else None),
+            _kpi("attendanceRate", latest.attendance_rate, prev.attendance_rate if prev else None),
+            _kpi("avgAccuracy", latest.avg_accuracy, prev.avg_accuracy if prev else None),
+            _kpi("qaCount", latest.qa_count, prev.qa_count if prev else None),
+        ],
+    }
+
+
 async def get_trend(
     db: AsyncSession, lecture_id: uuid.UUID, days: int = 30
 ) -> dict:
