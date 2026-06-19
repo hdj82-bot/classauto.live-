@@ -36,7 +36,6 @@ import type {
   AttendanceData,
   ScoresData,
   EngagementData,
-  CostData,
   QAData,
   WatchHeatmapData,
   TrendData,
@@ -64,16 +63,16 @@ type SectionKey =
   | "engagement"
   | "attention"
   | "watch"
-  | "qa"
-  | "cost";
+  | "qa";
 
 /**
- * 강의별 분석 리포트 — 6 endpoint (`attendance`, `scores`, `engagement`, `qa`,
- * `cost`, `export/csv`) 를 모두 사용한다. 각 endpoint 응답을 차트 컴포넌트에
- * 그대로 넘긴다 (정규화 코드는 차트 내부에 둔다 — 응답 shape 의 단일 진실은
- * `types.ts`).
+ * 강의별 분석 리포트 — dashboard endpoint (`attendance`, `scores`, `engagement`,
+ * `qa`, `trend`, `qa-keywords`, `kpi`, `export/csv`) 를 사용한다. 각 endpoint 응답을
+ * 차트 컴포넌트에 그대로 넘긴다 (정규화 코드는 차트 내부에 둔다 — 응답 shape 의
+ * 단일 진실은 `types.ts`). 원가(`cost`) 는 정책상(planning/05 §1.1) 교수자 화면에
+ * 표시하지 않으므로 여기서 조회하지 않는다 (admin 비용 화면 전용).
  *
- * - 6 endpoint 는 `Promise.allSettled` 로 병렬 호출 → 일부가 실패해도 나머지
+ * - 모든 endpoint 는 `Promise.allSettled` 로 병렬 호출 → 일부가 실패해도 나머지
  *   섹션은 표시된다 (대시보드의 데이터 의존성이 서로 독립이라 best-effort).
  * - watch heatmap raw data 는 백엔드 미도착 — `/engagement` 응답에 `slides`
  *   키가 함께 와도 지원하도록 스키마를 미리 분리해두었다 (BACKEND_ASKS 참조).
@@ -94,8 +93,6 @@ export default function LectureAnalyticsPage() {
   const [scores, setScores] = useState<ScoresData | null>(null);
   const [engagement, setEngagement] = useState<EngagementData | null>(null);
   const [qa, setQa] = useState<QAData | null>(null);
-  // cost 데이터는 fetch 만 하고 UI 에는 노출하지 않는다 (planning/05 §1.1 비용
-  // 표시 금지). 후속 PR 에서 endpoint fetch 자체를 제거 — 그때 import 도 정리.
   const [watch, setWatch] = useState<WatchHeatmapData | null>(null);
   // C(스펙 11 §C): 성취율 추이 — 일배치 스냅샷(독립 best-effort, 페이지 에러 미관여).
   const [trend, setTrend] = useState<TrendData | null>(null);
@@ -134,7 +131,6 @@ export default function LectureAnalyticsPage() {
         scoresRes,
         engagementRes,
         qaRes,
-        costRes,
         trendRes,
         qaKeywordsRes,
         kpiRes,
@@ -146,7 +142,6 @@ export default function LectureAnalyticsPage() {
           `/api/v1/dashboard/${lectureId}/engagement`,
         ),
         api.get<QAData>(`/api/v1/dashboard/${lectureId}/qa?limit=50`),
-        api.get<CostData>(`/api/v1/dashboard/${lectureId}/cost`),
         api.get<TrendData>(`/api/v1/dashboard/${lectureId}/trend?days=30`),
         api.get<QaKeywordsData>(`/api/v1/dashboard/${lectureId}/qa-keywords?top=24`),
         api.get<KpiDeltaData>(`/api/v1/dashboard/${lectureId}/kpi`),
@@ -171,18 +166,15 @@ export default function LectureAnalyticsPage() {
       if (qaKeywordsRes.status === "fulfilled")
         setQaKeywords(qaKeywordsRes.value.data);
       if (kpiRes.status === "fulfilled") setKpi(kpiRes.value.data);
-      // costRes 응답은 의도적으로 UI 에 노출하지 않음 (planning/05 §1.1).
-      void costRes;
 
-      // 모든 dashboard endpoint (attendance/scores/engagement/qa/cost) 가
-      // 실패한 경우만 페이지 단위 에러로 띄운다 — 부분 실패는 해당 섹션이
-      // 자체 EmptyState 로 처리.
+      // 모든 dashboard endpoint (attendance/scores/engagement/qa) 가 실패한
+      // 경우만 페이지 단위 에러로 띄운다 — 부분 실패는 해당 섹션이 자체
+      // EmptyState 로 처리.
       const allDashboardFailed = [
         attendanceRes,
         scoresRes,
         engagementRes,
         qaRes,
-        costRes,
       ].every((r) => r.status === "rejected");
       if (allDashboardFailed) {
         setError(t("lectureLoadError"));
@@ -348,11 +340,10 @@ export default function LectureAnalyticsPage() {
 
       {/*
         cost 섹션은 docs/planning/05-instructor-pages.md §1.1 (2026-05-06)
-        비용 표시 절대 금지 정책에 따라 v2 에서 제외. 대신 우측 위젯·
-        구독 페이지에서 편수·한도 단위로 표시한다. cost 데이터는 여전히
-        fetch 되지만 (TODO 후속 정리 — `cost` state + import 도 정리)
-        UI 상에는 렌더하지 않는다.
-        — 또한 백엔드 admin 페이지에서만 원가 모니터링 (별도 화면).
+        비용 표시 절대 금지 정책에 따라 교수자 화면에서 제외. 대신 우측 위젯·
+        구독 페이지에서 편수·한도 단위로 표시한다. 원가 데이터는 이 페이지에서
+        조회하지 않으며(2026-06-19 dead-fetch 제거), 백엔드 admin 화면에서만
+        원가 모니터링한다 (별도 화면).
       */}
       </div>
     </PageContainer>
