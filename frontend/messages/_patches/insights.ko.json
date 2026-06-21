@@ -18,7 +18,11 @@
       "accuracy": "평균 정답률",
       "qa": "질문 수",
       "warnings": "딴짓 경고",
-      "students": "학습자 {count}명"
+      "students": "학습자 {count}명",
+      "completedOf": "{completed}/{total}명 완료",
+      "totalQuestions": "총 {count}문항",
+      "rejected": "거부 {count}건 · {rate}%",
+      "highWarning": "고경고 {count}명"
     },
     "summary": {
       "title": "학습 데이터 요약",
@@ -28,6 +32,9 @@
       "title": "상위 취약 개념",
       "subtitle": "근거 데이터와 함께 — 차주 수업 초점 후보",
       "empty": "임계값을 넘는 취약 개념이 없습니다.",
+      "chartTitle": "취약 개념별 정답률",
+      "classAvg": "학급 평균 {value}%",
+      "chartHint": "막대가 짧고 붉을수록 학생들이 더 어려워한 개념입니다. 점선은 학급 평균.",
       "severity": "심각도",
       "accuracy": "정답률 {value}%",
       "responses": "응답 {count}건",
