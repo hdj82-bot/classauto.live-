@@ -311,9 +311,19 @@ pg_dump --no-owner --no-privileges --format=plain "$PGURL" | gzip -9 > "ifl-${ST
 - `--no-owner --no-privileges`: 다른 환경 role/permission 차이로 복원이 깨지지 않게(= `backup.yml` 과 동일 플래그).
 - pg 클라이언트 버전은 서버와 맞춘다(현재 **pg16** — backend 이미지와 동일).
 
-**반자동 옵션(원하면)**: `backup.yml` 워크플로를 그대로 재사용하되 **`DATABASE_URL_BACKUP` 를 Supabase
-Direct URL 로** 두고, 별도 cron 워크플로(또는 `vars.DEPLOY_ENABLED` 게이트 분리)로 주 1회 트리거. 산출물은
-동일하게 `s3://<버킷>/ifl-backup/<날짜>/`. 다만 이는 앱 빌드 잡과 무관한 운영 워크플로 변경이므로 별도 PR 로.
+**반자동 옵션(구현됨 — 권장)**: 주 1회 cron 워크플로 [`/.github/workflows/backup-supabase.yml`](.github/workflows/backup-supabase.yml)
+가 [`scripts/supabase-backup.sh`](scripts/supabase-backup.sh) 를 호출해 Supabase Direct URL 을 `pg_dump` →
+gzip → S3(`s3://<버킷>/ifl-backup/supabase/<날짜>/`) 로 올린다. `backup.yml`(VPS 전용·일일) 과 **별도 게이트**
+(`vars.SUPABASE_BACKUP_ENABLED == 'true'`)·**별도 주기**(매주 일요일 03:00 KST)라 관리형 스택에서도 돈다.
+플래그는 `backup.yml` 과 동일(`--no-owner --no-privileges`, pg16 클라이언트).
+
+활성화(교수님 1회): Settings → Secrets and variables → Actions
+- Variables: `SUPABASE_BACKUP_ENABLED = "true"`
+- Secrets: `SUPABASE_DB_URL`(Direct URL) · `BACKUP_S3_BUCKET` · `AWS_ACCESS_KEY_ID` · `AWS_SECRET_ACCESS_KEY` · `AWS_REGION`
+- 보관 정책(30/90일)은 S3 버킷 lifecycle 로 설정. 수동 1회는 Actions → "Weekly Supabase Backup" → Run workflow.
+
+S3 없이 로컬 저장도 지원한다(`BACKUP_S3_BUCKET` 미설정 시 `./backups/` 로, 30일 자동 정리) — 손으로 즉시
+백업할 때 `PGURL="postgresql://…" ./scripts/supabase-backup.sh` 로 쓰면 위 수동 스니펫과 동일 산출물이 나온다.
 
 **확장 트리거**: DB 가 Free 한도(500MB)의 ~80% 에 도달하면 Supabase **Pro($25/월, 8GB + 7일 PITR)** 전환을
 검토([DEPLOYMENT_ROADMAP.md](DEPLOYMENT_ROADMAP.md) §7). 그 시점부터는 PITR 가 1차 안전망이 되어 수동 `pg_dump`
