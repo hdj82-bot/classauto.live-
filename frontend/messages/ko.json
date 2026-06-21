@@ -1567,5 +1567,25 @@
       "scoreDetail": "{correct} / {total} 정답",
       "backToPlayer": "강의로 돌아가기"
     }
+  },
+  "ownerCosts": {
+    "title": "API 비용 대시보드",
+    "subtitle": "베타테스터(교수자)별 외부 API 사용 비용을 종목별로 집계합니다.",
+    "denied": "운영자 전용 화면입니다. 운영자 계정으로 로그인해 주세요.",
+    "loadError": "비용 데이터를 불러오지 못했습니다.",
+    "refresh": "새로고침",
+    "refreshing": "불러오는 중…",
+    "generatedAt": "기준 시각: {time}",
+    "empty": "아직 집계된 비용이 없습니다.",
+    "totalCost": "총 비용 (최근 12개월)",
+    "monthToDate": "당월 누적",
+    "userCount": "사용 교수자 수",
+    "byServiceTitle": "종목별 비용",
+    "byMonthTitle": "월별 추이",
+    "byUserTitle": "교수자별 사용 현황",
+    "yearMonth": "{year}-{month}",
+    "exportCsv": "CSV 내보내기",
+    "colUser": "교수자",
+    "colTotal": "합계"
   }
 }

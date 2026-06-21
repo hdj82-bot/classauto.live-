@@ -1567,5 +1567,25 @@
       "scoreDetail": "{correct} / {total} correct",
       "backToPlayer": "Back to lecture"
     }
+  },
+  "ownerCosts": {
+    "title": "API Cost Dashboard",
+    "subtitle": "Per-tester (instructor) external API spend, broken down by service.",
+    "denied": "Owner-only screen. Please sign in with the owner account.",
+    "loadError": "Failed to load cost data.",
+    "refresh": "Refresh",
+    "refreshing": "Loading…",
+    "generatedAt": "As of: {time}",
+    "empty": "No costs recorded yet.",
+    "totalCost": "Total cost (last 12 months)",
+    "monthToDate": "Month to date",
+    "userCount": "Active instructors",
+    "byServiceTitle": "Cost by service",
+    "byMonthTitle": "Monthly trend",
+    "byUserTitle": "Usage by instructor",
+    "yearMonth": "{year}-{month}",
+    "exportCsv": "Export CSV",
+    "colUser": "Instructor",
+    "colTotal": "Total"
   }
 }
