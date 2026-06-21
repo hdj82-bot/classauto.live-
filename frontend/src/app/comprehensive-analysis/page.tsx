@@ -17,28 +17,48 @@ import { useI18n } from "@/contexts/I18nContext";
  * 차트/등급 한정 사용. 데이터는 시연용 고정값.
  */
 
-const W = 320;
-const H = 120;
+// ── 추이 차트 좌표계 ────────────────────────────────────────────────
+// 측정 주차(1~10주)·시연용 고정 추이. 1주 대비 우상향으로 도입 효과 가시화.
+const WEEKS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-function poly(vals: number[]): string {
-  const n = vals.length;
-  return vals
-    .map((v, i) => {
-      const x = (i / (n - 1)) * W;
-      const y = H - (v / 100) * H;
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-}
-
-// 시연용 고정 추이(1주→14주, 우상향 — ClassAuto 도입 효과 가시화). locale 무관 수치.
 const SERIES = {
-  completion: [58, 62, 67, 71, 76, 80, 85, 90],
-  understanding: [55, 58, 62, 66, 71, 75, 79, 83],
-  engagement: [40, 46, 52, 58, 65, 71, 76, 80],
+  completion: [58, 61, 64, 68, 72, 76, 80, 84, 87, 90],
+  understanding: [55, 57, 60, 63, 66, 69, 73, 77, 80, 83],
+  engagement: [40, 44, 49, 54, 59, 64, 69, 73, 77, 80],
+};
+
+// 상·하위 그룹 완주율(학기 총평 격차 근거). 시연용 고정값.
+const GROUP = {
+  high: [66, 69, 72, 76, 80, 84, 88, 91, 93, 95],
+  low: [50, 53, 56, 59, 63, 67, 71, 75, 78, 82],
 };
 
 const SCALE_COLORS = ["#DC2626", "#F59E0B", "#FACC15", "#84CC16", "#16A34A"];
+
+const COLOR = { completion: "#16A34A", understanding: "#B88308", engagement: "#2563EB" };
+
+// 메인 추이 차트 viewBox·여백(주차 축 + 선 끝 라벨 공간 확보).
+const VB = { w: 360, h: 168, padL: 6, padR: 92, padT: 12, padB: 28 };
+const PLOT_W = VB.w - VB.padL - VB.padR;
+const PLOT_H = VB.h - VB.padT - VB.padB;
+const xOf = (i: number, n: number) => VB.padL + (i / (n - 1)) * PLOT_W;
+const yOf = (v: number) => VB.padT + (1 - v / 100) * PLOT_H;
+const polyMain = (vals: number[]) =>
+  vals.map((v, i) => `${xOf(i, vals.length).toFixed(1)},${yOf(v).toFixed(1)}`).join(" ");
+
+// 미니 스파크라인 좌표(총평 근거 그래프용). domain 으로 여러 선의 Y축을 공유.
+function spark(vals: number[], w: number, h: number, domain?: [number, number], pad = 4) {
+  const min = domain ? domain[0] : Math.min(...vals);
+  const max = domain ? domain[1] : Math.max(...vals);
+  const span = max - min || 1;
+  return vals.map((v, i) => {
+    const x = pad + (i / (vals.length - 1)) * (w - pad * 2);
+    const y = pad + (1 - (v - min) / span) * (h - pad * 2);
+    return { x, y };
+  });
+}
+const toPoly = (pts: { x: number; y: number }[]) =>
+  pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
 
 type Copy = typeof COPY.ko;
 
@@ -52,17 +72,32 @@ const COPY = {
     heroNote: "※ 아래 화면은 시연용 예시 데이터입니다.",
 
     trendTitle: "주차별 학습효율 추이",
-    trendSub: "1주 대비 상승폭으로 도입 효과를 한눈에",
-    trendLegend: { completion: "완주율", understanding: "평균 이해도", engagement: "대면 참여도" },
+    trendSub: "교육공학 3대 학습참여 지표(행동·인지·정의)를 1~10주로 추적",
     trendDelta: "1주 대비",
+    trendAxis: "주차",
+    legend: {
+      completion: { label: "완주율", construct: "행동적 참여 (Behavioral)", delta: 32 },
+      understanding: { label: "평균 이해도", construct: "인지적 참여 (Cognitive)", delta: 28 },
+      engagement: { label: "대면 참여도", construct: "정의적 참여 (Affective)", delta: 40 },
+    },
+    constructNote:
+      "색상은 Fredricks et al.(2004) 학습참여 3차원 모형의 지표에 대응합니다.",
 
     surveyTitle: "학기말 설문 자동생성",
-    surveySub: "문항마다 교수법 근거와 참고문헌(DOI)을 함께",
+    surveySub: "AI 제시 문항을 선행연구 원문과 나란히 — 채택할지 수정할지는 연구자가 결정",
     surveyWarn:
       "⚠️ AI 생성물은 반드시 교수자 검토가 필요합니다. 특히 DOI는 실재 여부를 확인하세요.",
-    surveyScale: "5점 리커트",
-    surveyRationale: "설계 근거",
-    surveyRef: "참고문헌",
+    colAi: "AI가 제시하는 설문문항",
+    colOrig: "선행연구 설문문항 원문",
+    colDecision: "채택 / 수정",
+    colAiHint: "건의한 연구방향에 맞춘 문항 + 학술 근거",
+    colOrigHint: "근거가 된 선행연구의 실제 문항",
+    colDecisionHint: "그대로 쓸지, 조정할지 연구자가 선택",
+    rationaleLabel: "설계 근거",
+    refLabel: "출처",
+    adopt: "채택",
+    modify: "수정",
+    scale: "5점 리커트",
 
     distTitle: "응답 결과 시각화",
     distSub: "문항별 5점 척도 분포와 평균",
@@ -70,7 +105,8 @@ const COPY = {
 
     reviewTitle: "학기 총평",
     reviewProBadge: "PRO",
-    reviewSub: "교육공학 이론 렌즈로 본 장점·개선점, 그리고 논문 방향",
+    reviewSub: "교육공학 이론 렌즈로 본 결론을 근거 그래프와 함께 제시",
+    evidenceLabel: "근거",
     reviewStrength: "강점",
     reviewWeakness: "보완점",
     reviewImprove: "개선 제안",
@@ -91,17 +127,32 @@ const COPY = {
     heroNote: "※ The screens below use example data for demonstration.",
 
     trendTitle: "Weekly learning-efficiency trend",
-    trendSub: "See the effect at a glance via lift vs. week 1",
-    trendLegend: { completion: "Completion", understanding: "Understanding", engagement: "In-class engagement" },
+    trendSub: "Tracks the three ed-tech engagement dimensions (behavioral·cognitive·affective) over weeks 1–10",
     trendDelta: "vs. week 1",
+    trendAxis: "Week",
+    legend: {
+      completion: { label: "Completion", construct: "Behavioral engagement", delta: 32 },
+      understanding: { label: "Understanding", construct: "Cognitive engagement", delta: 28 },
+      engagement: { label: "In-class engagement", construct: "Affective engagement", delta: 40 },
+    },
+    constructNote:
+      "Colors map to the three-dimensional engagement model of Fredricks et al. (2004).",
 
     surveyTitle: "Auto-generated end-of-term survey",
-    surveySub: "Each item with pedagogical rationale and a reference (DOI)",
+    surveySub: "AI items shown next to the original prior-research wording — the researcher decides to adopt or revise",
     surveyWarn:
       "⚠️ AI output requires instructor review. In particular, verify that each DOI actually exists.",
-    surveyScale: "5-point Likert",
-    surveyRationale: "Rationale",
-    surveyRef: "Reference",
+    colAi: "AI-suggested item",
+    colOrig: "Original prior-research item",
+    colDecision: "Adopt / Revise",
+    colAiHint: "Item fit to your research direction + scholarly grounding",
+    colOrigHint: "The actual item from the source study",
+    colDecisionHint: "Use as-is or adjust — your call",
+    rationaleLabel: "Rationale",
+    refLabel: "Source",
+    adopt: "Adopt",
+    modify: "Revise",
+    scale: "5-pt Likert",
 
     distTitle: "Response visualization",
     distSub: "Per-item 5-point distribution and average",
@@ -109,7 +160,8 @@ const COPY = {
 
     reviewTitle: "Semester review",
     reviewProBadge: "PRO",
-    reviewSub: "Strengths and improvements through an ed-tech lens, plus paper directions",
+    reviewSub: "Conclusions through an ed-tech lens, each paired with its evidence graph",
+    evidenceLabel: "Evidence",
     reviewStrength: "Strengths",
     reviewWeakness: "To improve",
     reviewImprove: "Suggestions",
@@ -123,33 +175,49 @@ const COPY = {
   },
 };
 
-const SURVEY_ITEMS = {
+type Decision = "adopt" | "modify";
+const SURVEY_ITEMS: Record<
+  "ko" | "en",
+  { no: number; aiText: string; origText: string; origRef: string; rationale: string; citation: string; decision: Decision }[]
+> = {
   ko: [
     {
       no: 1,
-      text: "사전학습 영상이 대면 수업 이해에 도움이 되었다.",
+      aiText: "사전학습 영상이 대면 수업 이해에 도움이 되었다.",
+      origText: "수업 전에 제공된 동영상 강의는 대면 수업 활동을 준비하는 데 도움이 되었다.",
+      origRef: "플립러닝 인식 문항 (대표 예시)",
       rationale: "플립러닝의 핵심 가정(사전학습→대면 심화)에 대한 학습자 인식 측정.",
-      citation: "Bishop, J. L., & Verleger, M. A. (2013). The flipped classroom: A survey of the research. ASEE.",
+      citation: "Bishop & Verleger (2013), ASEE",
+      decision: "adopt",
     },
     {
       no: 2,
-      text: "나는 이 과목의 핵심 개념을 스스로 적용할 수 있다고 느낀다.",
-      rationale: "취약 개념에 대한 자기효능감 측정(Self-efficacy).",
-      citation: "Bandura, A. (1977). Self-efficacy. Psychological Review.",
+      aiText: "나는 이 과목의 핵심 개념을 스스로 적용할 수 있다고 느낀다.",
+      origText: "나는 이 수업에서 다루는 가장 어려운 내용도 이해할 수 있다고 확신한다.",
+      origRef: "학업적 자기효능감 문항 (대표 예시)",
+      rationale: "취약 개념에 대한 자기효능감(Self-efficacy) 측정 — 적용·전이 단계로 조정 가능.",
+      citation: "Bandura (1977); cf. MSLQ — Pintrich et al. (1991)",
+      decision: "modify",
     },
   ],
   en: [
     {
       no: 1,
-      text: "The pre-class videos helped me understand the in-class session.",
+      aiText: "The pre-class videos helped me understand the in-class session.",
+      origText: "The video lectures provided before class helped me prepare for the in-class activities.",
+      origRef: "Flipped-learning perception item (representative)",
       rationale: "Measures learner perception of the core flipped-learning premise.",
-      citation: "Bishop, J. L., & Verleger, M. A. (2013). The flipped classroom: A survey of the research. ASEE.",
+      citation: "Bishop & Verleger (2013), ASEE",
+      decision: "adopt",
     },
     {
       no: 2,
-      text: "I feel able to apply this course's core concepts on my own.",
-      rationale: "Measures self-efficacy on the course's weak concepts.",
-      citation: "Bandura, A. (1977). Self-efficacy. Psychological Review.",
+      aiText: "I feel able to apply this course's core concepts on my own.",
+      origText: "I'm confident I can understand the most difficult material presented in this course.",
+      origRef: "Academic self-efficacy item (representative)",
+      rationale: "Measures self-efficacy on weak concepts — adjustable toward the apply/transfer stage.",
+      citation: "Bandura (1977); cf. MSLQ — Pintrich et al. (1991)",
+      decision: "modify",
     },
   ],
 };
@@ -160,14 +228,32 @@ const DIST = [
   { no: 2, dist: [2, 3, 7, 10, 8], avg: 3.6 },
 ];
 
+type EvidenceKind = "spark-completion" | "survey-gap" | "group-gap";
 const REVIEW = {
   ko: {
     overview:
       "한 학기 동안 완주율·이해도·대면 참여도가 꾸준히 상승했습니다. 사전학습→대면 심화 구조가 학습 행동에 누적 효과를 낸 것으로 보입니다.",
     lens: "플립러닝 · 인지부하 이론 · 자기조절학습",
-    strengths: ["사전학습 완주율의 꾸준한 상승", "대면 참여도 증가 — 토론·문제풀이 정착"],
-    weaknesses: ["취약 개념의 자기효능감은 별도 보강 필요", "일부 주차에서 상·하위 격차 관찰"],
-    improvements: ["취약 개념 전용 보충 영상·퀴즈로 하위 그룹 개별 보강", "또래 설명(peer instruction) 구조로 격차 완화"],
+    evidence: [
+      {
+        tone: "strength" as const,
+        kind: "spark-completion" as EvidenceKind,
+        conclusion: "완주율이 한 학기 +32%p로 가장 큰 폭으로 상승 — 사전학습 루틴이 정착했습니다.",
+        caption: "근거 · 주차별 완주율 추이 (1→10주)",
+      },
+      {
+        tone: "weakness" as const,
+        kind: "survey-gap" as EvidenceKind,
+        conclusion: "이해도(Q1 3.9)에 비해 자기효능감(Q2 3.6)이 0.3점 낮아 취약 개념 보강이 필요합니다.",
+        caption: "근거 · 학기말 설문 문항별 평균",
+      },
+      {
+        tone: "improve" as const,
+        kind: "group-gap" as EvidenceKind,
+        conclusion: "상·하위 그룹 완주율 격차가 후반부까지 약 13%p 잔존 — 또래 설명·하위 그룹 보충이 유효합니다.",
+        caption: "근거 · 완주율 상위/하위 그룹 비교",
+      },
+    ],
     papers: [
       {
         title: "플립러닝이 학습자의 완주율과 대면 참여에 미치는 영향",
@@ -185,9 +271,26 @@ const REVIEW = {
     overview:
       "Completion, understanding, and in-class engagement rose steadily across the term, suggesting a cumulative effect of the pre-class-to-in-class structure.",
     lens: "Flipped learning · Cognitive load · Self-regulated learning",
-    strengths: ["Steady rise in pre-class completion", "Higher in-class engagement — discussion took hold"],
-    weaknesses: ["Self-efficacy on weak concepts needs reinforcement", "High/low gap seen in some weeks"],
-    improvements: ["Targeted supplements for lower group on weak concepts", "Peer instruction to narrow the gap"],
+    evidence: [
+      {
+        tone: "strength" as const,
+        kind: "spark-completion" as EvidenceKind,
+        conclusion: "Completion rose the most, +32%p over the term — the pre-class routine took hold.",
+        caption: "Evidence · Weekly completion trend (weeks 1→10)",
+      },
+      {
+        tone: "weakness" as const,
+        kind: "survey-gap" as EvidenceKind,
+        conclusion: "Self-efficacy (Q2 3.6) trails understanding (Q1 3.9) by 0.3 — weak concepts need reinforcement.",
+        caption: "Evidence · End-of-term survey item averages",
+      },
+      {
+        tone: "improve" as const,
+        kind: "group-gap" as EvidenceKind,
+        conclusion: "A ~13%p completion gap between high and low groups persists late — peer instruction / low-group supplements help.",
+        caption: "Evidence · Completion, high vs. low group",
+      },
+    ],
     papers: [
       {
         title: "Effect of flipped learning on completion and in-class engagement",
@@ -214,17 +317,78 @@ function SectionTitle({ title, sub }: { title: string; sub: string }) {
   );
 }
 
+// ── 학기 총평 근거 미니 그래프 ──────────────────────────────────────
+function EvidenceVisual({ kind, locale }: { kind: EvidenceKind; locale: "ko" | "en"; }) {
+  if (kind === "spark-completion") {
+    const pts = spark(SERIES.completion, 180, 56);
+    const last = pts[pts.length - 1];
+    return (
+      <svg viewBox="0 0 180 56" className="w-full h-14" role="img" aria-label="completion trend">
+        <polyline points={toPoly(pts)} fill="none" stroke={COLOR.completion} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={last.x} cy={last.y} r={3} fill={COLOR.completion} />
+        <text x={last.x - 4} y={last.y - 6} textAnchor="end" fontSize={11} fontWeight={700} fill={COLOR.completion}>+32%p</text>
+      </svg>
+    );
+  }
+  if (kind === "survey-gap") {
+    const bars = [
+      { label: "Q1", val: 3.9, color: "#16A34A" },
+      { label: "Q2", val: 3.6, color: "#DC2626" },
+    ];
+    return (
+      <div className="flex items-end gap-4 h-14 px-1">
+        {bars.map((b) => (
+          <div key={b.label} className="flex-1 flex flex-col items-center justify-end h-full">
+            <span className="text-[10px] font-bold tabular-nums" style={{ color: b.color }}>{b.val.toFixed(1)}</span>
+            <div className="w-full rounded-t" style={{ height: `${(b.val / 5) * 100}%`, background: b.color, opacity: 0.85 }} />
+            <span className="mt-0.5 text-[10px] text-gray-400">{b.label}</span>
+          </div>
+        ))}
+        <span className="self-center text-[10px] text-gray-400">/ 5.0</span>
+      </div>
+    );
+  }
+  // group-gap — 두 선의 Y축을 같은 domain 으로 공유, X는 각자 전체 폭에 매핑.
+  const lo = Math.min(...GROUP.low);
+  const hiMax = Math.max(...GROUP.high);
+  const domain: [number, number] = [lo, hiMax];
+  const hiPts = spark(GROUP.high, 180, 56, domain);
+  const loPts = spark(GROUP.low, 180, 56, domain);
+  return (
+    <svg viewBox="0 0 180 56" className="w-full h-14" role="img" aria-label="group gap">
+      <polyline points={toPoly(hiPts)} fill="none" stroke="#2563EB" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points={toPoly(loPts)} fill="none" stroke="#DC2626" strokeWidth={2.2} strokeDasharray="4 3" strokeLinecap="round" strokeLinejoin="round" />
+      <text x={176} y={hiPts[hiPts.length - 1].y - 4} textAnchor="end" fontSize={9} fontWeight={700} fill="#2563EB">{locale === "ko" ? "상위" : "High"}</text>
+      <text x={176} y={loPts[loPts.length - 1].y + 11} textAnchor="end" fontSize={9} fontWeight={700} fill="#DC2626">{locale === "ko" ? "하위" : "Low"}</text>
+    </svg>
+  );
+}
+
 export default function ComprehensiveAnalysisPage() {
   const { locale } = useI18n();
   const c: Copy = COPY[locale] ?? COPY.ko;
   const survey = SURVEY_ITEMS[locale] ?? SURVEY_ITEMS.ko;
   const review = REVIEW[locale] ?? REVIEW.ko;
 
-  const legend: { key: keyof typeof SERIES; label: string; color: string; delta: number }[] = [
-    { key: "completion", label: c.trendLegend.completion, color: "#16A34A", delta: 32 },
-    { key: "understanding", label: c.trendLegend.understanding, color: "#B88308", delta: 28 },
-    { key: "engagement", label: c.trendLegend.engagement, color: "#2563EB", delta: 40 },
-  ];
+  const legend = (["completion", "understanding", "engagement"] as const).map((key) => ({
+    key,
+    color: COLOR[key],
+    ...c.legend[key],
+  }));
+
+  // 선 끝 직접 라벨 — 겹침 방지(아래로 최소 간격 12 확보).
+  const endLabels = legend
+    .map((l) => ({ ...l, v: SERIES[l.key][SERIES[l.key].length - 1] }))
+    .map((l) => ({ ...l, y: yOf(l.v) }))
+    .sort((a, b) => a.y - b.y);
+  let lastY = -Infinity;
+  for (const e of endLabels) {
+    e.y = Math.max(e.y, lastY + 12);
+    lastY = e.y;
+  }
+
+  const toneColor = { strength: "text-green-700", weakness: "text-red-700", improve: "text-amber-700" } as const;
+  const toneLabel = { strength: c.reviewStrength, weakness: c.reviewWeakness, improve: c.reviewImprove } as const;
 
   return (
     <LightMarketingShell>
@@ -266,9 +430,10 @@ export default function ComprehensiveAnalysisPage() {
               <div key={l.key} className="rounded-xl bg-gray-50 p-3">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ background: l.color }} aria-hidden="true" />
-                  <span className="text-xs text-gray-500">{l.label}</span>
+                  <span className="text-xs font-semibold text-gray-700">{l.label}</span>
                 </div>
-                <p className="mt-1 text-2xl font-bold text-gray-900 tabular-nums">
+                <p className="mt-0.5 text-[11px] text-gray-400">{l.construct}</p>
+                <p className="mt-1.5 text-2xl font-bold text-gray-900 tabular-nums">
                   +{l.delta}
                   <span className="text-sm font-medium text-gray-400">%p</span>
                 </p>
@@ -276,14 +441,28 @@ export default function ComprehensiveAnalysisPage() {
               </div>
             ))}
           </div>
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-40" role="img" aria-label={c.trendTitle}>
-            {[0.25, 0.5, 0.75].map((g) => (
-              <line key={g} x1={0} y1={H * g} x2={W} y2={H * g} stroke="#eee" strokeWidth={1} />
+          <svg viewBox={`0 0 ${VB.w} ${VB.h}`} className="w-full" style={{ height: "auto" }} role="img" aria-label={c.trendTitle}>
+            {/* 가로 격자선 */}
+            {[0.25, 0.5, 0.75, 1].map((g) => (
+              <line key={g} x1={VB.padL} y1={VB.padT + PLOT_H * g} x2={VB.padL + PLOT_W} y2={VB.padT + PLOT_H * g} stroke="#eee" strokeWidth={1} />
             ))}
+            {/* 주차 축 눈금·라벨 */}
+            {WEEKS.map((wk, i) => (
+              <g key={wk}>
+                <line x1={xOf(i, WEEKS.length)} y1={VB.padT + PLOT_H} x2={xOf(i, WEEKS.length)} y2={VB.padT + PLOT_H + 4} stroke="#d1d5db" strokeWidth={1} />
+                <text x={xOf(i, WEEKS.length)} y={VB.padT + PLOT_H + 16} textAnchor="middle" fontSize={9} fill="#9ca3af" className="tabular-nums">
+                  {locale === "ko" ? `${wk}` : wk}
+                </text>
+              </g>
+            ))}
+            <text x={VB.padL + PLOT_W / 2} y={VB.h - 2} textAnchor="middle" fontSize={9} fill="#b0b0b0">
+              {c.trendAxis}
+            </text>
+            {/* 선 + 끝점 + 직접 라벨 */}
             {legend.map((l) => (
               <polyline
                 key={l.key}
-                points={poly(SERIES[l.key])}
+                points={polyMain(SERIES[l.key])}
                 fill="none"
                 stroke={l.color}
                 strokeWidth={2.5}
@@ -291,10 +470,19 @@ export default function ComprehensiveAnalysisPage() {
                 strokeLinejoin="round"
               />
             ))}
+            {endLabels.map((e) => (
+              <g key={e.key}>
+                <circle cx={VB.padL + PLOT_W} cy={yOf(e.v)} r={3} fill={e.color} />
+                <text x={VB.padL + PLOT_W + 6} y={e.y + 3} fontSize={10} fontWeight={700} fill={e.color}>
+                  {e.label} {e.v}
+                </text>
+              </g>
+            ))}
           </svg>
+          <p className="mt-2 text-[11px] text-gray-400">{c.constructNote}</p>
         </section>
 
-        {/* (b) 설문 자동생성 */}
+        {/* (b) 설문 자동생성 — AI 제시 / 선행연구 원문 / 채택·수정 3열 */}
         <section className="bg-white rounded-2xl shadow-sm p-6 mb-8 border border-[var(--line,rgba(10,10,10,0.08))]">
           <SectionTitle title={c.surveyTitle} sub={c.surveySub} />
           <div
@@ -303,26 +491,76 @@ export default function ComprehensiveAnalysisPage() {
           >
             {c.surveyWarn}
           </div>
-          <div className="space-y-3">
-            {survey.map((q) => (
-              <div key={q.no} className="rounded-xl border border-gray-100 p-4">
-                <div className="flex items-start gap-2">
-                  <span className="shrink-0 text-xs font-bold text-amber-700">Q{q.no}</span>
-                  <p className="text-sm font-medium text-gray-900">{q.text}</p>
+
+          <div className="overflow-hidden rounded-xl border border-gray-200">
+            {/* 헤더 (데스크톱) */}
+            <div className="hidden md:grid grid-cols-[1.25fr_1.25fr_0.7fr] bg-gray-50 border-b border-gray-200">
+              {[
+                { t: c.colAi, h: c.colAiHint },
+                { t: c.colOrig, h: c.colOrigHint },
+                { t: c.colDecision, h: c.colDecisionHint },
+              ].map((col, i) => (
+                <div key={i} className={`px-4 py-2.5 ${i < 2 ? "border-r border-gray-200" : ""}`}>
+                  <p className="text-xs font-bold text-gray-700">{col.t}</p>
+                  <p className="text-[10px] text-gray-400 leading-snug mt-0.5">{col.h}</p>
                 </div>
-                <div className="mt-1 ml-6">
-                  <span className="inline-block text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
-                    {c.surveyScale}
+              ))}
+            </div>
+            {/* 행 */}
+            {survey.map((q) => (
+              <div
+                key={q.no}
+                className="grid grid-cols-1 md:grid-cols-[1.25fr_1.25fr_0.7fr] border-b border-gray-100 last:border-b-0"
+              >
+                {/* AI 제시 문항 */}
+                <div className="px-4 py-4 md:border-r border-gray-100">
+                  <p className="md:hidden text-[10px] font-bold text-amber-700 mb-1">{c.colAi}</p>
+                  <div className="flex items-start gap-2">
+                    <span className="shrink-0 text-xs font-bold text-amber-700">Q{q.no}</span>
+                    <p className="text-sm font-medium text-gray-900">{q.aiText}</p>
+                  </div>
+                  <span className="inline-block mt-2 ml-6 text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                    {c.scale}
+                  </span>
+                  <p className="mt-2 ml-6 text-[11px] text-gray-600">
+                    <span className="font-semibold text-gray-500">{c.rationaleLabel}: </span>
+                    {q.rationale}
+                  </p>
+                  <p className="mt-1 ml-6 text-[11px] text-gray-400">
+                    <span className="font-semibold">{c.refLabel}: </span>
+                    {q.citation} · DOI: <span className="italic">10.____/______</span>
+                  </p>
+                </div>
+
+                {/* 선행연구 원문 */}
+                <div className="px-4 py-4 md:border-r border-gray-100 bg-gray-50/40">
+                  <p className="md:hidden text-[10px] font-bold text-gray-500 mb-1">{c.colOrig}</p>
+                  <p className="text-sm text-gray-700 leading-relaxed">“{q.origText}”</p>
+                  <p className="mt-2 text-[11px] text-gray-400">{q.origRef}</p>
+                </div>
+
+                {/* 채택 / 수정 */}
+                <div className="px-4 py-4 flex md:flex-col gap-2 md:justify-center">
+                  <p className="md:hidden text-[10px] font-bold text-gray-500 self-center mr-1">{c.colDecision}</p>
+                  <span
+                    className={`inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                      q.decision === "adopt"
+                        ? "bg-[#FFB627] text-[#1A1A1A]"
+                        : "border border-gray-200 text-gray-400"
+                    }`}
+                  >
+                    {q.decision === "adopt" ? "✓ " : ""}{c.adopt}
+                  </span>
+                  <span
+                    className={`inline-flex items-center justify-center rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                      q.decision === "modify"
+                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : "border border-gray-200 text-gray-400"
+                    }`}
+                  >
+                    {q.decision === "modify" ? "✎ " : ""}{c.modify}
                   </span>
                 </div>
-                <p className="mt-2 ml-6 text-xs text-gray-600">
-                  <span className="font-semibold text-gray-500">{c.surveyRationale}: </span>
-                  {q.rationale}
-                </p>
-                <p className="mt-1 ml-6 text-[11px] text-gray-400">
-                  <span className="font-semibold">{c.surveyRef}: </span>
-                  {q.citation} · DOI: <span className="italic">10.____/______</span>
-                </p>
               </div>
             ))}
           </div>
@@ -364,7 +602,7 @@ export default function ComprehensiveAnalysisPage() {
           </div>
         </section>
 
-        {/* (d) 학기 총평 [PRO] */}
+        {/* (d) 학기 총평 [PRO] — 결론 + 근거 그래프 */}
         <section className="bg-white rounded-2xl shadow-sm p-6 mb-10 border border-[var(--line,rgba(10,10,10,0.08))]">
           <div className="flex items-center gap-2 mb-1">
             <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "var(--font-display)" }}>
@@ -376,23 +614,18 @@ export default function ComprehensiveAnalysisPage() {
           </div>
           <p className="text-sm text-gray-500 mb-4">{c.reviewSub}</p>
           <p className="text-sm text-gray-700 mb-2">{review.overview}</p>
-          <p className="text-xs text-amber-700 mb-4">{review.lens}</p>
+          <p className="text-xs text-amber-700 mb-5">{review.lens}</p>
 
-          <div className="grid sm:grid-cols-3 gap-3 mb-5">
-            {[
-              { label: c.reviewStrength, items: review.strengths, color: "text-green-700" },
-              { label: c.reviewWeakness, items: review.weaknesses, color: "text-red-700" },
-              { label: c.reviewImprove, items: review.improvements, color: "text-amber-700" },
-            ].map((col) => (
-              <div key={col.label} className="rounded-xl bg-gray-50 p-3">
-                <p className={`text-xs font-bold mb-2 ${col.color}`}>{col.label}</p>
-                <ul className="space-y-1">
-                  {col.items.map((it, i) => (
-                    <li key={i} className="text-xs text-gray-600 leading-snug">
-                      · {it}
-                    </li>
-                  ))}
-                </ul>
+          {/* 결론 + 근거 그래프 카드 */}
+          <div className="grid md:grid-cols-3 gap-3 mb-6">
+            {review.evidence.map((ev, i) => (
+              <div key={i} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4 flex flex-col">
+                <p className={`text-xs font-bold mb-2 ${toneColor[ev.tone]}`}>{toneLabel[ev.tone]}</p>
+                <p className="text-[13px] text-gray-800 leading-snug mb-3">{ev.conclusion}</p>
+                <div className="mt-auto rounded-lg bg-white border border-gray-100 p-2">
+                  <EvidenceVisual kind={ev.kind} locale={locale} />
+                </div>
+                <p className="mt-2 text-[10px] text-gray-400">{ev.caption}</p>
               </div>
             ))}
           </div>
