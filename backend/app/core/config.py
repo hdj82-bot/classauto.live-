@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     # 시 규칙기반 폴백.
     ANALYTICS_BRIEFING_MODEL: str = "claude-sonnet-4-6"
     ANALYTICS_BRIEFING_MAX_TOKENS: int = 1500
+    # 학기 전체 분석(§3) 설문/총평 — 출력이 길어 별도 상한. 설문 6문항(근거·DOI)·
+    # 총평(장단점·논문 제안)이라 브리핑보다 토큰이 크다. 학기말 저빈도라 비용 영향 작다.
+    ANALYTICS_SURVEY_MAX_TOKENS: int = 2000
+    ANALYTICS_REVIEW_MAX_TOKENS: int = 2000
     # 학습 분석 PRO 전역 킬스위치. True 면 사용자별 토글(users.analytics_pro_enabled)
     # 로 접근 제어, False 면 운영자(ADMIN_EMAILS) 외 전원 차단(인시던트 시 즉시 차단용).
     ANALYTICS_PRO_ENABLED: bool = True

@@ -6,6 +6,15 @@ API/게이트가 이 패키지 위에 얹힌다.
 """
 from app.services.analytics_pro.analyze import DEFAULT_VIDEO_MINUTES, analyze
 from app.services.analytics_pro.briefing import build_rule_based, generate_briefing
+from app.services.analytics_pro.semester import (
+    build_rule_based_review,
+    build_rule_based_survey,
+    compute_timeline,
+    generate_review,
+    generate_survey,
+    synthesize_responses,
+    synthesize_trend,
+)
 from app.services.analytics_pro.synthetic import SCENARIOS, generate
 
 __all__ = [
@@ -15,4 +24,12 @@ __all__ = [
     "build_rule_based",
     "SCENARIOS",
     "DEFAULT_VIDEO_MINUTES",
+    # B 학기 전체 분석(§3)
+    "compute_timeline",
+    "synthesize_trend",
+    "generate_survey",
+    "build_rule_based_survey",
+    "synthesize_responses",
+    "generate_review",
+    "build_rule_based_review",
 ]
