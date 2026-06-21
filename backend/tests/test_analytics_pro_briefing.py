@@ -87,8 +87,8 @@ _BODY = {
 
 
 async def _enable_pro(db, user):
-    """베타 토글을 켠 교수자로 만든다(게이트 통과 전제)."""
-    user.analytics_pro_enabled = True
+    """실기능 허용 이메일(계정주)로 만든다 — 현 단계 게이트 통과 전제(베타테스터 비노출)."""
+    user.email = "hdj82@kyonggi.ac.kr"  # settings.ANALYTICS_PRO_ALLOWED_EMAILS 기본값
     await db.flush()
     return user
 
@@ -128,11 +128,39 @@ async def test_briefing_endpoint_requires_professor(client, student):
 
 @pytest.mark.asyncio
 async def test_briefing_endpoint_requires_beta_flag(client, professor):
-    """토글이 꺼진 교수자는 베타 권한 부재로 403(운영자 게이트)."""
+    """허용 이메일이 아닌 일반 교수자는 403."""
     resp = await client.post(
         "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
     )
     assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_briefing_endpoint_hidden_from_testers(client, db, professor, monkeypatch):
+    """베타테스터(토글 ON)라도 OPEN_TO_TESTERS=False 면 비노출(403) — 핵심 요구사항."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ANALYTICS_PRO_OPEN_TO_TESTERS", False)
+    professor.analytics_pro_enabled = True  # 운영자 콘솔 토글이 켜져 있어도
+    await db.flush()
+    resp = await client.post(
+        "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_briefing_endpoint_opens_to_testers_when_flag_on(client, db, professor, monkeypatch):
+    """정식 오픈(OPEN_TO_TESTERS=True) + 토글 ON 이면 베타테스터도 통과(200)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ANALYTICS_PRO_OPEN_TO_TESTERS", True)
+    professor.analytics_pro_enabled = True
+    await db.flush()
+    resp = await client.post(
+        "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio
@@ -152,7 +180,7 @@ async def test_briefing_endpoint_owner_bypasses_flag(client, db, professor):
 
 @pytest.mark.asyncio
 async def test_briefing_endpoint_global_killswitch(client, db, professor, monkeypatch):
-    """전역 킬스위치가 꺼지면 토글된 베타테스터도 차단(운영자만 예외)."""
+    """전역 킬스위치가 꺼지면 허용 이메일(비운영자)도 차단(운영자만 예외)."""
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "ANALYTICS_PRO_ENABLED", False)

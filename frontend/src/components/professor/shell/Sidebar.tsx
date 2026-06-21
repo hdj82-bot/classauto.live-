@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
+import { useOptionalAuth } from "@/contexts/AuthContext";
+import { canSeeAnalyticsPro } from "@/lib/analyticsProAccess";
 import { fetchProfessorData } from "@/lib/professorData";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
@@ -240,8 +242,17 @@ export default function ProfessorSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { t } = useI18n();
+  const auth = useOptionalAuth();
   // "강의 영상 생성" 클릭 → 진행 중 강의 해석 중 표시(중복 클릭 방지 + 시각 피드백).
   const [studioResolving, setStudioResolving] = useState(false);
+
+  // 학습 분석 PRO(실기능)는 계정주 2계정에만 노출 — 베타테스터에겐 메뉴를 숨긴다.
+  // 실제 접근 차단은 백엔드 require_analytics_pro 가 담당(이 필터는 진입점 노출 제어).
+  const visibleNavItems = navItems.filter(
+    (it) =>
+      it.href !== "/professor/analytics-pro" ||
+      canSeeAnalyticsPro(auth?.user?.email),
+  );
 
   const isActive = (href: string) =>
     pathname === href || pathname?.startsWith(href + "/");
@@ -266,7 +277,7 @@ export default function ProfessorSidebar() {
     <aside style={sidebarStyle} aria-label={t("nav.lectureManage")}>
       <div style={sectionHeaderStyle}>{t("nav.lectureManage")}</div>
       <nav className="flex flex-col gap-0.5 px-3 pb-4">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const active = isActive(item.href);
           const isStudio = item.href === STUDIO_HREF;
           return (

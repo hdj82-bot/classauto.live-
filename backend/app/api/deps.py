@@ -108,29 +108,39 @@ async def require_professor(user: User = Depends(get_current_user)) -> User:
 
 
 async def require_analytics_pro(user: User = Depends(require_professor)) -> User:
-    """학습 분석 PRO(베타 전용) 접근 게이트 — 교수자 + 베타 토글.
+    """학습 분석 PRO 접근 게이트 — 현 단계는 계정주·명시 허용 이메일만.
 
-    docs/planning/analytics-spec.md 의 운영자 토글 게이트. 판정 순서:
-    1. 운영자(ADMIN_EMAILS)는 전역 킬스위치·플래그와 무관하게 항상 통과(QA·시연용).
-    2. 전역 ``ANALYTICS_PRO_ENABLED`` 가 False 면 그 외 전원 차단(인시던트 즉시 차단).
-    3. 사용자별 ``analytics_pro_enabled`` 가 True 인 베타테스터만 통과.
+    docs/planning/analytics-spec.md. 판정 순서:
+    1. 전역 ``ANALYTICS_PRO_ENABLED`` 가 False 면 운영자(ADMIN_EMAILS)만 통과(인시던트 차단).
+    2. 운영자(ADMIN_EMAILS) + 명시 허용 이메일(``ANALYTICS_PRO_ALLOWED_EMAILS``)은 통과.
+       → 현재 실기능은 계정주 두 계정(classauto101@gmail.com·hdj82@kyonggi.ac.kr)에만 노출.
+    3. **곧 시작할 베타테스터**는 ``ANALYTICS_PRO_OPEN_TO_TESTERS`` 가 켜질 때(정식 오픈)에만,
+       그것도 운영자 콘솔 토글(``analytics_pro_enabled``)이 켜진 경우 통과. 기본값 False 라
+       지금은 토글이 켜져 있어도 베타테스터에겐 보이지 않는다(요구사항).
 
     require_professor 에 의존하므로 학생·미인증은 그 단계에서 이미 차단된다.
     """
     email = (user.email or "").strip().lower()
-    if email in settings.admin_email_set:
-        return user
+    is_owner = email in settings.admin_email_set
+
     if not settings.ANALYTICS_PRO_ENABLED:
+        if is_owner:
+            return user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="학습 분석 PRO 기능이 현재 비활성화되어 있습니다.",
         )
-    if not getattr(user, "analytics_pro_enabled", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="학습 분석 PRO 베타 권한이 없습니다. 운영자에게 활성화를 요청하세요.",
-        )
-    return user
+
+    if is_owner or email in settings.analytics_pro_allowed_email_set:
+        return user
+
+    if settings.ANALYTICS_PRO_OPEN_TO_TESTERS and getattr(user, "analytics_pro_enabled", False):
+        return user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="학습 분석 PRO 베타 권한이 없습니다.",
+    )
 
 
 def require_plan(*allowed_plans: str):
