@@ -878,7 +878,7 @@
     },
     "analyticsExample": {
       "previewBadge": "PREVIEW",
-      "previewBody": "This is a static preview of one screen from the analytics report. The left sidebar and other console menus are not clickable here — they become functional inside the real console once your beta account is approved.",
+      "previewBody": "This is a static preview of one screen from the analytics report. Click a left-menu item to jump to that section. Some features such as the top toolbar become functional inside the real console once your beta account is approved.",
       "previewCta": "Apply for beta"
     },
     "useCases": {
