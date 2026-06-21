@@ -62,7 +62,9 @@
   text-rendering: optimizeLegibility;
   min-height: 100%;
   width: 100%;
-  overflow-x: hidden;
+  /* clip(=가로 넘침 차단)으로 둔다. overflow-x:hidden 은 스크롤 컨테이너를 만들어
+     자식의 position:sticky(좌측 메뉴 고정)를 깨뜨리므로 clip 으로 교체. */
+  overflow-x: clip;
 }
 
 .an-root *,
@@ -108,9 +110,12 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+  /* 스크롤해도 좌측에 고정. 사이트 헤더(56px)+미리보기 배너(56px)=112px 아래에
+     붙도록 top 을 띄우고, 그만큼 높이를 줄여 한 화면에 들어오게 한다. */
   position: sticky;
-  top: 0;
-  height: 100vh;
+  top: 112px;
+  height: calc(100vh - 112px);
+  overflow-y: auto;
 }
 
 .an-root .brand {
