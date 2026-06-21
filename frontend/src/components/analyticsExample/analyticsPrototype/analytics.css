@@ -95,6 +95,12 @@
   min-height: 100%;
 }
 
+/* 좌측 메뉴 클릭 → 섹션 스크롤 시, 상단 스티키(사이트 헤더 + 미리보기 배너 +
+   프로토타입 topbar)에 가리지 않도록 앵커마다 여백을 둔다. */
+.an-root [id^="an-sec-"] {
+  scroll-margin-top: 140px;
+}
+
 .an-root .sidebar {
   background: var(--an-bg-sidebar);
   border-right: 1px solid var(--an-line);
