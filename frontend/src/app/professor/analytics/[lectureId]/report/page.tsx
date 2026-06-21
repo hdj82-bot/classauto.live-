@@ -14,7 +14,8 @@ import {
   displayStyle,
 } from "@/components/professor/shell";
 import {
-  EvidenceStrip,
+  EvidenceVisuals,
+  WeakConceptAccuracyChart,
   WeakConceptList,
   RecommendationCards,
   ClassVsIndividual,
@@ -177,7 +178,7 @@ export default function InsightsReportPage() {
 
       <div className="space-y-6">
         <Section title={t("evidence.title")}>
-          <EvidenceStrip evidence={evidence} />
+          <EvidenceVisuals evidence={evidence} />
         </Section>
 
         <Section title={t("summary.title")}>
@@ -195,6 +196,10 @@ export default function InsightsReportPage() {
         </Section>
 
         <Section title={t("weakConcepts.title")} description={t("weakConcepts.subtitle")}>
+          <WeakConceptAccuracyChart
+            concepts={evidence.weak_concepts}
+            classAvg={evidence.quiz.overall_accuracy}
+          />
           <WeakConceptList
             briefingConcepts={payload.weak_concepts}
             evidenceConcepts={evidence.weak_concepts}

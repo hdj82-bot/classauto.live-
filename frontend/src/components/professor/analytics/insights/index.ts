@@ -2,6 +2,7 @@
  * 인사이트 보고서 컴포넌트 묶음 진입점 — `/professor/analytics/[id]/report`.
  */
 export { default as EvidenceStrip } from "./EvidenceStrip";
+export { EvidenceVisuals, WeakConceptAccuracyChart, RingGauge, ProportionBar } from "./InsightCharts";
 export { default as WeakConceptList } from "./WeakConceptList";
 export { default as RecommendationCards } from "./RecommendationCards";
 export { default as ClassVsIndividual } from "./ClassVsIndividual";
