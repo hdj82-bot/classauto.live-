@@ -139,7 +139,8 @@ _SEMESTER_BODY = {
 
 
 async def _enable_pro(db, user):
-    user.analytics_pro_enabled = True
+    # 현 단계 게이트: 허용 이메일(계정주)만 통과. 베타 토글은 OPEN_TO_TESTERS 가 켜질 때만.
+    user.email = "hdj82@kyonggi.ac.kr"  # settings.ANALYTICS_PRO_ALLOWED_EMAILS 기본값
     await db.flush()
     return user
 

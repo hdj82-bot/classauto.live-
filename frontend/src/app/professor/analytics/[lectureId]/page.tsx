@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import { api } from "@/lib/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useI18n } from "@/contexts/I18nContext";
+import { useOptionalAuth } from "@/contexts/AuthContext";
+import { canSeeAnalyticsPro } from "@/lib/analyticsProAccess";
 import {
   AttendanceChart,
   StudentProgressGrid,
@@ -87,6 +89,9 @@ export default function LectureAnalyticsPage() {
   const { t } = useAnalyticsI18n();
   // 보고서 링크 라벨만 insights 패치에서 (analytics 패치는 본 창 소유 아님).
   const { t: tReport } = useInsightsI18n();
+  // 종합보고서(실기능)는 계정주 2계정에만 노출 — 베타테스터에겐 버튼을 숨긴다.
+  const auth = useOptionalAuth();
+  const showComprehensive = canSeeAnalyticsPro(auth?.user?.email);
 
   const [lecture, setLecture] = useState<LectureMeta | null>(null);
   const [attendance, setAttendance] = useState<AttendanceData | null>(null);
@@ -234,18 +239,20 @@ export default function LectureAnalyticsPage() {
           <div className="print-hide flex items-center gap-2">
             {/* 분석 리포트 PDF 출력 — 브라우저 인쇄(스펙 11 §A) */}
             <PdfExportButton />
-            {/* 종합보고서 — 학기 전체 분석(B블록 §3): 추이·설문·총평·논문 제안 */}
-            <Link
-              href={`/professor/analytics/${lectureId}/comprehensive`}
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold"
-              style={{
-                border: "1px solid var(--gold, #FFB627)",
-                color: "var(--gold-on-light, #B88308)",
-                textDecoration: "none",
-              }}
-            >
-              {t("comprehensiveReportLink")}
-            </Link>
+            {/* 종합보고서 — 학기 전체 분석(B블록 §3). 계정주 2계정에만 노출. */}
+            {showComprehensive && (
+              <Link
+                href={`/professor/analytics/${lectureId}/comprehensive`}
+                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold"
+                style={{
+                  border: "1px solid var(--gold, #FFB627)",
+                  color: "var(--gold-on-light, #B88308)",
+                  textDecoration: "none",
+                }}
+              >
+                {t("comprehensiveReportLink")}
+              </Link>
+            )}
             {/* 대면수업 솔루션 보고서(인사이트) — RQ2 핵심 합성 화면으로 이동 */}
             <Link
               href={`/professor/analytics/${lectureId}/report`}

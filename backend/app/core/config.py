@@ -95,9 +95,15 @@ class Settings(BaseSettings):
     # 총평(장단점·논문 제안)이라 브리핑보다 토큰이 크다. 학기말 저빈도라 비용 영향 작다.
     ANALYTICS_SURVEY_MAX_TOKENS: int = 2000
     ANALYTICS_REVIEW_MAX_TOKENS: int = 2000
-    # 학습 분석 PRO 전역 킬스위치. True 면 사용자별 토글(users.analytics_pro_enabled)
-    # 로 접근 제어, False 면 운영자(ADMIN_EMAILS) 외 전원 차단(인시던트 시 즉시 차단용).
+    # 학습 분석 PRO 전역 킬스위치. False 면 운영자(ADMIN_EMAILS) 외 전원 차단(인시던트).
     ANALYTICS_PRO_ENABLED: bool = True
+    # 실기능을 노출할 명시 허용 이메일(쉼표 구분). 현재는 계정주 2계정에만 노출하고
+    # 베타테스터에게는 숨긴다. classauto101@gmail.com 은 ADMIN_EMAILS 라 자동 포함되므로
+    # 여기엔 hdj82@kyonggi.ac.kr 만 둔다. env 로 추가 가능.
+    ANALYTICS_PRO_ALLOWED_EMAILS: str = "hdj82@kyonggi.ac.kr"
+    # 정식 베타 오픈 스위치. True 로 켜면 운영자 콘솔 토글(analytics_pro_enabled)이
+    # 베타테스터에게도 작동한다. 기본 False = 토글이 켜져 있어도 베타테스터에겐 비노출.
+    ANALYTICS_PRO_OPEN_TO_TESTERS: bool = False
 
     # ── OpenAI (임베딩) ─────────────────────────────────────────
     OPENAI_API_KEY: str = ""
@@ -432,6 +438,11 @@ class Settings(BaseSettings):
     def admin_email_set(self) -> set[str]:
         """ADMIN_EMAILS(쉼표 구분)를 소문자 set 으로 정규화 — 운영자 식별용."""
         return {e.strip().lower() for e in self.ADMIN_EMAILS.split(",") if e.strip()}
+
+    @property
+    def analytics_pro_allowed_email_set(self) -> set[str]:
+        """ANALYTICS_PRO_ALLOWED_EMAILS(쉼표 구분)를 소문자 set 으로 — 실기능 허용 이메일."""
+        return {e.strip().lower() for e in self.ANALYTICS_PRO_ALLOWED_EMAILS.split(",") if e.strip()}
 
 
 settings = Settings()
