@@ -239,7 +239,7 @@ export default function LectureAnalyticsPage() {
           <div className="print-hide flex items-center gap-2">
             {/* 분석 리포트 PDF 출력 — 브라우저 인쇄(스펙 11 §A) */}
             <PdfExportButton />
-            {/* 종합보고서 — 학기 전체 분석(B블록 §3). 계정주 2계정에만 노출. */}
+            {/* 종합보고서 — 학기 전체 분석(B블록 §3): 추이·설문·총평·논문 제안. 계정주 2계정에만 노출. */}
             {showComprehensive && (
               <Link
                 href={`/professor/analytics/${lectureId}/comprehensive`}
