@@ -37,6 +37,7 @@ from app.api.v1.quiz import router as quiz_router
 from app.api.v1.insights import router as insights_router
 from app.api.v1.invites import owner_router as invites_owner_router
 from app.api.v1.invites import public_router as invites_public_router
+from app.api.v1.owner_costs import owner_costs_router
 from app.api.v1.feedback import router as feedback_router
 from app.api.v1.analytics_pro import router as analytics_pro_router
 
@@ -116,6 +117,7 @@ app.include_router(quiz_router)
 app.include_router(insights_router)
 app.include_router(invites_owner_router)
 app.include_router(invites_public_router)
+app.include_router(owner_costs_router)
 app.include_router(feedback_router)
 app.include_router(analytics_pro_router)
 

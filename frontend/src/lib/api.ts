@@ -204,6 +204,45 @@ export const ownerInviteApi = {
     api.delete(`/api/owner/invites/${encodeURIComponent(id)}`),
 };
 
+// 계정주(운영자) 전용 — API 비용 대시보드. 백엔드 require_owner(ADMIN_EMAILS)
+// 가 권한을 강제하므로 비운영자가 호출하면 403.
+export interface OwnerCostServiceRow {
+  service: string;
+  cost_usd: number;
+  calls: number;
+  seconds: number;
+  tokens: number;
+}
+
+export interface OwnerCostUserRow {
+  user_id: string;
+  email: string | null;
+  name: string | null;
+  role: string | null;
+  total_usd: number;
+  calls: number;
+  /** 종목(service) → 비용(USD). 미사용 종목은 키 자체가 없음. */
+  by_service: Record<string, number>;
+}
+
+export interface OwnerCostsResponse {
+  generated_at: string;
+  window_days: number;
+  currency: string;
+  total_cost_usd: number;
+  month_to_date_usd: number;
+  user_count: number;
+  /** 사용자 표의 컬럼 집합 — 비용 내림차순 종목 키. */
+  services: string[];
+  by_service: OwnerCostServiceRow[];
+  by_month: { year: number; month: number; cost_usd: number }[];
+  by_user: OwnerCostUserRow[];
+}
+
+export const ownerCostsApi = {
+  get: () => api.get<OwnerCostsResponse>("/api/owner/costs"),
+};
+
 export interface MeResponse {
   id: string;
   role: "professor" | "student" | "admin";
