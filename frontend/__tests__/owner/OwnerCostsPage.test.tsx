@@ -46,6 +46,10 @@ const SAMPLE = {
 describe("OwnerCostsPage", () => {
   beforeEach(() => {
     mocks.get.mockReset();
+    // useFx 의 환율 조회를 결정적으로 — 실제 네트워크 차단.
+    global.fetch = vi.fn().mockResolvedValue({
+      json: async () => ({ rates: { KRW: 1380 } }),
+    }) as unknown as typeof fetch;
   });
 
   it("renders per-service and per-user cost breakdown (i18n ko)", async () => {
@@ -62,6 +66,11 @@ describe("OwnerCostsPage", () => {
     // 요약 카드 라벨(번역값)
     expect(screen.getByText("당월 누적")).toBeTruthy();
     expect(screen.getByText("교수자별 사용 현황")).toBeTruthy();
+
+    // 달러 + 원화 병기 — 총 비용 $3 × 1380 = ₩4,140 가 보조표기로 나타난다.
+    await waitFor(() => {
+      expect(screen.getByText("₩4,140")).toBeTruthy();
+    });
   });
 
   it("shows owner-only fallback on 403", async () => {

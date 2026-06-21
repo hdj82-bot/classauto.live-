@@ -4,24 +4,27 @@
 접근한다(``require_owner``). 베타테스터(교수자)별 외부 API 사용 비용을
 종목(서비스)별로 집계하고, 전체 합산·월별 추이를 함께 제공한다.
 
-비용 출처 — **현재 DB 에 영속화되는 것만** 집계한다:
-  - ``render_cost_logs``: HeyGen 렌더 / ElevenLabs·Google TTS 합성 비용.
-    ``video_renders.instructor_id`` 로 교수자에게 귀속.
-  - ``qa_logs``: 학생 RAG Q&A 의 Claude 비용. ``lectures → courses.instructor_id``
-    로 (강의 소유) 교수자에게 귀속. 서비스 라벨은 ``claude_qa``.
+비용 출처 — **DB 에 영속화되는 세 테이블을 모두 통합**한다(서로 겹치지 않음):
+  - ``render_cost_logs``: 강의 영상 렌더(HeyGen) · TTS(ElevenLabs/Google) 합성.
+    ``video_renders.instructor_id`` 로 교수자 귀속.
+  - ``qa_logs``: 학생 RAG Q&A 의 Claude 비용. ``lectures → courses.instructor_id``.
+  - ``platform_cost_logs``: Q&A 아바타 렌더(HeyGen/**VisionStory**) · 소크라테스
+    퀴즈 · 인사이트 브리핑(Claude). ``lectures → courses.instructor_id``.
 
-아직 영속화되지 않는 비용(슬라이드 스크립트 생성 Claude·OpenAI 이미지 생성 등)은
-잡히지 않는다. 그 비용이 ``render_cost_logs`` 에 기록되기 시작하면 ``service``
-라벨 기준으로 본 대시보드에 **자동 노출**된다(데이터 주도 설계 — 새 종목을
-추가해도 이 파일을 고칠 필요가 없다).
+각 행의 종목(서비스) 라벨은 **벤더 기준**으로 정규화한다 — heygen / elevenlabs /
+google_tts / visionstory / claude / openai. 같은 벤더의 호출은 한 종목으로 합산된다.
 
-성능: 모든 집계에 ``created_at >= now - 365d`` 윈도우를 적용해 입력 행 수를
-제한한다. ``ix_render_cost_logs_created_at``(0014) 와 ``qa_logs(created_at)``
-가 시간 필터를 백킹. 운영자 전용·저빈도 화면이라 캐시는 두지 않는다(요청마다
-fresh — "실시간" 요건).
+아직 영속화되지 않는 비용(gpt-image 아바타 룩 생성·음성 클론·슬라이드 스크립트
+생성 Claude·임베딩 등)은 잡히지 않는다. 해당 호출부에 비용 기록을 추가하면
+같은 벤더 라벨로 본 대시보드에 자동 합류한다(데이터 주도 설계).
+
+성능: 모든 집계에 ``created_at >= now - 365d`` 윈도우를 적용. 운영자 전용·저빈도
+화면이라 캐시는 두지 않는다(요청마다 fresh — "실시간"). 환율(원/달러)은 프론트가
+당일 시세를 별도로 조회해 표기한다(백엔드는 USD 원장만 책임).
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends
@@ -30,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_owner
 from app.db.session import get_db
+from app.models.cost_log import CostLog
 from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.qa_log import QALog
@@ -41,9 +45,24 @@ owner_costs_router = APIRouter(prefix="/api/owner/costs", tags=["owner"])
 # 비용 집계 윈도우 — admin.get_costs(COSTS_WINDOW_DAYS) 와 동일하게 최근 12개월.
 COSTS_WINDOW_DAYS = 365
 
-# 학생 RAG Q&A(Claude) 비용의 서비스 라벨. render_cost_logs 의 service 값
-# (heygen/elevenlabs/google_tts/...) 과 겹치지 않는 별도 종목으로 노출한다.
-QA_SERVICE_LABEL = "claude_qa"
+
+def _platform_service(category, model: str | None) -> str:
+    """platform_cost_logs 의 (category, model) 을 벤더 종목 라벨로 정규화.
+
+    - AVATAR_QA: Q&A 아바타 렌더. model 이 곧 벤더("visionstory"/"heygen").
+    - LLM_*: Claude 호출(Q&A/평가/요약) → "claude".
+    - TTS/STT/OTHER: 현재 platform 에 거의 안 쌓이지만 폴백 처리.
+    """
+    cat = getattr(category, "value", category)  # SAEnum → str
+    if cat == "AVATAR_QA":
+        return (model or "heygen").strip().lower()
+    if cat in ("LLM_QA", "LLM_ASSESSMENT", "LLM_SUMMARY"):
+        return "claude"
+    if cat == "TTS":
+        return (model or "tts").strip().lower()
+    if cat == "STT":
+        return "stt"
+    return "other"
 
 
 def _month_start(now: datetime) -> datetime:
@@ -69,7 +88,37 @@ async def get_owner_costs(
     start_date = now - timedelta(days=COSTS_WINDOW_DAYS)
     month_start = _month_start(now)
 
-    # ── 1. render_cost_logs: (instructor, service) 별 비용·초·호출수 ──
+    # 종목별 플랫폼 합계 / 사용자별 누적기.
+    service_agg: dict[str, dict] = {}
+    user_agg: dict[str, dict] = {}
+
+    def _service_slot(name: str) -> dict:
+        return service_agg.setdefault(
+            name, {"cost_usd": 0.0, "calls": 0, "seconds": 0.0, "tokens": 0}
+        )
+
+    def _user_slot(uid) -> dict:
+        return user_agg.setdefault(
+            str(uid), {"total_usd": 0.0, "by_service": {}, "calls": 0}
+        )
+
+    def _add(uid, service: str, cost: float, *, calls: int = 0,
+             seconds: float = 0.0, tokens: int = 0) -> None:
+        s = _service_slot(service)
+        s["cost_usd"] += cost
+        s["calls"] += calls
+        s["seconds"] += seconds
+        s["tokens"] += tokens
+        if uid is None:
+            return
+        slot = _user_slot(uid)
+        slot["by_service"][service] = round(
+            slot["by_service"].get(service, 0.0) + cost, 4
+        )
+        slot["total_usd"] += cost
+        slot["calls"] += calls
+
+    # ── 1. render_cost_logs: (instructor, service) ──
     render_rows = (
         await db.execute(
             select(
@@ -84,9 +133,16 @@ async def get_owner_costs(
             .group_by(VideoRender.instructor_id, RenderCostLog.service)
         )
     ).all()
+    for r in render_rows:
+        _add(
+            r.user_id,
+            (r.service or "other").strip().lower(),
+            float(r.cost or 0),
+            calls=int(r.calls or 0),
+            seconds=float(r.seconds or 0),
+        )
 
-    # ── 2. qa_logs: instructor 별 Claude Q&A 비용·토큰·호출수 ──
-    #    qa_logs.user_id 는 질문한 학생이지만, 비용 귀속은 강의를 소유한 교수자.
+    # ── 2. qa_logs: instructor 별 Claude Q&A ──
     qa_rows = (
         await db.execute(
             select(
@@ -101,24 +157,42 @@ async def get_owner_costs(
             .group_by(Course.instructor_id)
         )
     ).all()
-
-    # ── 3. 종목(서비스)별 플랫폼 합계 ──
-    service_agg: dict[str, dict] = {}
-    for r in render_rows:
-        s = service_agg.setdefault(
-            r.service, {"cost_usd": 0.0, "calls": 0, "seconds": 0.0, "tokens": 0}
-        )
-        s["cost_usd"] += float(r.cost or 0)
-        s["calls"] += int(r.calls or 0)
-        s["seconds"] += float(r.seconds or 0)
     for r in qa_rows:
-        s = service_agg.setdefault(
-            QA_SERVICE_LABEL, {"cost_usd": 0.0, "calls": 0, "seconds": 0.0, "tokens": 0}
+        _add(
+            r.user_id,
+            "claude",
+            float(r.cost or 0),
+            calls=int(r.calls or 0),
+            tokens=int(r.tokens or 0),
         )
-        s["cost_usd"] += float(r.cost or 0)
-        s["calls"] += int(r.calls or 0)
-        s["tokens"] += int(r.tokens or 0)
 
+    # ── 3. platform_cost_logs: (instructor, category, model) ──
+    plat_rows = (
+        await db.execute(
+            select(
+                Course.instructor_id.label("user_id"),
+                CostLog.category.label("category"),
+                CostLog.model.label("model"),
+                func.sum(CostLog.cost_usd).label("cost"),
+                func.sum(CostLog.input_tokens + CostLog.output_tokens).label("tokens"),
+                func.count().label("calls"),
+            )
+            .join(Lecture, CostLog.lecture_id == Lecture.id)
+            .join(Course, Lecture.course_id == Course.id)
+            .where(CostLog.created_at >= start_date)
+            .group_by(Course.instructor_id, CostLog.category, CostLog.model)
+        )
+    ).all()
+    for r in plat_rows:
+        _add(
+            r.user_id,
+            _platform_service(r.category, r.model),
+            float(r.cost or 0),
+            calls=int(r.calls or 0),
+            tokens=int(r.tokens or 0),
+        )
+
+    # ── 종목별 집계 → 정렬 ──
     by_service = [
         {
             "service": name,
@@ -133,42 +207,10 @@ async def get_owner_costs(
     services = [row["service"] for row in by_service]
     total_cost = sum(v["cost_usd"] for v in service_agg.values())
 
-    # ── 4. 사용자(교수자)별 — 종목별 비용 맵 + 총액 ──
-    user_agg: dict[str, dict] = {}
-
-    def _user_slot(uid) -> dict:
-        key = str(uid)
-        return user_agg.setdefault(
-            key, {"total_usd": 0.0, "by_service": {}, "calls": 0}
-        )
-
-    for r in render_rows:
-        if r.user_id is None:  # instructor 가 SET NULL 로 비워진 고아 렌더
-            continue
-        slot = _user_slot(r.user_id)
-        cost = float(r.cost or 0)
-        slot["by_service"][r.service] = round(
-            slot["by_service"].get(r.service, 0.0) + cost, 4
-        )
-        slot["total_usd"] += cost
-        slot["calls"] += int(r.calls or 0)
-    for r in qa_rows:
-        if r.user_id is None:
-            continue
-        slot = _user_slot(r.user_id)
-        cost = float(r.cost or 0)
-        slot["by_service"][QA_SERVICE_LABEL] = round(
-            slot["by_service"].get(QA_SERVICE_LABEL, 0.0) + cost, 4
-        )
-        slot["total_usd"] += cost
-        slot["calls"] += int(r.calls or 0)
-
-    # 사용자 메타(email/name/role) 일괄 조회
+    # ── 사용자 메타(email/name/role) 일괄 조회 ──
     user_meta: dict[str, User] = {}
     if user_agg:
-        import uuid as _uuid
-
-        ids = [_uuid.UUID(k) for k in user_agg]
+        ids = [uuid.UUID(k) for k in user_agg]
         meta_rows = (
             await db.execute(select(User).where(User.id.in_(ids)))
         ).scalars().all()
@@ -190,29 +232,15 @@ async def get_owner_costs(
         )
     by_user.sort(key=lambda x: x["total_usd"], reverse=True)
 
-    # ── 5. 월별 합계(render + qa 병합), 최신 12개 ──
     by_month = await _by_month(db, start_date)
-
-    # ── 6. 당월 누적(month-to-date) ──
-    mtd_render = (
-        await db.execute(
-            select(func.sum(RenderCostLog.cost_usd)).where(
-                RenderCostLog.created_at >= month_start
-            )
-        )
-    ).scalar() or 0
-    mtd_qa = (
-        await db.execute(
-            select(func.sum(QALog.cost_usd)).where(QALog.created_at >= month_start)
-        )
-    ).scalar() or 0
+    mtd = await _month_to_date(db, month_start)
 
     return {
         "generated_at": now.isoformat(),
         "window_days": COSTS_WINDOW_DAYS,
         "currency": "USD",
         "total_cost_usd": round(total_cost, 4),
-        "month_to_date_usd": round(float(mtd_render) + float(mtd_qa), 4),
+        "month_to_date_usd": round(mtd, 4),
         "user_count": len(by_user),
         "services": services,
         "by_service": by_service,
@@ -222,42 +250,45 @@ async def get_owner_costs(
 
 
 async def _by_month(db: AsyncSession, start_date: datetime) -> list[dict]:
-    """월별(render + qa) 비용 합계 — 최신순 최대 12개.
-
-    render_cost_logs 와 qa_logs 를 각각 (year, month) 로 GROUP BY 한 뒤
-    파이썬에서 병합한다(두 테이블을 SQL UNION 하는 것보다 단순·이식성↑).
-    """
-    render_m = (
-        await db.execute(
-            select(
-                extract("year", RenderCostLog.created_at).label("year"),
-                extract("month", RenderCostLog.created_at).label("month"),
-                func.sum(RenderCostLog.cost_usd).label("total"),
+    """월별(render + qa + platform) 비용 합계 — 최신순 최대 12개."""
+    parts = []
+    for model_col in (RenderCostLog, QALog, CostLog):
+        rows = (
+            await db.execute(
+                select(
+                    extract("year", model_col.created_at).label("year"),
+                    extract("month", model_col.created_at).label("month"),
+                    func.sum(model_col.cost_usd).label("total"),
+                )
+                .where(model_col.created_at >= start_date)
+                .group_by("year", "month")
             )
-            .where(RenderCostLog.created_at >= start_date)
-            .group_by("year", "month")
-        )
-    ).all()
-    qa_m = (
-        await db.execute(
-            select(
-                extract("year", QALog.created_at).label("year"),
-                extract("month", QALog.created_at).label("month"),
-                func.sum(QALog.cost_usd).label("total"),
-            )
-            .where(QALog.created_at >= start_date)
-            .group_by("year", "month")
-        )
-    ).all()
+        ).all()
+        parts.extend(rows)
 
     merged: dict[tuple[int, int], float] = {}
-    for r in (*render_m, *qa_m):
+    for r in parts:
         key = (int(r.year), int(r.month))
         merged[key] = merged.get(key, 0.0) + float(r.total or 0)
 
-    rows = [
+    out = [
         {"year": y, "month": m, "cost_usd": round(c, 4)}
         for (y, m), c in merged.items()
     ]
-    rows.sort(key=lambda x: (x["year"], x["month"]), reverse=True)
-    return rows[:12]
+    out.sort(key=lambda x: (x["year"], x["month"]), reverse=True)
+    return out[:12]
+
+
+async def _month_to_date(db: AsyncSession, month_start: datetime) -> float:
+    """render + qa + platform 의 당월 누적 비용 합."""
+    total = 0.0
+    for model_col in (RenderCostLog, QALog, CostLog):
+        val = (
+            await db.execute(
+                select(func.sum(model_col.cost_usd)).where(
+                    model_col.created_at >= month_start
+                )
+            )
+        ).scalar()
+        total += float(val or 0)
+    return total

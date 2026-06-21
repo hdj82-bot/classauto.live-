@@ -1576,6 +1576,8 @@
     "refresh": "새로고침",
     "refreshing": "불러오는 중…",
     "generatedAt": "기준 시각: {time}",
+    "fxRate": "환율 ₩{rate} / $1",
+    "fxApprox": " (추정)",
     "empty": "아직 집계된 비용이 없습니다.",
     "totalCost": "총 비용 (최근 12개월)",
     "monthToDate": "당월 누적",

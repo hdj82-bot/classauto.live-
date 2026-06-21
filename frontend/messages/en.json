@@ -1576,6 +1576,8 @@
     "refresh": "Refresh",
     "refreshing": "Loading…",
     "generatedAt": "As of: {time}",
+    "fxRate": "FX ₩{rate} / $1",
+    "fxApprox": " (approx.)",
     "empty": "No costs recorded yet.",
     "totalCost": "Total cost (last 12 months)",
     "monthToDate": "Month to date",

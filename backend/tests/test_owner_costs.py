@@ -128,6 +128,37 @@ async def test_owner_costs_excludes_old_window(client, admin, db, professor, lec
 
 
 @pytest.mark.asyncio
+async def test_owner_costs_includes_platform_costs_visionstory(
+    client, admin, db, professor, lecture,
+):
+    """platform_cost_logs(AVATAR_QA/visionstory)도 합산되고 교수자에게 귀속된다."""
+    from app.models.cost_log import CostCategory, CostLog
+
+    db.add(
+        CostLog(
+            id=uuid.uuid4(),
+            lecture_id=lecture.id,
+            category=CostCategory.avatar_qa,
+            model="visionstory",
+            cost_usd=1.2,
+            created_at=datetime.now(timezone.utc) - timedelta(days=5),
+        )
+    )
+    await db.flush()
+
+    resp = await client.get("/api/owner/costs", headers=make_auth_header(admin))
+    assert resp.status_code == 200
+    data = resp.json()
+
+    by_service = {row["service"]: row["cost_usd"] for row in data["by_service"]}
+    assert by_service.get("visionstory") == 1.2
+    assert data["total_cost_usd"] == 1.2
+    # lecture 는 course→professor 소유 → 교수자에게 귀속
+    user = next(u for u in data["by_user"] if u["user_id"] == str(professor.id))
+    assert user["by_service"]["visionstory"] == 1.2
+
+
+@pytest.mark.asyncio
 async def test_owner_costs_month_to_date(client, admin, db, professor, lecture):
     """당월 비용만 month_to_date_usd 에 잡힌다(45일 전은 제외)."""
     await _seed_render_cost(db, lecture, professor, "heygen", 4.0, days_ago=0)
