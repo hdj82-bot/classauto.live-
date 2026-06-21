@@ -130,3 +130,103 @@ class BriefingResult(BaseModel):
     briefing: Briefing
     student_solutions: list[StudentSolution]
     source: str                 # "claude" | "rule-based-mock"
+
+
+# ── B. 학기 전체 분석(§3) — 10주차~학기말 ────────────────────────────────────
+
+
+class SemesterProfile(BaseModel):
+    """학기 분석 입력(§3.1). 과목 메타(CourseProfile) + 학기 타임라인.
+
+    ``semester_weeks`` 는 학기 총 주차(15/16 등), ``current_week`` 는 현재 주차.
+    분석 마감 주차는 ``semester_weeks - 1`` 로 자동 계산(§3.1).
+    """
+
+    course: CourseProfile
+    semester_weeks: int = Field(..., ge=2, le=24)
+    current_week: int = Field(..., ge=1, le=24)
+    enrolled: int = Field(40, ge=1, le=2000)
+
+
+class SemesterTimeline(BaseModel):
+    """학기 분석 타임라인 판정(§3.1). 순수 계산 — AI 비의존."""
+
+    semester_weeks: int
+    current_week: int
+    trigger_week: int            # 기능 개방 주차(스펙 고정 10)
+    deadline_week: int           # 분석 마감 = semester_weeks - 1
+    is_open: bool                # current_week >= trigger_week
+    is_past_deadline: bool       # current_week > deadline_week
+
+
+class WeeklyMetric(BaseModel):
+    """주차별 학습효율 1포인트(§3.3)."""
+
+    week: int
+    completion_rate: float       # 0~100(%)
+    avg_understanding: float     # 0~100
+    engagement: float            # 0~100(대면 참여도)
+
+
+class SemesterTrend(BaseModel):
+    """주차별 추이 + 1주 대비 상승폭 요약(§3.3 — ClassAuto 도입 효과 가시화)."""
+
+    weeks: list[WeeklyMetric]
+    completion_delta: float      # +%p (현재 - 1주)
+    understanding_delta: float
+    engagement_delta: float
+    timeline: SemesterTimeline
+
+
+class SurveyReference(BaseModel):
+    """설문 문항 근거 문헌(§3.4). DOI 는 교수자 검증 대상(§3.7)."""
+
+    citation: str
+    doi: str = ""                # 빈 값 = 교수자가 실재 확인 후 채움(폴백 시)
+
+
+class SurveyQuestion(BaseModel):
+    """학기말 설문 1문항(§3.4) — 본문 + 교수법 근거 + 참고문헌."""
+
+    no: int
+    text: str
+    scale: str                   # "5점 리커트" | "주관식"
+    rationale: str               # 교수법 설계 근거
+    reference: SurveyReference
+
+
+class SurveyResult(BaseModel):
+    """``generate_survey()`` 결과(§3.4). 상단 경고 고정 + 출처 표기."""
+
+    warning: str
+    questions: list[SurveyQuestion]
+    source: str                  # "claude" | "rule-based-mock"
+
+
+class SurveyResponseDist(BaseModel):
+    """설문 응답 분포 1문항(§3.5) — 5점 척도 분포 + 평균(데모 합성)."""
+
+    no: int
+    text: str
+    dist: list[int]              # 길이 5(1~5점 응답 수)
+    average: float
+
+
+class PaperSuggestion(BaseModel):
+    """논문 제목·방향 제안(§3.6) — 집필은 Accept.best 로 연결."""
+
+    title: str
+    direction: str
+    method: str
+
+
+class SemesterReview(BaseModel):
+    """학기 총평[PRO](§3.6) — 교육공학 이론 렌즈 + 장단점 + 논문 제안."""
+
+    overview: str
+    theory_lens: str
+    strengths: list[str]
+    weaknesses: list[str]
+    improvements: list[str]
+    paper_suggestions: list[PaperSuggestion]
+    source: str                  # "claude" | "rule-based-mock"
