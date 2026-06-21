@@ -1,0 +1,87 @@
+name: Weekly Supabase Backup
+
+# 관리형 Supabase 스택(프로덕션)용 주 1회 pg_dump 백업.
+# OPERATIONS_RUNBOOK.md §8.6 의 "반자동 옵션" 구현.
+#
+# 왜 별도 워크플로인가:
+#   기존 .github/workflows/backup.yml 은 자체호스팅(VPS+Docker) 전용이며
+#   `vars.DEPLOY_ENABLED == 'true'` 일 때만 돈다. 현재 프로덕션은 관리형
+#   Supabase(Free 티어 — PITR 없음)라 그 워크플로가 돌지 않아 자동 백업이
+#   전무했다. 이 워크플로가 그 갭을 메운다(별도 게이트·주기).
+#
+# 동작: Supabase Direct URL 로 pg_dump → gzip → S3 업로드(scripts/supabase-backup.sh).
+#
+# 활성화(교수님 1회 설정):
+#   Settings → Secrets and variables → Actions
+#     · Variables: SUPABASE_BACKUP_ENABLED = "true"
+#     · Secrets:   SUPABASE_DB_URL  (postgresql://postgres.<ref>:<pw>@<host>:5432/postgres)
+#                  BACKUP_S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION
+#   보관 정책(30/90일)은 S3 버킷 lifecycle 로 설정.
+
+on:
+  schedule:
+    # 매주 일요일 03:00 KST = 토요일 18:00 UTC (KST=UTC+9, DST 없음).
+    - cron: "0 18 * * 6"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "수동 백업 사유 (감사용)"
+        required: false
+        default: "manual run"
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Supabase pg_dump → S3
+    runs-on: ubuntu-latest
+    if: vars.SUPABASE_BACKUP_ENABLED == 'true'
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install postgresql-client (matches server — pg16)
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL "https://www.postgresql.org/media/keys/ACCC4CF8.asc" \
+            -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          # shellcheck disable=SC1091
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Configure AWS CLI
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Dump → gzip → upload
+        env:
+          # connection string 자체가 secret. echo / 출력 금지.
+          PGURL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PGURL:-}" ]; then
+            echo "::error::SUPABASE_DB_URL secret is empty"
+            exit 1
+          fi
+          if [ -z "${BACKUP_S3_BUCKET:-}" ]; then
+            echo "::error::BACKUP_S3_BUCKET secret is empty"
+            exit 1
+          fi
+          chmod +x scripts/supabase-backup.sh
+          ./scripts/supabase-backup.sh
+
+      - name: Summary
+        run: |
+          echo "Weekly Supabase backup uploaded to s3://${BACKUP_S3_BUCKET:-?}/ifl-backup/supabase/$(date -u +%Y-%m-%d)/" >> "$GITHUB_STEP_SUMMARY"
+          echo "Retention is enforced via S3 bucket lifecycle policy." >> "$GITHUB_STEP_SUMMARY"
+        env:
+          BACKUP_S3_BUCKET: ${{ secrets.BACKUP_S3_BUCKET }}
