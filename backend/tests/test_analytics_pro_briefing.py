@@ -72,7 +72,7 @@ def test_strip_json_variants():
     assert json.loads(_strip_json('{"a": 1}')) == {"a": 1}
 
 
-# ── 엔드포인트 (교수자 인증 · 합성 데이터 · 폴백 경로) ─────────────────────────
+# ── 엔드포인트 (교수자 인증 + 베타 게이트 · 합성 데이터 · 폴백 경로) ───────────
 
 _BODY = {
     "course_profile": {
@@ -86,8 +86,16 @@ _BODY = {
 }
 
 
+async def _enable_pro(db, user):
+    """베타 토글을 켠 교수자로 만든다(게이트 통과 전제)."""
+    user.analytics_pro_enabled = True
+    await db.flush()
+    return user
+
+
 @pytest.mark.asyncio
-async def test_briefing_endpoint_ok(client, professor):
+async def test_briefing_endpoint_ok(client, db, professor):
+    await _enable_pro(db, professor)
     resp = await client.post(
         "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
     )
@@ -100,7 +108,8 @@ async def test_briefing_endpoint_ok(client, professor):
 
 
 @pytest.mark.asyncio
-async def test_briefing_endpoint_bad_scenario(client, professor):
+async def test_briefing_endpoint_bad_scenario(client, db, professor):
+    await _enable_pro(db, professor)
     body = {**_BODY, "scenario": "nope"}
     resp = await client.post(
         "/api/v1/analytics-pro/briefing", json=body, headers=make_auth_header(professor)
@@ -110,7 +119,45 @@ async def test_briefing_endpoint_bad_scenario(client, professor):
 
 @pytest.mark.asyncio
 async def test_briefing_endpoint_requires_professor(client, student):
+    """학생은 교수자 단계에서 차단(403)."""
     resp = await client.post(
         "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(student)
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_briefing_endpoint_requires_beta_flag(client, professor):
+    """토글이 꺼진 교수자는 베타 권한 부재로 403(운영자 게이트)."""
+    resp = await client.post(
+        "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_briefing_endpoint_owner_bypasses_flag(client, db, professor):
+    """운영자(ADMIN_EMAILS)는 토글 없이도 통과(QA·시연용)."""
+    from app.core.config import settings
+
+    owner_email = next(iter(settings.admin_email_set))
+    professor.email = owner_email
+    professor.analytics_pro_enabled = False
+    await db.flush()
+    resp = await client.post(
+        "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
+    )
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_briefing_endpoint_global_killswitch(client, db, professor, monkeypatch):
+    """전역 킬스위치가 꺼지면 토글된 베타테스터도 차단(운영자만 예외)."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ANALYTICS_PRO_ENABLED", False)
+    await _enable_pro(db, professor)
+    resp = await client.post(
+        "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
     )
     assert resp.status_code == 403

@@ -175,6 +175,26 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    href: "/professor/analytics-pro",
+    labelKey: "nav.analyticsPro",
+    iconId: "ic-analytics-pro",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="url(#nav-grad-electric)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 2a10 10 0 1 0 10 10" />
+        <path d="M12 12 7 7" />
+        <path d="M12 6v6h6" />
+      </svg>
+    ),
+  },
+  {
     href: "/professor/learners",
     labelKey: "nav.learners",
     iconId: "ic-learners",

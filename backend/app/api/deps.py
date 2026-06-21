@@ -107,6 +107,32 @@ async def require_professor(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+async def require_analytics_pro(user: User = Depends(require_professor)) -> User:
+    """학습 분석 PRO(베타 전용) 접근 게이트 — 교수자 + 베타 토글.
+
+    docs/planning/analytics-spec.md 의 운영자 토글 게이트. 판정 순서:
+    1. 운영자(ADMIN_EMAILS)는 전역 킬스위치·플래그와 무관하게 항상 통과(QA·시연용).
+    2. 전역 ``ANALYTICS_PRO_ENABLED`` 가 False 면 그 외 전원 차단(인시던트 즉시 차단).
+    3. 사용자별 ``analytics_pro_enabled`` 가 True 인 베타테스터만 통과.
+
+    require_professor 에 의존하므로 학생·미인증은 그 단계에서 이미 차단된다.
+    """
+    email = (user.email or "").strip().lower()
+    if email in settings.admin_email_set:
+        return user
+    if not settings.ANALYTICS_PRO_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="학습 분석 PRO 기능이 현재 비활성화되어 있습니다.",
+        )
+    if not getattr(user, "analytics_pro_enabled", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="학습 분석 PRO 베타 권한이 없습니다. 운영자에게 활성화를 요청하세요.",
+        )
+    return user
+
+
 async def require_student(user: User = Depends(get_current_user)) -> User:
     if user.role.value != "student":
         raise HTTPException(

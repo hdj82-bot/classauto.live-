@@ -1,0 +1,52 @@
+{
+  "analyticsPro": {
+    "title": "Per-Lecture Learning Analytics (PRO)",
+    "subtitle": "Aggregates and classifies pre-class data, then AI proposes an in-class plan and per-student prescriptions. During beta this runs on synthetic data.",
+    "generate": "Generate analysis",
+    "generating": "Generating...",
+    "form": {
+      "subject": "Subject",
+      "field": "Field",
+      "weaknessAxes": "Weakness axes (comma-separated)",
+      "weaknessAxesHint": "e.g. misconceptions, formula application errors",
+      "presets": "Quick fill",
+      "scenario": "Scenario"
+    },
+    "verdict": {
+      "excelling": "Excelling",
+      "confused": "Confused",
+      "polarized": "Polarized",
+      "dropout": "Drop-off"
+    },
+    "source": {
+      "ai": "AI-generated",
+      "fallback": "Rule-based"
+    },
+    "kpi": {
+      "understanding": "Avg. understanding",
+      "completion": "Completion rate",
+      "watched": "Avg. watched",
+      "questions": "Questions / student"
+    },
+    "briefing": {
+      "heading": "AI In-Class Briefing",
+      "openingMove": "First 5 minutes",
+      "recommendedMinutes": "Recommended {minutes} min"
+    },
+    "solutions": {
+      "heading": "Per-Student Solutions",
+      "colName": "Name",
+      "colLevel": "Level",
+      "colWeakness": "Weakness",
+      "colAction": "Prescription"
+    },
+    "gated": {
+      "title": "Analytics PRO beta access required",
+      "body": "This feature is for beta testers only. Ask an operator to enable it."
+    },
+    "errors": {
+      "incomplete": "Enter subject, field, and weakness axes.",
+      "failed": "Failed to generate. Please try again shortly."
+    }
+  }
+}

@@ -125,6 +125,7 @@ async def list_users(
                 "school": u.school,
                 "department": u.department,
                 "is_active": u.is_active,
+                "analytics_pro_enabled": u.analytics_pro_enabled,
                 "created_at": u.created_at.isoformat() if u.created_at else None,
             }
             for u in users
@@ -140,10 +141,11 @@ async def update_user(
     user_id: uuid.UUID,
     role: str | None = Query(default=None),
     is_active: bool | None = Query(default=None),
+    analytics_pro_enabled: bool | None = Query(default=None),
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """사용자 역할 변경 / 비활성화."""
+    """사용자 역할 변경 / 비활성화 / 학습 분석 PRO 베타 토글."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
@@ -151,6 +153,7 @@ async def update_user(
 
     old_role = user.role.value
     old_is_active = user.is_active
+    old_analytics_pro = user.analytics_pro_enabled
     role_changed = False
 
     if role is not None:
@@ -166,6 +169,9 @@ async def update_user(
 
     if is_active is not None:
         user.is_active = is_active
+
+    if analytics_pro_enabled is not None:
+        user.analytics_pro_enabled = analytics_pro_enabled
 
     await db.flush()
     await db.commit()
@@ -189,6 +195,15 @@ async def update_user(
             target_id=str(user.id),
             detail={"email": user.email, "from": old_is_active, "to": user.is_active},
         )
+    if analytics_pro_enabled is not None and analytics_pro_enabled != old_analytics_pro:
+        await log_admin_action(
+            db,
+            _admin,
+            "user.set_analytics_pro",
+            target_type="user",
+            target_id=str(user.id),
+            detail={"email": user.email, "from": old_analytics_pro, "to": user.analytics_pro_enabled},
+        )
 
     return {
         "id": str(user.id),
@@ -196,6 +211,7 @@ async def update_user(
         "name": user.name,
         "role": user.role.value,
         "is_active": user.is_active,
+        "analytics_pro_enabled": user.analytics_pro_enabled,
     }
 
 

@@ -111,6 +111,13 @@ class User(Base):
     beta_consented_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # 학습 분석 PRO(베타 전용 실기능, docs/planning/analytics-spec.md) 접근 토글.
+    # 운영자 콘솔(/admin/users)에서 베타테스터별로 켜고 끈다. 기본 False = 미허용.
+    # 게이트는 deps.require_analytics_pro 가 본 플래그 + 전역 ANALYTICS_PRO_ENABLED 로
+    # 판정하며, 운영자(ADMIN_EMAILS)는 플래그와 무관하게 항상 접근 가능하다.
+    analytics_pro_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
