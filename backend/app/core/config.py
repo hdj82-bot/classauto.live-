@@ -91,6 +91,9 @@ class Settings(BaseSettings):
     # 시 규칙기반 폴백.
     ANALYTICS_BRIEFING_MODEL: str = "claude-sonnet-4-6"
     ANALYTICS_BRIEFING_MAX_TOKENS: int = 1500
+    # 학습 분석 PRO 전역 킬스위치. True 면 사용자별 토글(users.analytics_pro_enabled)
+    # 로 접근 제어, False 면 운영자(ADMIN_EMAILS) 외 전원 차단(인시던트 시 즉시 차단용).
+    ANALYTICS_PRO_ENABLED: bool = True
 
     # ── OpenAI (임베딩) ─────────────────────────────────────────
     OPENAI_API_KEY: str = ""

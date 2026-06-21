@@ -83,6 +83,11 @@ import avatarsEn from "../../messages/_patches/avatars.en.json";
 // 5단계 카피. (docs/planning/12-self-avatar-onboarding.md)
 import photoAvatarOnboardingKo from "../../messages/_patches/photoAvatarOnboarding.ko.json";
 import photoAvatarOnboardingEn from "../../messages/_patches/photoAvatarOnboarding.en.json";
+// ── 2026-06-21: 강의별 학습 분석 PRO (/professor/analytics-pro) ──
+// namespace `analyticsPro` — 본체 / 다른 patch 와 충돌 없음. 마케팅 미리보기
+// (analyticsHub) 와 별개의 베타 전용 실기능. docs/planning/analytics-spec.md A블록.
+import analyticsProKo from "../../messages/_patches/analyticsPro.ko.json";
+import analyticsProEn from "../../messages/_patches/analyticsPro.en.json";
 
 export type Locale = "ko" | "en";
 
@@ -132,6 +137,7 @@ const koPatches: Messages[] = [
   shellCleanupKo as Messages,
   avatarsKo as Messages,
   photoAvatarOnboardingKo as Messages,
+  analyticsProKo as Messages,
 ];
 const enPatches: Messages[] = [
   professorEn as Messages,
@@ -150,6 +156,7 @@ const enPatches: Messages[] = [
   shellCleanupEn as Messages,
   avatarsEn as Messages,
   photoAvatarOnboardingEn as Messages,
+  analyticsProEn as Messages,
 ];
 
 const koMerged = koPatches.reduce(

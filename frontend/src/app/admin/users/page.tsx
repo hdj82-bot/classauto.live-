@@ -14,6 +14,7 @@ interface UserItem {
   school: string | null;
   department: string | null;
   is_active: boolean;
+  analytics_pro_enabled?: boolean;
   created_at: string | null;
 }
 
@@ -81,6 +82,25 @@ export default function AdminUsersPage() {
     }
   };
 
+  const handleToggleAnalyticsPro = async (
+    userId: string,
+    currentEnabled: boolean
+  ) => {
+    try {
+      await api.patch(`/api/v1/admin/users/${userId}`, null, {
+        params: { analytics_pro_enabled: !currentEnabled },
+      });
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === userId ? { ...u, analytics_pro_enabled: !currentEnabled } : u
+        )
+      );
+      toast(t("admin.userAnalyticsProChanged"), "success");
+    } catch {
+      toast(t("admin.userAnalyticsProChangeError"), "error");
+    }
+  };
+
   const totalPages = Math.ceil(total / 20);
 
   return (
@@ -118,6 +138,7 @@ export default function AdminUsersPage() {
                   <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColRole")}</th>
                   <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColAffiliation")}</th>
                   <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColStatus")}</th>
+                  <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColAnalyticsPro")}</th>
                   <th className="px-4 py-3 font-medium text-gray-600">{t("admin.userColAction")}</th>
                 </tr>
               </thead>
@@ -148,6 +169,29 @@ export default function AdminUsersPage() {
                       }`}>
                         {user.is_active ? t("admin.userActive") : t("admin.userInactive")}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {user.role === "professor" ? (
+                        <button
+                          onClick={() =>
+                            handleToggleAnalyticsPro(
+                              user.id,
+                              user.analytics_pro_enabled ?? false
+                            )
+                          }
+                          className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                            user.analytics_pro_enabled
+                              ? "bg-green-100 text-green-700 hover:bg-green-200"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {user.analytics_pro_enabled
+                            ? t("admin.analyticsProOn")
+                            : t("admin.analyticsProOff")}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-gray-300">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <button
