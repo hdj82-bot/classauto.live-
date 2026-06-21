@@ -133,6 +133,43 @@ async def require_analytics_pro(user: User = Depends(require_professor)) -> User
     return user
 
 
+def require_plan(*allowed_plans: str):
+    """플랜 차등 게이트 팩토리 — 지정 플랜만 통과(정식 런칭용 인프라).
+
+    AVATAR_VOICE_FEATURE_ROADMAP.md 의 Free/Basic/Pro 차등(커스텀 아바타·음성 클론은
+    Basic/Pro 한정)을 위한 의존성. **베타는 결제 UI 가 가려져 전원 무제한**이므로
+    전역 ``settings.PLAN_GATING_ENABLED`` 가 기본 False — 그 동안은 게이팅을 하지 않고
+    전원 통과한다(라이브 베타테스터 접근을 깨지 않는다). 정식 런칭 시 플래그를 켜면
+    구독 플랜으로 실제 게이팅한다. 운영자(ADMIN_EMAILS)는 플래그·플랜과 무관하게 통과.
+
+    ``allowed_plans`` 는 PlanType 값(대소문자 무시). 예: ``require_plan("basic", "pro")``.
+    교수자 전용 기능에 붙이므로 require_professor 에 의존한다(학생·미인증은 그 단계 차단).
+    """
+    allowed = {p.strip().lower() for p in allowed_plans}
+
+    async def _checker(
+        user: User = Depends(require_professor),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        if not settings.PLAN_GATING_ENABLED:
+            return user  # 베타: 게이팅 비활성 — 전원 통과
+        email = (user.email or "").strip().lower()
+        if email in settings.admin_email_set:
+            return user
+        # 로컬 import — 서비스가 모델을 import 하므로 deps 상단 import 시 순환 위험 회피.
+        from app.services.pipeline.subscription import get_or_create_subscription
+
+        sub = await get_or_create_subscription(db, user.id)
+        if sub.plan.value.lower() not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"이 기능은 {'/'.join(sorted(p.upper() for p in allowed))} 플랜에서 사용할 수 있습니다.",
+            )
+        return user
+
+    return _checker
+
+
 async def require_student(user: User = Depends(get_current_user)) -> User:
     if user.role.value != "student":
         raise HTTPException(

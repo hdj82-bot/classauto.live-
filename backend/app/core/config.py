@@ -103,6 +103,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     EMBEDDING_MODEL: str = "text-embedding-3-small"
 
+    # ── 플랜 차등(아바타/음성 등) 게이트 ─────────────────────────────
+    # AVATAR_VOICE_FEATURE_ROADMAP.md 의 Free/Basic/Pro 차등을 위한 전역 킬스위치.
+    # 베타는 결제 UI 가 가려져 전원 무제한이므로 기본 False(게이팅 비활성 — 전원 통과).
+    # 정식 런칭 시 True 로 켜면 deps.require_plan 이 구독 플랜으로 실제 게이팅한다.
+    PLAN_GATING_ENABLED: bool = False
+
     # ── 평가 시스템 ─────────────────────────────────────────────
     FORMATIVE_SERVE_COUNT: int = 5
     SUMMATIVE_SERVE_COUNT: int = 5
