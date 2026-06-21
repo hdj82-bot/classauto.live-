@@ -12,6 +12,7 @@
     "indexCardPublished": "공개",
     "indexCardDraft": "초안",
     "lectureBack": "← 강의 분석 목록으로",
+    "comprehensiveReportLink": "종합보고서",
     "lectureTitle": "{title} 분석 리포트",
     "lectureSubtitle": "이 강의에서 일어난 학습 활동을 시각화합니다.",
     "lectureLoading": "분석 데이터 불러오는 중...",

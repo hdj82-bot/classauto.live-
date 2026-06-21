@@ -234,6 +234,18 @@ export default function LectureAnalyticsPage() {
           <div className="print-hide flex items-center gap-2">
             {/* 분석 리포트 PDF 출력 — 브라우저 인쇄(스펙 11 §A) */}
             <PdfExportButton />
+            {/* 종합보고서 — 학기 전체 분석(B블록 §3): 추이·설문·총평·논문 제안 */}
+            <Link
+              href={`/professor/analytics/${lectureId}/comprehensive`}
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold"
+              style={{
+                border: "1px solid var(--gold, #FFB627)",
+                color: "var(--gold-on-light, #B88308)",
+                textDecoration: "none",
+              }}
+            >
+              {t("comprehensiveReportLink")}
+            </Link>
             {/* 대면수업 솔루션 보고서(인사이트) — RQ2 핵심 합성 화면으로 이동 */}
             <Link
               href={`/professor/analytics/${lectureId}/report`}

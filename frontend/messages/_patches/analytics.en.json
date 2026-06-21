@@ -12,6 +12,7 @@
     "indexCardPublished": "Published",
     "indexCardDraft": "Draft",
     "lectureBack": "← Back to analytics list",
+    "comprehensiveReportLink": "Comprehensive report",
     "lectureTitle": "{title} — analytics",
     "lectureSubtitle": "Visualizing learning activity for this lecture.",
     "lectureLoading": "Loading analytics data...",
