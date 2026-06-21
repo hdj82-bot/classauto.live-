@@ -14,6 +14,7 @@ const NAV_LINKS = [
   { href: "/features", key: "common.navFeatures" },
   { href: "/student-guide", key: "common.navStudentGuide" },
   { href: "/analytics-example", key: "common.navAnalytics" },
+  { href: "/comprehensive-analysis", key: "common.navComprehensive" },
   { href: "/pricing", key: "common.navPricing" },
   { href: "/use-cases", key: "common.navUseCases" },
 ] as const;
