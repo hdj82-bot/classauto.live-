@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 # boto3 client 는 생성 비용이 큰(botocore 서비스 모델 파싱) 객체이고 스레드 세이프
 # 하다. 매 호출 재생성하면 presign 을 행마다 부르는 핫패스(list_looks 등)에서
-# async 이벤트 루프를 동기 코드로 반복 블로킹한다. 프로세스당 1회만 만들어 재사용.
+# 비동기 이벤트 루프를 동기 코드로 반복 블로킹한다. 프로세스당 1회만 만들어 재사용.
 _s3_client = None
 _s3_client_lock = threading.Lock()
 
