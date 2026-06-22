@@ -2620,7 +2620,8 @@ async def register_standard_avatar(
         )
 
         try:
-            avatars = await heygen_list_avatars()
+            # 등록 검증 경로 — 방금 만든 아바타가 캐시에 안 잡히면 안 되므로 캐시 우회.
+            avatars = await heygen_list_avatars(use_cache=False)
         except HeyGenError as e:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
