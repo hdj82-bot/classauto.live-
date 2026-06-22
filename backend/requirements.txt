@@ -30,7 +30,7 @@ httpx>=0.28.1,<1.0.0
 # 동일 시그니처를 제공한다. 향후 tenacity 도입을 결정하면 이 줄을 다시 추가하면 된다.
 
 # AI / ML
-anthropic>=0.102.0,<1.0.0
+anthropic>=0.111.0,<1.0.0
 # images.edit 의 input_fidelity(교수 사진 정체성 보존; Photo Avatar v0.2)는 1.96.0+ 에서 지원.
 # 2026-06-05: floor 를 2.38.0 으로 끌어올림 — 운영/개발이 이미 2.x 설치본을 쓰므로
 # 소스와 핀을 일치시킨다(1.x 회귀 설치 방지). images.edit·embeddings.create·AsyncOpenAI·
