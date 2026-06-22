@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -211,8 +212,29 @@ async def get_video_status(video_id: str) -> dict:
 # ── 아바타 목록 조회 ─────────────────────────────────────────────────────────
 
 
-async def list_avatars() -> list[dict[str, Any]]:
-    """사용 가능한 아바타 목록 조회."""
+# HeyGen 계정 아바타 목록은 모든 교수자에게 동일하고 거의 바뀌지 않는다. 하지만
+# GET /api/avatars 는 교수자가 아바타 페이지를 열 때마다 호출돼, 캐시가 없으면
+# 매번 HeyGen /v2/avatars 를 친다. HeyGen 지연·429 시 재시도(30s×3 + 백오프)가
+# 그대로 사용자 대기로 노출되므로, 프로세스 메모리에 짧게(기본 5분) 캐시해 매
+# 요청 외부 호출을 없앤다. 성공 응답만 캐시한다(오류는 즉시 표면화).
+_AVATARS_CACHE_TTL = 300.0
+_avatars_cache: tuple[float, list[dict[str, Any]]] | None = None
+
+
+def reset_avatars_cache() -> None:
+    """list_avatars 의 프로세스 캐시를 비운다(테스트·강제 갱신용)."""
+    global _avatars_cache
+    _avatars_cache = None
+
+
+async def list_avatars(*, use_cache: bool = True) -> list[dict[str, Any]]:
+    """사용 가능한 아바타 목록 조회. 기본 5분 프로세스 캐시(use_cache=False 로 우회)."""
+    global _avatars_cache
+    if use_cache and _avatars_cache is not None:
+        cached_at, cached = _avatars_cache
+        if time.monotonic() - cached_at < _AVATARS_CACHE_TTL:
+            return cached
+
     url = f"{settings.HEYGEN_BASE_URL}/v2/avatars"
 
     resp = await _request_with_retry("GET", url, timeout=30.0)
@@ -223,7 +245,7 @@ async def list_avatars() -> list[dict[str, Any]]:
     data = resp.json().get("data", {})
     avatars = data.get("avatars", [])
 
-    return [
+    result = [
         {
             "avatar_id": a.get("avatar_id"),
             "avatar_name": a.get("avatar_name"),
@@ -233,6 +255,8 @@ async def list_avatars() -> list[dict[str, Any]]:
         }
         for a in avatars
     ]
+    _avatars_cache = (time.monotonic(), result)
+    return result
 
 
 # ── 아바타 그룹 (Photo Avatar — 웹 "공개 아바타" 캐릭터) ───────────────────────
