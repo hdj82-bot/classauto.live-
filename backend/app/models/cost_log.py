@@ -31,8 +31,17 @@ class CostLog(Base):
     lecture_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("lectures.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # PG enum ``costcategory`` 라벨은 대문자 '값'(LLM_QA·STT·TTS·OTHER·AVATAR_QA;
+    # 0006/0058 마이그레이션)으로 만들어졌다. values_callable 이 없으면 SQLAlchemy 는
+    # 멤버 '이름'(소문자: llm_qa·avatar_qa…)을 DB 로 보내, 라벨 불일치
+    # (InvalidTextRepresentation: invalid input value for enum costcategory)로 이 테이블의
+    # 적재·카테고리 필터 조회가 실패한다(그동안 platform_cost_logs 가 0건이던 원인).
+    # 본인 얼굴 Q&A 렌더는 제출 직전 ``budget.visionstory_spend_usd`` 필터가 크래시해
+    # 통째로 실패했다(0063 이 avatar_qa 소문자 라벨을 임시로 더해 그 한 경로만 살렸다).
+    # 값(대문자)을 쓰도록 명시해 DB enum 라벨과 일치시킨다 — 모든 카테고리를 한 번에 정합.
     category: Mapped[CostCategory] = mapped_column(
-        SAEnum(CostCategory), nullable=False
+        SAEnum(CostCategory, values_callable=lambda e: [m.value for m in e]),
+        nullable=False,
     )
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
