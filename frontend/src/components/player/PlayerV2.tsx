@@ -259,6 +259,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // 추천 질문은 기본 접힘 — 채팅 영역을 잠식하지 않게 버튼으로 펼친다.
   const [seedOpen, setSeedOpen] = useState(false);
   const qaBottomRef = useRef<HTMLDivElement>(null);
+  // Q&A 영상(아바타 클립) 답변이 추가될 때, 직전 질문 말풍선을 채팅 뷰 맨 위로
+  // 올려 그 아래 영상이 잘리지 않고 통째로 보이게 한다. qaBottomRef(맨 끝 앵커)로
+  // 스크롤하면 키 큰 영상의 윗부분이 뷰 위로 밀려 잘리므로 별도 앵커를 둔다.
+  const qaLatestUserRef = useRef<HTMLDivElement>(null);
 
   // ── Q&A 아바타 영상 재생 위치 ───────────────────────────────────────────────
   // "stage"(기본) = 좌측 강의 화면에 크게 재생, "chat" = 우측 채팅창에서 재생.
@@ -716,6 +720,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     setQaInput("");
     setQaMessages((m) => [...m, { role: "user", text: question }]);
     setQaSending(true);
+    // 답변에 아바타 영상이 함께 오면 스크롤을 "질문 말풍선 상단 정렬"로 바꿔
+    // 영상이 잘리지 않게 한다(영상 없으면 기존처럼 맨 아래로).
+    let answeredWithVideo = false;
     try {
       // 호출 경로 3종:
       //  - 미리보기(교수자): 소유 교수자 전용 /qa/preview (세션 없음)
@@ -742,6 +749,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
             );
       // 겹치는 질문이라 사전 렌더된 아바타 클립이 있으면 함께 재생(부가).
       const avatarUrl: string | null = data.avatar?.video_url ?? null;
+      answeredWithVideo = Boolean(avatarUrl);
       setQaMessages((m) => [
         ...m,
         {
@@ -766,7 +774,16 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       ]);
     }
     setQaSending(false);
-    setTimeout(() => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    setTimeout(() => {
+      if (answeredWithVideo) {
+        qaLatestUserRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      } else {
+        qaBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 50);
   };
 
   // ─── 추천(사전 제작) 질문 클릭 — 실시간 RAG 대신 미리 만든 Q&A 영상 재생 ───
@@ -785,9 +802,15 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     ]);
     // stage 모드면 좌측 강의 화면에 자동 재생(채팅 모드는 채팅에서 인라인 재생).
     routeAvatarToStage(q.video_url);
+    // 방금 추가한 질문 말풍선을 채팅 뷰 맨 위로 올려 그 아래 Q&A 영상이 통째로
+    // 보이게 한다(맨 아래 앵커로 스크롤하면 영상 윗부분이 잘림).
     setTimeout(
-      () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
-      50,
+      () =>
+        qaLatestUserRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        }),
+      80,
     );
   };
 
@@ -811,6 +834,12 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   if (!lecture) return null;
 
   const titleSegments = parseCourseTitle(lecture.title);
+  // 마지막 사용자 질문 말풍선 인덱스 — Q&A 영상 답변 시 이 말풍선을 뷰 상단으로
+  // 올려 영상이 잘리지 않게 스크롤하기 위한 앵커 대상(qaLatestUserRef).
+  let lastUserMsgIdx = -1;
+  for (let i = 0; i < qaMessages.length; i++) {
+    if (qaMessages[i].role === "user") lastUserMsgIdx = i;
+  }
   const week = lecture.week_number ?? null;
   const userInitial = (user?.name ?? user?.email ?? "?").trim().charAt(0).toUpperCase();
   const userSchoolDept = (() => {
@@ -1673,7 +1702,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     </div>
                   </div>
                 ) : (
-                  <div key={i} className={`${styles.msg} ${styles.me}`}>
+                  <div
+                    key={i}
+                    ref={i === lastUserMsgIdx ? qaLatestUserRef : undefined}
+                    className={`${styles.msg} ${styles.me}`}
+                  >
                     <span className={`${styles.msgAv} ${styles.msgAvMe}`}>나</span>
                     <div className={styles.bubble}>{m.text}</div>
                   </div>
