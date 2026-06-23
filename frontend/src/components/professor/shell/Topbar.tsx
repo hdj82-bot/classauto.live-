@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useI18n } from "@/contexts/I18nContext";
 import { BrandDot } from "@/components/ui";
+import { useShell } from "./ShellContext";
 import type { ReactNode } from "react";
 
 /**
@@ -56,6 +57,10 @@ export default function ProfessorTopbar({
   const router = useRouter();
   const { user, logout } = useAuth();
   const { t } = useI18n();
+  // 페이지가 ShellContext 로 끼운 중앙 노드(studio 의 제목 편집기 등).
+  // centerSlot prop(레거시) 이 명시되면 그쪽을 우선한다.
+  const shell = useShell();
+  const resolvedCenter = centerSlot ?? shell?.centerSlot ?? null;
 
   const resolvedBackLabel = backLabel ?? t("nav.dashboard");
   const initial = user?.email?.charAt(0).toUpperCase() ?? "?";
@@ -137,8 +142,8 @@ export default function ProfessorTopbar({
 
       {/* CENTER — title / title-input */}
       <div className="flex-1 flex justify-center items-center gap-2.5 min-w-0">
-        {centerSlot ? (
-          centerSlot
+        {resolvedCenter ? (
+          resolvedCenter
         ) : (
           title && (
             <span
