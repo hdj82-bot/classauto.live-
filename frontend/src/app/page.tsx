@@ -72,7 +72,7 @@ const NATURAL_DEMO_LECTURE_CARD = {
 
 // 대문 하단 둘째 줄 — 다국어 음성·자막을 보여주는 추가 실제 강의 카드 2장
 // (사용자 요청 2026-06-24). 좌측=뇌과학(일본어 음성+영어 자막),
-// 우측=중국 경제(중국어 음성+한국어 자막). 위 두 카드와 동일하게 로그인 게이트
+// 우측=중국 경제(중국어 음성+영어 자막). 위 두 카드와 동일하게 로그인 게이트
 // 없는 /lecture/[slug] 로 직행하므로 누구나 클릭 즉시 시청 가능.
 // FieldSelectCard 는 분야(social/natural) 라우팅 대신 href 직행 모드를 쓴다.
 // testId 는 기존 demo-field-social/natural 과 충돌하지 않도록 고유 값 부여.
@@ -92,10 +92,10 @@ const CHINA_ECON_DEMO_LECTURE_HREF =
   "/lecture/데이터로-읽는-현대-중국-경제중국어-음성-한국어-자막-e9a070b4";
 const CHINA_ECON_DEMO_LECTURE_CARD = {
   tagline: "D · Social Science",
-  metaLine: "실제 강의 · 중국어 음성 + 한국어 자막",
+  metaLine: "실제 강의 · 중국어 음성 + 영어 자막",
   title: "데이터로 읽는 2026 현대 중국 경제",
   subtitle:
-    "최신 통계와 데이터로 2026년 현재 중국 경제의 구조와 흐름을 읽어내는 실제 제작 강의입니다. 학생 화면 그대로 중국어 음성·한국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
+    "최신 통계와 데이터로 2026년 현재 중국 경제의 구조와 흐름을 읽어내는 실제 제작 강의입니다. 학생 화면 그대로 중국어 음성·영어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
   statSlides: "10 슬라이드",
   statSecondary: "AI 아바타 Q&A",
 };
