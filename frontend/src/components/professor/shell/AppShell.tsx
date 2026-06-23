@@ -4,6 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import ProfessorTopbar, { type ProfessorTopbarProps } from "./Topbar";
 import ProfessorSidebar from "./Sidebar";
 import ProfessorSvgGradients from "./SvgGradients";
+import { ShellProvider } from "./ShellContext";
 import { professorTokens } from "./tokens";
 
 /**
@@ -73,17 +74,22 @@ export default function ProfessorAppShell({
       : { ...mainBaseStyle, overflowY: "auto" };
 
   return (
-    // data-pro-* 마커: 인쇄 시 globals.css @media print 가 셸 크롬(topbar/sidebar)을
-    // 숨기고 100vh/overflow:hidden 을 풀어 본문 전체가 출력되게 한다(분석 PDF, 스펙 11 §A).
-    <div style={shellStyle} data-pro-shell>
-      <ProfessorSvgGradients />
-      <ProfessorTopbar {...topbar} />
-      <div style={stageStyle} data-pro-stage>
-        {variant === "default" && <ProfessorSidebar />}
-        <main style={mainStyle} data-pro-main>
-          {children}
-        </main>
+    // ShellProvider — 페이지가 Topbar 중앙(centerSlot)에 자기 컨텐츠를 끼우는 통로.
+    // Topbar 와 main(children) 이 같은 provider 안에 있어야 페이지가 set 한 노드를
+    // Topbar 가 읽는다.
+    <ShellProvider>
+      {/* data-pro-* 마커: 인쇄 시 globals.css @media print 가 셸 크롬(topbar/sidebar)을
+          숨기고 100vh/overflow:hidden 을 풀어 본문 전체가 출력되게 한다(분석 PDF, 스펙 11 §A). */}
+      <div style={shellStyle} data-pro-shell>
+        <ProfessorSvgGradients />
+        <ProfessorTopbar {...topbar} />
+        <div style={stageStyle} data-pro-stage>
+          {variant === "default" && <ProfessorSidebar />}
+          <main style={mainStyle} data-pro-main>
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </ShellProvider>
   );
 }
