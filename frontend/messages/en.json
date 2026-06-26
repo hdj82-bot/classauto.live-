@@ -449,6 +449,40 @@
       "other": "Other"
     }
   },
+  "board": {
+    "title": "Community board",
+    "subtitle": "Share your thoughts, ideas, and pain points using ClassAuto. This is an open space for beta testers.",
+    "writeCta": "New post",
+    "loginToWrite": "Log in to post",
+    "empty": "No posts yet. Be the first to write one.",
+    "loadError": "Failed to load posts. Please try again shortly.",
+    "backToList": "Back to list",
+    "more": "Load more",
+    "commentsTitle": "Comments",
+    "commentCount": "{count} comments",
+    "noComments": "No comments yet.",
+    "commentPlaceholder": "Write a comment…",
+    "commentSubmit": "Post comment",
+    "commentSubmitting": "Posting…",
+    "loginToComment": "Log in to comment.",
+    "pinnedBadge": "Notice",
+    "deleteConfirm": "Delete this? This cannot be undone.",
+    "delete": "Delete",
+    "deleteError": "Failed to delete. Please try again.",
+    "anonymous": "Anonymous",
+    "newPost": {
+      "title": "Write a post",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Enter a title",
+      "bodyLabel": "Body",
+      "bodyPlaceholder": "Write your post",
+      "submit": "Post",
+      "submitting": "Posting…",
+      "cancel": "Cancel",
+      "error": "Failed to post. Please try again.",
+      "validation": "Please enter both a title and body."
+    }
+  },
   "demo": {
     "meta": {
       "pageTitle": "Demo — ClassAuto",
@@ -865,6 +899,7 @@
       "navComprehensive": "Comprehensive analysis",
       "navPricing": "Pricing",
       "navUseCases": "Use cases",
+      "navBoard": "Community",
       "navTrust": "Student data",
       "navSecurity": "Security",
       "navBeta": "Beta",

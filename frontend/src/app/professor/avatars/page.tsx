@@ -992,7 +992,12 @@ export default function AvatarsPage() {
     }
   }, [toast, t, reloadVoices, ownVoiceId]);
 
-  if (loading) return <LoadingSpinner fullScreen label={t("loading")} />;
+  // 과거엔 여기서 `if (loading) return <LoadingSpinner fullScreen/>` 로 페이지
+  // 전체를 HeyGen 카탈로그 한 호출(listAvatars)이 끝날 때까지 막았다. 공유 HeyGen
+  // 계정이 느리면 교수자는 5분 넘게 빈 화면만 보다 이탈했다(사용자 피드백). 이제는
+  // 페이지를 즉시 렌더하고, 카탈로그에 의존하지 않는 작업(본인 사진 업로드·저장된
+  // 아바타·표준 아바타 등록)은 곧바로 가능하게 한다. HeyGen 라이브러리는 도착하는
+  // 대로 채워지며, 그동안 라이브러리 영역에만 가벼운 로딩 안내를 보여 준다.
 
   return (
     <PageContainer>
@@ -1112,6 +1117,27 @@ export default function AvatarsPage() {
           reducedMotion={reducedMotion}
           t={t}
         />
+
+        {/* 카탈로그(HeyGen 표준 아바타) 로딩 안내 — 페이지를 막지 않고 라이브러리
+            영역에만 가볍게 표시한다. 도착하면 아래 AvatarLibrary 가 채워진다. */}
+        {loading && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "14px 16px",
+              borderRadius: 12,
+              background: "var(--bg-card)",
+              border: "1px solid var(--line)",
+              fontSize: 13,
+              color: "var(--text-subtle)",
+            }}
+          >
+            <LoadingSpinner size="sm" />
+            <span>{t("loading")}</span>
+          </div>
+        )}
 
         {/* 최근 선택한 아바타 + 저장된 아바타·룩 라이브러리 — 재생성 없이 즉시 선택/적용.
             만든 아바타·룩이 없으면 컴포넌트가 스스로 아무것도 렌더하지 않는다. */}
