@@ -74,4 +74,30 @@ describe("OwnerCostsPage", () => {
       ),
     ).toBeTruthy();
   });
+
+  it("M5: 비-403 오류는 삼키지 않고 error 메시지를 노출한다", async () => {
+    mocks.get.mockRejectedValue({ response: { status: 500 } });
+    render(wrap(<OwnerCostsPage />));
+
+    expect(
+      await screen.findByText("비용 데이터를 불러오지 못했습니다."),
+    ).toBeTruthy();
+  });
+
+  it("M5: 부분 200(배열 필드 누락)에도 안전 가드(?? [])로 크래시하지 않는다", async () => {
+    // by_service / by_month / by_user / services 가 누락된 부분 응답.
+    mocks.get.mockResolvedValue({
+      data: {
+        generated_at: "2026-06-21T00:00:00Z",
+        total_cost_usd: 0,
+        month_to_date_usd: 0,
+        user_count: 0,
+      },
+    });
+    render(wrap(<OwnerCostsPage />));
+
+    // 제목은 렌더되고(=크래시 없음), total 0 이라 빈 안내가 보인다.
+    expect(await screen.findByText("API 비용 대시보드")).toBeTruthy();
+    expect(screen.getByText("아직 집계된 비용이 없습니다.")).toBeTruthy();
+  });
 });

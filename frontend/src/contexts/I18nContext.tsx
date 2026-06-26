@@ -170,7 +170,23 @@ const enMerged = enPatches.reduce(
 
 const messages: Record<Locale, Messages> = { ko: koMerged, en: enMerged };
 
-const LOCALE_STORAGE_KEY = "ifl-locale";
+// 로케일 선호는 쿠키에 저장한다 (CLAUDE.md: localStorage 금지 — artifact·SSR 호환).
+// 쿠키는 SSR 에서도 읽을 수 있고(추후 서버 컴포넌트가 초기 lang 을 정할 여지),
+// 만료/도메인 스코프가 명시적이다. SameSite=Lax 로 일반 내비게이션엔 따라붙되
+// 외부 사이트발 요청엔 제한 → CSRF 표면 최소화.
+const LOCALE_COOKIE = "ifl-locale";
+const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1년
+
+function readLocaleCookie(): Locale | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)ifl-locale=(ko|en)(?:;|$)/);
+  return match ? (match[1] as Locale) : null;
+}
+
+function writeLocaleCookie(l: Locale): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${LOCALE_COOKIE}=${l}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
+}
 
 interface I18nContextType {
   locale: Locale;
@@ -199,7 +215,7 @@ function subscribeLocale(callback: () => void) {
 // Hydration gate. useSyncExternalStore requires the client's initial snapshot
 // to equal the server snapshot ("ko"); otherwise React logs a recoverable
 // hydration error (minified #418 in prod) and re-renders the tree client-side.
-// The persisted preference in localStorage can be "en", so reflecting it on
+// The persisted preference in the cookie can be "en", so reflecting it on
 // the very first client render would mismatch the SSR HTML. We therefore keep
 // the snapshot pinned to the server value until the first client mount
 // completes (see I18nProvider effect), then flip and notify subscribers so the
@@ -208,10 +224,7 @@ let didHydrate = false;
 
 function getLocaleSnapshot(): Locale {
   if (!didHydrate) return "ko"; // match getServerLocaleSnapshot until mounted
-  if (typeof window === "undefined") return "ko";
-  const saved = window.localStorage.getItem(LOCALE_STORAGE_KEY);
-  if (saved === "ko" || saved === "en") return saved;
-  return "ko";
+  return readLocaleCookie() ?? "ko";
 }
 
 function getServerLocaleSnapshot(): Locale {
@@ -243,9 +256,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   const setLocale = useCallback((l: Locale) => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(LOCALE_STORAGE_KEY, l);
-    }
+    writeLocaleCookie(l);
     localeListeners.forEach((cb) => cb());
   }, []);
 
