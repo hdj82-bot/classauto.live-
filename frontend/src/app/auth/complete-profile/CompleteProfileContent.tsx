@@ -111,7 +111,8 @@ export default function CompleteProfileContent() {
             }),
       });
       login(data.access_token);
-      router.replace("/dashboard");
+      // 역할별 착지: 교수자는 교수자 대시보드, 학생은 학생 대시보드.
+      router.replace(role === "professor" ? "/professor/dashboard" : "/dashboard");
     } catch {
       setError(t("student.completeProfileV2.error"));
     } finally {

@@ -163,10 +163,13 @@ function Dashboard({ data, colorOf, t }: DashboardProps) {
     }
   }, [data.generated_at]);
 
-  const maxService = Math.max(...data.by_service.map((s) => s.cost_usd), 0.0001);
-  const maxMonth = Math.max(...data.by_month.map((m) => m.cost_usd), 0.0001);
+  // 부분 200/배열 누락 시 빈 배열로 안전 가드 — .map / 스프레드 폭발 방지.
+  const byService = data.by_service ?? [];
+  const byMonth = data.by_month ?? [];
+  const maxService = Math.max(...byService.map((s) => s.cost_usd), 0.0001);
+  const maxMonth = Math.max(...byMonth.map((m) => m.cost_usd), 0.0001);
   // 월별은 최신순으로 오므로 그래프는 시간순으로 뒤집어 표시.
-  const months = [...data.by_month].reverse();
+  const months = [...byMonth].reverse();
 
   return (
     <div className="mt-6 space-y-6">
@@ -196,7 +199,7 @@ function Dashboard({ data, colorOf, t }: DashboardProps) {
           {/* 종목별 비용 — 막대 + 표 */}
           <Card title={t("ownerCosts.byServiceTitle")}>
             <div className="space-y-3">
-              {data.by_service.map((row) => {
+              {byService.map((row) => {
                 const share =
                   data.total_cost_usd > 0
                     ? (row.cost_usd / data.total_cost_usd) * 100
@@ -335,7 +338,9 @@ function Card({
 }
 
 function UserTable({ data, colorOf, t }: DashboardProps) {
-  const { services, by_user: users } = data;
+  // 부분 200/배열 누락 시 빈 배열로 안전 가드.
+  const services = data.services ?? [];
+  const users = data.by_user ?? [];
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -422,14 +427,15 @@ function UserBar({
 
 function CsvButton({ data, label }: { data: OwnerCostsResponse; label: string }) {
   const handle = () => {
-    const header = ["email", "role", "total_usd", ...data.services];
+    const services = data.services ?? [];
+    const header = ["email", "role", "total_usd", ...services];
     const lines = [header.join(",")];
-    for (const u of data.by_user) {
+    for (const u of data.by_user ?? []) {
       const row = [
         u.email ?? u.user_id,
         u.role ?? "",
         u.total_usd.toFixed(4),
-        ...data.services.map((s) => (u.by_service[s] ?? 0).toFixed(4)),
+        ...services.map((s) => (u.by_service[s] ?? 0).toFixed(4)),
       ];
       lines.push(row.map(csvCell).join(","));
     }
