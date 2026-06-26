@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
@@ -23,12 +23,28 @@ from app.models.lecture import Lecture
 from app.models.qa_log import QALog
 from app.models.session import LearningSession
 from app.models.user import User
-from app.services.pipeline.qa import answer_question
+from app.services.pipeline.qa import QAResult, answer_question
 from app.services.pipeline.qa_avatar import resolve_avatar_for_question
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/qa", tags=["qa"])
+
+# 고정 오류 메시지(L2) — 타입드 예외의 str(exc) 를 그대로 클라이언트에 echo 하지 않는다.
+# (예외 메시지가 바뀌어도 내부 정보가 응답으로 새지 않도록 핸들러에서 고정 문구를 쓴다.)
+_MSG_NOT_READY = "강의를 찾을 수 없거나 아직 준비되지 않았습니다."
+_MSG_NO_SESSION = "이 세션에 대한 권한이 없습니다."
+_MSG_PREVIEW_OWNER_ONLY = "미리보기 Q&A 는 소유 교수자만 가능합니다."
+_MSG_NOT_PUBLISHED = "아직 발행되지 않은 강의입니다."
+
+# H1: 학생 1회 세션당 Q&A 횟수 상한(런어웨이 가드). 정상 학습엔 충분히 넉넉하되, 단일
+# 학생이 한 세션에서 무한정 Claude 를 호출해 비용을 키우는 것을 막는다(CLAUDE.md: 학생
+# 무제한 Q&A 금지). 초과 시 Claude 호출 없이(비용 0) 안내 메시지를 반환한다.
+STUDENT_QA_PER_SESSION_CAP = 50
+_MSG_SESSION_CAP = (
+    "이 학습 세션에서 질문할 수 있는 횟수를 모두 사용했습니다. "
+    "강의를 다시 시작하거나 다음에 이어서 질문해 주세요."
+)
 
 
 class QARequest(BaseModel):
@@ -67,6 +83,26 @@ async def ask_question(
             ).scalar_one_or_none()
             if not lecture or not lecture.pipeline_task_id:
                 raise LookupError("강의 파이프라인이 아직 처리되지 않았습니다.")
+
+            # H1: 세션당 Q&A 횟수 상한 — 초과면 Claude 호출 없이 안내(비용 0).
+            asked = db.execute(
+                select(func.count(QALog.id)).where(
+                    QALog.session_id == body.session_id
+                )
+            ).scalar() or 0
+            if asked >= STUDENT_QA_PER_SESSION_CAP:
+                logger.info(
+                    "학생 Q&A 세션 캡 초과 — 차단: session=%s asked=%d",
+                    body.session_id, asked,
+                )
+                return (
+                    QAResult(
+                        answer=_MSG_SESSION_CAP, in_scope=False, top_slides=[],
+                        input_tokens=0, output_tokens=0, cost_usd=0.0,
+                    ),
+                    None,
+                )
+
             result = answer_question(db, lecture.pipeline_task_id, str(body.session_id), body.question)
 
             top_slide_numbers = (
@@ -120,10 +156,10 @@ async def ask_question(
 
     try:
         result, avatar_payload = await loop.run_in_executor(None, _run)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail=_MSG_NOT_READY)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=_MSG_NO_SESSION)
     except Exception:
         raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
 
@@ -172,10 +208,10 @@ async def preview_question(
 
     try:
         result = await loop.run_in_executor(None, _run)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail=_MSG_NOT_READY)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=_MSG_PREVIEW_OWNER_ONLY)
     except Exception:
         raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
 
@@ -228,10 +264,10 @@ async def public_question(
 
     try:
         result = await loop.run_in_executor(None, _run)
-    except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
+    except LookupError:
+        raise HTTPException(status_code=404, detail=_MSG_NOT_READY)
+    except PermissionError:
+        raise HTTPException(status_code=403, detail=_MSG_NOT_PUBLISHED)
     except Exception:
         raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
 
