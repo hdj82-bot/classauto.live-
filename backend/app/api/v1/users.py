@@ -15,6 +15,11 @@ router = APIRouter(prefix="/api/v1/users", tags=["users"])
 class MeResponse(BaseModel):
     id: str
     role: str
+    # 프론트 신원 표시(H4)용 — Topbar 이니셜·플레이어 학생 이름, 분석 PRO/종합보고서
+    # 노출 게이트(이메일 허용목록 canSeeAnalyticsPro)가 이 값을 쓴다. JWT 에는 sub·role
+    # 만 있어 프론트가 email/name 을 빈 문자열로 두던 문제를, /me 가 채워 보강한다.
+    email: str
+    name: str
     # 학생 첫 사용 온보딩(영상 시청 4슬라이드 안내)을 "다시 보지 않기" 한 시각.
     # null = 아직 안 함(진입 시 안내 표시). 값이 있으면 영구 스킵.
     onboarded_at: datetime | None
@@ -24,6 +29,8 @@ def _to_me(user: User) -> MeResponse:
     return MeResponse(
         id=str(user.id),
         role=user.role.value,
+        email=user.email,
+        name=user.name,
         onboarded_at=user.onboarded_at,
     )
 

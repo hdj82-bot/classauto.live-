@@ -11,6 +11,26 @@ async def test_me_onboarded_at_null_initially(client, student):
     assert data["onboarded_at"] is None
 
 
+async def test_me_returns_email_and_name(client, student, professor):
+    """H4: /me 가 email·name 을 반환해야 프론트가 신원 표시·노출 게이트를 채운다.
+
+    종전에는 응답에 email/name 이 없어 프론트 user 가 빈 문자열로 남고, 분석 PRO 메뉴·
+    종합보고서 버튼(이메일 허용목록 게이트)이 영구히 사라졌다.
+    """
+    r_stu = await client.get("/api/v1/users/me", headers=make_auth_header(student))
+    assert r_stu.status_code == 200
+    body = r_stu.json()
+    assert body["email"] == student.email == "stu@test.ac.kr"
+    assert body["name"] == student.name == "테스트 학생"
+
+    # 교수자(분석 PRO 게이트 대상)도 동일하게 채워진다.
+    r_prof = await client.get("/api/v1/users/me", headers=make_auth_header(professor))
+    assert r_prof.status_code == 200
+    prof_body = r_prof.json()
+    assert prof_body["email"] == professor.email
+    assert prof_body["name"] == professor.name
+
+
 async def test_mark_onboarded_sets_and_is_idempotent(client, student):
     headers = make_auth_header(student)
 

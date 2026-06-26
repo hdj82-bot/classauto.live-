@@ -63,8 +63,10 @@ export default function ProfessorTopbar({
   const resolvedCenter = centerSlot ?? shell?.centerSlot ?? null;
 
   const resolvedBackLabel = backLabel ?? t("nav.dashboard");
-  const initial = user?.email?.charAt(0).toUpperCase() ?? "?";
-  const displayName = user?.email?.split("@")[0] ?? "";
+  // 이름이 있으면 이름을, 없으면 이메일 로컬파트를 표시·이니셜로 쓴다(H4: /me 보강 후
+  // user.name·email 이 채워진다). 둘 다 비면 "?" 폴백.
+  const displayName = (user?.name?.trim() || user?.email?.split("@")[0]) ?? "";
+  const initial = (displayName || "?").charAt(0).toUpperCase();
 
   const handleBack = () => {
     if (onBack) return onBack();

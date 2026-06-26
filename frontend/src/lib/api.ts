@@ -246,6 +246,10 @@ export const ownerCostsApi = {
 export interface MeResponse {
   id: string;
   role: "professor" | "student" | "admin";
+  /** 본인 이메일 — Topbar 이니셜·분석 PRO/종합보고서 노출 게이트(H4). */
+  email: string;
+  /** 본인 이름 — Topbar·플레이어 학생 이름 표시(H4). */
+  name: string;
   /** 온보딩 안내를 "다시 보지 않기" 한 시각. null = 아직(진입 시 안내 표시). */
   onboarded_at: string | null;
 }
