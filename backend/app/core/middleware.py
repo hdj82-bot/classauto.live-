@@ -81,6 +81,28 @@ _RATE_LIMIT_EXEMPT_PATHS: frozenset[str] = frozenset(
     {"/health", "/health/deep", "/docs", "/openapi.json", "/metrics", "/redoc"}
 )
 
+# 앱 앞단에 있는 신뢰 프록시 홉 수(Railway 엣지 → 컨테이너의 단일 리버스 프록시 기준 1).
+# X-Forwarded-For 는 "client, proxy1, proxy2 ..." 순으로 각 홉이 자신이 직접 본 IP 를
+# 오른쪽 끝에 덧붙인다. 맨 앞(leftmost) 항목은 클라이언트가 임의로 위조할 수 있어
+# 레이트리밋 키로 쓰면 헤더만 바꿔가며 무제한 우회가 된다(C3-a). 신뢰 프록시가 덧붙인
+# "마지막 홉(rightmost)"에서 이 값만큼 들어간 항목이 실제 클라이언트 IP 다. 프록시 단을
+# 늘리면(예: 별도 nginx 추가) 이 상수를 키운다. config.py 는 다른 작업 소유라 여기 둔다.
+_TRUSTED_PROXY_HOPS = 1
+
+
+def _client_ip_from_forwarded(forwarded: str) -> str | None:
+    """X-Forwarded-For 에서 신뢰 가능한 클라이언트 IP(마지막 홉 기준)를 뽑는다.
+
+    leftmost 항목은 클라이언트가 위조 가능하므로 절대 신뢰하지 않고, 신뢰 프록시가
+    덧붙인 오른쪽 홉만 사용한다. 항목이 기대보다 적으면(설정 불일치 등) 가장 왼쪽으로
+    클램프해 best-effort 로 동작한다. 빈 헤더면 None.
+    """
+    hops = [h.strip() for h in forwarded.split(",") if h.strip()]
+    if not hops:
+        return None
+    idx = min(_TRUSTED_PROXY_HOPS, len(hops))
+    return hops[-idx]
+
 
 def _extract_client_id(request: Request) -> str:
     """JWT sub claim(서명 검증 필수) 우선, 실패 시 클라이언트 IP로 폴백.
@@ -112,11 +134,12 @@ def _extract_client_id(request: Request) -> str:
             # 매 요청마다 새 키가 만들어져 무제한이 되므로 절대 그렇게 하지 않는다.
             pass
 
-    # X-Forwarded-For 헤더로 실제 클라이언트 IP 확인 (nginx 프록시 대응)
+    # X-Forwarded-For 헤더로 실제 클라이언트 IP 확인 (신뢰 프록시 마지막 홉 기준).
+    # leftmost(클라 위조 가능) 가 아니라 신뢰 프록시가 덧붙인 홉을 사용해 레이트리밋
+    # 우회를 차단한다(_client_ip_from_forwarded). 헤더가 없으면 직접 peer 로 폴백.
     forwarded = request.headers.get("X-Forwarded-For", "")
-    if forwarded:
-        real_ip = forwarded.split(",")[0].strip() or "unknown"
-    else:
+    real_ip = _client_ip_from_forwarded(forwarded) if forwarded else None
+    if not real_ip:
         real_ip = request.client.host if request.client else "unknown"
     return f"ip:{real_ip}"
 

@@ -262,7 +262,41 @@ def step3_generate_scripts(self, prev_result: dict) -> dict:
 
     scripts_data = [{"slide_number": s.slide_number, "script": s.script} for s in scripts]
     logger.info("Step3 완료: task_id=%s, %d 스크립트 생성", task_id, len(scripts))
+
+    # C3(b): 스크립트 세그먼트 임베딩을 여기서 **1회** 저장한다. retriever 가 질문마다
+    # 전체 스크립트를 OpenAI 로 재임베딩하던 비용 증폭을 없앤다(저장분 조회로 전환,
+    # 저장분 없으면 on-the-fly 폴백). 임베딩/저장 실패는 graceful — 스크립트 생성은 이미
+    # 끝났고 retriever 폴백이 있으므로 파이프라인을 멈추지 않는다(로깅만).
+    _store_script_segment_embeddings(task_id, scripts_data)
+
     return {**prev_result, "scripts": scripts_data}
+
+
+def _store_script_segment_embeddings(task_id: str, scripts_data: list[dict]) -> None:
+    """step3 생성 스크립트를 1회 임베딩해 ``script_segment_embeddings`` 에 저장.
+
+    slide_number 는 step3 scripts 의 1-based 값을 그대로 쓴다(retriever 의
+    _script_segments_for_task 가 slide_index+1 로 만드는 값과 동일). 모든 예외를 잡아
+    파이프라인 진행을 보장한다(retriever 가 미저장 시 on-the-fly 로 폴백).
+    """
+    from app.services.pipeline.embedding import store_script_segment_embeddings
+
+    segments = [
+        (int(s["slide_number"]), s.get("script") or "") for s in scripts_data
+    ]
+    db = SyncSessionLocal()
+    try:
+        count = store_script_segment_embeddings(db, task_id, segments)
+        db.commit()
+        logger.info("Step3 스크립트 임베딩 저장: task_id=%s, %d건", task_id, count)
+    except Exception as exc:  # noqa: BLE001 — 저장 실패가 파이프라인을 멈추지 않는다.
+        db.rollback()
+        logger.warning(
+            "Step3 스크립트 임베딩 저장 실패(graceful, 폴백 존재): task_id=%s, error=%s",
+            task_id, exc,
+        )
+    finally:
+        db.close()
 
 
 def _estimate_segments(scripts: list[dict]) -> list[dict]:
