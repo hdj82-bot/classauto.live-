@@ -160,9 +160,24 @@ def upload_ppt(file_bytes: bytes, lecture_id: str, filename: str) -> tuple[str, 
 
 # ── SSRF 방지 ──────────────────────────────────────────────────────────────
 
+# HeyGen 웹훅(event_data.url)이 돌려주는 영상은 HeyGen 소유 도메인에서만 서빙된다
+# (files.heygen.ai / files2.heygen.ai / resource2.heygen.ai 등). 가짜 웹훅이
+# 임의 외부 URL 을 주입해 학생에게 노출시키는 것을 막기 위해, 웹훅 다운로드 경로는
+# 이 도메인(및 그 서브도메인)만 허용한다. 서명 검증과 함께 동작하는 2차 방어선.
+# config.py 를 건드리지 않도록 s3.py 내부 상수로 둔다.
+HEYGEN_ALLOWED_HOSTS = frozenset({"heygen.ai", "heygen.com"})
 
-def _validate_external_url(url: str) -> None:
-    """SSRF 방지: 내부 네트워크 주소 접근 차단."""
+
+def _validate_external_url(
+    url: str, allowed_hosts: frozenset[str] | None = None
+) -> None:
+    """SSRF 방지: 내부 네트워크 주소 접근 차단.
+
+    ``allowed_hosts`` 가 주어지면 호스트가 해당 도메인(또는 그 서브도메인)에
+    속할 때만 통과시킨다(allowlist). 웹훅처럼 외부에서 URL 을 주입할 수 있는
+    경로에서 임의 외부 호스트 다운로드를 차단하는 용도다. 미지정(None)이면
+    기존 SSRF 차단만 적용한다(신뢰 가능한 내부 호출 경로 호환).
+    """
     from urllib.parse import urlparse
     import ipaddress
 
@@ -170,27 +185,53 @@ def _validate_external_url(url: str) -> None:
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"허용되지 않는 프로토콜: {parsed.scheme}")
 
-    hostname = parsed.hostname or ""
+    hostname = (parsed.hostname or "").lower()
     blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "metadata.google.internal"}
     if hostname in blocked_hosts or hostname.endswith(".internal"):
         raise ValueError(f"내부 네트워크 접근 차단: {hostname}")
 
+    # 호스트명이 IP 면 사설/루프백/링크로컬을 차단한다. ip_address 파싱 실패(=도메인)는
+    # 통과시키되, '사설 IP 차단' raise 가 같은 try 의 except 에 삼켜지지 않도록 파싱과
+    # 판정을 분리한다(버그 수정: 종전엔 사설 IP raise 를 except ValueError 가 흡수해
+    # 10.0.0.5 같은 사설 IP 가 차단되지 않았다).
     try:
         ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local:
-            raise ValueError(f"사설 IP 접근 차단: {hostname}")
     except ValueError:
-        pass  # 호스트명이 도메인인 경우 통과
+        ip = None  # 호스트명이 도메인 → IP 검사 건너뜀
+    if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local):
+        raise ValueError(f"사설 IP 접근 차단: {hostname}")
+
+    if allowed_hosts is not None:
+        if not any(
+            hostname == h or hostname.endswith("." + h) for h in allowed_hosts
+        ):
+            raise ValueError(f"허용되지 않은 외부 호스트: {hostname or '(없음)'}")
 
 
 # ── 기존 함수 (호환 유지) ────────────────────────────────────────────────────
 
 
-async def upload_from_url(source_url: str, lecture_id: str, slide_number: int | None = None) -> tuple[str, float]:
-    """원격 URL의 비디오를 다운로드하여 S3에 업로드. (s3_url, elapsed) 반환."""
-    _validate_external_url(source_url)
-    async with httpx.AsyncClient(timeout=300.0) as client:
+async def upload_from_url(
+    source_url: str,
+    lecture_id: str,
+    slide_number: int | None = None,
+    allowed_hosts: frozenset[str] | None = None,
+) -> tuple[str, float]:
+    """원격 URL의 비디오를 다운로드하여 S3에 업로드. (s3_url, elapsed) 반환.
+
+    ``allowed_hosts`` 를 넘기면 소스 호스트를 해당 도메인 allowlist 로 제한한다
+    (웹훅 등 외부 주입 경로용). ``follow_redirects=False`` 로 두어, 허용 호스트가
+    allowlist 밖으로 리다이렉트해 검증을 우회하는 것을 막는다.
+    """
+    _validate_external_url(source_url, allowed_hosts=allowed_hosts)
+    async with httpx.AsyncClient(timeout=300.0, follow_redirects=False) as client:
         resp = await client.get(source_url)
+        # 리다이렉트(3xx)는 따라가지 않는다 — allowlist 우회 차단. raise_for_status 는
+        # 3xx 를 오류로 보지 않으므로 명시적으로 거부한다.
+        if resp.is_redirect:
+            raise ValueError(
+                f"리다이렉트 응답 거부(allowlist 우회 차단): {source_url}"
+            )
         resp.raise_for_status()
     video_bytes = resp.content
 

@@ -151,19 +151,20 @@ async def test_webhook_success_records_cost_with_rate(client):
     }
     body = json.dumps(payload).encode()
 
-    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""), \
+    secret = "cost-test-secret"
+    sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", secret), \
          patch.object(settings, "HEYGEN_COST_USD_PER_SECOND", 0.01), \
          patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db), \
          patch("app.api.v1.webhooks.s3_svc.upload_from_url",
                return_value=("https://s3.example/v.mp4", 1.0)) as mock_s3, \
          patch("app.api.v1.webhooks.cost_log.record_once", side_effect=fake_record_once), \
          patch("app.api.v1.webhooks.notification.notify_instructor"):
-        # HMAC 미설정이므로 sig 헤더 불필요
-        _ = hmac.new(b"", body, hashlib.sha256)  # noqa: F841 — keep imports honest
+        # 서명 검증이 모든 환경에서 강제이므로 유효 서명 헤더를 동봉한다.
         resp = await client.post(
             "/api/v1/webhooks/heygen",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "Signature": sig},
         )
 
     # webhooks.py 가 run_until_complete 를 호출하므로 async client 아래에선

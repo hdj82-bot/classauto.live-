@@ -769,7 +769,7 @@ def _rendering_seed(db, lec, prof, job_id: str) -> QAAnswerCache:
 def test_seed_webhook_success_marks_ready(sync_db, monkeypatch):
     from app.api.v1 import webhooks
 
-    async def _fake_upload(url, lecture_id, *a):  # noqa: ANN001
+    async def _fake_upload(url, lecture_id, *a, **kw):  # noqa: ANN001
         return ("s3://qa/clip.mp4", 0.0)
 
     monkeypatch.setattr(webhooks.s3_svc, "upload_from_url", _fake_upload)

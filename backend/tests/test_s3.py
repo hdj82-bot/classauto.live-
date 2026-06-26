@@ -203,3 +203,71 @@ async def test_upload_from_url():
 
         # 간단한 접근: httpx를 직접 mock하기 어려우므로 skip
         pass
+
+
+# ── URL allowlist / SSRF (_validate_external_url) ────────────────────────────
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://files.heygen.ai/video/vid.mp4",
+        "https://files2.heygen.ai/v.mp4",
+        "https://resource2.heygen.ai/a/b.mp4",
+        "https://heygen.ai/v.mp4",
+        "https://app.heygen.com/v.mp4",
+        "https://heygen.com/v.mp4",
+    ],
+)
+def test_validate_external_url_allowlist_pass(url):
+    """HeyGen 도메인·서브도메인은 allowlist 를 통과한다."""
+    s3_svc._validate_external_url(url, allowed_hosts=s3_svc.HEYGEN_ALLOWED_HOSTS)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://evil.com/video.mp4",
+        "https://heygen.ai.evil.com/v.mp4",   # 서브도메인 위장
+        "https://notheygen.ai/v.mp4",          # 접미사 위장 (suffix 가 '.heygen.ai')
+        "https://s3.amazonaws.com/bucket/v.mp4",
+    ],
+)
+def test_validate_external_url_allowlist_block(url):
+    """allowlist 밖 호스트는 ValueError 로 차단된다."""
+    with pytest.raises(ValueError):
+        s3_svc._validate_external_url(url, allowed_hosts=s3_svc.HEYGEN_ALLOWED_HOSTS)
+
+
+def test_validate_external_url_ssrf_still_blocked_without_allowlist():
+    """allowlist 미지정이어도 내부망/사설 IP 는 여전히 차단된다(기존 SSRF 방어)."""
+    for url in (
+        "http://localhost/x",
+        "http://127.0.0.1/x",
+        "http://169.254.169.254/latest/meta-data",  # link-local (메타데이터)
+        "http://10.0.0.5/x",                          # 사설 IP
+        "http://foo.internal/x",
+    ):
+        with pytest.raises(ValueError):
+            s3_svc._validate_external_url(url)
+
+
+def test_validate_external_url_allowlist_blocks_internal_too():
+    """allowlist 를 줘도 SSRF 차단이 우선 적용된다(둘 다 통과해야 함)."""
+    with pytest.raises(ValueError):
+        s3_svc._validate_external_url(
+            "http://127.0.0.1/x", allowed_hosts=s3_svc.HEYGEN_ALLOWED_HOSTS
+        )
+
+
+@pytest.mark.asyncio
+async def test_upload_from_url_blocks_non_heygen_host():
+    """upload_from_url 이 allowlist 밖 호스트면 HTTP 요청 전에 ValueError."""
+    with patch("app.services.pipeline.s3.httpx.AsyncClient") as mock_httpx:
+        with pytest.raises(ValueError):
+            await s3_svc.upload_from_url(
+                "https://evil.com/video.mp4",
+                "lecture-1",
+                allowed_hosts=s3_svc.HEYGEN_ALLOWED_HOSTS,
+            )
+    # 검증 단계에서 막혀 httpx 클라이언트는 생성되지 않아야 한다.
+    mock_httpx.assert_not_called()
