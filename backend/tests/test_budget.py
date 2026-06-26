@@ -381,11 +381,7 @@ def _make_lecture(db):
 
 
 def test_claim_slot_is_atomic_and_capped(slot_db):
-    from app.models.lecture import Lecture
-    from app.services.pipeline.budget import (
-        claim_avatar_render_slot,
-        release_avatar_render_slot,
-    )
+    from app.services.pipeline.budget import claim_avatar_render_slot
 
     prof, lec = _make_lecture(slot_db)
     with patch.object(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 2):
@@ -398,7 +394,6 @@ def test_claim_slot_is_atomic_and_capped(slot_db):
 
 
 def test_release_slot_returns_one_and_floors_at_zero(slot_db):
-    from app.models.lecture import Lecture
     from app.services.pipeline.budget import (
         claim_avatar_render_slot,
         release_avatar_render_slot,
