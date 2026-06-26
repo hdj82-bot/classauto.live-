@@ -92,18 +92,25 @@ validate_env() {
         exit 1
     fi
 
+    # 필수 환경변수 — backend/app/core/config.py 의 _REQUIRED_IN_PROD 와 일치(H5).
+    # 베타 무료 배포(1단계)는 결제 비활성 → STRIPE_* 미설정이 정상이므로 제외한다
+    # (종전엔 STRIPE_SECRET_KEY·STRIPE_WEBHOOK_SECRET 미설정으로 배포가 hard-fail 했다).
+    # config 의 prod 필수키(HEYGEN_WEBHOOK_SECRET·OPENAI_API_KEY 포함) + 자체호스팅
+    # compose 운영 인프라 변수(DB·JWT·POSTGRES·OAuth·TTS).
     local required_vars=(
         "DATABASE_URL" "JWT_SECRET_KEY" "POSTGRES_PASSWORD"
         "GOOGLE_OAUTH_CLIENT_ID" "GOOGLE_OAUTH_CLIENT_SECRET"
-        "ANTHROPIC_API_KEY" "AWS_ACCESS_KEY_ID" "AWS_SECRET_ACCESS_KEY"
-        "S3_BUCKET" "HEYGEN_API_KEY" "ELEVENLABS_API_KEY"
-        "STRIPE_SECRET_KEY" "STRIPE_WEBHOOK_SECRET"
+        "ANTHROPIC_API_KEY" "OPENAI_API_KEY"
+        "AWS_ACCESS_KEY_ID" "AWS_SECRET_ACCESS_KEY"
+        "S3_BUCKET" "HEYGEN_API_KEY" "HEYGEN_WEBHOOK_SECRET" "ELEVENLABS_API_KEY"
     )
 
     local missing=()
     for var in "${required_vars[@]}"; do
         val=$(grep "^${var}=" .env | cut -d'=' -f2-)
-        if [ -z "$val" ] || [[ "$val" == *"CHANGE_ME"* ]]; then
+        # 플레이스홀더 마커 통일(L5) — config.py _PLACEHOLDER_MARKERS 와 동일 집합
+        # (CHANGE_ME·CHANGE-ME·CHANGEME·YOUR_·YOUR-·PLACEHOLDER), 대소문자 무시.
+        if [ -z "$val" ] || echo "$val" | grep -qiE 'CHANGE[_-]?ME|YOUR[_-]|PLACEHOLDER'; then
             missing+=("$var")
         fi
     done

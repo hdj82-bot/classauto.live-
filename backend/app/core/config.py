@@ -415,6 +415,11 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PRICE_BASIC: str = ""   # Stripe Price ID for BASIC plan
     STRIPE_PRICE_PRO: str = ""     # Stripe Price ID for PRO plan
+    # 결제 실패(invoice.payment_failed) 시 즉시 다운그레이드하지 않고 두는 그레이스
+    # 기간(일). Stripe 가 smart retries 로 수 일에 걸쳐 재시도하므로, 일시적 카드 오류로
+    # 플랜이 깎이지 않게 past_due(subscriptions.expires_at)로만 표시하고 이 기간이 지나도
+    # 복구되지 않으면 downgrade_overdue_subscriptions(beat 훅)가 FREE 로 내린다(M8).
+    PAYMENT_DUNNING_GRACE_DAYS: int = 7
 
     # ── pgvector ──────────────────────────────────────────────────
     # 학생 실시간 Q&A 범위 게이트(is_in_scope). 0.7 은 정상 강의 질문(유사도
@@ -425,6 +430,13 @@ class Settings(BaseSettings):
     # ── Sentry ──────────────────────────────────────────────────
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 프로덕션 트레이싱 10%
+
+    # ── /metrics 게이트 (L4) ────────────────────────────────────
+    # Prometheus 스크래핑 엔드포인트 보호 토큰. Railway 엔 nginx 가 없어 /metrics 가
+    # 공개 도달 가능하므로, production 에선 이 토큰이 있어야 노출한다(없으면 404 비활성).
+    # 스크래퍼는 `Authorization: Bearer <토큰>` 또는 `?token=<토큰>` 으로 전달한다.
+    # development/staging 은 토큰 없이도 열어 로컬 Prometheus 가 그대로 동작한다.
+    METRICS_TOKEN: str = ""
 
     # ── 베타 초대제 (교수자 가입 게이트) ─────────────────────────
     # 계정주(운영자) 이메일 목록 — 교수자 초대 링크를 발급할 수 있는 사람.
@@ -441,7 +453,15 @@ class Settings(BaseSettings):
     # 예: "https://classauto.live,https://www.classauto.live"
     CORS_EXTRA_ORIGINS: str = ""
     # Vercel 프리뷰 배포(https://*.vercel.app) 허용 — 프리뷰에서 API 테스트 시 필요.
+    # production 에선 기본 False(.env.production 에서도 명시적 false). 켜더라도 아래
+    # CORS_VERCEL_PREVIEW_REGEX 로 우리 팀 프로젝트 프리뷰만 허용한다(M9).
     CORS_ALLOW_VERCEL_PREVIEWS: bool = False
+    # CORS_ALLOW_VERCEL_PREVIEWS=True 일 때 쓰는 origin 정규식. 종전 코드의
+    # r"https://.*\.vercel\.app" 는 **임의의 Vercel 앱 전체**를 허용해 과대했다.
+    # 우리 프로젝트 프리뷰 origin 은 "<project>-<git/hash>-<team>.vercel.app" 형태로
+    # 프로젝트명(classauto)으로 시작하므로 그 프리픽스로 좁힌다. starlette 는 이
+    # 정규식을 fullmatch 하므로 앵커는 불필요. 프로젝트명이 바뀌면 env 로 덮어쓴다.
+    CORS_VERCEL_PREVIEW_REGEX: str = r"https://classauto[a-z0-9-]*\.vercel\.app"
 
     @property
     def admin_email_set(self) -> set[str]:

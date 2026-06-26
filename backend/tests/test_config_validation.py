@@ -35,6 +35,30 @@ def test_required_in_prod_covers_pipeline_keys():
         assert k in config._REQUIRED_IN_PROD
 
 
+def test_required_in_prod_excludes_stripe_includes_webhook(monkeypatch):
+    """H5: 베타 무료 배포 — 결제 비활성이므로 STRIPE_* 는 prod 필수에서 제외,
+    HeyGen 웹훅 서명·OpenAI 키는 필수. 배포 스크립트(REQUIRED_VARS)와도 일치해야 한다."""
+    # 베타 무료 — Stripe 키는 미설정이 정상.
+    assert "STRIPE_SECRET_KEY" not in config._REQUIRED_IN_PROD
+    assert "STRIPE_WEBHOOK_SECRET" not in config._REQUIRED_IN_PROD
+    # HeyGen 웹훅 서명 검증·OpenAI 임베딩은 필수.
+    assert "HEYGEN_WEBHOOK_SECRET" in config._REQUIRED_IN_PROD
+    assert "OPENAI_API_KEY" in config._REQUIRED_IN_PROD
+
+
+def test_placeholder_markers_canonical_set():
+    """L5: config.py 가 통일 마커 집합(CHANGE_ME·change-me·YOUR_·PLACEHOLDER)을
+    대소문자 무시로 모두 잡아낸다 — 스크립트의 grep 패턴과 동일 기준."""
+    for marker in (
+        "CHANGE_ME", "change-me", "CHANGEME", "CHANGE-ME",
+        "YOUR_KEY", "your-domain", "PLACEHOLDER", "placeholder_x",
+    ):
+        assert config._looks_like_placeholder(marker), marker
+    # 정상 시크릿은 placeholder 로 오탐하지 않는다.
+    for real in ("sk-ant-abc123", "ifl-prod-bucket", "whsec_realsecret"):
+        assert not config._looks_like_placeholder(real), real
+
+
 def test_valid_prod_settings_pass(monkeypatch):
     _fill_valid_prod(monkeypatch)
     # 예외 없이 통과해야 한다.
