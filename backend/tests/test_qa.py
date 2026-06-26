@@ -36,9 +36,12 @@ def _patch_qa_sync_session(
     res_session.scalar_one_or_none.return_value = mock_session
     res_lecture = MagicMock()
     res_lecture.scalar_one_or_none.return_value = mock_lecture
+    # ③ 세션당 Q&A 횟수 캡 카운트(H1) — 0 건(캡 미달)으로 통과시킨다.
+    res_count = MagicMock()
+    res_count.scalar.return_value = 0
 
     mock_db = MagicMock()
-    mock_db.execute.side_effect = [res_session, res_lecture]
+    mock_db.execute.side_effect = [res_session, res_lecture, res_count]
 
     @contextmanager
     def _factory():

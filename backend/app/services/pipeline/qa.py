@@ -103,9 +103,11 @@ OUT_OF_SCOPE_SENTINEL = "[[OUT_OF_SCOPE]]"
 # H3: RAG 범위 가드 하드 플로어. < SIMILARITY_THRESHOLD(0.4) 경로의 거부를 Claude 의
 # 센티넬 출력에만 맡기면, 크래프티드 질문(프롬프트 인젝션)이 센티넬을 억제해 강의 밖
 # 질문에 일반지식으로 답해 버릴 수 있다(차별점 위반). 유사도가 이 하드 플로어 미만이면
-# 강의와 명백히 무관한 것으로 보고 **Claude 호출 없이 결정적으로 거부**한다 — 인젝션
-# 표면과 비용을 동시에 줄인다. 0.2~0.4 구간만 LLM 판정(센티넬)에 맡긴다.
-RAG_HARD_FLOOR_SIMILARITY = 0.2
+# (= 사실상 0 에 가까운, 강의와 전혀 무관한 입력) **Claude 호출 없이 결정적으로 거부**해
+# 인젝션 표면과 비용을 줄인다. 단, 임베딩 유사도는 저구간에서 관련성 판별력이 약하므로
+# (표현만 달라 낮은 정상 질문이 존재 — test_qa_rag.answers_beyond_embeddings), 플로어는
+# 매우 낮게 잡아 [floor, 0.4) 구간의 판정은 그대로 Claude 에 맡긴다(설계 정책 유지).
+RAG_HARD_FLOOR_SIMILARITY = 0.05
 
 
 def _lecture_id_for_task(db: Session, task_id: str):
@@ -550,7 +552,7 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
             input_tokens=0, output_tokens=0, cost_usd=0.0,
         )
 
-    # ≥ 0.4: 관련 확정 → 항상 답변. [0.2, 0.4): Claude 가 관련성 최종 판정(거부 허용).
+    # ≥ 0.4: 관련 확정 → 항상 답변. [floor, 0.4): Claude 가 관련성 최종 판정(거부 허용).
     allow_refusal = best_sim < SIMILARITY_THRESHOLD
 
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)

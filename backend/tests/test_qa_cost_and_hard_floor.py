@@ -34,8 +34,8 @@ def test_claude_cost_usd_sums_tokens(monkeypatch):
 
 
 def test_claude_cost_usd_handles_garbage_as_zero():
-    # 테스트 mock 등 비정상 토큰값은 0 으로(파이프라인 비차단).
-    assert sg.claude_cost_usd([{"input": MagicMock()}]) == 0.0
+    # 비정상 토큰값(int 변환 불가)은 0 으로 처리(파이프라인 비차단).
+    assert sg.claude_cost_usd([{"input": "not-a-number"}]) == 0.0
     assert sg.claude_cost_usd([]) == 0.0
 
 
@@ -90,7 +90,7 @@ def test_hard_floor_rejects_without_calling_claude(monkeypatch):
     monkeypatch.setattr(
         qa_mod, "search_similar_script",
         lambda db, task_id, question, top_k=3: [
-            RetrievalResult(slide_number=1, text_content="강의 발화 내용", similarity=0.1)
+            RetrievalResult(slide_number=1, text_content="강의 발화 내용", similarity=0.02)
         ],
     )
 
