@@ -190,12 +190,16 @@ def _validate_external_url(
     if hostname in blocked_hosts or hostname.endswith(".internal"):
         raise ValueError(f"내부 네트워크 접근 차단: {hostname}")
 
+    # 호스트명이 IP 면 사설/루프백/링크로컬을 차단한다. ip_address 파싱 실패(=도메인)는
+    # 통과시키되, '사설 IP 차단' raise 가 같은 try 의 except 에 삼켜지지 않도록 파싱과
+    # 판정을 분리한다(버그 수정: 종전엔 사설 IP raise 를 except ValueError 가 흡수해
+    # 10.0.0.5 같은 사설 IP 가 차단되지 않았다).
     try:
         ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local:
-            raise ValueError(f"사설 IP 접근 차단: {hostname}")
     except ValueError:
-        pass  # 호스트명이 도메인인 경우 통과
+        ip = None  # 호스트명이 도메인 → IP 검사 건너뜀
+    if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local):
+        raise ValueError(f"사설 IP 접근 차단: {hostname}")
 
     if allowed_hosts is not None:
         if not any(
