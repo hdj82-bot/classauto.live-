@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import anthropic
 from sqlalchemy.orm import Session
@@ -45,6 +46,55 @@ OUT_OF_SCOPE_MESSAGE = (
     "죄송합니다. 해당 질문은 현재 강의 자료의 범위를 벗어납니다. "
     "강의 내용과 관련된 질문을 부탁드립니다."
 )
+
+# ── 공개(익명) Q&A 강의별 일일 하드 캡 (C3-c, 폭주 2차 방어) ─────────────────────
+# api/v1/qa.py 의 /qa/public 익명 경로는 세션·소유자 검증 없이 answer_question 을 부르며
+# session_id 자리에 합성 키 "public" 을 넘긴다. 전역 RateLimitMiddleware 는 IP 당 분당만
+# 막으므로, 익명 다수가 각자 한도 안에서 질문하면 강의 1개의 일일 Claude 호출 총량이
+# 무한정 커진다. 그 총량을 강의(task_id)·UTC 일자 단위 하드 캡으로 막는다. 캡 초과 시
+# RAG·Claude 호출 없이(비용 0) 안내 메시지를 반환한다.
+PUBLIC_SESSION_ID = "public"
+PUBLIC_QA_DAILY_CAP = 300  # 강의당 익명 Q&A 일일 최대 호출 수
+PUBLIC_QA_CAP_MESSAGE = (
+    "오늘 이 강의의 공개 질문 가능 횟수를 모두 사용했습니다. "
+    "잠시 후 또는 내일 다시 시도하거나, 로그인 후 학습 세션에서 질문해 주세요."
+)
+
+
+def _public_qa_within_daily_cap(db: Session, task_id: str) -> bool:
+    """공개 Q&A 의 강의별 일일 카운터를 증가시키고 캡 이내인지 반환한다.
+
+    캡을 넘었으면 카운터를 올리지 않고 ``False``. 이내면 1 증가시키고 ``True``.
+    공개 경로(api/v1/qa.public_question)는 세션 커밋을 하지 않으므로 카운터는 여기서
+    직접 커밋한다 — 이 경로에는 다른 보류 중인 DB 쓰기가 없어 안전하다. 카운터 갱신
+    중 어떤 오류도 답변을 막지 않도록(가용성 우선) 예외 시 통과(``True``)로 처리한다.
+    """
+    from app.models.embedding import PublicQADailyCount
+
+    today = datetime.now(timezone.utc).date()
+    try:
+        row = (
+            db.query(PublicQADailyCount)
+            .filter(
+                PublicQADailyCount.task_id == task_id,
+                PublicQADailyCount.day == today,
+            )
+            .first()
+        )
+        if row is None:
+            db.add(PublicQADailyCount(task_id=task_id, day=today, count=1))
+            db.commit()
+            return True
+        if row.count >= PUBLIC_QA_DAILY_CAP:
+            # 캡 초과 — 증가시키지 않고 즉시 차단(추가 비용 0).
+            return False
+        row.count += 1
+        db.commit()
+        return True
+    except Exception:  # noqa: BLE001 — 카운터 장애가 정상 답변을 막지 않게 한다.
+        db.rollback()
+        logger.exception("공개 Q&A 일일 캡 카운터 갱신 실패(통과 처리): task_id=%s", task_id)
+        return True
 
 # 범위 밖 판정 센티넬. Claude 가 강의 주제와 명백히 무관하다고 판단하면 이 토큰만
 # 출력하도록 프롬프트로 지시하고, 응답에 이 토큰이 있으면 거부로 처리한다.
@@ -410,7 +460,17 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
     - 스크립트 최고 유사도 < 0.4 → 표현만 달라 낮을 수 있으니 Claude 가 최종 판정
       (관련이면 답변, 명백히 무관할 때만 ``[[OUT_OF_SCOPE]]`` 거부).
     - 스크립트가 전혀 없음 → 판단 근거 없음. Claude 호출 없이 비용 0 으로 거부.
+
+    공개(익명) 경로(session_id="public")는 강의별 일일 하드 캡(C3-c)을 먼저 검사한다.
+    캡 초과면 RAG·Claude 없이 안내 메시지를 비용 0 으로 반환해 폭주를 2차로 막는다.
     """
+    if session_id == PUBLIC_SESSION_ID and not _public_qa_within_daily_cap(db, task_id):
+        logger.warning("공개 Q&A 일일 캡 초과 — 차단: task_id=%s", task_id)
+        return QAResult(
+            answer=PUBLIC_QA_CAP_MESSAGE, in_scope=False, top_slides=[],
+            input_tokens=0, output_tokens=0, cost_usd=0.0,
+        )
+
     script_results = search_similar_script(db, task_id, question, top_k=3)
     context = _build_script_context(script_results)
 
