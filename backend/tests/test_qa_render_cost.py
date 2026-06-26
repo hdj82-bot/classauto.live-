@@ -118,3 +118,40 @@ def test_no_lecture_id_records_nothing(sync_factory):
     qa_batch._record_qa_render_cost(rep, is_vs=False, duration=60, mock=False)
     assert s.execute(select(CostLog)).scalars().all() == []
     s.close()
+
+
+def test_visionstory_none_duration_uses_answer_length_fallback(sync_factory, monkeypatch):
+    """H1: VisionStory 상태 응답엔 duration 이 없어(None) 종전엔 본인 얼굴 렌더가 전부
+    $0 으로 기록됐다. 답변 길이로 렌더 길이를 추정해 0 이 아닌 비용을 적재해야 한다."""
+    from app.tasks import qa_batch
+
+    monkeypatch.setattr(settings, "VISIONSTORY_COST_USD_PER_SECOND", 0.02)
+    monkeypatch.setattr(settings, "QA_AVATAR_VOICE_SPEED", 1.0)
+    monkeypatch.setattr(settings, "QA_AVATAR_MAX_ANSWER_CHARS", 400)
+    s = sync_factory()
+    lec_id = _lecture(s)
+    # 100자 답변 → 100 / (5자/초 × 1.0배속) = 20초 → 20 × 0.02 = $0.40 (종전 $0)
+    rep = SimpleNamespace(
+        id=uuid.uuid4(), lecture_id=lec_id, cluster_key=None, answer_text="가" * 100,
+    )
+    qa_batch._record_qa_render_cost(rep, is_vs=True, duration=None, mock=False)
+
+    row = s.execute(select(CostLog).where(CostLog.lecture_id == lec_id)).scalars().one()
+    assert row.model == "visionstory"
+    assert row.cost_usd == pytest.approx(0.4)
+    assert row.cost_usd > 0  # 핵심: 더 이상 $0 으로 과소집계되지 않는다.
+    s.close()
+
+
+def test_estimate_qa_render_seconds_from_answer_length(monkeypatch):
+    from app.tasks import qa_batch
+
+    monkeypatch.setattr(settings, "QA_AVATAR_VOICE_SPEED", 1.0)
+    monkeypatch.setattr(settings, "QA_AVATAR_MAX_ANSWER_CHARS", 400)
+    rep = SimpleNamespace(answer_text="나" * 50)  # 50 / (5×1.0) = 10초
+    assert qa_batch._estimate_qa_render_seconds(rep) == pytest.approx(10.0)
+    # 렌더는 400자 상한으로 잘리므로 추정도 상한을 넘지 않는다.
+    rep_long = SimpleNamespace(answer_text="다" * 1000)
+    assert qa_batch._estimate_qa_render_seconds(rep_long) == pytest.approx(80.0)  # 400/(5×1)
+    # 빈 답변도 최소 1초(0 방지).
+    assert qa_batch._estimate_qa_render_seconds(SimpleNamespace(answer_text="")) == 1.0

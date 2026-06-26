@@ -517,6 +517,20 @@ def _mark_cluster_failed(db, cluster_key, error: str | None) -> None:
     db.flush()
 
 
+def _estimate_qa_render_seconds(rep) -> float:
+    """완료 응답에 duration 이 없을 때 답변 길이로 렌더 길이(초)를 보수적으로 추정한다.
+
+    VisionStory 상태 응답은 duration 을 주지 않아(항상 None) 비용이 $0 으로 과소집계됐다.
+    실제 렌더는 답변을 ``QA_AVATAR_MAX_ANSWER_CHARS``(400) 로 잘라 합성하므로, (잘린)
+    글자수 ÷ (발화속도 × 기준 초당 글자수) 로 초를 근사한다. 한국어 평균 ~5자/초 가정.
+    """
+    text = getattr(rep, "answer_text", "") or ""
+    chars = min(len(text), settings.QA_AVATAR_MAX_ANSWER_CHARS)
+    speed = settings.QA_AVATAR_VOICE_SPEED or 1.0
+    base_cps = 5.0  # 한국어 평균 발화 ~5자/초(분당 ~300자)
+    return max(1.0, chars / (base_cps * speed))
+
+
 def _record_qa_render_cost(rep, *, is_vs: bool, duration, mock: bool) -> None:
     """완료된 Q&A 아바타 렌더 1건(클러스터 대표)의 비용을 platform_cost_logs 에 적재.
 
@@ -529,7 +543,9 @@ def _record_qa_render_cost(rep, *, is_vs: bool, duration, mock: bool) -> None:
     - rendering→ready 전이 시점에만 호출돼(이후 폴링은 rendering 쿼리에서 빠짐) 사실상 멱등.
     - **별도 세션으로 커밋**(record_once_committed 패턴) — 비용 기록 실패가 배치 본
       트랜잭션(ready 전이)을 오염시키지 않게 격리한다.
-    - MOCK 은 실비용 0 → 기록 생략. duration 미상이면 estimate 가 0 을 반환(0 행도 무방).
+    - MOCK 은 실비용 0 → 기록 생략. **duration 미상 시 답변 길이로 렌더 길이를 추정**해
+      비용이 $0 으로 과소집계되지 않게 한다(H1). 특히 VisionStory 는 상태 응답에 duration
+      이 없어(항상 None) 종전엔 본인 얼굴 렌더가 전부 $0 으로 기록됐다.
     """
     if mock or rep.lecture_id is None:
         return
@@ -538,7 +554,9 @@ def _record_qa_render_cost(rep, *, is_vs: bool, duration, mock: bool) -> None:
     from app.services.pipeline.visionstory import estimate_cost_usd as _vs_cost
 
     provider = "visionstory" if is_vs else "heygen"
-    cost = (_vs_cost(duration) if is_vs else _heygen_cost(duration)) or 0.0
+    # duration 이 없거나 0 이면 답변 길이 기반 추정으로 폴백(특히 VisionStory).
+    eff_duration = duration if (duration and duration > 0) else _estimate_qa_render_seconds(rep)
+    cost = (_vs_cost(eff_duration) if is_vs else _heygen_cost(eff_duration)) or 0.0
     lecture_id = rep.lecture_id
     rep_id = rep.id
     cluster_key = rep.cluster_key or ""

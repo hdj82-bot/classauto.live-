@@ -258,10 +258,16 @@ def step3_generate_scripts(self, prev_result: dict) -> dict:
     slides_data = prev_result["slides"]
     slides = [SlideContent(**sd) for sd in slides_data]
 
-    scripts = generate_scripts(slides)
+    # H1: 슬라이드별 Claude 토큰 사용량을 적립해 스크립트 생성 비용을 CostLog 에 기록한다.
+    # 종전엔 슬라이드마다 Claude 를 호출(이미지 포함)하고도 비용을 debug 로그로만 버려,
+    # 운영자 비용 대시보드가 강의당 최대 LLM 지출(스크립트 생성)을 통째로 누락했다.
+    usages: list = []
+    scripts = generate_scripts(slides, usage_sink=usages)
 
     scripts_data = [{"slide_number": s.slide_number, "script": s.script} for s in scripts]
     logger.info("Step3 완료: task_id=%s, %d 스크립트 생성", task_id, len(scripts))
+
+    _record_script_gen_cost(task_id, usages)
 
     # C3(b): 스크립트 세그먼트 임베딩을 여기서 **1회** 저장한다. retriever 가 질문마다
     # 전체 스크립트를 OpenAI 로 재임베딩하던 비용 증폭을 없앤다(저장분 조회로 전환,
@@ -270,6 +276,47 @@ def step3_generate_scripts(self, prev_result: dict) -> dict:
     _store_script_segment_embeddings(task_id, scripts_data)
 
     return {**prev_result, "scripts": scripts_data}
+
+
+def _record_script_gen_cost(task_id: str, usages: list) -> None:
+    """스크립트 생성(step3)의 Claude 비용을 platform_cost_logs(CostLog, category=llm_summary)에
+    적재한다(별도 커밋 세션). 비용 0/오류면 조용히 건너뛴다 — 회계 보조이며 파이프라인을
+    막지 않는다(H1). lecture_id 키로 적재해 운영자 비용 대시보드 합산에 포함시킨다.
+    """
+    from app.services.pipeline.script_generator import claude_cost_usd
+
+    cost = claude_cost_usd(usages)
+    if cost <= 0:
+        return
+    from app.core.config import settings
+    from app.models.cost_log import CostCategory, CostLog
+    from app.models.lecture import Lecture
+
+    db = SyncSessionLocal()
+    try:
+        lecture_id = (
+            db.query(Lecture.id)
+            .filter(Lecture.pipeline_task_id == task_id)
+            .scalar()
+        )
+        if lecture_id is None:
+            return
+        db.add(
+            CostLog(
+                lecture_id=lecture_id,
+                category=CostCategory.llm_summary,
+                model=settings.SCRIPT_MODEL,
+                cost_usd=cost,
+                memo="script_generation",
+            )
+        )
+        db.commit()
+        logger.info("Step3 스크립트 생성 비용 기록: task_id=%s, cost=$%.4f", task_id, cost)
+    except Exception as exc:  # noqa: BLE001 — 비용 기록 실패가 파이프라인을 막지 않게.
+        db.rollback()
+        logger.warning("Step3 스크립트 생성 비용 기록 실패(무시): task_id=%s, error=%s", task_id, exc)
+    finally:
+        db.close()
 
 
 def _store_script_segment_embeddings(task_id: str, scripts_data: list[dict]) -> None:
