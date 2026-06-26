@@ -143,7 +143,10 @@ async def update_session_status(
 ) -> LearningSession:
     session = await _find_owned_session(db, user_id, session_id)
 
-    if not can_transition(session.status, new_status):
+    # 동일 상태로의 PATCH 는 상태 '전이' 가 아니라 진행률·시청량 메트릭 갱신이다
+    # (예: in_progress 를 유지하며 watched_sec 만 갱신). 상태머신은 서로 다른 상태 간
+    # 전이만 검증하고, 동일 상태(no-op)는 허용한다. 그 외 전이는 기존대로 검증.
+    if new_status != session.status and not can_transition(session.status, new_status):
         allowed = get_allowed_transitions(session.status)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
