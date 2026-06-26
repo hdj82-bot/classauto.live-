@@ -15,14 +15,14 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.lecture import Lecture
 from app.models.qa_answer_cache import QAAnswerCache
 from app.models.user import User
-from app.models.video_render import RenderCostLog
+from app.models.video_render import RenderCostLog, RenderStatus, VideoRender
 
 logger = logging.getLogger(__name__)
 
@@ -63,10 +63,11 @@ def assert_heygen_budget(db: Session, *, now: datetime | None = None) -> None:
     now = now or datetime.now(timezone.utc)
     daily_limit = settings.HEYGEN_DAILY_BUDGET_USD
     monthly_limit = settings.HEYGEN_MONTHLY_BUDGET_USD
+    inflight = inflight_heygen_spend_usd(db)
 
     if daily_limit and daily_limit > 0:
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        spent = heygen_spend_usd(db, day_start)
+        spent = heygen_spend_usd(db, day_start) + inflight
         if spent >= daily_limit:
             logger.error(
                 "[BUDGET] HeyGen 일 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
@@ -80,7 +81,7 @@ def assert_heygen_budget(db: Session, *, now: datetime | None = None) -> None:
         month_start = now.replace(
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
-        spent = heygen_spend_usd(db, month_start)
+        spent = heygen_spend_usd(db, month_start) + inflight
         if spent >= monthly_limit:
             logger.error(
                 "[BUDGET] HeyGen 월 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
@@ -116,12 +117,62 @@ def visionstory_spend_usd(db: Session, since: datetime) -> float:
     return float(total or 0.0)
 
 
+# ── in-flight(제출됐지만 미완료) 렌더의 추정 비용 ─────────────────────────────────
+#
+# $ 서킷 브레이커는 '완료 시점'에 기록되는 비용만 합산하므로, 짧은 시간에 다수 제출이
+# 몰리면(재시도 폭주·버그성 대량 렌더) 아직 완료되지 않은 렌더가 합계에 0 으로 잡혀
+# 한도를 크게 초과할 수 있었다. 별도 예약 저장소(Redis 등)를 두는 대신, 이미 DB 가
+# 추적하는 in-flight 상태(VideoRender.status=rendering / QAAnswerCache.status=rendering)를
+# 직접 세어 보수적 추정 비용(INFLIGHT_RENDER_ESTIMATE_SECONDS × 단가)을 합계에 더한다.
+# 완료되면 상태가 바뀌고 실비용이 기록되므로 추정→실비용으로 자연 전이한다(이중 합산은
+# 완료~기록 사이의 짧은 구간에서만 발생하며 '초과 방향'이라 안전). DB 오류 시 0 을
+# 반환(fail-open)해 브레이커가 기존(완료분만 합산) 동작으로 안전하게 퇴화한다.
+
+_VS_JOB_PREFIX = "visionstory:"
+
+
+def inflight_heygen_spend_usd(db: Session) -> float:
+    """제출됐지만 아직 완료되지 않은 HeyGen 본문 렌더(VideoRender)의 보수적 추정 비용."""
+    try:
+        n = db.execute(
+            select(func.count(VideoRender.id)).where(
+                VideoRender.status == RenderStatus.rendering
+            )
+        ).scalar()
+        secs = settings.INFLIGHT_RENDER_ESTIMATE_SECONDS
+        return float(n or 0) * float(secs) * settings.HEYGEN_COST_USD_PER_SECOND
+    except Exception:  # noqa: BLE001 — fail-open: 추정 실패가 렌더를 막지 않게.
+        return 0.0
+
+
+def inflight_visionstory_spend_usd(db: Session) -> float:
+    """제출됐지만 아직 완료되지 않은 VisionStory Q&A 렌더(대표 행)의 보수적 추정 비용.
+
+    대표 행만 heygen_job_id 를 갖고 비용도 대표 1건당 1회 기록되므로, job_id 가
+    VisionStory 접두(``visionstory:``)인 rendering 대표 행만 센다(클러스터 형제 제외).
+    """
+    from app.services.pipeline import qa_avatar  # noqa: PLC0415 — 순환 import 회피
+
+    try:
+        n = db.execute(
+            select(func.count(QAAnswerCache.id)).where(
+                QAAnswerCache.status == qa_avatar.STATUS_RENDERING,
+                QAAnswerCache.heygen_job_id.isnot(None),
+                QAAnswerCache.heygen_job_id.like(_VS_JOB_PREFIX + "%"),
+            )
+        ).scalar()
+        secs = settings.INFLIGHT_RENDER_ESTIMATE_SECONDS
+        return float(n or 0) * float(secs) * settings.VISIONSTORY_COST_USD_PER_SECOND
+    except Exception:  # noqa: BLE001 — fail-open.
+        return 0.0
+
+
 def assert_visionstory_budget(db: Session, *, now: datetime | None = None) -> None:
     """일/월 한도 초과 시 ``BudgetExceededError`` 를 raise. 한도 0 이면 해당 검사 비활성.
 
     ``assert_heygen_budget`` 과 동형. mock 모드(VISIONSTORY_MOCK)는 실비용 0 이라 건너뛴다.
-    한계: 비용은 렌더 완료 시점에 기록되므로 in-flight 다발 제출은 일시 초과할 수 있다
-    (HeyGen 브레이커와 동일 — 강의당 횟수 상한 C-2 가 폭주를 1차로 막는다).
+    완료분(visionstory_spend_usd) + in-flight 추정(inflight_visionstory_spend_usd)을 합산해
+    아직 완료되지 않은 다발 제출도 한도 계산에 즉시 반영한다.
     """
     if settings.VISIONSTORY_MOCK:
         return
@@ -129,10 +180,11 @@ def assert_visionstory_budget(db: Session, *, now: datetime | None = None) -> No
     now = now or datetime.now(timezone.utc)
     daily_limit = settings.VISIONSTORY_DAILY_BUDGET_USD
     monthly_limit = settings.VISIONSTORY_MONTHLY_BUDGET_USD
+    inflight = inflight_visionstory_spend_usd(db)
 
     if daily_limit and daily_limit > 0:
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        spent = visionstory_spend_usd(db, day_start)
+        spent = visionstory_spend_usd(db, day_start) + inflight
         if spent >= daily_limit:
             logger.error(
                 "[BUDGET] VisionStory 일 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
@@ -146,7 +198,7 @@ def assert_visionstory_budget(db: Session, *, now: datetime | None = None) -> No
         month_start = now.replace(
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
-        spent = visionstory_spend_usd(db, month_start)
+        spent = visionstory_spend_usd(db, month_start) + inflight
         if spent >= monthly_limit:
             logger.error(
                 "[BUDGET] VisionStory 월 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
@@ -362,3 +414,62 @@ def increment_avatar_render_count(
     lecture = db.get(Lecture, lecture_id)
     if lecture is not None:
         lecture.avatar_render_count = int(lecture.avatar_render_count or 0) + 1
+
+
+def claim_avatar_render_slot(
+    db: Session, lecture_id, instructor_id
+) -> bool:
+    """원자적으로 강의당 아바타 제작 슬롯 1개를 선점한다. 상한 도달 시 ``False``.
+
+    ``assert_avatar_rerender_quota`` + ``increment_avatar_render_count`` 는 '읽고-나서-쓰기'
+    라 두 동시 요청(더블클릭·중복 Celery 태스크)이 같은 count 를 읽고 둘 다 통과해
+    상한을 1 초과하는 TOCTOU 경쟁이 있었다. 조건부 UPDATE(``avatar_render_count < cap``)
+    로 검사와 증가를 한 번의 원자적 연산으로 수행해 그 경쟁을 제거한다. **외부 렌더
+    제출 전에** 호출해야 하며, 제출이 0 건으로 끝나면 ``release_avatar_render_slot`` 으로
+    되돌린다(실패 패스는 상한·비용 미소모 — 스펙 13 §C-2).
+
+    면제 계정(QA_AVATAR_UNLIMITED_EMAILS)·상한 비활성(0 이하)은 증가 없이 ``True``.
+    자체적으로 commit 해, 동시 트랜잭션이 선점 결과를 즉시 보게 한다.
+    """
+    if instructor_has_unlimited_qa(db, instructor_id):
+        return True
+    cap = settings.AVATAR_RERENDER_MAX_PER_LECTURE
+    if not cap or cap <= 0:
+        return True
+    current = func.coalesce(Lecture.avatar_render_count, 0)
+    result = db.execute(
+        update(Lecture)
+        .where(Lecture.id == lecture_id, current < cap)
+        .values(avatar_render_count=current + 1)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    claimed = (result.rowcount or 0) >= 1
+    if not claimed:
+        logger.warning(
+            "[BUDGET] 강의당 아바타 제작 슬롯 선점 실패(상한 도달): lecture=%s cap=%d",
+            lecture_id, cap,
+        )
+    return claimed
+
+
+def release_avatar_render_slot(
+    db: Session, lecture_id, instructor_id
+) -> None:
+    """제출 0 건으로 끝난 제작 패스가 선점했던 슬롯을 1 되돌린다(0 미만 방지).
+
+    면제 계정·상한 비활성은 애초에 선점하지 않으므로 건너뛴다. 자체 commit.
+    """
+    if instructor_has_unlimited_qa(db, instructor_id):
+        return
+    cap = settings.AVATAR_RERENDER_MAX_PER_LECTURE
+    if not cap or cap <= 0:
+        return
+    current = func.coalesce(Lecture.avatar_render_count, 0)
+    db.execute(
+        update(Lecture)
+        .where(Lecture.id == lecture_id, current > 0)
+        .values(avatar_render_count=current - 1)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()

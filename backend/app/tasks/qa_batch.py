@@ -778,9 +778,10 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         AvatarRerenderQuotaError,
         QARenderQuotaError,
         assert_avatar_rerender_quota,
-        increment_avatar_render_count,
+        claim_avatar_render_slot,
         instructor_has_unlimited_qa,
         qa_can_render_lecture,
+        release_avatar_render_slot,
     )
     from app.services.pipeline.qa import generate_seed_answer
 
@@ -909,64 +910,84 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
             )
             return {"submitted": 0, "failed": len(rows)}
 
+    # ── C-2: 제출 전에 강의당 제작 슬롯을 원자적으로 선점 ──
+    # 위 assert_avatar_rerender_quota 는 빠른 사전 피드백용 읽기 검사일 뿐, 동시 요청
+    # (더블클릭·중복 태스크) 사이의 경쟁을 막지 못한다(읽고-나서-쓰기). 외부 렌더 제출
+    # '전에' 조건부 UPDATE 로 슬롯을 한 번에 검사+선점해, 둘 다 통과해 상한을 넘기던
+    # TOCTOU 를 제거한다. 면제 계정·상한 비활성은 내부에서 True(증가 없음). 제출이 0
+    # 건으로 끝나면 finally 에서 되돌린다(실패 패스는 상한·비용 미소모 — 스펙 13 §C-2).
+    if not claim_avatar_render_slot(db, lecture_id, instructor_id):
+        for row in rows:
+            row.status = qa_avatar.STATUS_FAILED
+            row.error_message = (
+                "이 강의의 아바타 제작 횟수를 모두 사용했습니다. 추가 제작이 "
+                "필요하면 운영자에게 문의해 주세요."
+            )
+        db.commit()
+        logger.warning(
+            "Q&A 사전질문: 강의당 아바타 제작 슬롯 선점 실패(상한) — seed %d개 failed 표시: "
+            "lecture=%s, instructor=%s",
+            len(rows), lecture_id, instructor_id,
+        )
+        return {"submitted": 0, "failed": len(rows), "blocked": "rerender_cap"}
+
     submitted = failed = 0
-    for row in rows:
-        if submitted >= limit:
-            break  # 영상/교수자 렌더 한도 도달 — 나머지는 pending 유지.
+    try:
+        for row in rows:
+            if submitted >= limit:
+                break  # 영상/교수자 렌더 한도 도달 — 나머지는 pending 유지.
 
-        # 하이브리드: 교수자가 입력한 사전 대답이 있으면 그대로 쓰고, 비어 있으면
-        # 강의 자료(PPT) 기반으로 자동 생성한다. generate_seed_answer 는 음성 답변용
-        # 표기 규칙(출처 미표기·중국어 괄호 금지)을 적용한다.
-        answer = (row.answer_text or "").strip()
-        if not answer:
-            # 답변은 강의 발화 언어(아바타 발화 내용과 동일)로 생성한다.
-            _voice_lang = (lecture.voice_lang if lecture else None) or "ko"
-            generated, in_scope = generate_seed_answer(
-                db, task_id, row.question_text, lang=_voice_lang
-            )
-            if not in_scope:
-                # 슬라이드/임베딩이 없어 답변을 만들 수 없음(파이프라인 미완 등).
-                row.status = qa_avatar.STATUS_FAILED
-                row.error_message = "강의 자료를 찾지 못했습니다."
-                failed += 1
-                continue
-            if not generated.strip():
-                row.status = qa_avatar.STATUS_FAILED
-                row.error_message = "답변 생성 실패"
-                failed += 1
-                continue
-            answer = generated
+            # 하이브리드: 교수자가 입력한 사전 대답이 있으면 그대로 쓰고, 비어 있으면
+            # 강의 자료(PPT) 기반으로 자동 생성한다. generate_seed_answer 는 음성 답변용
+            # 표기 규칙(출처 미표기·중국어 괄호 금지)을 적용한다.
+            answer = (row.answer_text or "").strip()
+            if not answer:
+                # 답변은 강의 발화 언어(아바타 발화 내용과 동일)로 생성한다.
+                _voice_lang = (lecture.voice_lang if lecture else None) or "ko"
+                generated, in_scope = generate_seed_answer(
+                    db, task_id, row.question_text, lang=_voice_lang
+                )
+                if not in_scope:
+                    # 슬라이드/임베딩이 없어 답변을 만들 수 없음(파이프라인 미완 등).
+                    row.status = qa_avatar.STATUS_FAILED
+                    row.error_message = "강의 자료를 찾지 못했습니다."
+                    failed += 1
+                    continue
+                if not generated.strip():
+                    row.status = qa_avatar.STATUS_FAILED
+                    row.error_message = "답변 생성 실패"
+                    failed += 1
+                    continue
+                answer = generated
 
-        # 저장은 원문 그대로 둔다 — 렌더 상한(QA_AVATAR_MAX_ANSWER_CHARS=400)으로 자르지
-        # 않는다. 여기서 자르면 편집기에 보이는 원문이 손상된다(2026-06-15 버그). 교수자
-        # 입력은 스키마가 이미 ≤400 이라 손실이 없고, 자동 생성 답변의 안전 상한으로만 800
-        # 을 둔다. 실제 렌더에 넘기는 길이는 _submit_cluster 가 400 으로 따로 자른다(=비용 상한).
-        row.answer_text = answer[:800]
-        row.question_embedding = qa_avatar.embed_question(row.question_text)
+            # 저장은 원문 그대로 둔다 — 렌더 상한(QA_AVATAR_MAX_ANSWER_CHARS=400)으로 자르지
+            # 않는다. 여기서 자르면 편집기에 보이는 원문이 손상된다(2026-06-15 버그). 교수자
+            # 입력은 스키마가 이미 ≤400 이라 손실이 없고, 자동 생성 답변의 안전 상한으로만 800
+            # 을 둔다. 실제 렌더에 넘기는 길이는 _submit_cluster 가 400 으로 따로 자른다(=비용 상한).
+            row.answer_text = answer[:800]
+            row.question_embedding = qa_avatar.embed_question(row.question_text)
 
-        try:
-            assert_qa_render_budget(db, instructor_id, lecture_id)
-        except QARenderQuotaError as exc:
-            logger.warning(
-                "Q&A 사전질문 예산 차단(중단): instructor=%s, lecture=%s, %s",
-                instructor_id, lecture_id, exc,
-            )
-            break
+            try:
+                assert_qa_render_budget(db, instructor_id, lecture_id)
+            except QARenderQuotaError as exc:
+                logger.warning(
+                    "Q&A 사전질문 예산 차단(중단): instructor=%s, lecture=%s, %s",
+                    instructor_id, lecture_id, exc,
+                )
+                break
 
-        # 질문 1건 = 단독 클러스터 1렌더. 기존 _submit_cluster 재사용(rendering 전이·제출).
-        if _submit_cluster(
-            loop, db, qa_avatar.Cluster(members=[row], centroid=[]),
-            lecture_id, instructor_id,
-        ):
-            submitted += 1
-
-    # ── C-2: 성공한 제작 패스 1건을 강의 카운터에 +1 ──
-    # 클러스터/클립 수와 무관하게 '한 번의 제작'은 1로 센다(이 호출 = 1 패스). 제출이
-    # 하나라도 성공한 경우만 카운트해, 전부 실패(submitted==0)한 패스는 상한을
-    # 소모하지 않는다(실패는 비용 미발생 — 스펙 13 §C-2). 면제 계정은 increment 가
-    # 내부에서 건너뛴다. HeyGen·VisionStory 구분 없이 동일(둘 다 _submit_cluster 경유).
-    if submitted >= 1:
-        increment_avatar_render_count(db, lecture_id, instructor_id)
+            # 질문 1건 = 단독 클러스터 1렌더. 기존 _submit_cluster 재사용(rendering 전이·제출).
+            if _submit_cluster(
+                loop, db, qa_avatar.Cluster(members=[row], centroid=[]),
+                lecture_id, instructor_id,
+            ):
+                submitted += 1
+    finally:
+        # ── C-2: 슬롯은 제출 전에 선점했다(claim). 제출이 한 건도 안 됐으면(전부 실패/
+        # 스킵, 또는 예기치 못한 예외) 선점분을 되돌린다 — 실패 패스는 상한을 소모하지
+        # 않는다(스펙 13 §C-2). 한 건이라도 제출됐으면 선점을 유지(=이번 제작 1회 카운트).
+        if submitted < 1:
+            release_avatar_render_slot(db, lecture_id, instructor_id)
 
     db.commit()
     result = {"submitted": submitted, "failed": failed}
