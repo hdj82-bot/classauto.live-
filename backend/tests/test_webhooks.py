@@ -19,8 +19,16 @@ from app.models.video_render import VideoRender, RenderStatus
 
 # ── HMAC 헬퍼 ────────────────────────────────────────────────────────────────
 
-def _sign(body: bytes, secret: str) -> str:
+_SECRET = "test-webhook-secret"
+
+
+def _sign(body: bytes, secret: str = _SECRET) -> str:
     return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
+def _signed_headers(body: bytes, secret: str = _SECRET) -> dict[str, str]:
+    """유효한 HeyGen 서명('Signature' 헤더, raw hex HMAC-SHA256)을 포함한 헤더."""
+    return {"Content-Type": "application/json", "Signature": _sign(body, secret)}
 
 
 # ── 렌더링 성공 웹훅 ─────────────────────────────────────────────────────────
@@ -58,7 +66,7 @@ async def test_heygen_webhook_success(client, professor, lecture, db):
     }
     body = json.dumps(payload).encode()
 
-    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""), \
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET), \
          patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db), \
          patch("app.api.v1.webhooks.s3_svc.upload_from_url", new_callable=AsyncMock, return_value=("https://s3.amazonaws.com/video.mp4", 2.5)), \
          patch("app.api.v1.webhooks.notification.notify_instructor", new_callable=AsyncMock), \
@@ -66,7 +74,7 @@ async def test_heygen_webhook_success(client, professor, lecture, db):
         resp = await client.post(
             "/api/v1/webhooks/heygen",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers=_signed_headers(body),
         )
     assert resp.status_code == 200
     assert resp.json()["status"] == "processed"
@@ -104,13 +112,13 @@ async def test_heygen_webhook_failure(client, professor, lecture, db):
     }
     body = json.dumps(payload).encode()
 
-    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""), \
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET), \
          patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db), \
          patch("app.api.v1.webhooks.notification.notify_instructor", new_callable=AsyncMock):
         resp = await client.post(
             "/api/v1/webhooks/heygen",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers=_signed_headers(body),
         )
     assert resp.status_code == 200
     assert resp.json()["status"] == "processed"
@@ -133,12 +141,12 @@ async def test_heygen_webhook_unknown_video(client):
     }
     body = json.dumps(payload).encode()
 
-    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""), \
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET), \
          patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db):
         resp = await client.post(
             "/api/v1/webhooks/heygen",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers=_signed_headers(body),
         )
     assert resp.status_code == 200
     assert resp.json()["status"] == "ignored"
@@ -151,11 +159,11 @@ async def test_heygen_webhook_no_video_id(client):
     payload = {"event_type": "test", "event_data": {}}
     body = json.dumps(payload).encode()
 
-    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""):
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET):
         resp = await client.post(
             "/api/v1/webhooks/heygen",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers=_signed_headers(body),
         )
     assert resp.status_code == 200
     assert resp.json()["reason"] == "no video_id"
@@ -182,12 +190,12 @@ async def test_heygen_webhook_duplicate_event_blocked(client):
     }
     body = json.dumps(payload).encode()
 
-    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""), \
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET), \
          patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db):
         resp = await client.post(
             "/api/v1/webhooks/heygen",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers=_signed_headers(body),
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -227,12 +235,12 @@ async def test_heygen_webhook_already_processed_render_ignored(client, professor
     }
     body = json.dumps(payload).encode()
 
-    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""), \
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET), \
          patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db):
         resp = await client.post(
             "/api/v1/webhooks/heygen",
             content=body,
-            headers={"Content-Type": "application/json"},
+            headers=_signed_headers(body),
         )
     assert resp.status_code == 200
     data = resp.json()
@@ -262,3 +270,105 @@ async def test_heygen_webhook_invalid_signature(client):
             },
         )
     assert resp.status_code == 401
+
+
+# ── 시크릿 미설정: fail-closed 거부 (C4) ─────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_heygen_webhook_secret_unset_rejected(client):
+    """HEYGEN_WEBHOOK_SECRET 미설정 시 서명 유무와 무관하게 401 거부(fail-closed).
+
+    경고-후-통과(개발환경 우회)를 제거해, 시크릿 없이는 어떤 환경에서도 위조
+    웹훅을 받아들이지 않는다.
+    """
+    payload = {"event_type": "avatar_video.success", "event_data": {"video_id": "x"}}
+    body = json.dumps(payload).encode()
+
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", ""):
+        resp = await client.post(
+            "/api/v1/webhooks/heygen",
+            content=body,
+            # 임의의 서명을 보내도 시크릿이 없으면 통과시키지 않는다.
+            headers={"Content-Type": "application/json", "Signature": "whatever"},
+        )
+    assert resp.status_code == 401
+
+
+# ── 서명 누락 거부 ───────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_heygen_webhook_missing_signature_rejected(client):
+    """시크릿은 있으나 서명 헤더가 없으면 401."""
+    payload = {"event_type": "avatar_video.success", "event_data": {"video_id": "x"}}
+    body = json.dumps(payload).encode()
+
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET):
+        resp = await client.post(
+            "/api/v1/webhooks/heygen",
+            content=body,
+            headers={"Content-Type": "application/json"},
+        )
+    assert resp.status_code == 401
+
+
+# ── 유효 서명: 'sha256=' 접두사 허용 ─────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_heygen_webhook_valid_signature_sha256_prefix(client):
+    """'sha256=' 접두사가 붙은 유효 서명도 통과(접두사 제거 후 비교)."""
+    mock_db = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+    mock_db.__enter__ = MagicMock(return_value=mock_db)
+    mock_db.__exit__ = MagicMock(return_value=False)
+
+    payload = {
+        "event_type": "avatar_video.success",
+        "event_data": {"video_id": "unknown-id"},
+    }
+    body = json.dumps(payload).encode()
+    sig = "sha256=" + _sign(body)
+
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET), \
+         patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db):
+        resp = await client.post(
+            "/api/v1/webhooks/heygen",
+            content=body,
+            headers={"Content-Type": "application/json", "Signature": sig},
+        )
+    # 서명 검증 통과 → 라우팅 로직까지 진입(unknown video → ignored)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ignored"
+
+
+# ── 유효 서명: X-HeyGen-Signature 헤더 호환 ──────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_heygen_webhook_valid_signature_legacy_header(client):
+    """구버전 X-HeyGen-Signature 헤더로도 유효 서명이 인정된다."""
+    mock_db = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = None
+    mock_db.execute.return_value = mock_result
+    mock_db.__enter__ = MagicMock(return_value=mock_db)
+    mock_db.__exit__ = MagicMock(return_value=False)
+
+    payload = {
+        "event_type": "avatar_video.success",
+        "event_data": {"video_id": "unknown-id"},
+    }
+    body = json.dumps(payload).encode()
+
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET), \
+         patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db):
+        resp = await client.post(
+            "/api/v1/webhooks/heygen",
+            content=body,
+            headers={
+                "Content-Type": "application/json",
+                "X-HeyGen-Signature": _sign(body),
+            },
+        )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ignored"
