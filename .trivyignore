@@ -1,8 +1,16 @@
 # Trivy ignore — 임시 우회 항목.
 #
-# 각 entry 는 dependabot 의 자동 patch PR 이 도착하면 즉시 제거할 것.
-# 이 파일에 무기한 항목을 누적하지 말 것. 추가 시 sunset 일자 명시.
+# 각 entry 는 수정본이 도착하면(의존성 patch PR 또는 Debian point-release 가 apt mirror 에
+# 반영되면) 즉시 제거할 것. 이 파일에 무기한 항목을 누적하지 말 것. 추가 시 sunset 일자 명시.
 #
-# 현재 ignore 항목 없음.
-# (GHSA-q4gf-8mx6-v5v3 Next.js DoS 는 next 16.2.6 으로 해소 — 2026-05-16 제거.
-#  fixed-in 16.2.3, main 의 frontend/package.json·package-lock 둘 다 16.2.6.)
+# ── Debian(bookworm) base 이미지 OS 패키지 CVE (2026-06-26 추가, sunset 2026-07-31) ──
+# 백엔드 이미지(Dockerfile.prod)는 이미 빌드 시 `apt-get update && apt-get upgrade -y` 로
+# OS 패키지를 갱신한다. 아래 3건은 Trivy DB 엔 수정본이 등록돼 있으나, 빌드 시점의 Debian
+# 보안 mirror 에 아직 해당 .deb 가 반영되지 않아(또는 buildx 레이어 캐시로) apt 가 끌어오지
+# 못한 상태다. mirror 에 반영되면 다음 이미지 빌드가 자동 패치하므로 이 항목들을 제거한다.
+# 노출 맥락: 영향 패키지(libreoffice/poppler)는 studio 의 PPTX→PDF→PNG 변환 경로에서만 쓰이고,
+# 업로더는 초대된 베타 교수자(준신뢰)다. openssl 은 아웃바운드 TLS. 베타 한정 한시 허용.
+# ⚠️ 2026-07-31 이전에 재검증: 각 CVE 가 apt-upgrade 로 해소됐는지 확인 후 해당 줄 삭제.
+CVE-2026-8357   # libreoffice (fonts-opensymbol·libreoffice-common·libuno-cppu3·uno-libs-private) → deb12u13
+CVE-2026-10118  # poppler (libpoppler126·poppler-utils) → deb12u2
+CVE-2026-45447  # openssl/libssl3 (PKCS7_verify UAF) → deb12u2
