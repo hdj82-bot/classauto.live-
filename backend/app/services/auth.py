@@ -154,6 +154,17 @@ async def exchange_google_code(code: str) -> dict:
         if not userinfo.get("id") or not userinfo.get("email"):
             raise ValueError("Google userinfo에 필수 필드(id, email)가 없습니다.")
 
+        # M1: 이메일 인증 여부 확인 — 미검증 이메일은 거부한다.
+        # 교수자 초대 게이트가 이메일을 신뢰 식별자로 쓰므로(누군가 검증 안 된 타인
+        # 이메일로 가입하면 초대 우회 가능), Google 이 소유를 검증한 이메일만 통과시킨다.
+        # v2 userinfo 는 ``verified_email``, OpenID(id_token)는 ``email_verified`` 를 쓰므로
+        # 둘 다 확인한다. bool True 또는 문자열 "true" 만 검증된 것으로 인정.
+        verified = userinfo.get("email_verified")
+        if verified is None:
+            verified = userinfo.get("verified_email")
+        if verified is not True and str(verified).strip().lower() != "true":
+            raise ValueError("인증되지 않은 Google 이메일입니다. 이메일 인증 후 다시 시도해 주세요.")
+
         return userinfo
 
 

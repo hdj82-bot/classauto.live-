@@ -74,28 +74,46 @@ async def get_current_user_optional(
 
     익명 접근을 허용하되 로그인 사용자는 식별해야 하는 엔드포인트용 — 예:
     공개 강의 조회는 누구나 가능하지만, 소유 교수자에겐 미발행 강의도 보여주는
-    "미리보기" 동작. 어떤 경우에도 401 을 던지지 않는다.
+    "미리보기" 동작. 토큰이 없거나 무효하면 401 대신 ``None`` 을 반환한다.
+
+    L3: 과거엔 ``except Exception`` 으로 **모든** 예외를 삼켜, Redis·DB 장애 등
+    인프라 오류까지 "익명"으로 둔갑시켰다(로그인 사용자가 조용히 권한을 잃고,
+    장애가 가려짐). 이제는 **인증/토큰 관련 예외만** 익명 처리하고, 그 외
+    (DB·Redis 오류 등)는 그대로 전파해 strict ``get_current_user`` 와 동일하게
+    500 으로 드러나게 한다.
     """
     if credentials is None:
         return None
+
+    # 토큰 디코드·형식 검증 단계의 실패만 익명 처리(인증 실패 = 익명).
     try:
         payload = decode_token(credentials.credentials)
-        if payload.get("type") != "access":
-            return None
-        jti = payload.get("jti")
-        if jti:
-            r = get_redis()
-            if await r.exists(f"{_BL_PREFIX}{jti}"):
-                return None
-        result = await db.execute(
-            select(User).where(User.id == uuid.UUID(payload["sub"]))
-        )
-        user = result.scalar_one_or_none()
-        if not user or not user.is_active:
-            return None
-        return user
-    except Exception:  # noqa: BLE001 — 선택적 인증은 어떤 이유로든 실패 시 익명 처리.
+    except JWTError:
         return None
+
+    if payload.get("type") != "access":
+        return None
+
+    sub = payload.get("sub")
+    if not sub:
+        return None
+    try:
+        user_uuid = uuid.UUID(str(sub))
+    except (ValueError, TypeError):
+        return None
+
+    # 이하 Redis/DB 호출의 예외는 잡지 않는다 — 인프라 오류는 전파(가려지지 않게).
+    jti = payload.get("jti")
+    if jti:
+        r = get_redis()
+        if await r.exists(f"{_BL_PREFIX}{jti}"):
+            return None
+
+    result = await db.execute(select(User).where(User.id == user_uuid))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        return None
+    return user
 
 
 async def require_professor(user: User = Depends(get_current_user)) -> User:
