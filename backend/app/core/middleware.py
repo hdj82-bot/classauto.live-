@@ -81,6 +81,20 @@ _RATE_LIMIT_EXEMPT_PATHS: frozenset[str] = frozenset(
     {"/health", "/health/deep", "/docs", "/openapi.json", "/metrics", "/redoc"}
 )
 
+# Redis 장애로 레이트리밋을 평가할 수 없을 때 fail-closed 로 막을 비용·보안 민감 prefix.
+# (M3) 종전엔 Redis 연결/연산 실패 시 전 경로를 통과시켜(fail-open), 장애 중에 인증
+# brute-force·고가 렌더/LLM 호출이 무제한으로 새어 나갈 수 있었다. 아래 prefix 는
+# 레이트리밋이 죽으면 503 으로 차단하고(가용성보다 비용·보안 우선), 그 외 값싼 읽기
+# 경로는 종전처럼 fail-open(가용성 우선)으로 둔다.
+#   - /api/auth     : 로그인·OAuth 코드 교환·refresh — 무차별 대입 보호
+#   - /api/v1/render: PPT 업로드·영상 렌더 — HeyGen/TTS 비용
+#   - /api/v1/qa    : 학생 RAG Q&A — Claude/임베딩 비용
+RATE_LIMIT_FAIL_CLOSED_PREFIXES: tuple[str, ...] = (
+    "/api/auth",
+    "/api/v1/render",
+    "/api/v1/qa",
+)
+
 # 앱 앞단에 있는 신뢰 프록시 홉 수(Railway 엣지 → 컨테이너의 단일 리버스 프록시 기준 1).
 # X-Forwarded-For 는 "client, proxy1, proxy2 ..." 순으로 각 홉이 자신이 직접 본 IP 를
 # 오른쪽 끝에 덧붙인다. 맨 앞(leftmost) 항목은 클라이언트가 임의로 위조할 수 있어
@@ -155,6 +169,15 @@ def _lookup_limit(path: str) -> tuple[int, int]:
     return best_limit
 
 
+def _rate_limit_unavailable_response() -> JSONResponse:
+    """레이트리밋을 평가할 수 없을 때(Redis 장애) 민감 경로에 돌려줄 503 응답."""
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "일시적으로 요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요."},
+        headers={"Retry-After": "5"},
+    )
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Redis 기반 슬라이딩 윈도우 Rate Limiter."""
 
@@ -163,11 +186,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if path in _RATE_LIMIT_EXEMPT_PATHS or path.startswith(RATE_LIMIT_EXEMPT_PREFIXES):
             return await call_next(request)
 
+        # 비용·보안 민감 경로는 Redis 장애 시 통과시키지 않는다(fail-closed).
+        fail_closed = path.startswith(RATE_LIMIT_FAIL_CLOSED_PREFIXES)
+
         try:
             from app.core.redis import get_redis
             redis = get_redis()
         except Exception:
-            # Redis 연결 실패 시 rate limiting 건너뜀
+            # Redis 연결 실패 — 민감 경로는 차단(503), 값싼 읽기는 통과(fail-open).
+            logger.warning("rate-limit Redis 연결 실패 (path=%s, fail_closed=%s)", path, fail_closed)
+            if fail_closed:
+                return _rate_limit_unavailable_response()
             return await call_next(request)
 
         client_id = _extract_client_id(request)
@@ -177,22 +206,30 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         path_group = "/".join(path.strip("/").split("/")[:3])
         key = f"rl:{client_id}:{path_group}"
 
+        # ── Redis 카운터 평가 ── 여기서 나는 예외만 "Redis 장애"로 취급한다.
+        # call_next(엔드포인트 실행)는 이 try 밖에서 호출해, 실제 앱 5xx 가 레이트리밋
+        # 장애(503)로 둔갑하지 않게 한다.
         try:
             current = await redis.incr(key)
             if current == 1:
                 await redis.expire(key, window)
+        except Exception:
+            # Redis 연산 오류 — 민감 경로는 차단(503), 값싼 읽기는 통과(fail-open).
+            logger.warning("rate-limit Redis 연산 실패 (path=%s, fail_closed=%s)", path, fail_closed)
+            if fail_closed:
+                return _rate_limit_unavailable_response()
+            return await call_next(request)
 
-            remaining = max(0, max_requests - current)
-            response = await call_next(request) if current <= max_requests else JSONResponse(
+        remaining = max(0, max_requests - current)
+        if current > max_requests:
+            response: Response = JSONResponse(
                 status_code=429,
                 content={"detail": "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."},
             )
+        else:
+            response = await call_next(request)
 
-            response.headers["X-RateLimit-Limit"] = str(max_requests)
-            response.headers["X-RateLimit-Remaining"] = str(remaining)
-            response.headers["X-RateLimit-Reset"] = str(window)
-            return response
-
-        except Exception:
-            # Redis 오류 시 요청을 차단하지 않음
-            return await call_next(request)
+        response.headers["X-RateLimit-Limit"] = str(max_requests)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        response.headers["X-RateLimit-Reset"] = str(window)
+        return response

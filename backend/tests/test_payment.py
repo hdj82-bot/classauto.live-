@@ -243,14 +243,134 @@ async def test_webhook_subscription_deleted(db, professor):
 
 
 @pytest.mark.asyncio
-async def test_webhook_payment_failed(db):
+async def test_webhook_payment_failed_sets_past_due_grace(db, professor):
+    """invoice.payment_failed → 즉시 다운그레이드하지 않고 그레이스 기한(past_due)만 설정(M8)."""
+    from app.services.pipeline.subscription import get_or_create_subscription
+    sub = await get_or_create_subscription(db, professor.id)
+    sub.stripe_customer_id = "cus_fail_test"
+    sub.plan = PlanType.pro
+    await db.flush()
+
     mock_event = MagicMock()
     mock_event.type = "invoice.payment_failed"
     mock_event.data.object.customer = "cus_fail_test"
     mock_event.data.object.amount_due = 9900
 
     result = await handle_webhook_event(db, mock_event)
-    assert result == "payment_failed_logged"
+    assert result == "past_due"
+    # 그레이스 기한이 미래로 찍히고, 플랜은 즉시 깎이지 않는다.
+    assert sub.expires_at is not None
+    assert sub.expires_at > datetime.now(timezone.utc)
+    assert sub.plan == PlanType.pro
+
+
+@pytest.mark.asyncio
+async def test_webhook_payment_failed_does_not_advance_grace(db, professor):
+    """연속 결제 실패가 그레이스 기한을 매번 뒤로 미루지 못한다(첫 실패 기준 유지)."""
+    from app.services.pipeline.subscription import get_or_create_subscription
+    sub = await get_or_create_subscription(db, professor.id)
+    sub.stripe_customer_id = "cus_fail_twice"
+    sub.plan = PlanType.basic
+    await db.flush()
+
+    def _evt():
+        e = MagicMock()
+        e.type = "invoice.payment_failed"
+        e.data.object.customer = "cus_fail_twice"
+        e.data.object.amount_due = 9900
+        return e
+
+    await handle_webhook_event(db, _evt())
+    first_deadline = sub.expires_at
+    assert first_deadline is not None
+
+    await handle_webhook_event(db, _evt())
+    assert sub.expires_at == first_deadline  # 두 번째 실패가 기한을 미루지 않음
+
+
+@pytest.mark.asyncio
+async def test_webhook_payment_failed_unknown_customer(db):
+    """매칭되는 구독이 없으면 user_not_found 로 끝난다(부수효과 없음)."""
+    mock_event = MagicMock()
+    mock_event.type = "invoice.payment_failed"
+    mock_event.data.object.customer = "cus_nonexistent"
+    mock_event.data.object.amount_due = 100
+
+    result = await handle_webhook_event(db, mock_event)
+    assert result == "user_not_found"
+
+
+@pytest.mark.asyncio
+async def test_downgrade_overdue_subscriptions_downgrades_expired(db, professor):
+    """그레이스 기한이 지난 past_due 유료 구독은 FREE 로 다운그레이드(M8 훅)."""
+    from datetime import timedelta
+    from app.services.pipeline.subscription import get_or_create_subscription
+    from app.services.payment import downgrade_overdue_subscriptions
+
+    sub = await get_or_create_subscription(db, professor.id)
+    sub.stripe_customer_id = "cus_overdue"
+    sub.stripe_subscription_id = "sub_overdue"
+    sub.plan = PlanType.pro
+    sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)  # 그레이스 만료
+    await db.flush()
+
+    n = await downgrade_overdue_subscriptions(db)
+    assert n == 1
+    assert sub.plan == PlanType.free
+    assert sub.stripe_subscription_id is None
+    assert sub.expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_downgrade_overdue_subscriptions_skips_within_grace(db, professor):
+    """그레이스 기간 내(미래 expires_at)면 다운그레이드하지 않는다."""
+    from datetime import timedelta
+    from app.services.pipeline.subscription import get_or_create_subscription
+    from app.services.payment import downgrade_overdue_subscriptions
+
+    sub = await get_or_create_subscription(db, professor.id)
+    sub.stripe_customer_id = "cus_in_grace"
+    sub.plan = PlanType.pro
+    sub.expires_at = datetime.now(timezone.utc) + timedelta(days=3)
+    await db.flush()
+
+    n = await downgrade_overdue_subscriptions(db)
+    assert n == 0
+    assert sub.plan == PlanType.pro
+    assert sub.expires_at is not None
+
+
+@pytest.mark.asyncio
+async def test_webhook_checkout_clears_past_due_grace(db, professor):
+    """결제 복구(checkout.completed) 시 past_due 그레이스 기한이 해제된다."""
+    from datetime import timedelta
+    from app.services.pipeline.subscription import get_or_create_subscription
+    sub = await get_or_create_subscription(db, professor.id)
+    sub.stripe_customer_id = "cus_recover"
+    sub.plan = PlanType.basic
+    sub.expires_at = datetime.now(timezone.utc) - timedelta(days=1)  # past_due 상태
+    await db.flush()
+
+    mock_event = MagicMock()
+    mock_event.type = "checkout.session.completed"
+    mock_event.data.object.customer = "cus_recover"
+    mock_event.data.object.subscription = "sub_recover"
+    mock_event.data.object.metadata = {"user_id": str(professor.id)}
+
+    fake_sub = _stripe_subscription(price_id="price_pro_test")
+    with patch.dict(
+        "app.services.payment._PRICE_TO_PLAN",
+        {"price_pro_test": PlanType.pro},
+        clear=True,
+    ), patch(
+        "app.services.payment.stripe.Subscription.retrieve",
+        return_value=fake_sub,
+    ):
+        result = await handle_webhook_event(db, mock_event)
+
+    assert result == "activated"
+    assert sub.plan == PlanType.pro
+    assert sub.expires_at is None  # 그레이스 해제
 
 
 @pytest.mark.asyncio
