@@ -17,6 +17,7 @@ const NAV_LINKS = [
   { href: "/comprehensive-analysis", key: "common.navComprehensive" },
   { href: "/pricing", key: "common.navPricing" },
   { href: "/use-cases", key: "common.navUseCases" },
+  { href: "/board", key: "common.navBoard" },
 ] as const;
 
 /**

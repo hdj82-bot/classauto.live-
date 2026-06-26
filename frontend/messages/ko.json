@@ -449,6 +449,40 @@
       "other": "기타"
     }
   },
+  "board": {
+    "title": "자유게시판",
+    "subtitle": "ClassAuto를 쓰면서 느낀 점·아이디어·불편함을 자유롭게 남겨 주세요. 베타 테스터끼리 공개로 나누는 공간입니다.",
+    "writeCta": "글쓰기",
+    "loginToWrite": "로그인하고 글쓰기",
+    "empty": "아직 등록된 글이 없습니다. 첫 글을 남겨 주세요.",
+    "loadError": "글을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+    "backToList": "목록으로",
+    "more": "더 보기",
+    "commentsTitle": "댓글",
+    "commentCount": "댓글 {count}개",
+    "noComments": "아직 댓글이 없습니다.",
+    "commentPlaceholder": "댓글을 입력하세요…",
+    "commentSubmit": "댓글 등록",
+    "commentSubmitting": "등록 중…",
+    "loginToComment": "댓글을 쓰려면 로그인하세요.",
+    "pinnedBadge": "공지",
+    "deleteConfirm": "정말 삭제하시겠습니까? 되돌릴 수 없습니다.",
+    "delete": "삭제",
+    "deleteError": "삭제에 실패했습니다. 다시 시도해 주세요.",
+    "anonymous": "익명",
+    "newPost": {
+      "title": "새 글 작성",
+      "titleLabel": "제목",
+      "titlePlaceholder": "제목을 입력하세요",
+      "bodyLabel": "내용",
+      "bodyPlaceholder": "내용을 입력하세요",
+      "submit": "등록하기",
+      "submitting": "등록 중…",
+      "cancel": "취소",
+      "error": "등록에 실패했습니다. 다시 시도해 주세요.",
+      "validation": "제목과 내용을 모두 입력해 주세요."
+    }
+  },
   "demo": {
     "meta": {
       "pageTitle": "데모 체험 — ClassAuto",
@@ -865,6 +899,7 @@
       "navComprehensive": "종합분석",
       "navPricing": "요금제",
       "navUseCases": "활용 사례",
+      "navBoard": "자유게시판",
       "navTrust": "학생 데이터",
       "navSecurity": "보안",
       "navBeta": "베타 신청",

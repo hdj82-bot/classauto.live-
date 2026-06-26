@@ -291,6 +291,58 @@ export const feedbackApi = {
     api.patch<FeedbackItem>(`/api/v1/admin/feedback/${encodeURIComponent(id)}`, { status }),
 };
 
+// ── 자유게시판 (베타 테스터 커뮤니티) ──────────────────────────────────────────
+// 열람은 공개(비로그인 포함), 작성/삭제는 로그인 필요(백엔드가 강제). 공개 노출은
+// 표시 이름(author_name)만 — 이메일은 응답에 포함되지 않는다.
+export interface BoardComment {
+  id: string;
+  author_name: string;
+  body: string;
+  created_at: string;
+  can_delete: boolean;
+}
+
+export interface BoardPostSummary {
+  id: string;
+  author_name: string;
+  title: string;
+  pinned: boolean;
+  comment_count: number;
+  created_at: string;
+}
+
+export interface BoardPostDetail {
+  id: string;
+  author_name: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  created_at: string;
+  comments: BoardComment[];
+  can_delete: boolean;
+}
+
+export const boardApi = {
+  list: (params?: { page?: number; limit?: number }) =>
+    api.get<{ total: number; page: number; limit: number; posts: BoardPostSummary[] }>(
+      "/api/v1/board/posts",
+      { params },
+    ),
+  get: (id: string) =>
+    api.get<BoardPostDetail>(`/api/v1/board/posts/${encodeURIComponent(id)}`),
+  create: (body: { title: string; body: string }) =>
+    api.post<BoardPostDetail>("/api/v1/board/posts", body),
+  comment: (postId: string, body: { body: string }) =>
+    api.post<BoardComment>(
+      `/api/v1/board/posts/${encodeURIComponent(postId)}/comments`,
+      body,
+    ),
+  remove: (id: string) =>
+    api.delete(`/api/v1/board/posts/${encodeURIComponent(id)}`),
+  removeComment: (id: string) =>
+    api.delete(`/api/v1/board/comments/${encodeURIComponent(id)}`),
+};
+
 export interface AuditLogItem {
   id: string;
   actor_id: string | null;
