@@ -76,6 +76,9 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17
+          # 러너에 기본 설치된 pg16 의 /usr/bin/pg_dump 가 PATH 우선이라, 방금 깐 17
+          # 바이너리(/usr/lib/postgresql/17/bin)를 PATH 앞에 둬 후속 스텝이 17 을 쓰게 한다.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
       - name: Configure AWS CLI
         uses: aws-actions/configure-aws-credentials@v6
