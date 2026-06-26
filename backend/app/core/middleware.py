@@ -187,7 +187,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # 비용·보안 민감 경로는 Redis 장애 시 통과시키지 않는다(fail-closed).
-        fail_closed = path.startswith(RATE_LIMIT_FAIL_CLOSED_PREFIXES)
+        # 단 **프로덕션에서만** 적용한다 — dev/test/staging 은 실제 Redis 없이(단위테스트
+        # 인메모리 mock 등) 도는 경우가 많아 일괄 503 이 되면 안 되고, 남용·비용 위협은
+        # 실사용자가 있는 프로덕션에 한정되기 때문. 실 Redis 장애 대응(차단)은 prod 전용.
+        from app.core.config import settings as _settings
+        fail_closed = (
+            path.startswith(RATE_LIMIT_FAIL_CLOSED_PREFIXES)
+            and _settings.ENVIRONMENT == "production"
+        )
 
         try:
             from app.core.redis import get_redis

@@ -192,14 +192,19 @@ class _OpFailRedis:
 
 
 @pytest_asyncio.fixture
-async def _rl_client_with(db):
+async def _rl_client_with(db, monkeypatch):
     """주입한 get_redis 구현으로 RateLimit 미들웨어를 돌리는 클라이언트 팩토리.
 
     teardown 에서 원래 get_redis 를 복구해 다른 테스트로 장애 mock 이 새지 않게 한다.
+    fail-closed 는 프로덕션 한정이므로(middleware), 이 장애 분기 테스트는 ENVIRONMENT 를
+    production 으로 두고 검증한다(monkeypatch 가 자동 복구).
     """
     from app.core import redis as redis_module
+    from app.core.config import settings
     from app.db.session import get_db
     from app.main import app
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
 
     async def override_get_db():
         yield db
