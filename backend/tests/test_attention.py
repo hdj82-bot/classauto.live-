@@ -1,6 +1,6 @@
 """집중도 모니터링 API 통합 테스트."""
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -63,12 +63,15 @@ async def test_start_attention_tracking_unauthenticated(client, student, lecture
 
 @pytest.mark.asyncio
 async def test_heartbeat(client, student, lecture, db):
+    # 부정행위 방지(C2): 하트비트 progress_seconds 는 서버 경과 실시간 상한으로
+    # 깎인다. 정상 진행을 흉내내려면 started_at 을 충분히 과거로 둬야 한다.
     session = LearningSession(
         id=uuid.uuid4(),
         user_id=student.id,
         lecture_id=lecture.id,
         status=SessionStatus.in_progress,
         total_sec=600,
+        started_at=datetime.now(timezone.utc) - timedelta(seconds=300),
         last_heartbeat_at=datetime.now(timezone.utc),
     )
     db.add(session)

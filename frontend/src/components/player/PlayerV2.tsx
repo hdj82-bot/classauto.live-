@@ -383,6 +383,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   }, [slug, router]);
 
   // ─── 세션 생성 + 첫 환영 메시지 ───
+  // 부정행위 방지(C2): total_sec 만 클라가 알려주고, 진행률·완료 판정은 서버가
+  // 잰 경과 실시간·하트비트로만 한다. 같은 강의의 활성 세션이 이미 있으면 서버가
+  // 409 로 거부(동시 재생 제한)하며, 그 경우 sessionId 가 null 로 남아 no-op 된다.
   useEffect(() => {
     // 미리보기 모드: 학생 시청 세션·집중도를 만들지 않는다(분석 오염 방지).
     // sessionId 가 null 로 남으면 퀴즈 제출·Q&A·집중도 등은 기존 가드로 no-op.
@@ -434,6 +437,27 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         /* 분석 계측 실패는 무시 — 재생에 영향 없음 */
       });
   }, [currentSlide, sessionId]);
+
+  // ─── 강의 끝 도달 → 서버에 완료 보고(판정은 서버) ───
+  // 부정행위 방지(C2): 로컬에서 끝까지 재생했다는 사실 자체를 '완료'로 단정하지
+  // 않는다. 서버가 잰 시청량(경과 실시간·하트비트 기반)이 기준 미달이면 완료를
+  // 거부(409)하며 그대로 수용하고, 충분하면 서버가 completed 로 확정한다. 즉
+  // 진행률·완료 게이트는 클라가 아니라 서버가 최종 판정한다.
+  const completionReportedRef = useRef(false);
+  useEffect(() => {
+    if (!sessionId || !durationSec) return;
+    if (completionReportedRef.current) return;
+    // 마지막 슬라이드 끝(currentTime ≈ duration) 근처에 도달했을 때만.
+    if (progressSec < Math.floor(durationSec) - 1) return;
+    completionReportedRef.current = true;
+    void api
+      .post(`/api/v1/sessions/${sessionId}/complete`, null, {
+        params: { watched_sec: Math.round(durationSec) },
+      })
+      .catch(() => {
+        /* 서버가 완료를 인정하지 않으면(409 등) 로컬에서 완료로 처리하지 않는다 */
+      });
+  }, [progressSec, durationSec, sessionId]);
 
   // ─── 인터스티셜 퀴즈 목록 fetch (타임스탬프 트리거용, 정답·해설 미포함) ───
   // /quiz/playback 은 선택 인증으로 바뀌어(발행 강의는 익명도 조회) 비로그인 홍보
