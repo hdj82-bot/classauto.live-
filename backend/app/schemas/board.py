@@ -1,5 +1,4 @@
 """자유게시판 스키마 (글 + 댓글)."""
-import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
