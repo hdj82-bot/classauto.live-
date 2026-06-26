@@ -193,6 +193,15 @@ class Settings(BaseSettings):
     VISIONSTORY_DAILY_BUDGET_USD: float = 200.0
     VISIONSTORY_MONTHLY_BUDGET_USD: float = 1500.0
 
+    # $ 서킷 브레이커는 '완료 시점'에 기록된 비용만 합산하므로, 짧은 시간에 다수 제출이
+    # 몰리면(재시도 폭주·버그성 대량 렌더) 아직 완료되지 않은 in-flight 렌더가 0 으로
+    # 잡혀 한도를 크게 초과할 수 있었다. budget.inflight_*_spend_usd 가 DB 의 in-flight
+    # 상태(rendering)를 직접 세어 "추정 길이 × 단가"를 합계에 더해 즉시 반영한다. 이 값은
+    # 미완료 렌더 1건의 보수적 추정 길이(초)다. Q&A 답변은 ≤400자(QA_AVATAR_MAX_ANSWER_
+    # CHARS)·1.2배속이라 최대 ~90초. 보수적으로 잡아 폭주를 일찍 끊되, 너무 크면 정상
+    # 동시 렌더를 막으므로 env 로 조정 가능. 0 이면 in-flight 가산 비활성(완료분만 합산).
+    INFLIGHT_RENDER_ESTIMATE_SECONDS: float = 90.0
+
     # ── 아바타 Q&A 캐시 (docs/planning/08 §5, 09 §5) ─────────────
     # 실시간 HeyGen 렌더 금지(지연). 질문은 항상 즉시 RAG 텍스트로 답하고, 겹치는
     # 질문만 야간 배치로 사전 렌더한 아바타 클립을 캐시에서 즉시 제공한다.

@@ -153,8 +153,11 @@ async def spend_by_instructor(db, since=None) -> dict[uuid.UUID, float]:
   2026-06-16). 본인 잘못 아닌 실패로 교수자가 막히지 않게.
 - **면제**: `QA_AVATAR_UNLIMITED_EMAILS`(계정주·테스트 계정) 재사용 → 무제한.
 - **저장/카운트**: 마이그레이션 `0057` 로 `lectures.avatar_render_count INT NOT NULL DEFAULT 0` 추가.
-  아바타 렌더 패스가 **성공 완료될 때**(웹훅/폴링 완료 경로)에 +1. (완료 전 다발 제출 in-flight edge 는
-  전역 $ 브레이커 + 교수자 월 쿼터로 2차 방어 — 베타 허용.)
+  렌더 **제출 직전에 원자적으로 슬롯을 선점**(`budget.claim_avatar_render_slot` — 조건부 UPDATE
+  `avatar_render_count < cap` 로 검사+증가를 한 번에)하고, 그 패스가 **0건 제출로 끝나면 되돌린다**
+  (`release_avatar_render_slot`). 이로써 동시 요청(더블클릭·중복 태스크)이 같은 count 를 읽고 둘 다
+  통과해 상한을 1 초과하던 TOCTOU 경쟁을 제거한다(2026-06-26). 선점이 제출 전에 일어나므로
+  완료 전 다발 제출 in-flight 도 즉시 한도에 반영된다.
 - **게이트 지점**: 강의 아바타 렌더 제출 진입부(`budget.assert_qa_render_budget` 호출 자리 인근)에
   `assert_avatar_rerender_quota(db, lecture_id)` 추가. 초과 시 신규 예외
   `AvatarRerenderQuotaError`(`BudgetExceededError` 계열) → API 가 명확한 4xx + 메시지 반환.
@@ -299,5 +302,8 @@ ClassAuto 디자인 토큰을 그대로 따른다. 추가할 화면:
 - 결제/구독 로직 변경, 신규 가격 정책.
 - 교수자별 **개별 $ 하드캡** — 베타 한정으로 보류. 재렌더 폭주는 C-2(강의당 횟수 상한)가 막고,
   전체 비용은 전역 $ 브레이커(HeyGen) + 교수자 월 쿼터로 충분.
-- **VisionStory 전용 $ 서킷브레이커** — 보류. C-2 의 강의당 재렌더 상한 + 교수자 월 쿼터로
-  본인 얼굴 비용이 횟수 기준으로 봉인되므로 베타엔 불필요. 정식 런칭 전 사용량 보고 재검토.
+- ~~**VisionStory 전용 $ 서킷브레이커** — 보류.~~ **구현됨**(`budget.assert_visionstory_budget`,
+  일 $200 / 월 $1500, `platform_cost_logs` category=AVATAR_QA·model=visionstory 합산). C-2(강의당
+  재렌더 상한)가 1차, 이 $ 브레이커가 2차 방어선. 2026-06-26: 두 $ 브레이커(HeyGen·VisionStory)가
+  **완료분 + in-flight 추정**(`budget.inflight_*_spend_usd`, `INFLIGHT_RENDER_ESTIMATE_SECONDS`)을
+  합산하도록 보강 — 완료 전 다발 제출(재시도 폭주)도 한도 계산에 즉시 반영된다.

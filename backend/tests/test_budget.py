@@ -284,3 +284,195 @@ def test_assert_qa_render_budget_unlimited_account_bypasses():
     with patch.object(budget, "instructor_has_unlimited_qa", return_value=True), \
          patch.object(settings, "HEYGEN_MOCK", True):
         assert_qa_render_budget(_db(), uuid.uuid4(), uuid.uuid4())
+
+
+# ── in-flight(미완료) 렌더가 $ 한도 계산에 즉시 반영되는지 ─────────────────────────
+
+
+def test_heygen_inflight_counts_toward_daily_limit():
+    # 완료분 1.0 + in-flight 추정 2.5 = 3.5 >= 일 3.0 → 차단(완료분만이면 통과했을 것).
+    with patch.object(settings, "HEYGEN_MOCK", False), \
+         patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
+         patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 100.0), \
+         patch.object(budget, "heygen_spend_usd", return_value=1.0), \
+         patch.object(budget, "inflight_heygen_spend_usd", return_value=2.5):
+        with pytest.raises(BudgetExceededError):
+            assert_heygen_budget(_db())
+
+
+def test_heygen_inflight_under_limit_passes():
+    with patch.object(settings, "HEYGEN_MOCK", False), \
+         patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
+         patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 100.0), \
+         patch.object(budget, "heygen_spend_usd", return_value=1.0), \
+         patch.object(budget, "inflight_heygen_spend_usd", return_value=0.5):
+        assert_heygen_budget(_db())  # 1.5 < 3.0 → 통과
+
+
+def test_visionstory_inflight_counts_toward_daily_limit():
+    from app.services.pipeline.budget import assert_visionstory_budget
+
+    with patch.object(settings, "VISIONSTORY_MOCK", False), \
+         patch.object(settings, "VISIONSTORY_DAILY_BUDGET_USD", 200.0), \
+         patch.object(settings, "VISIONSTORY_MONTHLY_BUDGET_USD", 5000.0), \
+         patch.object(budget, "visionstory_spend_usd", return_value=150.0), \
+         patch.object(budget, "inflight_visionstory_spend_usd", return_value=60.0):
+        with pytest.raises(BudgetExceededError):  # 210 >= 200
+            assert_visionstory_budget(_db())
+
+
+def test_inflight_helpers_fail_open_on_db_error():
+    # DB 오류 시 0 을 반환해 브레이커가 '완료분만 합산'으로 안전 퇴화(fail-open).
+    db = MagicMock()
+    db.execute.side_effect = RuntimeError("db down")
+    assert budget.inflight_heygen_spend_usd(db) == 0.0
+    assert budget.inflight_visionstory_spend_usd(db) == 0.0
+
+
+# ── 원자적 강의당 아바타 제작 슬롯 선점/해제 (C-2 race fix) ────────────────────────
+
+
+@pytest.fixture
+def slot_db():
+    """실제 sqlite 세션 — 조건부 UPDATE 의 rowcount 의미론을 검증하기 위함."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from app.db.base import Base
+    from tests.conftest import _patch_jsonb_columns
+
+    _patch_jsonb_columns()
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    s = Session()
+    try:
+        yield s
+    finally:
+        s.close()
+        engine.dispose()
+
+
+def _make_lecture(db):
+    from app.models.course import Course
+    from app.models.lecture import Lecture
+    from app.models.user import User, UserRole
+
+    prof = User(
+        id=uuid.uuid4(), google_sub=f"g-{uuid.uuid4().hex[:8]}",
+        email=f"{uuid.uuid4().hex[:6]}@t.ac.kr", name="교수",
+        role=UserRole.professor, is_active=True,
+    )
+    db.add(prof)
+    db.flush()
+    course = Course(id=uuid.uuid4(), instructor_id=prof.id, title="강좌")
+    db.add(course)
+    db.flush()
+    lec = Lecture(
+        id=uuid.uuid4(), course_id=course.id, title="강의",
+        slug=f"slug-{uuid.uuid4().hex}", order=1,
+    )
+    db.add(lec)
+    db.commit()
+    return prof, lec
+
+
+def test_claim_slot_is_atomic_and_capped(slot_db):
+    from app.services.pipeline.budget import claim_avatar_render_slot
+
+    prof, lec = _make_lecture(slot_db)
+    with patch.object(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 2):
+        assert claim_avatar_render_slot(slot_db, lec.id, prof.id) is True   # 0→1
+        assert claim_avatar_render_slot(slot_db, lec.id, prof.id) is True   # 1→2
+        # 상한 도달 — 조건부 UPDATE 가 0행 → 선점 실패(초과 차단).
+        assert claim_avatar_render_slot(slot_db, lec.id, prof.id) is False
+        slot_db.refresh(lec)
+        assert lec.avatar_render_count == 2  # 상한을 넘지 않음
+
+
+def test_release_slot_returns_one_and_floors_at_zero(slot_db):
+    from app.services.pipeline.budget import (
+        claim_avatar_render_slot,
+        release_avatar_render_slot,
+    )
+
+    prof, lec = _make_lecture(slot_db)
+    with patch.object(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 3):
+        claim_avatar_render_slot(slot_db, lec.id, prof.id)  # →1
+        release_avatar_render_slot(slot_db, lec.id, prof.id)  # →0
+        slot_db.refresh(lec)
+        assert lec.avatar_render_count == 0
+        # 0 미만으로 내려가지 않는다.
+        release_avatar_render_slot(slot_db, lec.id, prof.id)
+        slot_db.refresh(lec)
+        assert lec.avatar_render_count == 0
+
+
+def test_claim_and_release_skip_for_unlimited_account(slot_db):
+    from app.services.pipeline.budget import (
+        claim_avatar_render_slot,
+        release_avatar_render_slot,
+    )
+
+    prof, lec = _make_lecture(slot_db)
+    prof.email = "unlimited@t.ac.kr"
+    slot_db.commit()
+    with patch.object(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 1), \
+         patch.object(settings, "QA_AVATAR_UNLIMITED_EMAILS", "unlimited@t.ac.kr"):
+        # 면제 계정: 상한 1·count 이미 5 여도 선점은 True 이며 카운터를 건드리지 않는다.
+        lec.avatar_render_count = 5
+        slot_db.commit()
+        assert claim_avatar_render_slot(slot_db, lec.id, prof.id) is True
+        release_avatar_render_slot(slot_db, lec.id, prof.id)
+        slot_db.refresh(lec)
+        assert lec.avatar_render_count == 5
+
+
+def test_disabled_cap_always_claims(slot_db):
+    from app.services.pipeline.budget import claim_avatar_render_slot
+
+    prof, lec = _make_lecture(slot_db)
+    with patch.object(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 0):
+        # 상한 0 이하 = 비활성(무제한) → 항상 True, 카운터 증가 없음.
+        assert claim_avatar_render_slot(slot_db, lec.id, prof.id) is True
+        slot_db.refresh(lec)
+        assert (lec.avatar_render_count or 0) == 0
+
+
+def test_inflight_visionstory_counts_only_vs_rendering_reps(slot_db):
+    from app.services.pipeline import qa_avatar
+    from app.models.qa_answer_cache import QAAnswerCache
+    from app.services.pipeline.budget import inflight_visionstory_spend_usd
+
+    prof, lec = _make_lecture(slot_db)
+    # VS 대표 2건(rendering, visionstory: 접두) + HeyGen rendering 1건 + ready 1건.
+    slot_db.add_all([
+        QAAnswerCache(
+            lecture_id=lec.id, instructor_id=prof.id, question_text="q1",
+            status=qa_avatar.STATUS_RENDERING, heygen_job_id="visionstory:a",
+            origin=qa_avatar.ORIGIN_SEED,
+        ),
+        QAAnswerCache(
+            lecture_id=lec.id, instructor_id=prof.id, question_text="q2",
+            status=qa_avatar.STATUS_RENDERING, heygen_job_id="visionstory:b",
+            origin=qa_avatar.ORIGIN_SEED,
+        ),
+        QAAnswerCache(  # HeyGen(접두 없음) — VS 합산에서 제외
+            lecture_id=lec.id, instructor_id=prof.id, question_text="q3",
+            status=qa_avatar.STATUS_RENDERING, heygen_job_id="heygen-x",
+            origin=qa_avatar.ORIGIN_SEED,
+        ),
+        QAAnswerCache(  # 이미 완료 — in-flight 아님
+            lecture_id=lec.id, instructor_id=prof.id, question_text="q4",
+            status=qa_avatar.STATUS_READY, heygen_job_id="visionstory:c",
+            origin=qa_avatar.ORIGIN_SEED,
+        ),
+    ])
+    slot_db.commit()
+    with patch.object(settings, "INFLIGHT_RENDER_ESTIMATE_SECONDS", 100.0), \
+         patch.object(settings, "VISIONSTORY_COST_USD_PER_SECOND", 0.03):
+        # VS rendering 대표 2건 × 100초 × $0.03 = $6.00
+        assert inflight_visionstory_spend_usd(slot_db) == pytest.approx(6.0)
