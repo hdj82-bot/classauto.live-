@@ -2343,6 +2343,137 @@ function StatCard({ card, dataKey }: { card: StatCardData; dataKey: string }) {
   );
 }
 
+// ── 학습 참여 분석 (채팅 질문 · Q&A 영상 클릭 · 인터스티셜 퀴즈) ───────────────
+// 把字句 강의 시연용 샘플. 실제 구현 시 채팅 로그/영상 클릭 이벤트/퀴즈 응답 집계로 교체.
+const ENGAGE_CHAT = [
+  { topic: "把字句 vs 被字句 비교", count: 23, sample: "把자문이랑 被자문은 언제 구분해서 쓰나요?" },
+  { topic: "어순(목적어 전치)", count: 9, sample: "把 쓰면 목적어가 동사 앞에 오는 이유가 뭔가요?" },
+  { topic: "보어 위치", count: 7, sample: "결과보어는 동사 뒤 어디에 붙나요?" },
+  { topic: "把 사용 조건", count: 5, sample: "把 뒤에는 꼭 특정한 대상만 오나요?" },
+  { topic: "부정문 不/没 위치", count: 3, sample: "把자문 부정할 때 不은 어디에 넣어요?" },
+];
+const ENGAGE_VIDEOS = [
+  { title: "把字句 vs 被字句 한 번에 정리", clicks: 76 },
+  { title: "把자문 쓰는 조건 3가지", clicks: 53 },
+  { title: "기본 어순 SVO 복습", clicks: 41 },
+  { title: "보어의 종류와 위치", clicks: 34 },
+  { title: "흔한 어순 실수 모음", clicks: 28 },
+];
+const ENGAGE_QUIZ = [
+  { label: "把자문 어순 고르기", pos: 25, reached: 47, rate: 72, hard: false },
+  { label: "문장 성분 식별", pos: 55, reached: 43, rate: 64, hard: false },
+  { label: "把자문 오류 찾기", pos: 80, reached: 35, rate: 49, hard: true },
+];
+
+function EngagementSection() {
+  const chatMax = Math.max(...ENGAGE_CHAT.map((c) => c.count));
+  const vidMax = Math.max(...ENGAGE_VIDEOS.map((v) => v.clicks));
+  const rateColor = (r: number) =>
+    r >= 70 ? "var(--an-success)" : r >= 55 ? "var(--an-gold-on-light)" : "var(--an-warning)";
+  return (
+    <section id="an-sec-engagement">
+      <div className="section-head">
+        <div className="section-head-left">
+          <h2 className="section-title">학습 참여 분석</h2>
+          <span className="section-sub">채팅 질문 · Q&amp;A 영상 클릭 · 인터스티셜 퀴즈 정답률</span>
+        </div>
+      </div>
+
+      <section className="chart-row">
+        <div className="chart-card">
+          <div className="chart-head">
+            <div className="chart-title-block">
+              <div className="chart-title">채팅 질문 클러스터</div>
+              <div className="chart-sub">영상 중 던진 질문 47건을 주제별로 묶음 · 가장 많은 묶음이 차주 재설명 1순위</div>
+            </div>
+          </div>
+          <div className="en-bars">
+            {ENGAGE_CHAT.map((c, i) => (
+              <div className="en-bar-row" key={i}>
+                <div className="en-bar-head">
+                  <span className="en-bar-label">{c.topic}</span>
+                  <span className="en-bar-val">{c.count}건</span>
+                </div>
+                <div className="en-track">
+                  <div className="en-fill" style={{ width: `${(c.count / chatMax) * 100}%` }} />
+                </div>
+                <div className="en-samp">&ldquo;{c.sample}&rdquo;</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="chart-card">
+          <div className="chart-head">
+            <div className="chart-title-block">
+              <div className="chart-title">Q&amp;A 영상 클릭 분포</div>
+              <div className="chart-sub">미리 제작한 답변 영상 중 많이 본 순서 · 수요가 높은 주제</div>
+            </div>
+          </div>
+          <div className="en-bars">
+            {ENGAGE_VIDEOS.map((v, i) => (
+              <div className="en-bar-row" key={i}>
+                <div className="en-bar-head">
+                  <span className="en-bar-label">
+                    {i === 0 ? "★ " : ""}
+                    {v.title}
+                  </span>
+                  <span className="en-bar-val">{v.clicks}회</span>
+                </div>
+                <div className="en-track">
+                  <div
+                    className={"en-fill" + (i === 0 ? " top" : "")}
+                    style={{ width: `${(v.clicks / vidMax) * 100}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <div className="chart-card" style={{ marginTop: 16 }}>
+        <div className="chart-head">
+          <div className="chart-title-block">
+            <div className="chart-title">인터스티셜 퀴즈 — 영상 중 3문항 정답/오답률</div>
+            <div className="chart-sub">
+              초록=정답 · 빨강=오답 · 도달 인원은 해당 지점까지 시청한 학생 수(이탈할수록 뒤 문항 도달↓)
+            </div>
+          </div>
+        </div>
+        <div className="en-quiz-row">
+          {ENGAGE_QUIZ.map((q, i) => {
+            const correct = Math.round((q.reached * q.rate) / 100);
+            return (
+              <div className="en-quiz" key={i}>
+                <div className="en-quiz-h">
+                  Q{i + 1}. {q.label}
+                  {q.hard && <span className="en-hard">난이도↑</span>}
+                </div>
+                <div className="en-quiz-pos">
+                  영상 {q.pos}% 지점 · 도달 {q.reached}/47명
+                </div>
+                <div className="en-quiz-track">
+                  <div className="en-quiz-c" style={{ width: `${q.rate}%` }}>
+                    {correct}
+                  </div>
+                  <div className="en-quiz-i" style={{ width: `${100 - q.rate}%` }}>
+                    {q.reached - correct}
+                  </div>
+                </div>
+                <div className="en-quiz-r">
+                  정답률 <strong style={{ color: rateColor(q.rate) }}>{q.rate}%</strong> · 오답{" "}
+                  {q.reached - correct}명
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function AnalyticsPrototype() {
   const [course, setCourse] = useState<Course>(COURSES[0]);
   const [period, setPeriod] = useState<Period>(PERIODS[2]);
@@ -2457,6 +2588,8 @@ export default function AnalyticsPrototype() {
             <StudentCardsSection students={all.students} />
 
             <HeatmapSection students={all.students} chapters={all.chapters} chapterAgg={all.chapterAgg} />
+
+            <EngagementSection />
 
             <BriefingSection briefing={all.briefing} />
 
