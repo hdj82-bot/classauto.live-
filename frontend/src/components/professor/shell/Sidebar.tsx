@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { canSeeAnalyticsPro } from "@/lib/analyticsProAccess";
+import { canManageInvites } from "@/lib/ownerAccess";
 import { fetchProfessorData } from "@/lib/professorData";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
@@ -201,6 +202,27 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    // 계정주(운영자) 전용 — 베타테스터 초대 링크 발급/관리. canManageInvites 로 노출 제어.
+    href: "/owner/invites",
+    labelKey: "nav.betaInvites",
+    iconId: "ic-invite",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="url(#nav-grad-electric)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M4 4h16v12H5.2L4 17.2V4z" />
+        <path d="M8 9h8" />
+        <path d="M8 12h5" />
+      </svg>
+    ),
+  },
+  {
     href: "/professor/learners",
     labelKey: "nav.learners",
     iconId: "ic-learners",
@@ -251,13 +273,15 @@ export default function ProfessorSidebar() {
   // "강의 영상 생성" 클릭 → 진행 중 강의 해석 중 표시(중복 클릭 방지 + 시각 피드백).
   const [studioResolving, setStudioResolving] = useState(false);
 
-  // 학습 분석 PRO(실기능)는 계정주 2계정에만 노출 — 베타테스터에겐 메뉴를 숨긴다.
-  // 실제 접근 차단은 백엔드 require_analytics_pro 가 담당(이 필터는 진입점 노출 제어).
-  const visibleNavItems = navItems.filter(
-    (it) =>
-      it.href !== "/professor/analytics-pro" ||
-      canSeeAnalyticsPro(auth?.user?.email),
-  );
+  // 학습 분석 PRO(실기능)는 계정주 2계정에만, 베타 초대는 계정주(ADMIN_EMAILS)에게만
+  // 노출 — 베타테스터에겐 두 메뉴를 숨긴다. 실제 접근 차단은 백엔드(require_analytics_pro·
+  // require_owner)가 담당하며 이 필터는 진입점 노출 제어다.
+  const email = auth?.user?.email;
+  const visibleNavItems = navItems.filter((it) => {
+    if (it.href === "/professor/analytics-pro") return canSeeAnalyticsPro(email);
+    if (it.href === "/owner/invites") return canManageInvites(email);
+    return true;
+  });
 
   const isActive = (href: string) =>
     pathname === href || pathname?.startsWith(href + "/");
