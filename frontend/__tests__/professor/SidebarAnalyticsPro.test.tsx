@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({ email: null as string | null }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/professor/dashboard",
+  useSearchParams: () => new URLSearchParams(),
   useRouter: () => ({
     push: vi.fn(),
     back: vi.fn(),
