@@ -9,7 +9,6 @@ interface Props {
   /** 환영 메시지에 들어갈 교수자 이름 (없으면 익명형 카피) */
   professorName?: string;
   progress: OnboardingProgress;
-  onOpenProfileModal: () => void;
   /** 라우팅 / 행동 트리거 */
   onCreateLecture: () => void;
 }
@@ -21,7 +20,8 @@ interface Props {
  * + §12 (교수자 화면 라이트 베이스 + 골드 포인트, 마스코트 미사용).
  *
  * 단계별 CTA 분기:
- *   - profile : 학과·소속 모달 오픈
+ *   - profile : 가입(OAuth) 시 학교·학과를 이미 입력하므로 항상 완료 상태 →
+ *     체크리스트에 CTA 가 노출되지 않아 여기로 들어오지 않는다.
  *   - course / upload / script : `/professor/lecture/new` 로 이동
  *     (한 페이지에서 강좌 자동 생성 + 강의 생성 + PPT 업로드 + 스크립트 검토 진입)
  *   - share : 공개 처리는 강의 상세 화면 — 우선은 동일 라우트로 안내
@@ -29,17 +29,12 @@ interface Props {
 export default function EmptyDashboard({
   professorName,
   progress,
-  onOpenProfileModal,
   onCreateLecture,
 }: Props) {
   const { t } = useProfessorI18n();
   const router = useRouter();
 
-  const handleStepAction = (stepId: OnboardingStepId) => {
-    if (stepId === "profile") {
-      onOpenProfileModal();
-      return;
-    }
+  const handleStepAction = (_stepId: OnboardingStepId) => {
     onCreateLecture();
   };
 

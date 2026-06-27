@@ -12,14 +12,10 @@ import {
 import { useI18n } from "@/contexts/I18nContext";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import EmptyDashboard from "@/components/professor/EmptyDashboard";
-import InstructorProfileModal, {
-  type InstructorProfileDraft,
-} from "@/components/professor/InstructorProfileModal";
 import {
   computeOnboardingProgress,
   type OnboardingSignals,
 } from "@/components/professor/onboardingSteps";
-import { useProfessorI18n } from "@/components/professor/useProfessorI18n";
 import {
   StatGrid,
   Donut,
@@ -105,12 +101,6 @@ export default function ProfessorDashboardPage() {
   );
   const [error, setError] = useState<string | null>(null);
 
-  // 학과·소속 정보 — 모달 제출 시 채워짐.
-  const [profileDraft, setProfileDraft] =
-    useState<InstructorProfileDraft | null>(null);
-  const [profileModalOpen, setProfileModalOpen] = useState(false);
-  const [autoOpenChecked, setAutoOpenChecked] = useState(false);
-
   useEffect(() => {
     let cancelled = false;
     // 캐시가 없을 때만 스피너 — 재방문 시 캐시로 즉시 렌더.
@@ -135,18 +125,13 @@ export default function ProfessorDashboardPage() {
     };
   }, [t]);
 
-  useEffect(() => {
-    if (loading) return;
-    if (autoOpenChecked) return;
-    setAutoOpenChecked(true);
-    if (lectures.length === 0 && !profileDraft) {
-      setProfileModalOpen(true);
-    }
-  }, [loading, lectures.length, profileDraft, autoOpenChecked]);
-
   const signals: OnboardingSignals = useMemo(
     () => ({
-      profileSaved: profileDraft !== null,
+      // 교수자는 Google OAuth 가입 시 /auth/complete-profile 에서 학교·학과를
+      // 필수로 입력해 user.school/department 가 이미 채워진 채로 대시보드에
+      // 도착한다. 따라서 이 단계는 항상 완료. (대시보드에서 같은 정보를 다시
+      // 묻던 모달은 제거 — 영속성이 없어 매 새로고침마다 반복되던 버그.)
+      profileSaved: true,
       courseCount: courses.length,
       lectureCount: lectures.length,
       lectureWithRenderCount: lectures.filter(
@@ -154,7 +139,7 @@ export default function ProfessorDashboardPage() {
       ).length,
       publishedLectureCount: lectures.filter((l) => l.is_published).length,
     }),
-    [profileDraft, courses.length, lectures],
+    [courses.length, lectures],
   );
 
   const progress = useMemo(
@@ -165,10 +150,6 @@ export default function ProfessorDashboardPage() {
   const handleCreateLecture = useCallback(() => {
     router.push("/professor/studio");
   }, [router]);
-
-  const handleProfileSaved = useCallback((profile: InstructorProfileDraft) => {
-    setProfileDraft(profile);
-  }, []);
 
   const [hub, setHub] = useState<DashboardHubData | null>(
     () => getCachedHub<DashboardHubData>(hubCacheKey(lectures)),
@@ -330,13 +311,6 @@ export default function ProfessorDashboardPage() {
         <EmptyDashboard
           progress={progress}
           onCreateLecture={handleCreateLecture}
-          onOpenProfileModal={() => setProfileModalOpen(true)}
-        />
-        <InstructorProfileModal
-          open={profileModalOpen}
-          onClose={() => setProfileModalOpen(false)}
-          onSaved={handleProfileSaved}
-          initial={profileDraft ?? undefined}
         />
       </PageContainer>
     );
@@ -346,12 +320,7 @@ export default function ProfessorDashboardPage() {
     <DashboardHomeView
       hub={hub}
       onCreateLecture={handleCreateLecture}
-      onOpenProfile={() => setProfileModalOpen(true)}
       onJumpToInbox={() => router.push("/professor/inbox")}
-      profileModalOpen={profileModalOpen}
-      onCloseProfileModal={() => setProfileModalOpen(false)}
-      onProfileSaved={handleProfileSaved}
-      profileDraft={profileDraft}
     />
   );
 }
@@ -365,39 +334,20 @@ export default function ProfessorDashboardPage() {
 function DashboardHomeView({
   hub,
   onCreateLecture,
-  onOpenProfile,
   onJumpToInbox,
-  profileModalOpen,
-  onCloseProfileModal,
-  onProfileSaved,
-  profileDraft,
 }: {
   hub: DashboardHubData | null;
   onCreateLecture: () => void;
-  onOpenProfile: () => void;
   onJumpToInbox: () => void;
-  profileModalOpen: boolean;
-  onCloseProfileModal: () => void;
-  onProfileSaved: (profile: InstructorProfileDraft) => void;
-  profileDraft: InstructorProfileDraft | null;
 }) {
   const { t } = useI18n();
-  const { t: tp } = useProfessorI18n();
   const { t: th } = useDashboardHubI18n();
-
-  const eyebrow = profileDraft?.school
-    ? `${profileDraft.school}${profileDraft.department ? " · " + profileDraft.department : ""}`
-    : "ClassAuto";
-
-  const titleNode = profileDraft?.school
-    ? th("greetingNamed", { name: profileDraft.school })
-    : th("greetingDefault");
 
   return (
     <PageContainer>
       <PageHeader
-        eyebrow={eyebrow}
-        title={titleNode}
+        eyebrow="ClassAuto"
+        title={th("greetingDefault")}
         subtitle={
           hub
             ? th("summaryWeek", {
@@ -408,22 +358,6 @@ function DashboardHomeView({
         }
         actions={
           <>
-            <button
-              type="button"
-              onClick={onOpenProfile}
-              className="hidden sm:inline-flex items-center rounded-lg motion-safe:transition"
-              style={{
-                padding: "8px 14px",
-                fontSize: 12.5,
-                fontWeight: 500,
-                color: "var(--text-muted)",
-                background: "transparent",
-                border: "1px solid var(--line)",
-                cursor: "pointer",
-              }}
-            >
-              {tp("openProfile")}
-            </button>
             <PrimaryButton
               variant="primary"
               size="md"
@@ -520,13 +454,6 @@ function DashboardHomeView({
           {hub && <ActivityFeed activity={hub.activity} />}
         </section>
       </div>
-
-      <InstructorProfileModal
-        open={profileModalOpen}
-        onClose={onCloseProfileModal}
-        onSaved={onProfileSaved}
-        initial={profileDraft ?? undefined}
-      />
     </PageContainer>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import ProfessorDashboardPage from "@/app/professor/dashboard/page";
 import { I18nProvider } from "@/contexts/I18nContext";
@@ -54,7 +54,10 @@ describe("ProfessorDashboardPage", () => {
     expect(screen.getByTestId("professor-empty-primary-cta")).toBeTruthy();
   });
 
-  it("automatically opens the profile modal on first empty-dashboard render", async () => {
+  it("treats the profile step as already done and never auto-opens a profile modal", async () => {
+    // 교수자는 OAuth 가입 시 학교·학과를 입력하므로 대시보드 도착 시점에
+    // user.school/department 가 이미 채워져 있다 → profile 단계는 자동 완료이고,
+    // 같은 정보를 다시 묻는 모달은 더 이상 뜨지 않는다.
     apiGet.mockImplementation(async (url: string) => {
       if (url === "/api/courses") return { data: [] };
       return { data: [] };
@@ -63,8 +66,21 @@ describe("ProfessorDashboardPage", () => {
     renderPage(<ProfessorDashboardPage />);
 
     await waitFor(() =>
-      expect(screen.getByTestId("professor-profile-form")).toBeTruthy(),
+      expect(screen.getByTestId("professor-empty-dashboard")).toBeTruthy(),
     );
+    // profile 단계는 이미 완료, course 가 다음 active 단계
+    expect(
+      screen
+        .getByTestId("professor-onboarding-step-profile")
+        .getAttribute("data-status"),
+    ).toBe("done");
+    expect(
+      screen
+        .getByTestId("professor-onboarding-step-course")
+        .getAttribute("data-status"),
+    ).toBe("active");
+    // 학과·소속 입력 모달은 자동으로 뜨지 않는다
+    expect(screen.queryByTestId("professor-profile-form")).toBeNull();
   });
 
   it("falls back to the regular lecture grid when at least one lecture exists", async () => {
@@ -106,41 +122,4 @@ describe("ProfessorDashboardPage", () => {
     expect(screen.queryByTestId("professor-profile-form")).toBeNull();
   });
 
-  it("ticks the profile step once the modal is submitted with valid values", async () => {
-    apiGet.mockImplementation(async (url: string) => {
-      if (url === "/api/courses") return { data: [] };
-      return { data: [] };
-    });
-
-    renderPage(<ProfessorDashboardPage />);
-
-    await waitFor(() =>
-      expect(screen.getByTestId("professor-profile-form")).toBeTruthy(),
-    );
-
-    fireEvent.change(screen.getByTestId("professor-profile-school"), {
-      target: { value: "경기대학교" },
-    });
-    fireEvent.change(screen.getByTestId("professor-profile-department"), {
-      target: { value: "중어중문학과" },
-    });
-
-    await act(async () => {
-      fireEvent.submit(screen.getByTestId("professor-profile-form"));
-    });
-
-    await waitFor(() =>
-      expect(
-        screen
-          .getByTestId("professor-onboarding-step-profile")
-          .getAttribute("data-status"),
-      ).toBe("done"),
-    );
-    // course 가 다음 active 단계로 승격된다
-    expect(
-      screen
-        .getByTestId("professor-onboarding-step-course")
-        .getAttribute("data-status"),
-    ).toBe("active");
-  });
 });
