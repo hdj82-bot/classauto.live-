@@ -97,9 +97,10 @@ class Settings(BaseSettings):
     ANALYTICS_REVIEW_MAX_TOKENS: int = 2000
     # 학습 분석 PRO 전역 킬스위치. False 면 운영자(ADMIN_EMAILS) 외 전원 차단(인시던트).
     ANALYTICS_PRO_ENABLED: bool = True
-    # 실기능을 노출할 명시 허용 이메일(쉼표 구분). 현재는 계정주 2계정에만 노출하고
-    # 베타테스터에게는 숨긴다. classauto101@gmail.com 은 ADMIN_EMAILS 라 자동 포함되므로
-    # 여기엔 hdj82@kyonggi.ac.kr 만 둔다. env 로 추가 가능.
+    # 실기능을 노출할 명시 허용 이메일(쉼표 구분) — ADMIN_EMAILS(계정주)는 자동
+    # 포함되므로, 여기엔 '관리자가 아닌' 베타테스터만 추가하면 된다. 계정주 2계정
+    # (classauto101·hdj82)은 모두 ADMIN_EMAILS 라 이 목록과 무관하게 통과한다.
+    # (hdj82 는 ADMIN_EMAILS 편입으로 이제 중복이나, 명시 보존; env 로 추가 가능.)
     ANALYTICS_PRO_ALLOWED_EMAILS: str = "hdj82@kyonggi.ac.kr"
     # 정식 베타 오픈 스위치. True 로 켜면 운영자 콘솔 토글(analytics_pro_enabled)이
     # 베타테스터에게도 작동한다. 기본 False = 토글이 켜져 있어도 베타테스터에겐 비노출.
@@ -441,9 +442,12 @@ class Settings(BaseSettings):
     # ── 베타 초대제 (교수자 가입 게이트) ─────────────────────────
     # 계정주(운영자) 이메일 목록 — 교수자 초대 링크를 발급할 수 있는 사람.
     # 쉼표 구분. 이 목록의 이메일을 가진 로그인 사용자는 role 과 무관하게
-    # 초대 발급 화면(/owner/invites)과 /api/owner/invites/* 를 쓸 수 있다.
+    # 초대 발급 화면(/owner/invites)·/api/owner/invites/* 와 **관리자 콘솔**
+    # (require_admin: 베타테스터 사용현황·비용·피드백 등)을 모두 쓸 수 있다.
+    # role 을 admin 으로 바꾸지 않으므로 계정주가 교수자 계정이어도 강의 제작·
+    # 학습분석 PRO(require_professor 의존) 가 그대로 동작한다.
     # (베타 동안 신규 교수자 가입은 이 사람이 보낸 초대 링크로만 가능.)
-    ADMIN_EMAILS: str = "classauto101@gmail.com"
+    ADMIN_EMAILS: str = "classauto101@gmail.com,hdj82@kyonggi.ac.kr"
     # 교수자 초대 링크 유효기간(일). 0 이면 무기한.
     PROFESSOR_INVITE_TTL_DAYS: int = 14
 

@@ -40,6 +40,34 @@ async def test_get_stats_professor_forbidden(client, professor):
 
 
 @pytest.mark.asyncio
+async def test_require_admin_accepts_admin_email_without_role(professor):
+    """운영자 이메일(ADMIN_EMAILS)은 role 이 professor 여도 콘솔에 통과한다.
+
+    계정주(예: hdj82@kyonggi.ac.kr)가 교수자 계정 그대로 관리자 콘솔을 쓰게 하기 위한
+    회귀 — role 을 admin 으로 바꾸면 require_professor 의존 기능이 깨지므로, 운영자
+    식별은 ADMIN_EMAILS 로 한다.
+    """
+    from app.api.deps import require_admin
+    from app.core.config import settings
+
+    professor.email = next(iter(settings.admin_email_set))
+    assert professor.role.value == "professor"
+    assert await require_admin(user=professor) is professor
+
+
+@pytest.mark.asyncio
+async def test_require_admin_rejects_plain_professor(professor):
+    """ADMIN_EMAILS 에 없는 일반 교수자는 콘솔에서 거부된다(403)."""
+    from fastapi import HTTPException
+
+    from app.api.deps import require_admin
+
+    with pytest.raises(HTTPException) as exc:
+        await require_admin(user=professor)
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_get_stats_student_forbidden(client, student):
     resp = await client.get("/api/v1/admin/stats", headers=make_auth_header(student))
     assert resp.status_code == 403
