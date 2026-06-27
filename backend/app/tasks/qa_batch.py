@@ -784,6 +784,20 @@ def _seed_still_rendering(db, lecture_id) -> int:
     ).count()
 
 
+def qa_avatar_stale(lecture) -> bool:
+    """강의의 현재 아바타/음성이 마지막 Q&A 렌더 때(qa_rendered_*)와 다른지.
+
+    True 면 이미 렌더된(ready) 사전질문 클립이 옛 아바타/음성으로 남아 있어 '낡은'
+    상태다. 강의 자료 점검(rerender-plan)·_render_seed_questions 가 이를 보고 ready
+    클립을 pending 으로 되돌려 새 아바타로 다시 만든다.
+    """
+    if lecture is None:
+        return False
+    return (lecture.avatar_id or None) != (lecture.qa_rendered_avatar_id or None) or (
+        (lecture.voice_id or None) != (lecture.qa_rendered_voice_id or None)
+    )
+
+
 def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
     """교수자 사전 질문(pending)을 RAG로 답변 생성 → 렌더 제출. 제출/실패 수 반환.
 
@@ -802,6 +816,27 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         release_avatar_render_slot,
     )
     from app.services.pipeline.qa import generate_seed_answer
+
+    # 아바타·음성이 마지막 렌더 때와 다르면(stale), 이미 렌더된(ready)·진행 중(rendering)
+    # 사전질문 클립도 pending 으로 되돌려 새 아바타/음성으로 다시 만든다. 안 그러면
+    # '다시 제작'이 옛 아바타로 만든 ready 클립을 "변경 없음"으로 건너뛴다(2026-06-15 보고).
+    _lecture0 = db.get(Lecture, lecture_id)
+    if qa_avatar_stale(_lecture0):
+        stale_rows = db.query(QAAnswerCache).filter(
+            QAAnswerCache.lecture_id == lecture_id,
+            QAAnswerCache.origin == qa_avatar.ORIGIN_SEED,
+            QAAnswerCache.status.in_(
+                [qa_avatar.STATUS_READY, qa_avatar.STATUS_RENDERING]
+            ),
+        ).all()
+        for r in stale_rows:
+            r.status = qa_avatar.STATUS_PENDING
+            r.s3_video_url = None
+            r.heygen_job_id = None
+            r.cluster_key = None
+            r.error_message = None
+        if stale_rows:
+            db.commit()
 
     # pending + **failed** 를 함께 가져온다. 실패한 질문도 "다시 제작" 시 재시도해야
     # 하는데, 종전엔 pending 만 조회해 한 번 failed 가 되면 영영 재시도되지 않았다
@@ -1006,6 +1041,13 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         # 않는다(스펙 13 §C-2). 한 건이라도 제출됐으면 선점을 유지(=이번 제작 1회 카운트).
         if submitted < 1:
             release_avatar_render_slot(db, lecture_id, instructor_id)
+
+    # 이번에 렌더(시도)한 아바타/음성을 강의에 기록 — 다음 '다시 제작' 점검이 변경
+    # 여부를 정확히 판단한다(현재 avatar/voice 와 비교해 stale 감지). _render_seed_questions
+    # 는 항상 현재 강의 아바타로 렌더하므로 출처 = 현재 강의 avatar/voice.
+    if lecture is not None:
+        lecture.qa_rendered_avatar_id = lecture.avatar_id
+        lecture.qa_rendered_voice_id = lecture.voice_id
 
     db.commit()
     result = {"submitted": submitted, "failed": failed}

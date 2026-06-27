@@ -215,6 +215,9 @@ export default function StudioWizardPage() {
   // 우측 "예상 질문" 패널의 사전 질문·답변 목록. 로드 시 GET, 변경 시 디바운스
   // PUT(전량 교체), 생성 직전 flush. 백엔드 미배포/404 시 빈 목록으로 degrade.
   const [seedQuestions, setSeedQuestions] = useState<SeedQuestionDraft[]>([]);
+  // 현재 강의 아바타/음성이 이미 렌더된 Q&A 클립과 달라 '다시 제작' 시 새로 만들어야
+  // 하는지(백엔드 점검). '다시 제작' 점검창이 ready 클립도 재작업 대상으로 표시한다.
+  const [qaAvatarStale, setQaAvatarStale] = useState(false);
   // "AI 질문 승인 — 아바타 미리 생성" 클릭 후 렌더가 끝날 때까지 true. 렌더는 celery
   // 비동기라 클립이 pending→rendering→ready 로 가는데, 폴링을 'rendering' 에만 걸면
   // pending 구간에서 폴링이 멈춰 버튼이 idle 로 되돌아가 "실패했나?" 오해를 준다.
@@ -410,8 +413,10 @@ export default function StudioWizardPage() {
     if (!lectureId) return;
     let cancelled = false;
     (async () => {
-      const { seedQuestions: loaded } = await getSeedQuestions(lectureId);
+      const { seedQuestions: loaded, qaAvatarStale: stale } =
+        await getSeedQuestions(lectureId);
       if (cancelled) return;
+      setQaAvatarStale(stale);
       if (loaded.length > 0) {
         setSeedQuestions(
           loaded.map((q) => ({
@@ -881,11 +886,13 @@ export default function StudioWizardPage() {
   // 영상 생성 직후 + 렌더 진척 폴링에서 사용. 편집 중 디바운스 저장이 대기 중이면
   // 건너뛰어(seedSaveRef) 입력 값 손실을 막는다.
   const reloadSeedQuestions = useCallback(async (): Promise<
-    SeedQuestionDraft[] | null
+    { questions: SeedQuestionDraft[]; stale: boolean } | null
   > => {
     if (!lectureId || seedSaveRef.current) return null;
     try {
-      const { seedQuestions: fresh } = await getSeedQuestions(lectureId);
+      const { seedQuestions: fresh, qaAvatarStale: stale } =
+        await getSeedQuestions(lectureId);
+      setQaAvatarStale(stale);
       const mapped: SeedQuestionDraft[] = fresh.map((q) => ({
         id: q.id,
         question: q.question,
@@ -898,7 +905,8 @@ export default function StudioWizardPage() {
       setSeedQuestions(mapped);
       // 호출부가 서버 기준 최신 상태를 즉시 쓸 수 있게 반환한다('다시 제작' 점검에서
       // setState 의 비동기 갱신을 기다리지 않고 ②③ 줄을 정확히 만들기 위함).
-      return mapped;
+      // stale(아바타 변경 여부)도 같이 돌려줘 ready 클립 재제작 판정에 쓴다.
+      return { questions: mapped, stale };
     } catch {
       /* 미배포/네트워크 — 다음 주기에 재시도 */
       return null;
@@ -1062,9 +1070,8 @@ export default function StudioWizardPage() {
         // ── 실제 사전 점검(dry-run) ────────────────────────────────────────
         // 고정 문구가 아니라 **서버에 실제 변경분을 묻는다**. dry_run 은 DB 를 전혀
         // 건드리지 않고(비용 0) 어느 슬라이드가 재합성되는지·재사용 개수·현재 아바타를
-        // 돌려준다. Q&A 는 서버 기준 최신 seedQuestions 로 다시 점검한다(아바타를 바꾸면
-        // 백엔드가 seed 클립을 pending 으로 무효화하므로, 화면의 옛 상태가 아니라
-        // 새로 받아온 상태로 판정해야 정확하다).
+        // 돌려준다. Q&A 는 서버 기준 최신 seedQuestions 로 다시 점검하고, 아바타·음성이
+        // 바뀌었는지(stale)도 같은 응답에서 받아 ready 클립 재제작 여부를 판정한다.
         setInspecting(true);
         let preview: {
           changed_slide_numbers?: number[];
@@ -1073,6 +1080,7 @@ export default function StudioWizardPage() {
           avatar_name?: string | null;
         };
         let freshSeeds: SeedQuestionDraft[];
+        let stale: boolean;
         try {
           const [{ data }, reloaded] = await Promise.all([
             api.post<{
@@ -1084,7 +1092,8 @@ export default function StudioWizardPage() {
             reloadSeedQuestions(),
           ]);
           preview = data;
-          freshSeeds = reloaded ?? seedQuestions;
+          freshSeeds = reloaded?.questions ?? seedQuestions;
+          stale = reloaded?.stale ?? qaAvatarStale;
         } catch {
           toast("변경 사항 점검에 실패했어요. 잠시 후 다시 시도해 주세요.", "error");
           return;
@@ -1092,14 +1101,18 @@ export default function StudioWizardPage() {
           setInspecting(false);
         }
 
-        // 새로 만들어야 할(대기/실패) 추천 질문과 그 번호. status 가 undefined 인 신규
-        // 입력 행은 아직 저장 전이라 제외한다. 질문/답변을 고치거나(upsert→pending)
-        // 아바타를 바꾸면(seed 클립 초기화) pending 이 되므로 이 집합이 "새로 만들 Q&A".
+        // 새로 만들어야 할 추천 질문과 그 번호. status 가 undefined 인 신규 입력 행은
+        // 저장 전이라 제외. 새로 만들 조건:
+        //  - 대기/실패(pending/failed): 질문/답변을 고쳤거나 아직 안 만든 항목.
+        //  - 아바타·음성이 바뀌어(stale=백엔드 provenance 점검) '낡은' 경우: 이미 만든
+        //    (ready) 항목도 새 아바타로 다시 만들어야 한다.
         const seedToRender = freshSeeds
           .map((q, i) => ({ q, n: i + 1 }))
-          .filter(
-            ({ q }) => !!q.status && q.status !== "ready" && q.status !== "rendering",
-          );
+          .filter(({ q }) => {
+            if (!q.status || q.status === "rendering") return false;
+            if (q.status === "ready") return stale;
+            return true; // pending / failed
+          });
         const seedTotal = freshSeeds.filter((q) => !!q.status).length;
         const pendingSeed = seedToRender.length;
         const avatarName =
@@ -1119,10 +1132,12 @@ export default function StudioWizardPage() {
           ? `② Q&A 질문·답변 — ${seedTotal}개 중 ${pendingSeed}개 새로 작업` +
             ` (${seedToRender.map(({ n }) => n).join(", ")}번)`
           : "② Q&A 질문·답변 — 변경 없음(작업 없음)";
-        // ③ Q&A 아바타 — 어떤 아바타로 답변 영상을 만드는지 명시(아바타 종류 점검).
-        const avatarLine = pendingSeed
-          ? `③ Q&A 아바타 — ${avatarName} · 위 답변 영상을 이 아바타로 새로 제작`
-          : `③ Q&A 아바타 — ${avatarName} · 현재 아바타로 이미 완료`;
+        // ③ Q&A 아바타 — 아바타 종류 + 변경 여부 점검.
+        const avatarLine = stale
+          ? `③ Q&A 아바타 — ${avatarName} · 아바타가 바뀌어 답변 영상을 새로 제작`
+          : pendingSeed
+            ? `③ Q&A 아바타 — ${avatarName} · 위 답변 영상을 이 아바타로 제작`
+            : `③ Q&A 아바타 — ${avatarName} · 현재 아바타로 이미 완료`;
 
         const nothingToDo = changedSlides.length === 0 && pendingSeed === 0;
 
@@ -1305,6 +1320,7 @@ export default function StudioWizardPage() {
     t,
     persistSeedQuestions,
     seedQuestions,
+    qaAvatarStale,
     reloadSeedQuestions,
     slides,
   ]);

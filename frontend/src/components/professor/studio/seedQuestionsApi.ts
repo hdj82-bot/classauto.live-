@@ -72,6 +72,7 @@ interface SeedQuestionsWire {
   max: number;
   used_this_month: number;
   remaining: number;
+  qa_avatar_stale?: boolean;
   // C-2(스펙 13): 강의당 아바타 제작 횟수 상한. 무제한/상한 비활성이면 큰 sentinel.
   avatar_render_count?: number;
   avatar_rerender_remaining?: number;
@@ -94,6 +95,8 @@ export interface SeedQuestionsResult {
   avatarRerenderMax: number;
   /** 백엔드 미응답/404 로 빈 목록을 쓰는 중인지. */
   deferred: boolean;
+  /** 현재 아바타/음성이 이미 렌더된 클립과 달라 '다시 제작' 시 새로 만들어야 하는지. */
+  qaAvatarStale: boolean;
 }
 
 function _parse(data: SeedQuestionsWire, deferred: boolean): SeedQuestionsResult {
@@ -106,6 +109,7 @@ function _parse(data: SeedQuestionsWire, deferred: boolean): SeedQuestionsResult
     avatarRerenderRemaining: data.avatar_rerender_remaining ?? 0,
     avatarRerenderMax: data.avatar_rerender_max ?? 0,
     deferred,
+    qaAvatarStale: !!data.qa_avatar_stale,
   };
 }
 
@@ -127,6 +131,7 @@ export async function getSeedQuestions(
       avatarRerenderRemaining: 0,
       avatarRerenderMax: 0,
       deferred: true,
+      qaAvatarStale: false,
     };
   }
 }
