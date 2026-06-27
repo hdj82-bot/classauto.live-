@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { api } from "@/lib/api";
 import LightMarketingShell from "./LightMarketingShell";
 import FormField from "./FormField";
 import { useMarketingI18n } from "./useMarketingI18n";
@@ -123,9 +124,19 @@ export default function BetaApplyContent() {
 
     setSubmitting(true);
     try {
-      // No backend endpoint yet — see BACKEND_ASKS.R2W4.md. We simulate the
-      // round-trip with a small delay so the success state isn't jarring.
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // 공개 엔드포인트(비로그인) — 신청은 운영자 콘솔(/admin) 수신함으로 모인다.
+      await api.post("/api/beta-applications", {
+        name: form.name,
+        school: form.school,
+        department: form.department,
+        professor_title: form.professorTitle,
+        email: form.email,
+        subject: form.subject,
+        student_count: form.studentCount || null,
+        start_timing: form.startTiming,
+        channel: form.channel,
+        message: form.message || null,
+      });
       setSubmitted(true);
     } catch {
       setSubmitError(t("betaApply.errorBanner"));
@@ -208,13 +219,6 @@ export default function BetaApplyContent() {
       </section>
 
       <section className="max-w-2xl mx-auto px-4 sm:px-6 pb-24">
-        <div
-          className="mb-6 rounded-xl border border-[rgba(184,131,8,0.30)] bg-[rgba(255,182,39,0.06)] px-4 py-3 text-xs text-[#7A5500] leading-relaxed"
-          role="note"
-        >
-          {t("betaApply.mockNotice")}
-        </div>
-
         {submitError && (
           <div
             role="alert"
