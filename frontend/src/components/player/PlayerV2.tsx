@@ -369,7 +369,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       // 그래서 fetch 전에 refresh 쿠키로 access 토큰을 선제 복원한다(비로그인은 그냥 통과).
       await bootstrapAuth();
       try {
-        const { data } = await api.get<LectureData>(`/api/lectures/${slug}/public`);
+        const { data } = await api.get<LectureData>(`/api/lectures/${slug}/public`, {
+          timeout: 12000, // 시청 진입 핫패스 — 멈춤 상한.
+        });
         if (data.is_expired) {
           router.replace("/expired");
           return;

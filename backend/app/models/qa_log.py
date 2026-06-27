@@ -2,7 +2,17 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -11,6 +21,12 @@ from app.db.base import Base
 class QALog(Base):
     """RAG Q&A 로그."""
     __tablename__ = "qa_logs"
+
+    # 강의별 최신순 조회(대시보드 요약·Q&A 목록·내보내기)가 핫패스라
+    # (lecture_id 필터 + created_at 정렬)을 한 번에 커버하는 복합 인덱스.
+    __table_args__ = (
+        Index("ix_qa_logs_lecture_created", "lecture_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
