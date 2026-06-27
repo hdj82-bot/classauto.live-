@@ -20,7 +20,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin"]} allowOwner>
       {/* 모바일: 세로 스택(상단 가로 내비) / md+: 좌측 고정 사이드바.
           종전 w-64 고정 사이드바가 폰에서 256px 를 차지해 본문이 ~119px 로 짓눌렸다. */}
       <div className="min-h-screen flex flex-col md:flex-row bg-gray-50">
