@@ -184,3 +184,73 @@ async def test_approve_enqueues_render_seed_questions(
         "app.tasks.qa_batch.render_seed_questions",
         args=[lecture_id, prof_id],
     )
+
+
+# ── force 강제 재생성 ─────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_force_render_resets_ready_clips_before_enqueue(
+    client, professor, lecture, db, seed_sync_session
+):
+    """force=true 면 render enqueue 전에 ready 클립을 pending 으로 되돌린다(강제 재생성).
+
+    아바타를 같은 값으로 다시 골라 '다시 제작'이 변경을 못 잡을 때, 현재 아바타/음성
+    으로 답변 영상을 강제로 다시 만드는 경로(2026-06-16 사용자 결정).
+    """
+    from app.models.qa_answer_cache import QAAnswerCache
+    from app.services.pipeline import qa_avatar
+
+    lecture.pipeline_task_id = "task-1"  # 엔드포인트 통과 조건
+    row = QAAnswerCache(
+        lecture_id=lecture.id, instructor_id=professor.id,
+        question_text="질문", answer_text="답변",
+        status=qa_avatar.STATUS_READY, heygen_job_id="job-old",
+        s3_video_url="https://s3/old.mp4", origin=qa_avatar.ORIGIN_SEED,
+    )
+    db.add(row)
+    await db.flush()
+
+    with patch("app.celery_app.celery.send_task") as mock_send:
+        resp = await client.post(
+            f"/api/lectures/{lecture.id}/seed-questions/render?force=true",
+            headers=make_auth_header(professor),
+        )
+
+    assert resp.status_code == 200
+    mock_send.assert_called_once()  # 렌더 태스크는 그대로 enqueue
+    await db.refresh(row)
+    assert row.status == qa_avatar.STATUS_PENDING  # ready → pending 강제 리셋
+    assert row.heygen_job_id is None
+    assert row.s3_video_url is None
+
+
+@pytest.mark.asyncio
+async def test_render_without_force_keeps_ready_clips(
+    client, professor, lecture, db, seed_sync_session
+):
+    """force 없이는 ready 클립을 건드리지 않는다(기존 동작 — 변경분만 렌더 태스크가 판단)."""
+    from app.models.qa_answer_cache import QAAnswerCache
+    from app.services.pipeline import qa_avatar
+
+    lecture.pipeline_task_id = "task-1"
+    row = QAAnswerCache(
+        lecture_id=lecture.id, instructor_id=professor.id,
+        question_text="질문", answer_text="답변",
+        status=qa_avatar.STATUS_READY, heygen_job_id="job-keep",
+        s3_video_url="https://s3/keep.mp4", origin=qa_avatar.ORIGIN_SEED,
+    )
+    db.add(row)
+    await db.flush()
+
+    with patch("app.celery_app.celery.send_task") as mock_send:
+        resp = await client.post(
+            f"/api/lectures/{lecture.id}/seed-questions/render",
+            headers=make_auth_header(professor),
+        )
+
+    assert resp.status_code == 200
+    mock_send.assert_called_once()
+    await db.refresh(row)
+    assert row.status == qa_avatar.STATUS_READY  # 강제 아니므로 보존
+    assert row.heygen_job_id == "job-keep"

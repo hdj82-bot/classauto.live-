@@ -11,6 +11,7 @@ from app.api.deps import (
     get_current_user_optional,
     require_professor,
 )
+from app.core.config import settings
 from app.db.session import SyncSessionLocal, get_db
 from app.models.embedding import SlideEmbedding
 from app.models.user import User
@@ -29,6 +30,7 @@ from app.schemas.seed_question import (
     GeneratedSeedQuestion,
     GenerateSeedAnswerRequest,
     GenerateSeedAnswerResponse,
+    GenerateSeedQuestionsRequest,
     GenerateSeedQuestionsResponse,
     SeedQuestionItem,
     SeedQuestionsRequest,
@@ -235,12 +237,18 @@ async def get_lecture_video(
 # 세션으로 하고, seed 작업은 별도 동기 세션에서 실행한다(qa.py ask_question 패턴).
 
 
-def _seed_questions_response(sdb, instructor_id, rows) -> SeedQuestionsResponse:
-    """현재 사전 질문 행 + 이번 달 렌더 한도/사용량을 응답으로 투영.
+def _seed_questions_response(
+    sdb, instructor_id, rows, lecture_id=None
+) -> SeedQuestionsResponse:
+    """현재 사전 질문 행 + 이번 달 렌더 한도/사용량 + 강의당 제작 횟수를 응답으로 투영.
 
     answer 는 교수자가 입력한 사전 대답(없으면 ""=RAG 자동 생성 예정).
     preview_url 은 ready 인 행의 클립 presigned URL(점검용 재생).
+    ``lecture_id`` 가 주어지면(없으면 rows 에서 추론) 강의당 아바타 제작 횟수(C-2)를
+    함께 투영해 프론트가 "재제작 N회 남음"·차단 안내에 쓰게 한다.
     """
+    if lecture_id is None and rows:
+        lecture_id = rows[0].lecture_id
     items = [
         SeedQuestionItem(
             id=str(r.id),
@@ -255,11 +263,27 @@ def _seed_questions_response(sdb, instructor_id, rows) -> SeedQuestionsResponse:
         )
         for r in rows
     ]
+    from app.services.pipeline.budget import (  # noqa: PLC0415
+        avatar_render_count,
+        avatar_rerender_remaining,
+    )
+
+    rerender_count = (
+        avatar_render_count(sdb, lecture_id) if lecture_id is not None else 0
+    )
+    rerender_remaining = (
+        avatar_rerender_remaining(sdb, lecture_id, instructor_id)
+        if lecture_id is not None
+        else 0
+    )
     return SeedQuestionsResponse(
         questions=items,
         max=qa_avatar.SEED_QUESTIONS_MAX,
         used_this_month=qa_renders_used_this_month(sdb, instructor_id),
         remaining=qa_render_quota_remaining(sdb, instructor_id),
+        avatar_render_count=rerender_count,
+        avatar_rerender_remaining=rerender_remaining,
+        avatar_rerender_max=settings.AVATAR_RERENDER_MAX_PER_LECTURE,
     )
 
 
@@ -284,7 +308,9 @@ async def get_seed_questions(
     def _work():
         with SyncSessionLocal() as sdb:
             rows = qa_avatar.list_seed_questions(sdb, lecture_id)
-            resp = _seed_questions_response(sdb, instructor_id, rows)
+            resp = _seed_questions_response(
+                sdb, instructor_id, rows, lecture_id
+            )
             # 아바타·음성이 마지막 Q&A 렌더 때(lecture.qa_rendered_*)와 다르고, 이미
             # 렌더된(ready) 클립이 있으면 '낡은' 상태 — '다시 제작' 점검이 이를 알린다.
             from app.models.lecture import Lecture as _Lecture  # noqa: PLC0415
@@ -331,7 +357,7 @@ async def put_seed_questions(
                 sdb, lecture_id, instructor_id, items
             )
             sdb.commit()
-            return _seed_questions_response(sdb, instructor_id, rows)
+            return _seed_questions_response(sdb, instructor_id, rows, lecture_id)
 
     return await loop.run_in_executor(None, _work)
 
@@ -386,6 +412,7 @@ async def generate_seed_answer_endpoint(
 )
 async def generate_seed_questions_endpoint(
     lecture_id: uuid.UUID,
+    payload: GenerateSeedQuestionsRequest = GenerateSeedQuestionsRequest(),
     db: AsyncSession = Depends(get_db),
     professor: User = Depends(require_professor),
 ):
@@ -394,6 +421,9 @@ async def generate_seed_questions_endpoint(
     "질문과 답변 자동 생성" 버튼이 호출 → 교수자가 받은 질문·답변을 검토·수정 후
     PUT 으로 저장한다(여기서는 저장하지 않음). 발화 언어(`lecture.voice_lang`)로
     작성되므로 영어 강의면 질문·답변도 영어. 비소유 404, 파이프라인 미처리면 400.
+
+    ``payload.exclude``: 이미 다른 카드에 있는 질문들. 카드별 생성 시 그 주제를 피해
+    강의의 또 다른 핵심을 뽑게 해, 같은 주제(예: 어순)가 여러 카드에 반복되는 것을 막는다.
     """
     from app.models.lecture import Lecture  # noqa: PLC0415
     from app.services.pipeline.qa import generate_seed_questions  # noqa: PLC0415
@@ -408,11 +438,14 @@ async def generate_seed_questions_endpoint(
             detail="강의 파이프라인이 아직 처리되지 않았습니다.",
         )
     voice_lang = (lecture.voice_lang if lecture else None) or "ko"
+    exclude = list(payload.exclude)
     loop = asyncio.get_event_loop()
 
     def _work() -> GenerateSeedQuestionsResponse:
         with SyncSessionLocal() as sdb:
-            pairs = generate_seed_questions(sdb, task_id, n=3, lang=voice_lang)
+            pairs = generate_seed_questions(
+                sdb, task_id, n=3, lang=voice_lang, exclude=exclude
+            )
             return GenerateSeedQuestionsResponse(
                 questions=[GeneratedSeedQuestion(**p) for p in pairs]
             )
@@ -427,6 +460,7 @@ async def generate_seed_questions_endpoint(
 )
 async def render_seed_questions_endpoint(
     lecture_id: uuid.UUID,
+    force: bool = False,
     db: AsyncSession = Depends(get_db),
     professor: User = Depends(require_professor),
 ):
@@ -434,6 +468,10 @@ async def render_seed_questions_endpoint(
 
     렌더는 비동기(celery)로 진행되며, 진척은 GET 폴링으로 확인한다. 저장(PUT)은
     호출 직전에 끝낸 상태를 가정한다. 비소유 404, 파이프라인 미처리면 400.
+
+    ``force=true`` 면 이미 완성(ready)된 답변 클립도 pending 으로 되돌려 **현재 아바타/
+    음성으로 강제 재생성**한다. 아바타를 같은 값으로 다시 골라(_reset_seed_renders 가
+    안 불려 변경 감지가 안 됨) 답변 영상이 옛 아바타로 남았을 때 빠져나오는 경로다.
     """
     from app.celery_app import celery  # noqa: PLC0415
     from app.models.lecture import Lecture  # noqa: PLC0415
@@ -447,6 +485,36 @@ async def render_seed_questions_endpoint(
             detail="강의 파이프라인이 아직 처리되지 않았습니다.",
         )
 
+    # ── C-2: 강의당 아바타 제작 횟수 상한 (docs/planning/13 §C-2) ──
+    # 면제 계정(QA_AVATAR_UNLIMITED_EMAILS)·상한 비활성(<=0)은 통과. 첫 제작(count 0)은
+    # 항상 통과하고, 누적 제작 패스가 상한에 도달하면 재제작을 4xx 로 막는다. 카운트는
+    # 렌더 태스크(qa_batch._render_seed_questions)가 패스 성공 제출 시 +1 한다(여기서
+    # 올리지 않음 — 제출 실패 패스를 소모하지 않기 위해).
+    _email = (professor.email or "").strip().lower()
+    _cap = settings.AVATAR_RERENDER_MAX_PER_LECTURE
+    if (
+        _cap
+        and _cap > 0
+        and _email not in settings.qa_avatar_unlimited_email_set
+        and (lecture.avatar_render_count or 0) >= _cap
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                "이 강의의 아바타 제작 횟수를 모두 사용했습니다. 추가 제작이 "
+                "필요하면 운영자에게 문의해 주세요."
+            ),
+        )
+
+    if force:
+        # 완성(ready)/진행(rendering) 클립을 pending 으로 되돌린다(렌더 아바타/음성 변경
+        # 반영). 렌더 태스크가 pending 을 현재 아바타로 다시 만든다. 아바타 변경 PATCH 와
+        # 동일 무효화 헬퍼를 재사용.
+        from app.services.lecture import _reset_seed_renders  # noqa: PLC0415
+
+        await _reset_seed_renders(db, lecture_id)
+        await db.commit()
+
     celery.send_task(
         "app.tasks.qa_batch.render_seed_questions",
         args=[str(lecture_id), str(professor.id)],
@@ -458,7 +526,7 @@ async def render_seed_questions_endpoint(
     def _work() -> SeedQuestionsResponse:
         with SyncSessionLocal() as sdb:
             rows = qa_avatar.list_seed_questions(sdb, lecture_id)
-            return _seed_questions_response(sdb, instructor_id, rows)
+            return _seed_questions_response(sdb, instructor_id, rows, lecture_id)
 
     return await loop.run_in_executor(None, _work)
 

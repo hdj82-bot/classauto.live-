@@ -1,7 +1,8 @@
 """IFL Platform — 통합 FastAPI 백엔드."""
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from sqlalchemy import text
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -37,6 +38,10 @@ from app.api.v1.quiz import router as quiz_router
 from app.api.v1.insights import router as insights_router
 from app.api.v1.invites import owner_router as invites_owner_router
 from app.api.v1.invites import public_router as invites_public_router
+from app.api.v1.owner_costs import owner_costs_router
+from app.api.v1.feedback import router as feedback_router
+from app.api.v1.board import router as board_router
+from app.api.v1.analytics_pro import router as analytics_pro_router
 
 
 @asynccontextmanager
@@ -84,7 +89,9 @@ _cors_kwargs: dict = dict(
     max_age=86400,
 )
 if settings.CORS_ALLOW_VERCEL_PREVIEWS:
-    _cors_kwargs["allow_origin_regex"] = r"https://.*\.vercel\.app"
+    # 종전의 r"https://.*\.vercel\.app" 는 임의 Vercel 앱 전체를 허용해 과대했다.
+    # 우리 팀 프로젝트 프리뷰 프리픽스로 좁힌다(M9 — settings.CORS_VERCEL_PREVIEW_REGEX).
+    _cors_kwargs["allow_origin_regex"] = settings.CORS_VERCEL_PREVIEW_REGEX
 
 app.add_middleware(CORSMiddleware, allow_origins=_cors_origins, **_cors_kwargs)
 
@@ -114,11 +121,42 @@ app.include_router(quiz_router)
 app.include_router(insights_router)
 app.include_router(invites_owner_router)
 app.include_router(invites_public_router)
+app.include_router(owner_costs_router)
+app.include_router(feedback_router)
+app.include_router(board_router)
+app.include_router(analytics_pro_router)
+
+
+def _extract_metrics_token(request: Request) -> str:
+    """요청에서 /metrics 인증 토큰을 추출한다(Authorization: Bearer 우선, 다음 ?token=)."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[7:].strip()
+    return request.query_params.get("token", "").strip()
+
+
+def _metrics_authorized(request: Request) -> bool:
+    """/metrics 접근 허용 여부.
+
+    - METRICS_TOKEN 이 설정돼 있으면: 토큰 일치(상수시간 비교) 시에만 허용.
+    - METRICS_TOKEN 이 비어 있으면: production 은 차단(미설정=비활성), 그 외는 허용.
+    """
+    token = settings.METRICS_TOKEN.strip()
+    if not token:
+        return settings.ENVIRONMENT != "production"
+    provided = _extract_metrics_token(request)
+    return bool(provided) and secrets.compare_digest(provided, token)
 
 
 @app.get("/metrics", include_in_schema=False)
-async def prometheus_metrics():
-    """Prometheus 스크래핑용 메트릭 엔드포인트."""
+async def prometheus_metrics(request: Request):
+    """Prometheus 스크래핑용 메트릭 엔드포인트(토큰 게이트 — L4).
+
+    Railway 엔 nginx 가 없어 /metrics 가 공개 도달 가능하므로 토큰으로 보호한다.
+    미인가 접근은 존재를 드러내지 않도록 404 로 응답한다.
+    """
+    if not _metrics_authorized(request):
+        raise HTTPException(status_code=404, detail="Not Found")
     return metrics_response()
 
 

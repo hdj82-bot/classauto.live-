@@ -8,13 +8,15 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { VoiceGender, VoiceOption } from "./voicePresets";
+import { playNormalizedPreview, type PreviewPlayHandle } from "./normalizedAudio";
 
 /**
  * 아바타 샘플과 함께 음성을 들려주는 훅.
  *
  * 우선순위:
- *  1. option.previewUrl 이 있으면 ``<audio>`` 로 그 음원(ElevenLabs preview)을
- *     재생 — 실제 voice 미리듣기.
+ *  1. option.previewUrl 이 있으면 그 음원(ElevenLabs preview)을 재생 — 실제 voice
+ *     미리듣기. 보이스마다 녹음 레벨이 달라 음량 정규화(normalizedAudio)를 거쳐
+ *     모든 미리듣기가 비슷한 체감 음량으로 들리게 한다.
  *  2. 없으면 브라우저 음성 합성(Web Speech API)으로 샘플 문장을 읽어 준다.
  *
  * 둘 다 사용 불가한 환경(SSR·jsdom·미지원 브라우저)에서는 ``supported=false`` 로
@@ -93,7 +95,7 @@ export function useVoicePreview(): VoicePreviewState {
     supportServerSnapshot,
   );
   const [speaking, setSpeaking] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioRef = useRef<PreviewPlayHandle | null>(null);
   // 현재 재생 세션 토큰 — 반복/중지 시 오래된 onend 콜백을 무시한다.
   const sessionRef = useRef(0);
 
@@ -105,7 +107,7 @@ export function useVoicePreview(): VoicePreviewState {
       /* no-op */
     }
     if (audioRef.current) {
-      audioRef.current.pause();
+      audioRef.current.stop();
       audioRef.current = null;
     }
     setSpeaking(false);
@@ -123,14 +125,9 @@ export function useVoicePreview(): VoicePreviewState {
         onEnded?.();
       };
 
-      // 1) 실제 음원(ElevenLabs preview)이 있으면 그것을 1회 재생.
+      // 1) 실제 음원(ElevenLabs preview)이 있으면 음량 정규화해 1회 재생.
       if (option.previewUrl && typeof window.Audio !== "undefined") {
-        const audio = new Audio(option.previewUrl);
-        audioRef.current = audio;
-        audio.onended = finish;
-        audio.onerror = finish;
-        const p = audio.play();
-        if (p && typeof p.catch === "function") p.catch(finish);
+        audioRef.current = playNormalizedPreview(option.previewUrl, finish);
         setSpeaking(true);
         return;
       }
@@ -174,7 +171,7 @@ export function useVoicePreview(): VoicePreviewState {
         /* no-op */
       }
       if (audioRef.current) {
-        audioRef.current.pause();
+        audioRef.current.stop();
         audioRef.current = null;
       }
     },

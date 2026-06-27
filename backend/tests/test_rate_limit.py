@@ -176,3 +176,83 @@ async def test_forged_jwt_falls_back_to_ip(rl_client, incr_fake_redis):
     ip_keys = [k for k in incr_fake_redis._store if k.startswith("rl:ip:")]
     assert not user_keys, f"forged JWT must not create user bucket: {user_keys}"
     assert ip_keys, "expected IP fallback bucket"
+
+
+# ── 5. Redis 장애 시 fail-closed/open 분기 (M3) ──────────────────────────────────
+
+
+class _OpFailRedis:
+    """INCR 가 항상 실패하는 redis — Redis 연산 장애 시뮬레이션."""
+
+    async def incr(self, key: str) -> int:  # noqa: ARG002
+        raise ConnectionError("redis op failed")
+
+    async def expire(self, key: str, seconds: int) -> None:  # noqa: ARG002
+        return None
+
+
+@pytest_asyncio.fixture
+async def _rl_client_with(db, monkeypatch):
+    """주입한 get_redis 구현으로 RateLimit 미들웨어를 돌리는 클라이언트 팩토리.
+
+    teardown 에서 원래 get_redis 를 복구해 다른 테스트로 장애 mock 이 새지 않게 한다.
+    fail-closed 는 프로덕션 한정이므로(middleware), 이 장애 분기 테스트는 ENVIRONMENT 를
+    production 으로 두고 검증한다(monkeypatch 가 자동 복구).
+    """
+    from app.core import redis as redis_module
+    from app.core.config import settings
+    from app.db.session import get_db
+    from app.main import app
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+
+    async def override_get_db():
+        yield db
+
+    orig_get_redis = redis_module.get_redis
+
+    clients: list[AsyncClient] = []
+
+    def _make(get_redis_impl):
+        app.dependency_overrides[get_db] = override_get_db
+        redis_module.get_redis = get_redis_impl
+        ac = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+        clients.append(ac)
+        return ac
+
+    yield _make
+
+    for ac in clients:
+        await ac.aclose()
+    redis_module.get_redis = orig_get_redis
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_fail_closed_on_redis_op_error_sensitive(_rl_client_with):
+    """민감 prefix(/api/v1/qa)는 Redis 연산 실패 시 통과시키지 않고 503."""
+    ac = _rl_client_with(lambda: _OpFailRedis())
+    r = await ac.get("/api/v1/qa")
+    assert r.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_fail_closed_on_redis_unavailable_sensitive(_rl_client_with):
+    """get_redis 자체가 실패(연결 장애)해도 민감 prefix 는 503 으로 막는다."""
+    def _raise():
+        raise ConnectionError("cannot connect to redis")
+
+    ac = _rl_client_with(_raise)
+    # /api/v1/render 도 민감 prefix.
+    r = await ac.post("/api/v1/render/upload")
+    assert r.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_fail_open_on_redis_error_cheap_path(_rl_client_with):
+    """비민감(값싼 읽기) 경로는 Redis 장애에도 통과(fail-open) — 503 이 아니어야 한다."""
+    ac = _rl_client_with(lambda: _OpFailRedis())
+    # /api/v1/dashboard 는 fail-closed prefix 가 아님 → 레이트리밋이 죽어도 통과.
+    # (인증이 없어 엔드포인트는 401/403 등으로 응답하지만 503 은 아니어야 한다.)
+    r = await ac.get("/api/v1/dashboard")
+    assert r.status_code != 503

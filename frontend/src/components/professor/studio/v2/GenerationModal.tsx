@@ -204,6 +204,41 @@ export default function GenerationModal({
   });
 
   const doneCount = bars.filter((b) => b.tone === "done").length;
+  // 추천 질문(Q&A) 답변 실패 개수 — 슬라이드 쇼가 끝나도 Q&A 가 실패했으면 "완성"
+  // 으로 축하하지 않고 사실대로 알린다(실패를 완성으로 숨기지 않는다).
+  const qaFailedCount = qaItems.filter((q) => q?.status === "failed").length;
+  const qaReadyCount = qaItems.filter((q) => q?.status === "ready").length;
+  // done(슬라이드 완료) 이면서 Q&A 가 하나라도 실패 → '부분 완료'. 축하·confetti 금지.
+  const hasFailure = done && qaFailedCount > 0;
+  // 아직 진행 중인(미완성·미실패) Q&A 답변 수 — pending/rendering/무상태. 슬라이드가
+  // 끝나도 이게 남아 있으면 아직 '완성'이 아니다(추천 질문 답변까지 끝나야 완성).
+  const qaInProgress = qaItems.filter(
+    (q) => q?.status !== "ready" && q?.status !== "failed",
+  ).length;
+  // 진짜 완성 — 슬라이드 완료 + Q&A 진행분 없음 + 실패 없음. 이때만 "완성" + confetti.
+  // (parent 의 done 이 슬라이드만 보고 일찍 true 가 돼도, 모달이 Q&A 상태로 한 번 더
+  // 게이팅해 Q&A 가 '대기 중'인데 "완성"이라 뜨는 일을 막는다.)
+  const fullyDone = done && qaInProgress === 0 && qaFailedCount === 0;
+  // 전체 진척률(슬라이드 단계 + Q&A 답변을 하나의 %로) — "조금도 안 올라간다" 체감을
+  // 없앤다. 각 바 균등 가중: done=1, TTS=슬라이드 완료율, 렌더 중 Q&A=0.5, 그 외=0.
+  const progressUnits = bars.reduce((sum, b) => {
+    if (b.tone === "done") return sum + 1;
+    if (b.key === "tts") return sum + slidePct / 100;
+    if (b.tone === "active") return sum + 0.5;
+    return sum;
+  }, 0);
+  const overallPct = bars.length
+    ? Math.round((progressUnits / bars.length) * 100)
+    : 0;
+  // 진행 중 격려 메시지 — 단계별로 바꿔 기다리는 체감을 낫게 한다.
+  const progressMsg =
+    overallPct >= 90
+      ? "거의 다 끝났어요! 🎉"
+      : overallPct >= 60
+        ? "자, 쭉쭉 갑니다~ 조금만 더요!"
+        : overallPct >= 30
+          ? "한창 만드는 중이에요. 곧 따라잡을게요!"
+          : "조금만 기다려 주세요. 서둘러 작업할게요!";
 
   return (
     <div
@@ -243,8 +278,8 @@ export default function GenerationModal({
           </div>
         )}
 
-        {/* Confetti — done 일 때만 */}
-        {done && (
+        {/* Confetti — 슬라이드+Q&A 까지 모두 완성됐을 때만(실패·진행 중이면 금지). */}
+        {fullyDone && (
           <div
             style={{
               position: "absolute",
@@ -302,18 +337,57 @@ export default function GenerationModal({
                 color: "var(--text)",
               }}
             >
-              {done ? "슬라이드 쇼가 완성되었어요!" : "슬라이드 쇼 만드는 중…"}
+              {fullyDone
+                ? "모두 완성되었어요! 🎉"
+                : hasFailure
+                  ? "슬라이드 쇼는 완성 — 단, Q&A 답변 일부 실패"
+                  : !done
+                    ? "슬라이드 쇼 만드는 중…"
+                    : "추천 질문 답변 만드는 중…"}
             </h2>
             <div style={{ color: "var(--text-muted)", fontSize: 13 }}>
               {lectureTitle} · 슬라이드 {slideCount}장
               <span style={{ ...tabularStyle }}>
                 {" · "}
                 {doneCount} / {bars.length} 단계 완료
+                {!fullyDone ? ` · 전체 ${overallPct}%` : null}
               </span>
-              {!done && eta ? (
+              {!fullyDone && eta ? (
                 <span style={{ ...tabularStyle }}> · 예상 {eta}</span>
               ) : null}
             </div>
+            {/* 진행 중 격려 메시지 — 단계별로 바뀌어 기다림 체감을 낫게 한다. */}
+            {!fullyDone && !hasFailure && (
+              <div
+                style={{
+                  marginTop: 10,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: "var(--gold-on-light, #B88308)",
+                }}
+              >
+                {progressMsg}
+              </div>
+            )}
+            {hasFailure && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "10px 12px",
+                  borderRadius: 8,
+                  background: "rgba(180,35,24,0.08)",
+                  border: "1px solid rgba(180,35,24,0.2)",
+                  color: "#B42318",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                추천 질문 답변 <b>{qaFailedCount}개 실패</b>
+                {qaReadyCount > 0 ? ` (성공 ${qaReadyCount}개)` : ""}. 슬라이드 쇼는
+                정상이지만 실패한 Q&A 답변 영상은 만들어지지 않았어요. 각 추천 질문
+                카드에 표시된 <b>실패 사유</b>를 확인하고 ‘다시 제작’으로 재시도하세요.
+              </div>
+            )}
           </div>
 
           {/* 단계별 가로 바 */}

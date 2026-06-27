@@ -4,6 +4,8 @@
     "openLecture": "Open lecture",
     "openStudio": "Open studio",
     "preview": "Preview",
+    "analyze": "Analytics",
+    "analyzeAria": "View learning analytics for {title}",
     "openLibrary": "Open library",
     "inProduction": "Rendering",
     "delete": "Delete",

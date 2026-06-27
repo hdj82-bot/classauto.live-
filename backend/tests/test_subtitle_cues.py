@@ -12,7 +12,11 @@ import pytest
 
 from app.core.config import settings
 from app.services.pipeline import elevenlabs_client
-from app.services.pipeline.tts import _cues_from_alignment, synthesize
+from app.services.pipeline.tts import (
+    _cues_from_alignment,
+    build_subtitle_cues_for_audio,
+    synthesize,
+)
 
 
 def _alignment(chars: list[tuple[str, float, float]]) -> dict:
@@ -140,3 +144,52 @@ async def test_synthesize_alignment_disabled_by_setting():
 
     align_mock.assert_not_awaited()
     assert result.subtitle_cues is None
+
+
+# ── build_subtitle_cues_for_audio (재합성 없는 cue 백필) ──────────────────────
+
+
+@pytest.mark.asyncio
+async def test_backfill_aligns_existing_audio_without_resynth():
+    # 음원은 이미 있고 transcript 만 주면, 합성은 호출하지 않고 정렬만 돌려 cue 생성.
+    align = _alignment([("안", 0.0, 0.5), ("녕", 0.5, 1.0), ("。", 1.0, 1.2)])
+    with patch.object(
+        elevenlabs_client, "synthesize", new_callable=AsyncMock,
+    ) as synth_mock, patch.object(
+        elevenlabs_client, "align_forced", new_callable=AsyncMock,
+        return_value=align,
+    ) as align_mock:
+        cues = await build_subtitle_cues_for_audio(b"existing-audio", "안녕。")
+
+    synth_mock.assert_not_awaited()  # 재합성 없음(비용 0).
+    align_mock.assert_awaited_once()
+    assert cues == [{"start": 0.0, "end": 1.2, "text": "안녕。"}]
+
+
+@pytest.mark.asyncio
+async def test_backfill_returns_none_when_disabled():
+    with patch.object(settings, "SUBTITLE_ALIGNMENT_ENABLED", False), patch.object(
+        elevenlabs_client, "align_forced", new_callable=AsyncMock,
+    ) as align_mock:
+        cues = await build_subtitle_cues_for_audio(b"audio", "안녕。")
+    align_mock.assert_not_awaited()
+    assert cues is None
+
+
+@pytest.mark.asyncio
+async def test_backfill_returns_none_on_empty_input():
+    with patch.object(
+        elevenlabs_client, "align_forced", new_callable=AsyncMock,
+    ) as align_mock:
+        assert await build_subtitle_cues_for_audio(b"", "안녕。") is None
+        assert await build_subtitle_cues_for_audio(b"audio", "   ") is None
+    align_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_backfill_degrades_to_none_on_alignment_failure():
+    with patch.object(
+        elevenlabs_client, "align_forced", new_callable=AsyncMock,
+        side_effect=elevenlabs_client.ElevenLabsServerError("boom"),
+    ):
+        assert await build_subtitle_cues_for_audio(b"audio", "안녕。") is None

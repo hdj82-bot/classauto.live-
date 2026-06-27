@@ -229,6 +229,26 @@ async def test_update_user_change_role(client, admin, student):
 
 
 @pytest.mark.asyncio
+async def test_update_user_toggle_analytics_pro(client, admin, professor):
+    """운영자가 교수자의 학습 분석 PRO 베타 토글을 켜고 끌 수 있다."""
+    on = await client.patch(
+        f"/api/v1/admin/users/{professor.id}",
+        params={"analytics_pro_enabled": True},
+        headers=make_auth_header(admin),
+    )
+    assert on.status_code == 200
+    assert on.json()["analytics_pro_enabled"] is True
+
+    off = await client.patch(
+        f"/api/v1/admin/users/{professor.id}",
+        params={"analytics_pro_enabled": False},
+        headers=make_auth_header(admin),
+    )
+    assert off.status_code == 200
+    assert off.json()["analytics_pro_enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_update_user_invalid_role(client, admin, student):
     """유효하지 않은 역할 값은 400을 반환한다."""
     resp = await client.patch(

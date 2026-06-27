@@ -3,7 +3,7 @@ import csv
 import io
 import uuid
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,13 @@ from app.api.deps import require_professor, require_student
 from app.db.session import get_db
 from app.models.session import LearningSession
 from app.models.user import User
+from app.schemas.action import ActionCreate, ActionResponse
+from app.schemas.goal import GoalCreate, GoalResponse, GoalUpdate
+from app.services import cohort_metrics as cohort_svc
 from app.services import dashboard as dashboard_svc
+from app.services import goals as goals_svc
+from app.services import qa_keywords as qa_keywords_svc
+from app.services import instructor_actions as actions_svc
 from app.services.lecture import assert_professor_owns_lecture, list_my_lectures
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -92,6 +98,143 @@ async def get_qa_logs(
 ):
     await assert_professor_owns_lecture(db, lecture_id, user.id)
     return await dashboard_svc.get_qa_logs(db, lecture_id, page, limit)
+
+
+@router.get("/{lecture_id}/kpi", summary="현황 KPI + 전주 대비 델타")
+async def get_kpi(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """일자 스냅샷 기반 KPI 4종(완료율·출석·정답률·질문 수) + 전주 대비 증감(스펙 11 §B).
+
+    스냅샷이 2주치 미만이면 델타는 null(현재값만). 추이(`/trend`)와 동일 원자료.
+    """
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await cohort_svc.get_kpi(db, lecture_id)
+
+
+@router.get(
+    "/{lecture_id}/goals",
+    response_model=list[GoalResponse],
+    summary="학습 목표 목록 + 달성률",
+)
+async def list_goals(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """강의 학습 목표와 현재 달성률(before→after, 스펙 11 §H-3)."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await goals_svc.list_goals(db, lecture_id)
+
+
+@router.post(
+    "/{lecture_id}/goals",
+    response_model=GoalResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="학습 목표 생성",
+)
+async def create_goal(
+    lecture_id: uuid.UUID,
+    body: GoalCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """목표 생성 — 현재 지표값을 baseline(before)으로 스냅샷한다."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await goals_svc.create_goal(db, lecture_id, body)
+
+
+@router.patch(
+    "/{lecture_id}/goals/{goal_id}",
+    response_model=GoalResponse,
+    summary="학습 목표 수정 (라벨/목표값)",
+)
+async def update_goal(
+    lecture_id: uuid.UUID,
+    goal_id: uuid.UUID,
+    body: GoalUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await goals_svc.update_goal(db, lecture_id, goal_id, body)
+
+
+@router.delete(
+    "/{lecture_id}/goals/{goal_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="학습 목표 삭제",
+)
+async def delete_goal(
+    lecture_id: uuid.UUID,
+    goal_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    await goals_svc.delete_goal(db, lecture_id, goal_id)
+
+
+@router.get(
+    "/{lecture_id}/actions",
+    response_model=list[ActionResponse],
+    summary="교수자 개입 행동 로그 (격려·권고 채택·메모)",
+)
+async def list_actions(
+    lecture_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """RQ2 계측 — 교수자가 데이터 기반으로 취한 행동 로그(스펙 11 §H-4)."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await actions_svc.list_actions(db, lecture_id)
+
+
+@router.post(
+    "/{lecture_id}/actions",
+    response_model=ActionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="교수자 개입 행동 기록 (격려 등)",
+)
+async def create_action(
+    lecture_id: uuid.UUID,
+    body: ActionCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """격려 등 개입 행동을 기록한다. 실제 외부 발송 채널은 후속 — status='recorded'."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await actions_svc.create_action(db, lecture_id, user.id, body)
+
+
+@router.get("/{lecture_id}/trend", summary="성취율 추이 (일자별 스냅샷)")
+async def get_trend(
+    lecture_id: uuid.UUID,
+    days: int = Query(30, ge=1, le=180, description="조회 기간(일), 1~180"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """일배치가 적재한 강의×일자 누적 지표 시계열(스펙 11 §C).
+
+    배포 시점부터 하루 1행씩 쌓이므로 점이 2개 이상 모이기 전까지는 추이가
+    비어 있을 수 있다(소급 수집 불가, 09 §3).
+    """
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await cohort_svc.get_trend(db, lecture_id, days)
+
+
+@router.get("/{lecture_id}/qa-keywords", summary="빈번 질문어 (한/중/영 키워드)")
+async def get_qa_keywords(
+    lecture_id: uuid.UUID,
+    top: int = Query(20, ge=1, le=100, description="반환할 상위 키워드 수"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_professor),
+):
+    """학생 Q&A 질문에서 자주 등장한 키워드 빈도(스펙 11 §G). 경량 휴리스틱 추출."""
+    await assert_professor_owns_lecture(db, lecture_id, user.id)
+    return await qa_keywords_svc.get_qa_keywords(db, lecture_id, top_n=top)
 
 
 @router.post("/watch-events", summary="재생 이벤트 배치 적재 (학습자)")

@@ -29,21 +29,34 @@ _HEYGEN_PROVIDER = "heygen"
 @router.post("/heygen", summary="HeyGen 렌더링 웹훅")
 async def heygen_webhook(
     request: Request,
+    signature: str | None = Header(None),
     x_heygen_signature: str | None = Header(None),
 ):
     body = await request.body()
 
-    # HMAC 검증 — 프로덕션에서는 시크릿과 서명 모두 필수
-    if settings.HEYGEN_WEBHOOK_SECRET:
-        if not x_heygen_signature:
-            raise HTTPException(status_code=401, detail="Missing webhook signature")
-        expected = hmac.new(
-            settings.HEYGEN_WEBHOOK_SECRET.encode(), body, hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(expected, x_heygen_signature):
-            raise HTTPException(status_code=401, detail="Invalid webhook signature")
-    else:
-        logger.warning("HEYGEN_WEBHOOK_SECRET 미설정: 서명 검증 생략 (개발환경)")
+    # 서명 검증 — 모든 환경에서 강제(fail-closed).
+    #
+    # 시크릿이 없으면 위조 웹훅(임의 외부 영상 주입 등)을 막을 수 없으므로,
+    # 경고 후 통과시키지 않고 401 로 거부한다(개발환경 포함). 운영 시 반드시
+    # HEYGEN_WEBHOOK_SECRET 를 설정해야 웹훅이 동작한다.
+    secret = settings.HEYGEN_WEBHOOK_SECRET
+    if not secret:
+        logger.error("HEYGEN_WEBHOOK_SECRET 미설정 — 웹훅 거부(fail-closed)")
+        raise HTTPException(status_code=401, detail="Webhook secret not configured")
+
+    # HeyGen 은 raw request body 의 HMAC-SHA256 hex digest 를 'Signature' 헤더로
+    # 보낸다(prefix·timestamp 없는 raw hex). 구버전/프록시 호환을 위해
+    # 'X-HeyGen-Signature' 도 함께 받고, 일부 게이트웨이가 붙이는 'sha256=' 접두사는
+    # 제거한 뒤 대소문자 무시로 상수시간 비교한다.
+    provided = signature or x_heygen_signature
+    if not provided:
+        raise HTTPException(status_code=401, detail="Missing webhook signature")
+    provided = provided.strip()
+    if provided.lower().startswith("sha256="):
+        provided = provided[len("sha256="):]
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, provided.lower()):
+        raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     payload = await request.json()
     event_type = payload.get("event_type", "")
@@ -111,7 +124,8 @@ async def heygen_webhook(
             if heygen_url:
                 try:
                     s3_url, elapsed = await s3_svc.upload_from_url(
-                        heygen_url, str(render.lecture_id), render.slide_number
+                        heygen_url, str(render.lecture_id), render.slide_number,
+                        allowed_hosts=s3_svc.HEYGEN_ALLOWED_HOSTS,
                     )
                     render.s3_video_url = s3_url
                     render.heygen_video_url = heygen_url
@@ -224,7 +238,10 @@ async def _handle_seed_clip_webhook(
         s3_url = None
         if heygen_url:
             try:
-                s3_url, _ = await s3_svc.upload_from_url(heygen_url, str(rep.lecture_id))
+                s3_url, _ = await s3_svc.upload_from_url(
+                    heygen_url, str(rep.lecture_id),
+                    allowed_hosts=s3_svc.HEYGEN_ALLOWED_HOSTS,
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.error("Q&A 클립 S3 업로드 실패: seed_id=%s, error=%s", rep.id, exc)
                 _mark_cluster_failed(db, rep.cluster_key, f"S3 업로드 실패: {exc}")

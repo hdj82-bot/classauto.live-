@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
 import { useStudioI18n } from "./useStudioI18n";
 
 interface ShareLinksProps {
@@ -36,9 +35,14 @@ export default function ShareLinks({
   };
 
   // 학생 링크 → QR PNG dataURL. url 이 바뀌면 재생성.
+  // qrcode 라이브러리(인코딩 테이블 포함)는 공유 패널이 열려 실제로 QR 을 그릴 때만
+  // 필요하므로 동적 import 로 분리해 studio 초기 번들에서 뺀다.
   useEffect(() => {
     let cancelled = false;
-    QRCode.toDataURL(url, { width: 480, margin: 2, errorCorrectionLevel: "M" })
+    import("qrcode")
+      .then(({ default: QRCode }) =>
+        QRCode.toDataURL(url, { width: 480, margin: 2, errorCorrectionLevel: "M" }),
+      )
       .then((d) => {
         if (!cancelled) setQrDataUrl(d);
       })

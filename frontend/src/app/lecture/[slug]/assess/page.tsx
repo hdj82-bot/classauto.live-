@@ -77,35 +77,49 @@ export default function AssessmentPage() {
     questions.length > 0 ? ((currentIndex + 1) / questions.length) * 100 : 0;
 
   const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      const responses = Object.entries(answers).map(([question_id, user_answer]) => ({
+    // 빈 응답 가드: 답을 하나도 입력/선택하지 않았으면 제출 자체를 막는다.
+    // (종전엔 빈 응답이어도 setCompleted(true) 가 실행돼 "완료" 가 떴다.)
+    const responses = Object.entries(answers)
+      .filter(([, user_answer]) => user_answer.trim() !== "")
+      .map(([question_id, user_answer]) => ({
         question_id,
         user_answer,
         video_timestamp_seconds: 0,
       }));
 
-      if (responses.length > 0 && assessmentSessionId) {
-        const { data: submitted } = await api.post("/api/responses", {
-          session_id: assessmentSessionId,
-          responses,
-        });
-        const results = submitted as SubmittedResult[];
-        const total = results.length;
-        const correct = results.filter((r) => r.is_correct === true).length;
-        const pending = results.filter((r) => r.is_correct === null).length;
-        setScoreResult({ total, correct, pending });
-      }
+    if (responses.length === 0 || !assessmentSessionId) {
+      toast(t("student.assessV2.submitError"), "error");
+      return;
+    }
 
+    setSubmitting(true);
+    try {
+      const { data: submitted } = await api.post("/api/responses", {
+        session_id: assessmentSessionId,
+        responses,
+      });
+      // 서버가 배열이 아닌/빈 응답을 돌려주면 채점 실패로 간주 — 완료 처리하지 않는다.
+      const results = Array.isArray(submitted) ? (submitted as SubmittedResult[]) : [];
+      if (results.length === 0) {
+        throw new Error("empty submission result");
+      }
+      const total = results.length;
+      const correct = results.filter((r) => r.is_correct === true).length;
+      const pending = results.filter((r) => r.is_correct === null).length;
+      setScoreResult({ total, correct, pending });
+
+      // 학습 세션 완료 표시(있을 때만). 채점 응답이 유효한 뒤에만 호출한다.
       if (learningSessionId) {
         await api.post(`/api/v1/sessions/${learningSessionId}/complete`);
       }
 
+      // 실제 채점 성공 시에만 완료 화면으로 전환.
       setCompleted(true);
     } catch {
       toast(t("student.assessV2.submitError"), "error");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   if (loading) {

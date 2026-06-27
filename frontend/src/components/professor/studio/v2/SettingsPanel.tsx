@@ -92,6 +92,12 @@ export interface SettingsPanelProps {
    * 직접 입력/자동 생성을 고를 수 있다.
    */
   onAutoGenerateSeedQuestion?: (index: number) => Promise<void>;
+  /**
+   * "현재 아바타로 답변 다시 만들기" — 이미 완성(ready)된 클립을 현재 아바타/음성으로
+   * 강제 재생성한다. 아바타를 바꿨는데 답변 영상이 그대로일 때(변경 감지 사각지대)
+   * 빠져나오는 경로. 부모가 force 렌더를 호출한다.
+   */
+  onForceRenderSeed?: () => void;
 }
 
 const settingsStyle: CSSProperties = {
@@ -406,6 +412,7 @@ export default function SettingsPanel({
   onChangeSeedQuestion,
   onPreviewSeed,
   onAutoGenerateSeedQuestion,
+  onForceRenderSeed,
 }: SettingsPanelProps) {
   // 자막이 음성과 동일한지 — null 이거나 voiceLang 과 같으면 "동일".
   const subtitleSame = subtitleLang === null || subtitleLang === voiceLang;
@@ -801,29 +808,46 @@ export default function SettingsPanel({
               </p>
             )}
 
-            {/* 생성 완료 — 모든 클립이 ready 면 안내(별도 승인 단계 없이 '슬라이드 쇼
-                제작'으로 함께 만들어진다). */}
-            {seedAllReady && (
-              <div
-                role="status"
+            {/* 강제 재생성 — 답변 클립이 준비됐는데 아바타·음성을 바꿔 다시 만들고
+                싶을 때. 같은 아바타를 다시 골라 '다시 제작'이 변경을 못 잡는 경우의
+                구제 경로(현재 아바타/음성으로 ready 클립을 강제 재렌더). */}
+            {seedAllReady && onForceRenderSeed && (
+              <button
+                type="button"
+                onClick={onForceRenderSeed}
+                title="현재 아바타·음성으로 답변 영상을 다시 만듭니다"
                 style={{
+                  marginTop: 8,
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 6,
                   padding: "8px 12px",
                   borderRadius: 9,
-                  border: "1px solid rgba(27,127,75,0.35)",
-                  background: "rgba(27,127,75,0.10)",
+                  border: "1px solid var(--line-strong)",
+                  background: "var(--bg-card)",
                   fontSize: 12,
                   fontWeight: 700,
-                  color: "#1B7F4B",
+                  color: "var(--text)",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
                 }}
               >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 6 9 17l-5-5" />
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 4v6h-6" />
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
                 </svg>
-                아바타 답변 영상 준비 완료 — 각 질문 ‘미리보기’로 확인
-              </div>
+                현재 아바타로 답변 다시 만들기
+              </button>
+            )}
+
+            {/* C-2(스펙 13): 강의당 아바타 제작 횟수 상한 사전 안내. 성공한 제작만
+                카운트되며, 상한 도달 시 재제작이 차단된다(차단 메시지는 page.tsx 가
+                429 응답을 받아 토스트로 표시). */}
+            {seedAllReady && onForceRenderSeed && (
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                본인·표준 아바타 수정은 강의당 재제작 2회로 제한됩니다. 성공한 제작만
+                카운트되니 신중히 진행해 주세요.
+              </p>
             )}
           </div>
         </details>
@@ -1169,20 +1193,20 @@ function SeedQuestionCard({
         <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-subtle)" }}>
           사전 대답
         </label>
-        {/* 답변은 권장 300~800자(아바타 발화 분량 적정선) — 백엔드와 동일하게 800자 상한.
-            넉넉한 높이 + 세로 스크롤·리사이즈로 한눈에 보이게 한다. */}
+        {/* 답변은 400자 이하 — 백엔드와 동일 상한. VisionStory 는 렌더 영상 초당 과금이라
+            답변이 길수록 비용↑이므로 어떤 언어로 쓰든 400자로 제한한다. */}
         <textarea
           value={item.answer}
           onChange={(e) => onChange({ answer: e.target.value })}
-          placeholder="이 질문이 들어오면 아바타가 말할 답변(권장 300~800자). 비워 두면 강의 자료로 자동 작성됩니다."
+          placeholder="이 질문이 들어오면 아바타가 말할 답변(400자 이하). 비워 두면 강의 자료로 자동 작성됩니다."
           rows={6}
-          maxLength={800}
+          maxLength={400}
           aria-label={`예상 질문 ${index + 1} 사전 대답`}
           style={{ ...textareaStyle, minHeight: 120, maxHeight: 320, overflowY: "auto" }}
         />
-        {/* 글자 수 표시 — 권장 범위(300~800) 안에 있도록 돕는다. */}
+        {/* 글자 수 표시 — 400자 상한 안에 있도록 돕는다. */}
         <span style={{ fontSize: 10.5, color: "var(--text-faint)", textAlign: "right" }}>
-          {item.answer.length}/800
+          {item.answer.length}/400
         </span>
       </div>
 
@@ -1255,9 +1279,16 @@ function SeedQuestionCard({
         </button>
       )}
       {item.status === "failed" && (
+        // 백엔드가 만든 '사람이 읽을 수 있는' 실패 사유(예: "강의 자료를 찾지
+        // 못했습니다.", "이번 달 추천 질문 제작 한도를 모두 사용했어요…", "본인 아바타를
+        // 준비하지 못했습니다…")는 그대로 보여 준다 — 교수자가 다음 행동(다시 시도·자료
+        // 보강·한도 문의)을 판단하려면 사유가 필요하다. 단, 제공자(VisionStory·HeyGen)·
+        // DB 의 원시 오류 문자열(예: "VisionStory 렌더 제출 오류 [403]: 30302…",
+        // "(psycopg2.errors…) invalid input value for enum…")은 의미가 없고 혼란만 주므로
+        // 숨기고 고정 안내로 대체한다(humanReadableSeedError 가 분기).
         <p style={{ margin: 0, fontSize: 11, color: "#B42318", lineHeight: 1.5 }}>
-          {item.error_message ||
-            "생성에 실패했어요. 질문이 강의 범위 밖이거나 한도를 초과했을 수 있습니다."}
+          {humanReadableSeedError(item.error_message) ??
+            "생성에 실패했어요. 잠시 후 ‘답변 자동 생성’으로 다시 시도해주세요."}
         </p>
       )}
     </div>
@@ -1265,6 +1296,28 @@ function SeedQuestionCard({
 }
 
 /* ───────── helpers ───────── */
+
+/**
+ * 사전 질문 실패 사유를 카드에 보여줄지 결정한다.
+ *
+ * 백엔드(app/tasks/qa_batch.py)는 교수자가 읽고 행동할 수 있는 한국어 안내문을
+ * error_message 에 담아 내려준다(자료 없음·한도 초과·아바타 미준비 등) — 이런 건
+ * 그대로 노출한다. 반면 제공자(VisionStory·HeyGen)·DB 의 원시 오류 문자열(영문
+ * 코드·예외 클래스·HTTP 상태·SQL/enum 키워드 등)은 교수자에게 의미가 없으므로
+ * null 을 돌려 호출부가 고정 안내로 대체하게 한다.
+ *
+ * 판정: (1) 원시 오류 신호가 있으면 숨김, (2) 한국어가 한 글자도 없으면(영문-only =
+ * 대개 원시 오류) 숨김, (3) 그 외에는 그대로 노출.
+ */
+function humanReadableSeedError(msg?: string | null): string | null {
+  const raw = (msg ?? "").trim();
+  if (!raw) return null;
+  const technical =
+    /(psycopg2|sqlalchemy|traceback|exception|invalid input|enum |null value|\[\d{3}\]|\b[A-Za-z]+Error\b|https?:\/\/|<[a-z/]+>)/i;
+  if (technical.test(raw)) return null;
+  if (!/[가-힣]/.test(raw)) return null;
+  return raw;
+}
 
 /** 속도 배율을 보기 좋게 표기 (1.0→"1.0", 1.05→"1.05", 0.7→"0.7"). */
 function formatSpeed(v: number): string {

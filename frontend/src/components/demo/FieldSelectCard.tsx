@@ -1,6 +1,7 @@
 "use client";
 
 import { type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { type DemoField } from "./demoTypes";
 import { useDemoI18n } from "./useDemoI18n";
 
@@ -24,6 +25,17 @@ interface Props {
   field: DemoField;
   onSelect: (field: DemoField) => void;
   override?: FieldCardOverride;
+  /**
+   * 클릭 시 직행할 강의 경로. 지정하면 `onSelect(field)` 분야 라우팅을 무시하고
+   * 이 href 로 곧장 이동한다(대문 하단에 분야 로직과 무관한 실제 강의 카드를
+   * 추가할 때 사용). 미지정 시 기존처럼 onSelect 가 라우팅한다.
+   */
+  href?: string;
+  /**
+   * data-testid 오버라이드. 같은 분야(field) 카드가 한 페이지에 둘 이상 존재할 때
+   * `demo-field-{field}` testid 충돌을 피하기 위해 고유 값을 부여한다.
+   */
+  testId?: string;
 }
 
 /**
@@ -39,8 +51,15 @@ interface Props {
  * 를 입히기 위해 `{placeholder}` 자리에서 분할 후 `<span>` 으로 감싼다 — 다른
  * 페이지에서도 같은 패턴을 쓰면 헬퍼로 승격할 수 있다.
  */
-export default function FieldSelectCard({ field, onSelect, override }: Props) {
+export default function FieldSelectCard({
+  field,
+  onSelect,
+  override,
+  href,
+  testId,
+}: Props) {
   const { t } = useDemoI18n();
+  const router = useRouter();
 
   const meta =
     field === "social"
@@ -76,9 +95,9 @@ export default function FieldSelectCard({ field, onSelect, override }: Props) {
   return (
     <button
       type="button"
-      onClick={() => onSelect(field)}
+      onClick={() => (href ? router.push(href) : onSelect(field))}
       aria-label={t(meta.a11yKey)}
-      data-testid={`demo-field-${field}`}
+      data-testid={testId ?? `demo-field-${field}`}
       data-field={meta.dataField}
       className="ca-field-card"
     >

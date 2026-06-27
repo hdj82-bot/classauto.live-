@@ -167,6 +167,9 @@ export const authApi = {
     school?: string;
     department?: string;
     student_number?: string;
+    // G(스펙 13): 교수자 베타 모니터링 동의. 백엔드가 교수자 가입 시 필수로 검증한다
+    // (미동의 422). 학생 가입은 이 값과 무관.
+    beta_consented?: boolean;
   }) => api.post<{ access_token: string }>("/api/auth/complete-profile", body),
 
   // refresh_token 쿠키는 서버가 만료 처리하므로 body 불필요
@@ -201,9 +204,52 @@ export const ownerInviteApi = {
     api.delete(`/api/owner/invites/${encodeURIComponent(id)}`),
 };
 
+// 계정주(운영자) 전용 — API 비용 대시보드. 백엔드 require_owner(ADMIN_EMAILS)
+// 가 권한을 강제하므로 비운영자가 호출하면 403.
+export interface OwnerCostServiceRow {
+  service: string;
+  cost_usd: number;
+  calls: number;
+  seconds: number;
+  tokens: number;
+}
+
+export interface OwnerCostUserRow {
+  user_id: string;
+  email: string | null;
+  name: string | null;
+  role: string | null;
+  total_usd: number;
+  calls: number;
+  /** 종목(service) → 비용(USD). 미사용 종목은 키 자체가 없음. */
+  by_service: Record<string, number>;
+}
+
+export interface OwnerCostsResponse {
+  generated_at: string;
+  window_days: number;
+  currency: string;
+  total_cost_usd: number;
+  month_to_date_usd: number;
+  user_count: number;
+  /** 사용자 표의 컬럼 집합 — 비용 내림차순 종목 키. */
+  services: string[];
+  by_service: OwnerCostServiceRow[];
+  by_month: { year: number; month: number; cost_usd: number }[];
+  by_user: OwnerCostUserRow[];
+}
+
+export const ownerCostsApi = {
+  get: () => api.get<OwnerCostsResponse>("/api/owner/costs"),
+};
+
 export interface MeResponse {
   id: string;
   role: "professor" | "student" | "admin";
+  /** 본인 이메일 — Topbar 이니셜·분석 PRO/종합보고서 노출 게이트(H4). */
+  email: string;
+  /** 본인 이름 — Topbar·플레이어 학생 이름 표시(H4). */
+  name: string;
   /** 온보딩 안내를 "다시 보지 않기" 한 시각. null = 아직(진입 시 안내 표시). */
   onboarded_at: string | null;
 }
@@ -212,4 +258,107 @@ export const userApi = {
   getMe: () => api.get<MeResponse>("/api/v1/users/me"),
   /** 온보딩 안내 영구 스킵(다시 보지 않기). */
   markOnboarded: () => api.post<MeResponse>("/api/v1/users/me/onboarded"),
+};
+
+export interface FeedbackItem {
+  id: string;
+  user_id: string | null;
+  user_email: string | null;
+  role: string;
+  category: string;
+  message: string;
+  lecture_id: string | null;
+  page: string | null;
+  status: "open" | "triaged" | "resolved";
+  created_at: string;
+}
+
+// 인앱 피드백(스펙 13 · F). 제출은 로그인 유저(교수/학생) 공통, 목록/상태변경은
+// 운영자 전용(백엔드 require_admin 강제).
+export const feedbackApi = {
+  submit: (body: {
+    category: string;
+    message: string;
+    lecture_id?: string;
+    page?: string;
+  }) => api.post<FeedbackItem>("/api/v1/feedback", body),
+  adminList: (params: { page?: number; status?: string; category?: string; role?: string }) =>
+    api.get<{ total: number; page: number; limit: number; feedback: FeedbackItem[] }>(
+      "/api/v1/admin/feedback",
+      { params },
+    ),
+  adminSetStatus: (id: string, status: string) =>
+    api.patch<FeedbackItem>(`/api/v1/admin/feedback/${encodeURIComponent(id)}`, { status }),
+};
+
+// ── 자유게시판 (베타 테스터 커뮤니티) ──────────────────────────────────────────
+// 열람은 공개(비로그인 포함), 작성/삭제는 로그인 필요(백엔드가 강제). 공개 노출은
+// 표시 이름(author_name)만 — 이메일은 응답에 포함되지 않는다.
+export interface BoardComment {
+  id: string;
+  author_name: string;
+  body: string;
+  created_at: string;
+  can_delete: boolean;
+}
+
+export interface BoardPostSummary {
+  id: string;
+  author_name: string;
+  title: string;
+  pinned: boolean;
+  comment_count: number;
+  created_at: string;
+}
+
+export interface BoardPostDetail {
+  id: string;
+  author_name: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  created_at: string;
+  comments: BoardComment[];
+  can_delete: boolean;
+}
+
+export const boardApi = {
+  list: (params?: { page?: number; limit?: number }) =>
+    api.get<{ total: number; page: number; limit: number; posts: BoardPostSummary[] }>(
+      "/api/v1/board/posts",
+      { params },
+    ),
+  get: (id: string) =>
+    api.get<BoardPostDetail>(`/api/v1/board/posts/${encodeURIComponent(id)}`),
+  create: (body: { title: string; body: string }) =>
+    api.post<BoardPostDetail>("/api/v1/board/posts", body),
+  comment: (postId: string, body: { body: string }) =>
+    api.post<BoardComment>(
+      `/api/v1/board/posts/${encodeURIComponent(postId)}/comments`,
+      body,
+    ),
+  remove: (id: string) =>
+    api.delete(`/api/v1/board/posts/${encodeURIComponent(id)}`),
+  removeComment: (id: string) =>
+    api.delete(`/api/v1/board/comments/${encodeURIComponent(id)}`),
+};
+
+export interface AuditLogItem {
+  id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  detail: Record<string, unknown> | null;
+  created_at: string | null;
+}
+
+// 운영자 감사 로그(스펙 13 · E) — 읽기 전용. require_admin.
+export const auditApi = {
+  list: (params: { page?: number; action?: string; actor?: string }) =>
+    api.get<{ total: number; page: number; limit: number; logs: AuditLogItem[] }>(
+      "/api/v1/admin/audit",
+      { params },
+    ),
 };

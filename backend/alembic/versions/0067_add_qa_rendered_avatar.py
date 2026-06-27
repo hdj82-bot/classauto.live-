@@ -1,7 +1,7 @@
 """Add lectures.qa_rendered_avatar_id / qa_rendered_voice_id.
 
-Revision ID: 0053
-Revises: 0052
+Revision ID: 0067
+Revises: 0066
 Create Date: 2026-06-15
 
 변경 내용 (Q&A 사전질문 클립의 '렌더 출처' 기록 — '다시 제작' 점검 정확도):
@@ -21,8 +21,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "0053"
-down_revision: Union[str, None] = "0052"
+revision: str = "0067"
+down_revision: Union[str, None] = "0066"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

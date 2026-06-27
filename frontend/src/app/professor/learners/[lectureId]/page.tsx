@@ -82,17 +82,24 @@ export default function LearnersBoardPage() {
     let cancelled = false;
     (async () => {
       try {
-        const { data: courses } = await api.get<{ id: string }[]>("/api/courses");
-        for (const c of courses) {
-          const { data: lecs } = await api.get<{ id: string; title: string }[]>(
-            `/api/courses/${c.id}/lectures`,
-          );
-          const hit = lecs.find((l) => l.id === lectureId);
-          if (hit) {
-            if (!cancelled) setLectureMeta({ title: hit.title });
-            return;
-          }
-        }
+        const { data: courses } = await api.get<{ id: string }[]>(
+          "/api/courses",
+          { timeout: 12000 },
+        );
+        // course 별 직렬 → 병렬. 개별 실패는 빈 목록으로 흡수.
+        const lists = await Promise.all(
+          courses.map((c) =>
+            api
+              .get<{ id: string; title: string }[]>(
+                `/api/courses/${c.id}/lectures`,
+                { timeout: 12000 },
+              )
+              .then((r) => r.data)
+              .catch(() => [] as { id: string; title: string }[]),
+          ),
+        );
+        const hit = lists.flat().find((l) => l.id === lectureId);
+        if (hit && !cancelled) setLectureMeta({ title: hit.title });
       } catch {
         // 메타 실패는 silent — 테이블은 lecture_id 만으로도 동작.
       }

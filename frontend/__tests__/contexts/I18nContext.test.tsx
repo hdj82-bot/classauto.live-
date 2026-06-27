@@ -88,6 +88,8 @@ describe("I18nContext (demo/student namespace lookup)", () => {
  */
 describe("I18nContext — 하이드레이션 SSR/CSR 로케일 스냅샷 안전성 가드", () => {
   beforeEach(() => {
+    // M2: 로케일 저장이 localStorage → 쿠키로 전환됨. 케이스 간 쿠키를 비운다.
+    document.cookie = "ifl-locale=; path=/; max-age=0";
     window.localStorage.clear();
     vi.resetModules();
   });
@@ -130,8 +132,8 @@ describe("I18nContext — 하이드레이션 SSR/CSR 로케일 스냅샷 안전�
     return { html, recoverableErrors, finalLocale };
   }
 
-  it("localStorage='en' 이어도 SSR/첫 CSR 스냅샷이 모두 'ko' → 하이드레이션 mismatch 없음", async () => {
-    window.localStorage.setItem("ifl-locale", "en");
+  it("쿠키='en' 이어도 SSR/첫 CSR 스냅샷이 모두 'ko' → 하이드레이션 mismatch 없음", async () => {
+    document.cookie = "ifl-locale=en; path=/";
     const Mod = await loadFresh();
 
     const { html, recoverableErrors, finalLocale } = await ssrThenHydrate(Mod);
@@ -144,7 +146,7 @@ describe("I18nContext — 하이드레이션 SSR/CSR 로케일 스냅샷 안전�
     expect(finalLocale).toBe("en");
   });
 
-  it("localStorage 미설정 시 SSR/CSR 모두 'ko' 로 일치", async () => {
+  it("쿠키 미설정 시 SSR/CSR 모두 'ko' 로 일치", async () => {
     const Mod = await loadFresh();
 
     const { html, recoverableErrors, finalLocale } = await ssrThenHydrate(Mod);
@@ -154,8 +156,8 @@ describe("I18nContext — 하이드레이션 SSR/CSR 로케일 스냅샷 안전�
     expect(finalLocale).toBe("ko");
   });
 
-  it("localStorage='ko' 면 전환 없이 'ko' 로 안정 (mismatch 없음)", async () => {
-    window.localStorage.setItem("ifl-locale", "ko");
+  it("쿠키='ko' 면 전환 없이 'ko' 로 안정 (mismatch 없음)", async () => {
+    document.cookie = "ifl-locale=ko; path=/";
     const Mod = await loadFresh();
 
     const { recoverableErrors, finalLocale } = await ssrThenHydrate(Mod);

@@ -24,7 +24,11 @@ from app.core.config import settings
 from app.db.session import SyncSessionLocal
 from app.models.qa_answer_cache import QAAnswerCache
 from app.services.pipeline import qa_avatar
-from app.services.pipeline.budget import BudgetExceededError, assert_qa_render_budget
+from app.services.pipeline.budget import (
+    BudgetExceededError,
+    assert_qa_render_budget,
+    assert_visionstory_budget,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +50,9 @@ def _lecture_voice_settings(db, lecture_id, instructor_id) -> dict:
         else (str(lecture.voice_gender) if lecture and lecture.voice_gender else "male")
     )
     voice_id = (lecture.voice_id or None) if lecture else None
-    voice_speed = (getattr(lecture, "voice_speed", None) if lecture else None) or 1.3
+    # Q&A 답변은 슬라이드 내레이션 속도와 무관하게 항상 QA_AVATAR_VOICE_SPEED(기본 1.2배)
+    # 로 발화한다 — 빠를수록 렌더 영상이 짧아져 VisionStory 비용이 준다(2026-06-16 결정).
+    voice_speed = settings.QA_AVATAR_VOICE_SPEED
     avatar_scale = (getattr(lecture, "avatar_scale", None) if lecture else None) or 1.0
     avatar_id = (lecture.avatar_id or None) if lecture else None
 
@@ -265,17 +271,37 @@ def _visionstory_enabled() -> bool:
     return bool((settings.VISIONSTORY_API_KEY or "").strip()) or settings.VISIONSTORY_MOCK
 
 
-def _own_face_source_key(professor) -> str | None:
-    """VisionStory 아바타 캐시 키 — 기본 룩 id 우선, 없으면 프로필 이미지 URL."""
+def _own_face_look_id(professor, lecture=None) -> str | None:
+    """VisionStory 가 쓸 본인 룩 id — **강의에 지정한 룩(lecture.avatar_id) 우선**,
+    없으면 교수자 기본 룩.
+
+    [버그 2026-06-16] 종전엔 항상 photo_avatar_default_look_id(전역 기본 룩)만 써서,
+    강의마다 다른 룩을 골라도 VisionStory 답변 영상이 늘 기본 룩 얼굴로 나왔다
+    ("내가 지정한 아바타가 아니다"). 이 강의에 적용한 룩을 우선 쓴다. (use_vs 분기
+    안에서만 호출되므로 avatar_id 는 이미 본인 룩으로 판정된 값이다.)
+    """
+    av = (lecture.avatar_id or None) if lecture is not None else None
+    if av:
+        return av
+    return professor.photo_avatar_default_look_id if professor is not None else None
+
+
+def _own_face_source_key(professor, lecture=None) -> str | None:
+    """VisionStory 아바타 캐시 키 — 지정 룩 id 우선, 없으면 프로필 이미지 URL.
+
+    캐시 키가 바뀌면(=다른 룩을 골랐으면) VisionStory 아바타를 새 룩 이미지로 다시
+    생성한다(_submit_cluster 의 source 비교).
+    """
     if professor is None:
         return None
-    return professor.photo_avatar_default_look_id or professor.profile_image_url
+    return _own_face_look_id(professor, lecture) or professor.profile_image_url
 
 
-def _own_face_image(db, professor) -> tuple[bytes, str] | None:
-    """본인 얼굴 소스 이미지(룩 우선, 없으면 프로필 사진) → (bytes, ctype). 실패면 None.
+def _own_face_image(db, professor, lecture=None) -> tuple[bytes, str] | None:
+    """본인 얼굴 소스 이미지(지정 룩 우선, 없으면 프로필 사진) → (bytes, ctype). 실패면 None.
 
-    VisionStory 아바타를 생성할 때 이 이미지를 쓴다(아바타는 1회 생성 후 재사용).
+    VisionStory 아바타를 생성할 때 이 이미지를 쓴다. **강의에 지정한 룩**의 이미지를
+    써야 답변 영상이 교수자가 고른 얼굴로 나온다(2026-06-16 수정).
     """
     if professor is None:
         return None
@@ -284,7 +310,7 @@ def _own_face_image(db, professor) -> tuple[bytes, str] | None:
     from app.services.pipeline import s3 as s3_svc
 
     url = None
-    look_id = professor.photo_avatar_default_look_id
+    look_id = _own_face_look_id(professor, lecture)
     if look_id:
         from app.models.photo_avatar import LookStatus, PhotoAvatarLook
 
@@ -355,8 +381,23 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
     # HeyGen 표준. (전역 qa_use_own_face 플래그가 아니라 적용 아바타로 판정 — 2026-06-15
     # 사용자 보고: 타인 아바타를 골라도 Q&A 가 본인 얼굴로 섞여 나옴.)
     use_vs = _is_own_face_lecture(db, _lecture, _professor) and _visionstory_enabled()
-    own_face_img = _own_face_image(db, _professor) if use_vs else None
+    own_face_img = _own_face_image(db, _professor, _lecture) if use_vs else None
     use_vs = use_vs and own_face_img is not None
+
+    # VisionStory 전역 $ 서킷 브레이커. HeyGen 렌더는 호출부(assert_qa_render_budget →
+    # assert_heygen_budget)가 가드하지만, VS 비용은 platform_cost_logs 로 따로 적재돼 그
+    # 경로엔 안 잡힌다. 제출 직전·상태 전이 전에 일/월 한도를 확인하고, 초과면 렌더하지
+    # 않고 pending 유지(다음 배치·한도 리셋/상향 시 재시도 — character 미준비와 동일 패턴).
+    # failed 로 두지 않는 건 본인 잘못이 아닌 전역 한도이기 때문. mock 은 통과.
+    if use_vs:
+        try:
+            assert_visionstory_budget(db)
+        except BudgetExceededError as exc:
+            logger.warning(
+                "Q&A 배치: VisionStory 예산 차단 — 렌더 보류(pending 유지): cache_id=%s, %s",
+                rep.id, exc,
+            )
+            return False
 
     character = None
     if not use_vs:
@@ -405,7 +446,7 @@ def _submit_cluster(loop, db, cluster, lecture_id, instructor_id) -> bool:
 
             # 교수자별 VisionStory 아바타를 1회 생성해 재사용한다(매 렌더 재생성 금지).
             # 소스 이미지(룩/프로필)가 바뀌면 source_key 가 달라져 재생성한다.
-            source_key = _own_face_source_key(_professor)
+            source_key = _own_face_source_key(_professor, _lecture)
             avatar_id = _professor.visionstory_avatar_id
             if not avatar_id or _professor.visionstory_avatar_source != source_key:
                 avatar_id = loop.run_until_complete(
@@ -476,6 +517,71 @@ def _mark_cluster_failed(db, cluster_key, error: str | None) -> None:
     db.flush()
 
 
+def _estimate_qa_render_seconds(rep) -> float:
+    """완료 응답에 duration 이 없을 때 답변 길이로 렌더 길이(초)를 보수적으로 추정한다.
+
+    VisionStory 상태 응답은 duration 을 주지 않아(항상 None) 비용이 $0 으로 과소집계됐다.
+    실제 렌더는 답변을 ``QA_AVATAR_MAX_ANSWER_CHARS``(400) 로 잘라 합성하므로, (잘린)
+    글자수 ÷ (발화속도 × 기준 초당 글자수) 로 초를 근사한다. 한국어 평균 ~5자/초 가정.
+    """
+    text = getattr(rep, "answer_text", "") or ""
+    chars = min(len(text), settings.QA_AVATAR_MAX_ANSWER_CHARS)
+    speed = settings.QA_AVATAR_VOICE_SPEED or 1.0
+    base_cps = 5.0  # 한국어 평균 발화 ~5자/초(분당 ~300자)
+    return max(1.0, chars / (base_cps * speed))
+
+
+def _record_qa_render_cost(rep, *, is_vs: bool, duration, mock: bool) -> None:
+    """완료된 Q&A 아바타 렌더 1건(클러스터 대표)의 비용을 platform_cost_logs 에 적재.
+
+    QA 렌더는 VideoRender 가 없어 render_cost_logs(video_render_id FK)에 못 들어가,
+    그동안 어느 비용 테이블에도 기록되지 않아 운영자 비용 대시보드(/admin/costs·
+    beta-overview)가 QA 렌더 비용을 **과소집계**했다. lecture_id 키의 CostLog
+    (category=AVATAR_QA)로 적재해 두 비용 테이블 합산(스펙 13 §B)에 자동 포함시킨다.
+
+    - 클러스터 형제는 같은 클립을 공유하므로 **대표 행 1건당 1회**만 기록(비용=클립 1개).
+    - rendering→ready 전이 시점에만 호출돼(이후 폴링은 rendering 쿼리에서 빠짐) 사실상 멱등.
+    - **별도 세션으로 커밋**(record_once_committed 패턴) — 비용 기록 실패가 배치 본
+      트랜잭션(ready 전이)을 오염시키지 않게 격리한다.
+    - MOCK 은 실비용 0 → 기록 생략. **duration 미상 시 답변 길이로 렌더 길이를 추정**해
+      비용이 $0 으로 과소집계되지 않게 한다(H1). 특히 VisionStory 는 상태 응답에 duration
+      이 없어(항상 None) 종전엔 본인 얼굴 렌더가 전부 $0 으로 기록됐다.
+    """
+    if mock or rep.lecture_id is None:
+        return
+    from app.models.cost_log import CostCategory, CostLog
+    from app.services.pipeline.heygen import estimate_cost_usd as _heygen_cost
+    from app.services.pipeline.visionstory import estimate_cost_usd as _vs_cost
+
+    provider = "visionstory" if is_vs else "heygen"
+    # duration 이 없거나 0 이면 답변 길이 기반 추정으로 폴백(특히 VisionStory).
+    eff_duration = duration if (duration and duration > 0) else _estimate_qa_render_seconds(rep)
+    cost = (_vs_cost(eff_duration) if is_vs else _heygen_cost(eff_duration)) or 0.0
+    lecture_id = rep.lecture_id
+    rep_id = rep.id
+    cluster_key = rep.cluster_key or ""
+    sdb = SyncSessionLocal()
+    try:
+        sdb.add(
+            CostLog(
+                lecture_id=lecture_id,
+                category=CostCategory.avatar_qa,
+                model=provider,
+                cost_usd=float(cost),
+                memo=f"qa_avatar cache={rep_id} cluster={cluster_key}",
+            )
+        )
+        sdb.commit()
+    except Exception as exc:  # noqa: BLE001 — 비용 기록 실패가 렌더 완료를 막지 않게.
+        sdb.rollback()
+        logger.warning(
+            "Q&A 렌더 비용 기록 실패(무시): cache_id=%s, provider=%s, error=%s",
+            rep_id, provider, exc,
+        )
+    finally:
+        sdb.close()
+
+
 def _poll_inflight(loop, db) -> tuple[int, int]:
     """status=rendering 인 대표 행(heygen_job_id 보유)을 폴링해 ready/failed 로 전이.
 
@@ -517,6 +623,7 @@ def _poll_inflight(loop, db) -> tuple[int, int]:
                     s3_svc.upload_from_url(video_url, str(rep.lecture_id))
                 )
             _mark_cluster_ready(db, rep, s3_url, duration)
+            _record_qa_render_cost(rep, is_vs=is_vs, duration=duration, mock=mock)
             completed += 1
         elif status_data.get("status") == "failed":
             _mark_cluster_failed(db, rep.cluster_key, status_data.get("error", "HeyGen Q&A 렌더 실패"))
@@ -533,7 +640,10 @@ def _lecture_renders_used_this_month(db, lecture_id) -> int:
     09 §5: "아바타 Q&A 영상당 렌더 = 영상 전체에서 3렌더". 교수자 월 한도(6)와 별개로
     한 영상이 여러 밤의 배치에 걸쳐 3렌더를 초과하지 않도록 영상 단위로도 막는다.
     교수자 한도(budget.qa_renders_used_this_month)와 동일 기준 — 대표 행(heygen_job_id
-    보유)만 세고, 실패도 포함(이미 제출·과금됐을 수 있음)해 재시도 폭주를 막는다.
+    보유)만 센다. **실패(status=failed)는 제외**한다(2026-06-16 사용자 결정): 잘못 만든
+    Q&A 를 고쳐 다시 만드는 건 새 슬롯이 아니라 같은 클립의 재시도이므로, 실패가 월
+    한도를 영구 소모해 "한도 소진"으로 재시도를 막던 구조를 바로잡는다. 재시도 폭주는
+    제출 직전 ``assert_qa_render_budget``($ 서킷 브레이커)가 따로 막는다.
     """
     from sqlalchemy import func, select
 
@@ -543,6 +653,7 @@ def _lecture_renders_used_this_month(db, lecture_id) -> int:
         select(func.count(QAAnswerCache.id)).where(
             QAAnswerCache.lecture_id == lecture_id,
             QAAnswerCache.heygen_job_id.isnot(None),
+            QAAnswerCache.status != qa_avatar.STATUS_FAILED,
             QAAnswerCache.created_at >= _month_start(),
         )
     ).scalar()
@@ -696,9 +807,13 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
     """
     from app.models.lecture import Lecture
     from app.services.pipeline.budget import (
+        AvatarRerenderQuotaError,
         QARenderQuotaError,
+        assert_avatar_rerender_quota,
+        claim_avatar_render_slot,
         instructor_has_unlimited_qa,
         qa_can_render_lecture,
+        release_avatar_render_slot,
     )
     from app.services.pipeline.qa import generate_seed_answer
 
@@ -738,8 +853,39 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         if _r.status == qa_avatar.STATUS_FAILED:
             _r.status = qa_avatar.STATUS_PENDING
             _r.error_message = None
+            # 실패 렌더는 한도를 소모하지 않는다(2026-06-16 사용자 결정) — 재시도하면
+            # 새 클립으로 다시 제출되므로, 이전 실패 제출 표식(heygen_job_id·cluster_key·
+            # 영상 URL)을 비워 _lecture_renders_used_this_month / qa_renders_used_this_month
+            # 의 '제출된 렌더' 카운트에서 빠지게 한다. 안 그러면 failed→pending 으로 바뀐
+            # 뒤에도 옛 job_id 가 남아 한도를 계속 점유, 재시도가 '한도 소진'으로 막힌다.
+            _r.heygen_job_id = None
+            _r.cluster_key = None
+            _r.s3_video_url = None
     if rows:
         db.commit()
+
+    # ── C-2: 강의당 아바타 제작 횟수 상한 게이트 ──
+    # 이번 제작이 강의당 상한(AVATAR_RERENDER_MAX_PER_LECTURE)을 넘으면 렌더하지 않고
+    # 명확한 사유로 failed 표시한다(피드백 0 = 가장 혼란). 동기 재제작 엔드포인트
+    # (lectures.py)가 이미 4xx 로 1차 차단하지만, 승인(approve) 경로·직접 호출의
+    # 백스톱으로 여기서도 강제한다. 면제 계정·상한 비활성은 통과(첫 제작 count 0 도 통과).
+    if rows:
+        try:
+            assert_avatar_rerender_quota(db, lecture_id, instructor_id)
+        except AvatarRerenderQuotaError as exc:
+            for row in rows:
+                row.status = qa_avatar.STATUS_FAILED
+                row.error_message = (
+                    "이 강의의 아바타 제작 횟수를 모두 사용했습니다. 추가 제작이 "
+                    "필요하면 운영자에게 문의해 주세요."
+                )
+            db.commit()
+            logger.warning(
+                "Q&A 사전질문: 강의당 아바타 제작 횟수 상한 — seed %d개 failed 표시: "
+                "lecture=%s, instructor=%s, %s",
+                len(rows), lecture_id, instructor_id, exc,
+            )
+            return {"submitted": 0, "failed": len(rows), "blocked": "rerender_cap"}
 
     # 렌더 한도 계산.
     #  - 무제한 계정(QA_AVATAR_UNLIMITED_EMAILS, 계정주 포함)은 강의당 월 캡도 면제 —
@@ -784,7 +930,25 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
         from app.models.user import User as _User
 
         professor = db.query(_User).filter(_User.id == instructor_id).first()
-        if _resolve_character(db, loop, lecture, professor) is None:
+        # 렌더 provider 를 실제 제출(_submit_cluster)과 **동일하게** 판정한다. 본인 얼굴
+        # 강의가 VisionStory 로 렌더되면 HeyGen talking_photo 가 전혀 필요 없다.
+        #
+        # [버그 2026-06-16] 종전엔 provider 와 무관하게 _resolve_character 를 호출했는데,
+        # 그게 본인 얼굴 강의에서 _ensure_talking_photo_sync 로 **HeyGen 에 사진 아바타를
+        # 등록**한다. VisionStory 로 이전(HeyGen 아바타 전량 삭제)한 뒤에도 seed 렌더(=‘다시
+        # 제작’)마다 HeyGen 에 아바타가 되살아나고, HeyGen 사진 아바타 3개 한도(401028)에
+        # 걸려 Q&A 렌더가 통째로 실패했다. VisionStory 경로일 땐 HeyGen 을 건드리지 않는다.
+        own_face_img = (
+            _own_face_image(db, professor, lecture)
+            if (_is_own_face_lecture(db, lecture, professor) and _visionstory_enabled())
+            else None
+        )
+        use_vs = own_face_img is not None
+        # 표준/레거시 HeyGen 경로일 때만 본인 아바타(또는 표준 폴백) 확보를 사전 점검한다.
+        own_avatar_unready = (not use_vs) and (
+            _resolve_character(db, loop, lecture, professor) is None
+        )
+        if own_avatar_unready:
             for row in rows:
                 row.status = qa_avatar.STATUS_FAILED
                 row.error_message = (
@@ -799,56 +963,84 @@ def _render_seed_questions(db, loop, lecture_id, instructor_id) -> dict:
             )
             return {"submitted": 0, "failed": len(rows)}
 
+    # ── C-2: 제출 전에 강의당 제작 슬롯을 원자적으로 선점 ──
+    # 위 assert_avatar_rerender_quota 는 빠른 사전 피드백용 읽기 검사일 뿐, 동시 요청
+    # (더블클릭·중복 태스크) 사이의 경쟁을 막지 못한다(읽고-나서-쓰기). 외부 렌더 제출
+    # '전에' 조건부 UPDATE 로 슬롯을 한 번에 검사+선점해, 둘 다 통과해 상한을 넘기던
+    # TOCTOU 를 제거한다. 면제 계정·상한 비활성은 내부에서 True(증가 없음). 제출이 0
+    # 건으로 끝나면 finally 에서 되돌린다(실패 패스는 상한·비용 미소모 — 스펙 13 §C-2).
+    if not claim_avatar_render_slot(db, lecture_id, instructor_id):
+        for row in rows:
+            row.status = qa_avatar.STATUS_FAILED
+            row.error_message = (
+                "이 강의의 아바타 제작 횟수를 모두 사용했습니다. 추가 제작이 "
+                "필요하면 운영자에게 문의해 주세요."
+            )
+        db.commit()
+        logger.warning(
+            "Q&A 사전질문: 강의당 아바타 제작 슬롯 선점 실패(상한) — seed %d개 failed 표시: "
+            "lecture=%s, instructor=%s",
+            len(rows), lecture_id, instructor_id,
+        )
+        return {"submitted": 0, "failed": len(rows), "blocked": "rerender_cap"}
+
     submitted = failed = 0
-    for row in rows:
-        if submitted >= limit:
-            break  # 영상/교수자 렌더 한도 도달 — 나머지는 pending 유지.
+    try:
+        for row in rows:
+            if submitted >= limit:
+                break  # 영상/교수자 렌더 한도 도달 — 나머지는 pending 유지.
 
-        # 하이브리드: 교수자가 입력한 사전 대답이 있으면 그대로 쓰고, 비어 있으면
-        # 강의 자료(PPT) 기반으로 자동 생성한다. generate_seed_answer 는 음성 답변용
-        # 표기 규칙(출처 미표기·중국어 괄호 금지)을 적용한다.
-        answer = (row.answer_text or "").strip()
-        if not answer:
-            # 답변은 강의 발화 언어(아바타 발화 내용과 동일)로 생성한다.
-            _voice_lang = (lecture.voice_lang if lecture else None) or "ko"
-            generated, in_scope = generate_seed_answer(
-                db, task_id, row.question_text, lang=_voice_lang
-            )
-            if not in_scope:
-                # 슬라이드/임베딩이 없어 답변을 만들 수 없음(파이프라인 미완 등).
-                row.status = qa_avatar.STATUS_FAILED
-                row.error_message = "강의 자료를 찾지 못했습니다."
-                failed += 1
-                continue
-            if not generated.strip():
-                row.status = qa_avatar.STATUS_FAILED
-                row.error_message = "답변 생성 실패"
-                failed += 1
-                continue
-            answer = generated
+            # 하이브리드: 교수자가 입력한 사전 대답이 있으면 그대로 쓰고, 비어 있으면
+            # 강의 자료(PPT) 기반으로 자동 생성한다. generate_seed_answer 는 음성 답변용
+            # 표기 규칙(출처 미표기·중국어 괄호 금지)을 적용한다.
+            answer = (row.answer_text or "").strip()
+            if not answer:
+                # 답변은 강의 발화 언어(아바타 발화 내용과 동일)로 생성한다.
+                _voice_lang = (lecture.voice_lang if lecture else None) or "ko"
+                generated, in_scope = generate_seed_answer(
+                    db, task_id, row.question_text, lang=_voice_lang
+                )
+                if not in_scope:
+                    # 슬라이드/임베딩이 없어 답변을 만들 수 없음(파이프라인 미완 등).
+                    row.status = qa_avatar.STATUS_FAILED
+                    row.error_message = "강의 자료를 찾지 못했습니다."
+                    failed += 1
+                    continue
+                if not generated.strip():
+                    row.status = qa_avatar.STATUS_FAILED
+                    row.error_message = "답변 생성 실패"
+                    failed += 1
+                    continue
+                answer = generated
 
-        # 저장은 교수자 입력 스키마 상한(seed_question.answer max_length=800)까지 원문
-        # 그대로 둔다 — 렌더 상한(QA_AVATAR_MAX_ANSWER_CHARS)으로 자르지 않는다. 렌더에
-        # 넘기는 길이는 _submit_cluster 가 그 상한으로 따로 자르므로, 여기서 자르면 편집기에
-        # 보이는 원문까지 영구 손상된다(2026-06-15 사용자 보고: 답변 뒷부분 짤림).
-        row.answer_text = answer[:800]
-        row.question_embedding = qa_avatar.embed_question(row.question_text)
+            # 저장은 원문 그대로 둔다 — 렌더 상한(QA_AVATAR_MAX_ANSWER_CHARS=400)으로 자르지
+            # 않는다. 여기서 자르면 편집기에 보이는 원문이 손상된다(2026-06-15 버그). 교수자
+            # 입력은 스키마가 이미 ≤400 이라 손실이 없고, 자동 생성 답변의 안전 상한으로만 800
+            # 을 둔다. 실제 렌더에 넘기는 길이는 _submit_cluster 가 400 으로 따로 자른다(=비용 상한).
+            row.answer_text = answer[:800]
+            row.question_embedding = qa_avatar.embed_question(row.question_text)
 
-        try:
-            assert_qa_render_budget(db, instructor_id, lecture_id)
-        except QARenderQuotaError as exc:
-            logger.warning(
-                "Q&A 사전질문 예산 차단(중단): instructor=%s, lecture=%s, %s",
-                instructor_id, lecture_id, exc,
-            )
-            break
+            try:
+                assert_qa_render_budget(db, instructor_id, lecture_id)
+            except QARenderQuotaError as exc:
+                logger.warning(
+                    "Q&A 사전질문 예산 차단(중단): instructor=%s, lecture=%s, %s",
+                    instructor_id, lecture_id, exc,
+                )
+                break
 
-        # 질문 1건 = 단독 클러스터 1렌더. 기존 _submit_cluster 재사용(rendering 전이·제출).
-        if _submit_cluster(
-            loop, db, qa_avatar.Cluster(members=[row], centroid=[]),
-            lecture_id, instructor_id,
-        ):
-            submitted += 1
+            # 질문 1건 = 단독 클러스터 1렌더. 기존 _submit_cluster 재사용(rendering 전이·제출).
+            if _submit_cluster(
+                loop, db, qa_avatar.Cluster(members=[row], centroid=[]),
+                lecture_id, instructor_id,
+            ):
+                submitted += 1
+    finally:
+        # ── C-2: 슬롯은 제출 전에 선점했다(claim). 제출이 한 건도 안 됐으면(전부 실패/
+        # 스킵, 또는 예기치 못한 예외) 선점분을 되돌린다 — 실패 패스는 상한을 소모하지
+        # 않는다(스펙 13 §C-2). 한 건이라도 제출됐으면 선점을 유지(=이번 제작 1회 카운트).
+        if submitted < 1:
+            release_avatar_render_slot(db, lecture_id, instructor_id)
 
     # 이번에 렌더(시도)한 아바타/음성을 강의에 기록 — 다음 '다시 제작' 점검이 변경
     # 여부를 정확히 판단한다(현재 avatar/voice 와 비교해 stale 감지). _render_seed_questions

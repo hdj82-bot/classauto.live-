@@ -1,5 +1,6 @@
 """세션 관리 API 통합 테스트."""
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -92,12 +93,15 @@ async def test_update_session_invalid_transition(client, student, lecture, db):
 
 @pytest.mark.asyncio
 async def test_complete_session(client, student, lecture, db):
+    # 부정행위 방지(C2): 완료는 서버가 잰 경과 실시간이 충분할 때만 인정된다.
+    # 정상 완료를 흉내내려면 started_at 을 충분히 과거로 둬 실시간이 흐른 상태여야 한다.
     session = LearningSession(
         id=uuid.uuid4(),
         user_id=student.id,
         lecture_id=lecture.id,
         status=SessionStatus.in_progress,
         total_sec=600,
+        started_at=datetime.now(timezone.utc) - timedelta(seconds=600),
     )
     db.add(session)
     await db.flush()

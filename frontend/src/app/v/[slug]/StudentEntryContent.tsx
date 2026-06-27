@@ -91,6 +91,7 @@ export default function StudentEntryContent() {
         // 형제 경로(PlayerV2·assess)도 raw 통과 규약을 쓴다.
         const { data } = await api.get<PublicLecture>(
           `/api/lectures/${slug}/public`,
+          { timeout: 10000 }, // 학생 진입 핫패스 — 멈춤이 빈 화면으로 굳지 않게 상한.
         );
         if (cancelled) return;
         if (data.is_expired) {

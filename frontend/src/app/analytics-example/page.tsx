@@ -1,9 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import AnalyticsPrototype from "@/components/analyticsExample/analyticsPrototype/AnalyticsPrototype";
+import dynamic from "next/dynamic";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
+import PrototypeSkeleton from "@/components/marketing/PrototypeSkeleton";
 import { useMarketingI18n } from "@/components/marketing/useMarketingI18n";
+
+// 2400+줄 인터랙티브 미리보기는 클라이언트 전용 지연 로딩 — 초기 JS·하이드레이션
+// 비용을 줄여 첫 페인트를 앞당긴다(상단 안내 배너·CTA 는 즉시 보인다).
+const AnalyticsPrototype = dynamic(
+  () => import("@/components/analyticsExample/analyticsPrototype/AnalyticsPrototype"),
+  { ssr: false, loading: () => <PrototypeSkeleton /> },
+);
 
 /**
  * `/analytics-example` — 학습 분석 화면 미리보기 (2026-05-15).

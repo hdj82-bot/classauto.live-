@@ -85,7 +85,10 @@ get_env() {
 
 is_placeholder() {
     local v="$1"
-    [[ -z "$v" || "$v" == *"CHANGE_ME"* || "$v" == *"change-me"* || "$v" == *"your-"* ]]
+    [ -z "$v" ] && return 0
+    # 플레이스홀더 마커 통일(L5) — config.py _PLACEHOLDER_MARKERS 와 동일 집합
+    # (CHANGE_ME·CHANGE-ME·CHANGEME·YOUR_·YOUR-·PLACEHOLDER), 대소문자 무시.
+    printf '%s' "$v" | grep -qiE 'CHANGE[_-]?ME|YOUR[_-]|PLACEHOLDER'
 }
 
 # ── .env.example 에서 [REQUIRED] 변수 목록 추출 ─────────────────────────────

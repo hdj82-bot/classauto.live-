@@ -73,6 +73,10 @@ interface SeedQuestionsWire {
   used_this_month: number;
   remaining: number;
   qa_avatar_stale?: boolean;
+  // C-2(스펙 13): 강의당 아바타 제작 횟수 상한. 무제한/상한 비활성이면 큰 sentinel.
+  avatar_render_count?: number;
+  avatar_rerender_remaining?: number;
+  avatar_rerender_max?: number;
 }
 
 export interface SeedQuestionsResult {
@@ -83,6 +87,12 @@ export interface SeedQuestionsResult {
   usedThisMonth: number;
   /** 이번 달 남은 렌더 슬롯 수. */
   remaining: number;
+  /** C-2: 이 강의의 누적 아바타 제작 패스 수. */
+  avatarRenderCount: number;
+  /** C-2: 이 강의에 남은 아바타 제작 횟수(상한 − 누적). 무제한이면 매우 큰 값. */
+  avatarRerenderRemaining: number;
+  /** C-2: 강의당 아바타 제작 횟수 상한(설정값). */
+  avatarRerenderMax: number;
   /** 백엔드 미응답/404 로 빈 목록을 쓰는 중인지. */
   deferred: boolean;
   /** 현재 아바타/음성이 이미 렌더된 클립과 달라 '다시 제작' 시 새로 만들어야 하는지. */
@@ -95,6 +105,9 @@ function _parse(data: SeedQuestionsWire, deferred: boolean): SeedQuestionsResult
     max: data.max ?? 3,
     usedThisMonth: data.used_this_month ?? 0,
     remaining: data.remaining ?? 0,
+    avatarRenderCount: data.avatar_render_count ?? 0,
+    avatarRerenderRemaining: data.avatar_rerender_remaining ?? 0,
+    avatarRerenderMax: data.avatar_rerender_max ?? 0,
     deferred,
     qaAvatarStale: !!data.qa_avatar_stale,
   };
@@ -114,6 +127,9 @@ export async function getSeedQuestions(
       max: 3,
       usedThisMonth: 0,
       remaining: 0,
+      avatarRenderCount: 0,
+      avatarRerenderRemaining: 0,
+      avatarRerenderMax: 0,
       deferred: true,
       qaAvatarStale: false,
     };
@@ -142,13 +158,17 @@ export interface GeneratedSeedQuestion {
  * (저장·렌더하지 않음). 교수자가 "질문과 답변 자동 생성" 버튼으로 호출 → 받은
  * 질문·답변을 카드에 채워 검토·수정 후 저장한다. 발화 언어로 작성된다. 미배포/404
  * 시 throw → 호출부가 toast.
+ *
+ * ``exclude``: 이미 다른 카드에 채워진 질문들. 넘기면 백엔드가 그 주제를 피해 강의의
+ * 또 다른 핵심을 뽑는다(카드별 생성이 같은 어순 질문만 반복하던 문제 방지).
  */
 export async function generateSeedQuestions(
   lectureId: string,
+  exclude: string[] = [],
 ): Promise<GeneratedSeedQuestion[]> {
   const { data } = await api.post<{
     questions?: { question: string; answer: string }[];
-  }>(`/api/lectures/${lectureId}/seed-questions/generate`);
+  }>(`/api/lectures/${lectureId}/seed-questions/generate`, { exclude });
   return (data.questions ?? []).map((q) => ({
     question: q.question ?? "",
     answer: q.answer ?? "",
@@ -185,9 +205,13 @@ export async function generateSeedAnswer(
  */
 export async function renderSeedQuestions(
   lectureId: string,
+  opts?: { force?: boolean },
 ): Promise<SeedQuestionsResult> {
+  // force=true → 이미 완성(ready)된 답변 클립도 pending 으로 되돌려 현재 아바타/음성
+  // 으로 강제 재생성한다(같은 아바타를 다시 골라 변경 감지가 안 될 때 사용).
+  const qs = opts?.force ? "?force=true" : "";
   const { data } = await api.post<SeedQuestionsWire>(
-    `/api/lectures/${lectureId}/seed-questions/render`,
+    `/api/lectures/${lectureId}/seed-questions/render${qs}`,
   );
   return _parse(data, false);
 }

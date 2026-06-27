@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import stripe
 from fastapi import HTTPException, status
@@ -199,6 +199,8 @@ async def _handle_checkout_completed(db: AsyncSession, session) -> str:
     if sub:
         sub.stripe_subscription_id = subscription_id
         sub.plan = new_plan
+        # 결제 성공 — past_due 그레이스 기한이 있었다면 해제(정상 복귀).
+        sub.expires_at = None
         await db.flush()
         logger.info(
             "구독 활성화: customer=%s, plan=%s, price_id=%s",
@@ -225,6 +227,8 @@ async def _handle_subscription_updated(db: AsyncSession, subscription) -> str:
 
     sub.plan = new_plan
     sub.stripe_subscription_id = subscription.id
+    # 구독이 유효 상태로 갱신됨 — past_due 그레이스 기한 해제(결제 복구 반영).
+    sub.expires_at = None
     await db.flush()
     logger.info(
         "구독 변경: customer=%s, plan=%s, price_id=%s",
@@ -243,16 +247,80 @@ async def _handle_subscription_deleted(db: AsyncSession, subscription) -> str:
 
     sub.plan = PlanType.free
     sub.stripe_subscription_id = None
+    # 해지 확정 — past_due 그레이스 기한도 정리(상태 일관성).
+    sub.expires_at = None
     await db.flush()
     logger.info("구독 해지 → FREE: customer=%s", customer_id)
     return "cancelled"
 
 
 async def _handle_payment_failed(db: AsyncSession, invoice) -> str:
-    """결제 실패 알림 로깅."""
+    """결제 실패 → past_due 추적 + 그레이스 기한 설정(M8).
+
+    Stripe 는 결제 실패 시 smart retries 로 수 일에 걸쳐 재시도하므로 즉시
+    다운그레이드하면 일시적 카드 오류만으로 플랜이 깎인다. 첫 실패에
+    ``subscriptions.expires_at = now + PAYMENT_DUNNING_GRACE_DAYS`` 로 그레이스
+    기한만 찍어 past_due 로 표시하고(연속 실패 시 기한을 앞당기지 않는다),
+    기한이 지나도 복구되지 않은 구독은 ``downgrade_overdue_subscriptions``
+    (beat 훅)가 FREE 로 내린다. 결제가 복구되면 성공 핸들러가 expires_at 을
+    비워 정상 복귀시킨다.
+    """
     customer_id = invoice.customer
-    logger.warning("결제 실패: customer=%s, amount=%s", customer_id, invoice.amount_due)
-    return "payment_failed_logged"
+    sub = await _get_sub_by_customer(db, customer_id)
+    if not sub:
+        logger.warning("결제 실패했으나 사용자를 찾을 수 없음: customer=%s", customer_id)
+        return "user_not_found"
+
+    # 첫 실패에만 그레이스 기한을 찍는다 — 연속 실패가 기한을 매번 미루지 못하게.
+    if sub.expires_at is None:
+        sub.expires_at = datetime.now(timezone.utc) + timedelta(
+            days=settings.PAYMENT_DUNNING_GRACE_DAYS
+        )
+    await db.flush()
+
+    grace_until = sub.expires_at.isoformat() if sub.expires_at else "?"
+    logger.warning(
+        "결제 실패 → past_due: customer=%s, amount=%s, grace_until=%s",
+        customer_id, getattr(invoice, "amount_due", None), grace_until,
+    )
+    if sentry_sdk is not None:
+        sentry_sdk.capture_message(
+            f"Stripe payment_failed → past_due (customer={customer_id}, grace_until={grace_until})",
+            level="warning",
+        )
+    return "past_due"
+
+
+async def downgrade_overdue_subscriptions(
+    db: AsyncSession, *, now: datetime | None = None
+) -> int:
+    """그레이스 기한(expires_at)이 지난 past_due 구독을 FREE 로 다운그레이드(M8).
+
+    ``invoice.payment_failed`` 가 찍은 expires_at 이 경과했는데도 결제가 복구되지
+    않은(=아직 유료 플랜인) 구독을 정리한다. Celery beat 가 하루 1회 호출하는 것을
+    의도한 dunning 마무리 훅. 반환값은 다운그레이드한 건수.
+    """
+    cutoff = now or datetime.now(timezone.utc)
+    result = await db.execute(
+        select(Subscription).where(
+            Subscription.expires_at.is_not(None),
+            Subscription.expires_at < cutoff,
+            Subscription.plan != PlanType.free,
+        )
+    )
+    overdue = result.scalars().all()
+    for sub in overdue:
+        logger.info(
+            "past_due 그레이스 만료 → FREE: customer=%s, plan=%s, expired_at=%s",
+            sub.stripe_customer_id, sub.plan.value,
+            sub.expires_at.isoformat() if sub.expires_at else "?",
+        )
+        sub.plan = PlanType.free
+        sub.stripe_subscription_id = None
+        sub.expires_at = None
+    if overdue:
+        await db.flush()
+    return len(overdue)
 
 
 async def _get_sub_by_customer(db: AsyncSession, customer_id: str) -> Subscription | None:

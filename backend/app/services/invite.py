@@ -39,8 +39,13 @@ async def create_invite(
     created_by: uuid.UUID | None,
     role: str = "professor",
     ttl_days: int | None = None,
+    cohort: str | None = None,
 ) -> ProfessorInvite:
-    """이메일 지정 단일 사용 초대 생성. 토큰은 추측 불가한 난수."""
+    """이메일 지정 단일 사용 초대 생성. 토큰은 추측 불가한 난수.
+
+    ``cohort`` 는 베타 코호트 태그(예: "2026-08") — 가입 시 교수자 users.cohort 로
+    전파한다(없으면 NULL).
+    """
     days = settings.PROFESSOR_INVITE_TTL_DAYS if ttl_days is None else ttl_days
     expires_at = _now() + timedelta(days=days) if days and days > 0 else None
     inv = ProfessorInvite(
@@ -50,6 +55,7 @@ async def create_invite(
         role=role,
         created_by=created_by,
         expires_at=expires_at,
+        cohort=cohort,
     )
     db.add(inv)
     await db.commit()

@@ -14,7 +14,8 @@ import {
   displayStyle,
 } from "@/components/professor/shell";
 import {
-  EvidenceStrip,
+  EvidenceVisuals,
+  WeakConceptAccuracyChart,
   WeakConceptList,
   RecommendationCards,
   ClassVsIndividual,
@@ -61,14 +62,22 @@ export default function InsightsReportPage() {
         // (분석 상세 페이지와 동일). 실패해도 보고서는 렌더.
         const lectureMetaPromise = (async () => {
           try {
-            const { data: courses } = await api.get<{ id: string }[]>("/api/courses");
-            for (const c of courses) {
-              const { data: lecs } = await api.get<LectureMeta[]>(
-                `/api/courses/${c.id}/lectures`,
-              );
-              const found = lecs.find((l) => l.id === lectureId);
-              if (found) return found;
-            }
+            const { data: courses } = await api.get<{ id: string }[]>(
+              "/api/courses",
+              { timeout: 12000 },
+            );
+            // course 별 직렬 → 병렬. 개별 실패는 빈 목록으로 흡수.
+            const lists = await Promise.all(
+              courses.map((c) =>
+                api
+                  .get<LectureMeta[]>(`/api/courses/${c.id}/lectures`, {
+                    timeout: 12000,
+                  })
+                  .then((r) => r.data)
+                  .catch(() => [] as LectureMeta[]),
+              ),
+            );
+            return lists.flat().find((l) => l.id === lectureId) ?? null;
           } catch {
             /* 무시 */
           }
@@ -177,7 +186,7 @@ export default function InsightsReportPage() {
 
       <div className="space-y-6">
         <Section title={t("evidence.title")}>
-          <EvidenceStrip evidence={evidence} />
+          <EvidenceVisuals evidence={evidence} />
         </Section>
 
         <Section title={t("summary.title")}>
@@ -195,6 +204,10 @@ export default function InsightsReportPage() {
         </Section>
 
         <Section title={t("weakConcepts.title")} description={t("weakConcepts.subtitle")}>
+          <WeakConceptAccuracyChart
+            concepts={evidence.weak_concepts}
+            classAvg={evidence.quiz.overall_accuracy}
+          />
           <WeakConceptList
             briefingConcepts={payload.weak_concepts}
             evidenceConcepts={evidence.weak_concepts}

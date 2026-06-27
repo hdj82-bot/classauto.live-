@@ -4,6 +4,8 @@
     "openLecture": "강의 열기",
     "openStudio": "작업 화면으로 이동",
     "preview": "미리보기",
+    "analyze": "데이터 분석",
+    "analyzeAria": "{title} 학습 데이터 분석 보기",
     "openLibrary": "전체 강의 보기",
     "inProduction": "제작 중",
     "delete": "삭제",

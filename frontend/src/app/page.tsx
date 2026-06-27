@@ -39,17 +39,64 @@ import "./demo/demo-v3.css";
  *   - docs/planning/04-demo-page.md — /demo 스펙 (히어로 카피 정합)
  *   - docs/design-system/colors.md §1 — light beige + gold dual-surface
  */
-// 대문 좌측 인문계열 카드 = 교수자가 실제 제작·공개한 강의(중국어번역작문 2주차).
-// 이 강의가 비공개/삭제되면 링크가 깨지므로, 데모 강의를 바꾸면 슬러그·텍스트도
-// 함께 갱신한다. (우측 자연계열 카드는 종전대로 /demo mock 유지.)
-const SOCIAL_DEMO_LECTURE_HREF = "/lecture/중국어-필수-문장성분-f7dda164";
+// 대문의 두 분야 카드 = 교수자가 실제 제작·공개한 강의로 직행한다(데모 mock 아님).
+// 강의가 비공개/삭제되면 링크가 깨지므로, 데모 강의를 바꾸면 슬러그·텍스트·슬라이드
+// 수도 함께 갱신한다.
+//  - 좌측(인문계열) = 중국어 문장 성분과 어순
+//  - 우측(자연계열) = 코딩의 기초 (영어 음성 + 한국어 자막)
+// 두 HREF 모두 로그인 게이트 없는 /lecture/[slug] (학생 진입 /v/ 가 아님) — 누구나
+// 클릭 즉시 영상 재생(홍보용). /v/ 는 비로그인에게 로그인/회원가입만 노출하므로 금지.
+const SOCIAL_DEMO_LECTURE_HREF =
+  "/lecture/중국어-문장-성분과-어순한국어-음성중국어-자막-96f7569b";
 const SOCIAL_DEMO_LECTURE_CARD = {
   tagline: "A · Liberal Arts",
-  metaLine: "실제 강의 · 영어 음성 + 한국어 자막",
-  title: "중국어 필수 문장성분",
+  metaLine: "실제 강의 · 한국어 음성 + 중국어 자막",
+  title: "중국어 문장 성분과 어순",
   subtitle:
-    "한국어와 중국어의 문장성분 차이를 다루는 실제 제작 강의입니다. 학생 화면 그대로 영어 음성·한국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
+    "한국어와 중국어의 문장 성분·어순 차이를 다루는 실제 제작 강의입니다. 학생 화면 그대로 한국어 음성·중국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
   statSlides: "12 슬라이드",
+  statSecondary: "AI 아바타 Q&A",
+};
+
+const NATURAL_DEMO_LECTURE_HREF =
+  "/lecture/코딩의-기초영문음성한국어자막-648873e7";
+const NATURAL_DEMO_LECTURE_CARD = {
+  tagline: "B · Computer Science",
+  metaLine: "실제 강의 · 영어 음성 + 한국어 자막",
+  title: "코딩의 기초",
+  subtitle:
+    "프로그래밍 입문 개념을 다루는 실제 제작 강의입니다. 학생 화면 그대로 영어 음성·한국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
+  statSlides: "10 슬라이드",
+  statSecondary: "AI 아바타 Q&A",
+};
+
+// 대문 하단 둘째 줄 — 다국어 음성·자막을 보여주는 추가 실제 강의 카드 2장
+// (사용자 요청 2026-06-24). 좌측=뇌과학(일본어 음성+영어 자막),
+// 우측=중국 경제(중국어 음성+한국어 자막). 위 두 카드와 동일하게 로그인 게이트
+// 없는 /lecture/[slug] 로 직행하므로 누구나 클릭 즉시 시청 가능.
+// FieldSelectCard 는 분야(social/natural) 라우팅 대신 href 직행 모드를 쓴다.
+// testId 는 기존 demo-field-social/natural 과 충돌하지 않도록 고유 값 부여.
+const NEURO_DEMO_LECTURE_HREF =
+  "/lecture/학습과-기억의-뇌과학일본어-음성-영어-자막-302b1296";
+const NEURO_DEMO_LECTURE_CARD = {
+  tagline: "C · Natural Science",
+  metaLine: "실제 강의 · 일본어 음성 + 영어 자막",
+  title: "학습과 기억의 뇌과학",
+  subtitle:
+    "기억이 형성·저장·인출되는 뇌의 작동 원리와 효과적인 학습 전략을 다루는 실제 제작 강의입니다. 학생 화면 그대로 일본어 음성·영어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
+  statSlides: "10 슬라이드",
+  statSecondary: "AI 아바타 Q&A",
+};
+
+const CHINA_ECON_DEMO_LECTURE_HREF =
+  "/lecture/데이터로-읽는-현대-중국-경제중국어-음성-한국어-자막-e9a070b4";
+const CHINA_ECON_DEMO_LECTURE_CARD = {
+  tagline: "D · Social Science",
+  metaLine: "실제 강의 · 중국어 음성 + 한국어 자막",
+  title: "데이터로 읽는 2026 현대 중국 경제",
+  subtitle:
+    "최신 통계와 데이터로 2026년 현재 중국 경제의 구조와 흐름을 읽어내는 실제 제작 강의입니다. 학생 화면 그대로 중국어 음성·한국어 자막으로 시청하고, AI 아바타에게 바로 질문해보세요.",
+  statSlides: "10 슬라이드",
   statSecondary: "AI 아바타 Q&A",
 };
 
@@ -58,13 +105,14 @@ export default function LandingPage() {
   const { t: tCommon } = useMarketingI18n();
   const router = useRouter();
 
-  // 분야 카드 선택. 좌측 인문계열(social)은 교수자가 실제 제작·공개한 강의
-  // (중국어번역작문 2주차) 학생 화면으로 직행한다. 우측 자연계열(natural)은
-  // 종전대로 /demo mock 으로 deep-link 한다(?field=X 자동 진입).
+  // 분야 카드 선택. 두 카드 모두 교수자가 실제 제작·공개한 강의 학생 화면으로
+  // 직행한다(좌측=중국어 필수 문장성분, 우측=코딩의 기초). '시작하기' = 곧장 영상.
   const handleSelectField = useCallback(
     (f: DemoField) => {
       if (f === "social") {
         router.push(SOCIAL_DEMO_LECTURE_HREF);
+      } else if (f === "natural") {
+        router.push(NATURAL_DEMO_LECTURE_HREF);
       } else {
         router.push(`/demo?field=${f}`);
       }
@@ -269,7 +317,27 @@ export default function LandingPage() {
                 onSelect={handleSelectField}
                 override={{ ...SOCIAL_DEMO_LECTURE_CARD, glyph: <BookGlyph /> }}
               />
-              <FieldSelectCard field="natural" onSelect={handleSelectField} />
+              <FieldSelectCard
+                field="natural"
+                onSelect={handleSelectField}
+                override={NATURAL_DEMO_LECTURE_CARD}
+              />
+              {/* 둘째 줄 — href 직행 모드의 추가 실제 강의 카드 2장.
+                  좌측=뇌과학(자연계열 기본 글리프), 우측=중국 경제(인문계열 글리프). */}
+              <FieldSelectCard
+                field="natural"
+                onSelect={handleSelectField}
+                override={NEURO_DEMO_LECTURE_CARD}
+                href={NEURO_DEMO_LECTURE_HREF}
+                testId="demo-field-neuro"
+              />
+              <FieldSelectCard
+                field="social"
+                onSelect={handleSelectField}
+                override={{ ...CHINA_ECON_DEMO_LECTURE_CARD, glyph: <BookGlyph /> }}
+                href={CHINA_ECON_DEMO_LECTURE_HREF}
+                testId="demo-field-china-econ"
+              />
             </div>
           </div>
         </section>

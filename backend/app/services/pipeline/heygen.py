@@ -1,7 +1,9 @@
 """HeyGen API 클라이언트."""
 from __future__ import annotations
 
+import json
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -9,6 +11,7 @@ import httpx
 
 from app.core.config import settings
 from app.core.metrics import track_external_api
+from app.core.redis import get_redis
 from app.core.retry import RetryableHTTPError, request_with_retry
 
 logger = logging.getLogger(__name__)
@@ -211,8 +214,71 @@ async def get_video_status(video_id: str) -> dict:
 # ── 아바타 목록 조회 ─────────────────────────────────────────────────────────
 
 
-async def list_avatars() -> list[dict[str, Any]]:
-    """사용 가능한 아바타 목록 조회."""
+# HeyGen 계정 아바타 목록은 모든 교수자에게 동일하고 거의 바뀌지 않는다. 하지만
+# GET /api/avatars 는 교수자가 아바타 페이지를 열 때마다 호출돼, 캐시가 없으면
+# 매번 HeyGen /v2/avatars 를 친다. HeyGen 지연·429 시 재시도(30s×3 + 백오프)가
+# 그대로 사용자 대기로 노출되므로, 프로세스 메모리에 짧게(기본 5분) 캐시해 매
+# 요청 외부 호출을 없앤다. 성공 응답만 캐시한다(오류는 즉시 표면화).
+_AVATARS_CACHE_TTL = 300.0
+_avatars_cache: tuple[float, list[dict[str, Any]]] | None = None
+
+# ── 공유(Redis) 캐시 ──────────────────────────────────────────────────────────
+# 위 in-proc 캐시는 워커마다 따로라(Railway 다중 워커) 콜드 워커·재시작 직후엔
+# 매번 HeyGen 을 다시 친다. HeyGen 카탈로그(아바타/그룹/룩)는 계정 전역이라 거의
+# 안 바뀌므로, Redis 에 짧게 공유 캐싱해 워커가 달라도·재시작돼도 외부 호출을
+# 줄인다. Redis 장애는 절대 기능을 막지 않게 모든 예외를 삼키고 HeyGen 으로 폴백.
+#
+# 테스트 격리: conftest 의 autouse 픽스처가 매 테스트마다 reset_avatars_cache()
+# 를 호출한다. Redis 는 CI 에 실제로 떠 있어(키가 테스트 간 남으면 오류 케이스가
+# 캐시 적중으로 가려짐) sync 인 reset 에서 키를 지울 수 없으므로, 키에 epoch 을
+# 박고 reset 이 epoch 을 올린다 → 다음 읽기는 새 키(미스)가 된다. 프로덕션은
+# reset 을 부르지 않아 모든 워커가 v0 키를 공유한다.
+_REDIS_TTL = 600
+_cache_epoch = 0
+
+
+def reset_avatars_cache() -> None:
+    """HeyGen 카탈로그 캐시(in-proc + 공유)를 무효화한다(테스트·강제 갱신용)."""
+    global _avatars_cache, _cache_epoch
+    _avatars_cache = None
+    _cache_epoch += 1
+
+
+def _ckey(name: str) -> str:
+    return f"heygen:{name}:v{_cache_epoch}"
+
+
+async def _redis_get_json(key: str) -> Any | None:
+    try:
+        raw = await get_redis().get(key)
+        if raw:
+            return json.loads(raw)
+    except Exception:  # noqa: BLE001 — Redis 장애는 캐시 미스로 강등(기능 차단 금지)
+        logger.debug("heygen redis cache get failed key=%s", key, exc_info=True)
+    return None
+
+
+async def _redis_set_json(key: str, value: Any, ttl: int = _REDIS_TTL) -> None:
+    try:
+        await get_redis().set(key, json.dumps(value), ex=ttl)
+    except Exception:  # noqa: BLE001
+        logger.debug("heygen redis cache set failed key=%s", key, exc_info=True)
+
+
+async def list_avatars(*, use_cache: bool = True) -> list[dict[str, Any]]:
+    """사용 가능한 아바타 목록 조회. 기본 in-proc(5분) + Redis(10분) 캐시."""
+    global _avatars_cache
+    if use_cache:
+        if _avatars_cache is not None:
+            cached_at, cached = _avatars_cache
+            if time.monotonic() - cached_at < _AVATARS_CACHE_TTL:
+                return cached
+        # L2: 워커 간 공유 캐시. 콜드 워커가 HeyGen 을 다시 치지 않게 한다.
+        shared = await _redis_get_json(_ckey("avatars"))
+        if isinstance(shared, list):
+            _avatars_cache = (time.monotonic(), shared)
+            return shared
+
     url = f"{settings.HEYGEN_BASE_URL}/v2/avatars"
 
     resp = await _request_with_retry("GET", url, timeout=30.0)
@@ -223,7 +289,7 @@ async def list_avatars() -> list[dict[str, Any]]:
     data = resp.json().get("data", {})
     avatars = data.get("avatars", [])
 
-    return [
+    result = [
         {
             "avatar_id": a.get("avatar_id"),
             "avatar_name": a.get("avatar_name"),
@@ -233,6 +299,9 @@ async def list_avatars() -> list[dict[str, Any]]:
         }
         for a in avatars
     ]
+    _avatars_cache = (time.monotonic(), result)
+    await _redis_set_json(_ckey("avatars"), result)
+    return result
 
 
 # ── 아바타 그룹 (Photo Avatar — 웹 "공개 아바타" 캐릭터) ───────────────────────
@@ -254,6 +323,9 @@ async def list_avatar_groups() -> list[dict[str, Any]]:
     """
     if settings.HEYGEN_MOCK:
         return []
+    cached = await _redis_get_json(_ckey("groups"))
+    if isinstance(cached, list):
+        return cached
     url = f"{settings.HEYGEN_BASE_URL}/v2/avatar_group.list"
     resp = await _request_with_retry(
         "GET", url, params={"include_public": "true"}, timeout=30.0
@@ -293,6 +365,7 @@ async def list_avatar_groups() -> list[dict[str, Any]]:
                 ),
             }
         )
+    await _redis_set_json(_ckey("groups"), out)
     return out
 
 
@@ -304,6 +377,9 @@ async def list_avatars_in_group(group_id: str) -> list[dict[str, Any]]:
     """
     if settings.HEYGEN_MOCK:
         return []
+    cached = await _redis_get_json(_ckey(f"group_looks:{group_id}"))
+    if isinstance(cached, list):
+        return cached
     url = f"{settings.HEYGEN_BASE_URL}/v2/avatar_group/{group_id}/avatars"
     resp = await _request_with_retry("GET", url, timeout=30.0)
     if resp.status_code != 200:
@@ -337,6 +413,7 @@ async def list_avatars_in_group(group_id: str) -> list[dict[str, Any]]:
                 ),
             }
         )
+    await _redis_set_json(_ckey(f"group_looks:{group_id}"), out)
     return out
 
 

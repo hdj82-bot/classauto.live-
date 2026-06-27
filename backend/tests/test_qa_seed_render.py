@@ -287,6 +287,93 @@ def test_seed_render_fails_when_avatar_unavailable(sync_db, mock_render, monkeyp
         assert r.heygen_job_id is None  # 렌더(제출) 자체를 하지 않는다.
 
 
+def test_seed_render_own_face_visionstory_never_registers_heygen(
+    sync_db, mock_render, monkeypatch
+):
+    """본인 얼굴 + VisionStory 강의의 seed 렌더는 HeyGen talking_photo 를 만들지 않는다.
+
+    회귀(2026-06-16 사용자 보고): 사전점검이 provider 와 무관하게 _resolve_character 를
+    호출해, 본인 얼굴 강의에서 _ensure_talking_photo_sync 가 HeyGen 에 사진 아바타를
+    등록했다. VisionStory 로 이전(HeyGen 아바타 전량 삭제)한 뒤에도 ‘다시 제작’마다
+    HeyGen 에 아바타가 되살아나 3개 한도(401028)로 Q&A 가 통째로 실패했다.
+    """
+    import app.services.pipeline.visionstory as vs_mod
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    monkeypatch.setattr(settings, "VISIONSTORY_MOCK", True)
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    # 강의에 본인 얼굴(=교수자 talking_photo_id)을 적용 → 본인 얼굴 경로.
+    prof.photo_avatar_id = "tp-own"
+    lec.avatar_id = "tp-own"
+    # VisionStory 가 쓸 본인 얼굴 이미지는 확보된다고 가정(S3 다운로드 우회).
+    monkeypatch.setattr(
+        qa_batch, "_own_face_image", lambda *a, **k: (b"img", "image/png")
+    )
+
+    # 핵심 단언 — HeyGen talking_photo 등록은 절대 호출되면 안 된다.
+    def _must_not_register(*_a, **_k):
+        raise AssertionError("VisionStory 경로인데 HeyGen talking_photo 를 등록함")
+
+    monkeypatch.setattr(qa_batch, "_ensure_talking_photo_sync", _must_not_register)
+
+    async def _mk_avatar(*_a, **_k):
+        return "vs-avatar-1"
+
+    async def _mk_video(*_a, **_k):
+        return "vs-video-1"
+
+    monkeypatch.setattr(vs_mod, "create_avatar", _mk_avatar)
+    monkeypatch.setattr(vs_mod, "submit_talking_video", _mk_video)
+
+    _seed(sync_db, lec, prof, "이 강의의 핵심 개념은?")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 1
+    row = (
+        sync_db.query(QAAnswerCache)
+        .filter(QAAnswerCache.origin == qa_avatar.ORIGIN_SEED)
+        .first()
+    )
+    assert row.status == qa_avatar.STATUS_RENDERING
+    # VisionStory 로 제출됐다는 표식(접두) — HeyGen 경로가 아니다.
+    assert (row.heygen_job_id or "").startswith("visionstory:")
+
+
+def test_own_face_look_id_prefers_lecture_designated_look():
+    """VisionStory 본인 룩 선택 — 강의에 지정한 룩(lecture.avatar_id)을 기본 룩보다 우선.
+
+    회귀(2026-06-16 사용자 보고): 강의마다 다른 룩을 골라도 답변 영상이 늘 기본 룩
+    얼굴로 나왔다("내가 지정한 아바타가 아니다"). 지정 룩을 우선 쓴다.
+    """
+    from app.tasks import qa_batch
+
+    class _Prof:
+        photo_avatar_default_look_id = "default-look"
+        profile_image_url = "https://s3/profile.jpg"
+
+    class _Lec:
+        avatar_id = "designated-look"
+
+    # 강의에 지정한 룩이 있으면 그것을 쓴다(기본 룩이 아니라).
+    assert qa_batch._own_face_look_id(_Prof(), _Lec()) == "designated-look"
+    # 강의 아바타 미지정 → 교수자 기본 룩으로 폴백.
+    class _LecNone:
+        avatar_id = None
+    assert qa_batch._own_face_look_id(_Prof(), _LecNone()) == "default-look"
+    # lecture 인자 없음 → 기본 룩(무회귀).
+    assert qa_batch._own_face_look_id(_Prof(), None) == "default-look"
+    # source_key 도 지정 룩을 반영(다른 룩 선택 시 VisionStory 아바타 재생성 유도).
+    assert qa_batch._own_face_source_key(_Prof(), _Lec()) == "designated-look"
+
+
 def test_resolve_character_falls_back_to_standard_avatar(sync_db, monkeypatch):
     """본인 얼굴(Talking Photo) 미확보 시 표준 아바타로 폴백해 Q&A 가 막히지 않는다."""
     from app.models.lecture import VoiceGender
@@ -528,6 +615,159 @@ def test_limit_zero_marks_failed_with_quota_message(sync_db, mock_render, monkey
     assert "한도" in (row.error_message or "")  # 조용한 '대기' 가 아니라 사유 표시
 
 
+def test_failed_renders_do_not_consume_lecture_cap(sync_db, mock_render, monkeypatch):
+    """실패한 Q&A 렌더는 영상당 한도를 소모하지 않는다 — 재시도가 '한도 소진'으로 안 막힘.
+
+    회귀(2026-06-16 사용자 결정): 종전엔 실패 렌더도 heygen_job_id 보유로 카운트돼,
+    한 영상의 3렌더가 모두 실패하면 limit=0 → 재시도가 전부 '한도 소진'으로 막혔다
+    (잘못 만들면 영상 통째로 다시 만들어야 하는 구조). 실패는 한도에서 제외한다.
+    """
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    prof, _c, lec = _seed_lecture(sync_db)  # 일반 계정(무제한 아님)
+    # 직전 시도에서 3개(영상당 캡=3)가 모두 failed(제출 표식 heygen_job_id 보유)로 박힘.
+    for i in range(3):
+        sync_db.add(QAAnswerCache(
+            lecture_id=lec.id, instructor_id=prof.id, question_text=f"질문 {i}",
+            answer_text="사전 답변", status=qa_avatar.STATUS_FAILED,
+            error_message="이전 실패", heygen_job_id=f"job-old-{i}",
+            origin=qa_avatar.ORIGIN_SEED,
+        ))
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    # 실패가 한도를 소모하지 않으므로 3개 모두 재시도 제출(한도 소진 차단 없음).
+    assert result == {"submitted": 3, "failed": 0}
+    rows = sync_db.query(QAAnswerCache).all()
+    assert all(r.status == qa_avatar.STATUS_RENDERING for r in rows)
+    # 재시도는 새 job 으로 제출 — 옛 실패 job_id 는 비워졌다.
+    assert all(
+        r.heygen_job_id and not r.heygen_job_id.startswith("job-old") for r in rows
+    )
+
+
+# ── 3-b. C-2: 강의당 아바타 제작(렌더 패스) 횟수 상한 ──────────────────────────
+
+
+def test_rerender_pass_counts_as_one_regardless_of_clusters(
+    sync_db, mock_render, monkeypatch
+):
+    """한 번의 제작이 클러스터/클립 3개를 렌더해도 강의 카운터는 +1 만 증가(패스=1)."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    prof, _c, lec = _seed_lecture(sync_db)
+    for i in range(3):  # 질문 1건 = 단독 클러스터 → 3 제출
+        _seed(sync_db, lec, prof, f"질문 {i}")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 3
+    sync_db.refresh(lec)
+    assert lec.avatar_render_count == 1  # 클립 3개여도 패스는 1
+
+
+def test_rerender_cap_blocks_after_max(sync_db, mock_render, monkeypatch):
+    """상한(여기선 2)에 도달하면 다음 제작은 렌더 없이 failed + 사유로 차단된다."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    monkeypatch.setattr(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 2)
+    prof, _c, lec = _seed_lecture(sync_db)
+    _seed(sync_db, lec, prof, "질문")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        # 패스 1·2 — 성공(각 +1) → count 2 도달.
+        for _ in range(2):
+            # 다음 패스를 위해 ready/rendering 을 pending 으로 되돌릴 필요 없이,
+            # _render_seed_questions 는 pending+failed 만 잡으므로 새 질문을 매번 추가.
+            r = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+            assert r["submitted"] >= 1
+            # 다음 패스용 새 질문(이전 질문은 rendering 으로 빠짐).
+            _seed(sync_db, lec, prof, f"추가 {_}")
+            sync_db.commit()
+        sync_db.refresh(lec)
+        assert lec.avatar_render_count == 2
+
+        # 패스 3 — 상한 도달 → 차단.
+        blocked = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert blocked["submitted"] == 0
+    assert blocked.get("blocked") == "rerender_cap"
+    sync_db.refresh(lec)
+    assert lec.avatar_render_count == 2  # 차단된 패스는 카운트하지 않음
+    # 차단된 패스의 pending 질문은 사유와 함께 failed.
+    pendings = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.status == qa_avatar.STATUS_PENDING
+    ).count()
+    assert pendings == 0
+    blocked_row = sync_db.query(QAAnswerCache).filter(
+        QAAnswerCache.status == qa_avatar.STATUS_FAILED
+    ).first()
+    assert blocked_row is not None
+    assert "제작 횟수" in (blocked_row.error_message or "")
+
+
+def test_failed_submit_pass_does_not_increment_count(sync_db, mock_render, monkeypatch):
+    """제출이 전부 실패한 패스(본인 아바타 미확보 등)는 강의 카운터를 올리지 않는다."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    monkeypatch.setattr(qa_batch, "_resolve_character", lambda *a, **k: None)
+    prof, _c, lec = _seed_lecture(sync_db)
+    _seed(sync_db, lec, prof, "질문")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 0
+    sync_db.refresh(lec)
+    assert lec.avatar_render_count == 0  # 비용 미발생 → 상한 미소모
+
+
+def test_unlimited_account_bypasses_rerender_cap(sync_db, mock_render, monkeypatch):
+    """면제 계정은 상한에 막히지 않고, 카운터도 올리지 않는다(무제한)."""
+    from app.tasks import qa_batch
+
+    _patch_answer(monkeypatch, in_scope=True)
+    monkeypatch.setattr(settings, "AVATAR_RERENDER_MAX_PER_LECTURE", 1)
+    prof, _c, lec = _seed_lecture(sync_db)
+    prof.email = "unlimited@t.ac.kr"
+    monkeypatch.setattr(settings, "QA_AVATAR_UNLIMITED_EMAILS", "unlimited@t.ac.kr")
+    lec.avatar_render_count = 5  # 이미 상한 초과 상태여도
+    _seed(sync_db, lec, prof, "질문")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        result = qa_batch._render_seed_questions(sync_db, loop, lec.id, prof.id)
+    finally:
+        loop.close()
+
+    assert result["submitted"] == 1  # 상한 무시(면제)
+    sync_db.refresh(lec)
+    assert lec.avatar_render_count == 5  # 면제 계정은 카운트 증가 안 함
+
+
 # ── 4. 야간 배치(_submit_pending)는 instructor_seed 를 건너뛴다 ─────────────────
 
 
@@ -576,7 +816,7 @@ def _rendering_seed(db, lec, prof, job_id: str) -> QAAnswerCache:
 def test_seed_webhook_success_marks_ready(sync_db, monkeypatch):
     from app.api.v1 import webhooks
 
-    async def _fake_upload(url, lecture_id, *a):  # noqa: ANN001
+    async def _fake_upload(url, lecture_id, *a, **kw):  # noqa: ANN001
         return ("s3://qa/clip.mp4", 0.0)
 
     monkeypatch.setattr(webhooks.s3_svc, "upload_from_url", _fake_upload)

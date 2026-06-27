@@ -115,16 +115,37 @@ const FIXTURE_AVATARS: Avatar[] = [
   },
 ];
 
+// HeyGen 카탈로그 조회는 공유 계정이라 느리거나 레이트리밋이 잦다. 전역 axios 에
+// timeout 이 없어 이 한 호출이 무한정 매달리면 아바타 페이지가 통째로 멈춘다(이전
+// "5분 넘게 빈 화면" 이탈의 직접 원인). 12초 안에 못 받으면 timeout 으로 끊고
+// fixture 폴백(deferred 배너)으로 떨어뜨려, 교수자가 본인 사진 업로드·저장된
+// 아바타 선택 등 HeyGen 과 무관한 작업을 곧바로 이어갈 수 있게 한다.
+const _AVATARS_FETCH_TIMEOUT_MS = 12_000;
+
 export async function listAvatars(): Promise<AvatarListResult> {
   try {
-    const { data } = await api.get<AvatarsResponseWire>("/api/avatars");
+    const { data } = await api.get<AvatarsResponseWire>("/api/avatars", {
+      timeout: _AVATARS_FETCH_TIMEOUT_MS,
+    });
     return { avatars: (data.avatars ?? []).map(toAvatar), deferred: false };
   } catch (err) {
-    if (isDeferredError(err)) {
+    // timeout(ECONNABORTED)·미배포·기타 카탈로그 실패는 모두 fixture 로 폴백한다.
+    // 빈 카탈로그라도 페이지는 즉시 동작해야 하므로 throw 하지 않는다.
+    if (isDeferredError(err) || _isTimeout(err)) {
       return { avatars: FIXTURE_AVATARS, deferred: true };
     }
     throw err;
   }
+}
+
+/** axios timeout(ECONNABORTED) 또는 네트워크 단절 여부. */
+function _isTimeout(err: unknown): boolean {
+  const e = err as { code?: string; message?: string } | null;
+  return (
+    e?.code === "ECONNABORTED" ||
+    e?.code === "ERR_NETWORK" ||
+    /timeout/i.test(e?.message ?? "")
+  );
 }
 
 /** 강의에 지정된 아바타 정보(표시용) — GET /api/lectures/{id} 의 부분 투영. */
@@ -654,6 +675,24 @@ export async function deleteMyLook(lookId: string): Promise<{ ok: boolean }> {
   try {
     const { data } = await api.delete<{ ok: boolean }>(
       `/api/avatars/me/looks/${encodeURIComponent(lookId)}`,
+    );
+    return { ok: data?.ok ?? true };
+  } catch (err) {
+    if (isDeferredError(err)) return { ok: true };
+    throw err;
+  }
+}
+
+/**
+ * DELETE /api/avatars/me/photo-avatar — 직접 올린 프로필 사진으로 만든 '본인
+ * 아바타'(GET /api/avatars 의 is_custom 카드)를 삭제한다. 룩(PhotoAvatarLook)이
+ * 아니라 user.photo_avatar_id 합성 항목이므로 deleteMyLook 으로는 지워지지 않는다
+ * (404 → 목록 재조회에서 부활하던 버그). 백엔드가 사진·캐시를 함께 비운다.
+ */
+export async function deleteOwnPhotoAvatar(): Promise<{ ok: boolean }> {
+  try {
+    const { data } = await api.delete<{ ok: boolean }>(
+      "/api/avatars/me/photo-avatar",
     );
     return { ok: data?.ok ?? true };
   } catch (err) {

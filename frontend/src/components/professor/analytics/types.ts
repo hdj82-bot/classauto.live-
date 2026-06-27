@@ -65,6 +65,13 @@ export interface EngagementStudent {
   responseRate: number | null;
 }
 
+export interface AttentionSummary {
+  /** 학급 평균 집중도 점수(0~100). */
+  score: number;
+  /** 집중/보통/산만 학생 수 분포(도넛). */
+  distribution: { focused: number; moderate: number; distracted: number };
+}
+
 export interface EngagementData {
   lecture_id: string;
   summary: {
@@ -72,6 +79,8 @@ export interface EngagementData {
     totalQAQuestions: number;
     overallResponseRate: number;
     totalNoResponseEvents: number;
+    /** D(스펙 11 §D): 집중도 점수 + 분포. 구버전 응답엔 없을 수 있어 optional. */
+    attention?: AttentionSummary;
   };
   students: EngagementStudent[];
 }
@@ -112,6 +121,99 @@ export interface CostData {
     totalCostUsd: number;
   };
   byCategory: CostCategoryRow[];
+}
+
+/**
+ * 현황 KPI + 전주 대비 델타 (스펙 11 §B) — `/api/v1/dashboard/{id}/kpi` 응답.
+ * 일자 스냅샷 기반. delta 는 7일 이전 스냅샷이 없으면 null.
+ */
+export interface KpiItem {
+  key: "completionRate" | "attendanceRate" | "avgAccuracy" | "qaCount";
+  current: number;
+  delta: number | null;
+}
+
+export interface KpiDeltaData {
+  lecture_id: string;
+  as_of: string | null;
+  prev_as_of: string | null;
+  kpis: KpiItem[];
+}
+
+/**
+ * 성취율 추이 (스펙 11 §C) — `/api/v1/dashboard/{id}/trend` 응답.
+ * 일배치가 적재한 강의×일자 누적 스냅샷. 비율 3종은 0~100(%).
+ */
+export interface TrendPoint {
+  date: string;
+  completionRate: number;
+  attendanceRate: number;
+  avgAccuracy: number;
+  qaCount: number;
+  activeLearners: number;
+}
+
+export interface TrendData {
+  lecture_id: string;
+  points: TrendPoint[];
+}
+
+/**
+ * 빈번 질문어 (스펙 11 §G) — `/api/v1/dashboard/{id}/qa-keywords` 응답.
+ * 학생 Q&A 질문에서 추출한 키워드 빈도. lang 으로 한/중/영 칩 구분.
+ */
+export interface QaKeyword {
+  term: string;
+  lang: "ko" | "zh" | "en";
+  count: number;
+}
+
+export interface QaKeywordsData {
+  lecture_id: string;
+  totalQuestions: number;
+  keywords: QaKeyword[];
+}
+
+/**
+ * 학습 목표·달성률 (스펙 11 §H-3) — `/api/v1/dashboard/{id}/goals`.
+ * baseline(before) → current(after) → target 비교. progress_pct 0~100.
+ */
+export type GoalMetric =
+  | "completionRate"
+  | "attendanceRate"
+  | "avgAccuracy"
+  | "qaCount";
+
+export interface Goal {
+  id: string;
+  lecture_id: string;
+  metric: GoalMetric;
+  label: string;
+  target_value: number;
+  baseline_value: number | null;
+  current_value: number;
+  progress_pct: number;
+  achieved: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * 교수자 개입 행동 로그 (스펙 11 §H-4, RQ2) — `/api/v1/dashboard/{id}/actions`.
+ * 격려·권고 채택·메모. 실제 외부 발송 채널은 후속(status='recorded').
+ */
+export type ActionType = "encouragement" | "adopt_recommendation" | "note";
+
+export interface InstructorAction {
+  id: string;
+  lecture_id: string;
+  instructor_id: string;
+  action_type: ActionType;
+  target_user_id: string | null;
+  target_name: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
 }
 
 /**

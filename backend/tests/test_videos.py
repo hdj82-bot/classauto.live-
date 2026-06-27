@@ -1,5 +1,6 @@
 """스크립트 에디터 API 통합 테스트."""
 import uuid
+from unittest.mock import patch
 
 import pytest
 
@@ -371,10 +372,13 @@ async def test_rerender_heals_stuck_rendering_video(
         ))
     await db.flush()
 
-    resp = await client.post(
-        f"/api/videos/{video.id}/rerender",
-        headers=make_auth_header(professor),
-    )
+    # cue 가 빈 렌더는 rerender 시 정밀 싱크 백필 enqueue 대상이라 render_slide 를
+    # 모킹(테스트 Celery 미연결). 재합성 대상 수(0)·상태 회복과는 무관하다.
+    with patch("app.tasks.render.render_slide"):
+        resp = await client.post(
+            f"/api/videos/{video.id}/rerender",
+            headers=make_auth_header(professor),
+        )
     assert resp.status_code == 200
     data = resp.json()
     # 재합성 대상은 0(비용 0)이지만 갇혀 있던 Video 는 done 으로 회복된다.
@@ -413,14 +417,76 @@ async def test_rerender_done_video_no_changes_stays_done(
     ))
     await db.flush()
 
-    resp = await client.post(
-        f"/api/videos/{video.id}/rerender",
-        headers=make_auth_header(professor),
-    )
+    with patch("app.tasks.render.render_slide"):
+        resp = await client.post(
+            f"/api/videos/{video.id}/rerender",
+            headers=make_auth_header(professor),
+        )
     assert resp.status_code == 200
     data = resp.json()
     assert data["rerendered_segments"] == 0
     assert data["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_rerender_dry_run_reports_diff_without_mutating(
+    client, professor, lecture, db
+):
+    """dry_run=true 는 DB 를 건드리지 않고 실제 변경분만 정확히 보고한다.
+
+    슬라이드 2장 중 1장만 발화를 고친 상태 → 점검은 '1장 변경(2번)·1장 재사용' 을
+    돌려주고, 상태 전환·합성 enqueue 는 일어나지 않는다(비용 0)."""
+    from unittest.mock import patch
+
+    from app.models.video import Video, VideoScript
+    from app.models.video_render import RenderStatus, VideoRender
+
+    segments = [
+        {"slide_index": 0, "text": "그대로인 발화", "start_seconds": 0, "end_seconds": 10},
+        {"slide_index": 1, "text": "수정된 발화", "start_seconds": 10, "end_seconds": 20},
+    ]
+    lecture.avatar_name = "Sabine Office Front 2"
+    video = Video(id=uuid.uuid4(), lecture_id=lecture.id, status=VideoStatus.done)
+    db.add(video)
+    await db.flush()
+    db.add(VideoScript(
+        id=uuid.uuid4(), video_id=video.id,
+        ai_segments=segments, segments=list(segments),
+    ))
+    # 0번 슬라이드는 텍스트 일치(재사용), 1번은 옛 텍스트로 렌더돼 변경 대상.
+    db.add(VideoRender(
+        id=uuid.uuid4(), lecture_id=lecture.id, instructor_id=professor.id,
+        avatar_id="avatar-x", status=RenderStatus.ready,
+        audio_url="https://s3/audio/0.mp3", script_text="그대로인 발화",
+        slide_number=0,
+    ))
+    db.add(VideoRender(
+        id=uuid.uuid4(), lecture_id=lecture.id, instructor_id=professor.id,
+        avatar_id="avatar-x", status=RenderStatus.ready,
+        audio_url="https://s3/audio/1.mp3", script_text="옛 발화",
+        slide_number=1,
+    ))
+    await db.flush()
+
+    with patch("app.tasks.render.render_slide.delay") as mock_delay:
+        resp = await client.post(
+            f"/api/videos/{video.id}/rerender?dry_run=true",
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["dry_run"] is True
+    assert data["rerendered_segments"] == 1
+    assert data["slides_total"] == 2
+    assert data["changed_slide_numbers"] == [2]  # 1-based 표시
+    assert data["reused_slides"] == 1
+    assert data["avatar_name"] == "Sabine Office Front 2"
+    # 점검만 — 상태 전환·합성 enqueue 가 절대 없어야 한다(비용 0).
+    assert data["status"] == "done"
+    mock_delay.assert_not_called()
+
+    await db.refresh(video)
+    assert video.status == VideoStatus.done  # 점검은 상태를 바꾸지 않는다.
 
 
 @pytest.mark.asyncio
@@ -492,12 +558,61 @@ async def test_rerender_legacy_render_without_voice_record_no_regression(
     ))
     await db.flush()
 
-    resp = await client.post(
-        f"/api/videos/{video.id}/rerender",
-        headers=make_auth_header(professor),
-    )
+    with patch("app.tasks.render.render_slide"):
+        resp = await client.post(
+            f"/api/videos/{video.id}/rerender",
+            headers=make_auth_header(professor),
+        )
     assert resp.status_code == 200
     assert resp.json()["rerendered_segments"] == 0
+
+
+@pytest.mark.asyncio
+async def test_rerender_backfills_missing_subtitle_cues(
+    client, professor, lecture, db
+):
+    """텍스트·음성이 그대로(재사용)지만 자막 cue 가 빈 렌더는 rerender 시 **재합성
+    없이** 정밀 싱크 cue 백필을 위해 render_slide 를 enqueue 한다(음성-자막 싱크 복구).
+
+    이게 핵심 수정: 정렬 도입 전 만든 음원·아바타만 바꾼 강의는 모든 슬라이드가
+    '재사용'이라 cue 가 영구히 빈 채로 남아 자막이 글자수 추정으로 어긋났다. 이제
+    '다시 제작' 한 번이면 음원을 그대로 두고 cue 만 채워 정밀 싱크로 복구한다.
+    """
+    from app.models.video import Video, VideoScript
+    from app.models.video_render import RenderStatus, VideoRender
+
+    segments = [
+        {"slide_index": 0, "text": "그대로인 발화", "start_seconds": 0, "end_seconds": 10},
+    ]
+    video = Video(id=uuid.uuid4(), lecture_id=lecture.id, status=VideoStatus.done)
+    db.add(video)
+    await db.flush()
+    db.add(VideoScript(
+        id=uuid.uuid4(), video_id=video.id,
+        ai_segments=segments, segments=list(segments),
+    ))
+    render = VideoRender(
+        id=uuid.uuid4(), lecture_id=lecture.id, instructor_id=professor.id,
+        avatar_id="avatar-x", status=RenderStatus.ready,
+        audio_url="https://s3/audio/0.mp3", script_text="그대로인 발화",
+        slide_number=0, subtitle_cues=None,  # cue 없음 → 백필 대상.
+    )
+    db.add(render)
+    await db.flush()
+
+    with patch("app.tasks.render.render_slide") as mock_render:
+        resp = await client.post(
+            f"/api/videos/{video.id}/rerender",
+            headers=make_auth_header(professor),
+        )
+    assert resp.status_code == 200
+    # 텍스트 변경이 없어 재합성은 0이지만, cue 백필을 위해 render_slide 가 enqueue 됐다.
+    assert resp.json()["rerendered_segments"] == 0
+    mock_render.delay.assert_called_once()
+    # 음원을 보존한 채(=리셋 없이) 그 렌더 id 로 enqueue — render_slide 가 정렬만 돌린다.
+    assert mock_render.delay.call_args.args[0] == str(render.id)
+    await db.refresh(render)
+    assert render.audio_url == "https://s3/audio/0.mp3"  # 음원 보존(재합성 안 함).
 
 
 # ── 헬퍼 ─────────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import anthropic
 from sqlalchemy.orm import Session
@@ -46,9 +47,115 @@ OUT_OF_SCOPE_MESSAGE = (
     "강의 내용과 관련된 질문을 부탁드립니다."
 )
 
+# ── 공개(익명) Q&A 강의별 일일 하드 캡 (C3-c, 폭주 2차 방어) ─────────────────────
+# api/v1/qa.py 의 /qa/public 익명 경로는 세션·소유자 검증 없이 answer_question 을 부르며
+# session_id 자리에 합성 키 "public" 을 넘긴다. 전역 RateLimitMiddleware 는 IP 당 분당만
+# 막으므로, 익명 다수가 각자 한도 안에서 질문하면 강의 1개의 일일 Claude 호출 총량이
+# 무한정 커진다. 그 총량을 강의(task_id)·UTC 일자 단위 하드 캡으로 막는다. 캡 초과 시
+# RAG·Claude 호출 없이(비용 0) 안내 메시지를 반환한다.
+PUBLIC_SESSION_ID = "public"
+PUBLIC_QA_DAILY_CAP = 300  # 강의당 익명 Q&A 일일 최대 호출 수
+PUBLIC_QA_CAP_MESSAGE = (
+    "오늘 이 강의의 공개 질문 가능 횟수를 모두 사용했습니다. "
+    "잠시 후 또는 내일 다시 시도하거나, 로그인 후 학습 세션에서 질문해 주세요."
+)
+
+
+def _public_qa_within_daily_cap(db: Session, task_id: str) -> bool:
+    """공개 Q&A 의 강의별 일일 카운터를 증가시키고 캡 이내인지 반환한다.
+
+    캡을 넘었으면 카운터를 올리지 않고 ``False``. 이내면 1 증가시키고 ``True``.
+    공개 경로(api/v1/qa.public_question)는 세션 커밋을 하지 않으므로 카운터는 여기서
+    직접 커밋한다 — 이 경로에는 다른 보류 중인 DB 쓰기가 없어 안전하다. 카운터 갱신
+    중 어떤 오류도 답변을 막지 않도록(가용성 우선) 예외 시 통과(``True``)로 처리한다.
+    """
+    from app.models.embedding import PublicQADailyCount
+
+    today = datetime.now(timezone.utc).date()
+    try:
+        row = (
+            db.query(PublicQADailyCount)
+            .filter(
+                PublicQADailyCount.task_id == task_id,
+                PublicQADailyCount.day == today,
+            )
+            .first()
+        )
+        if row is None:
+            db.add(PublicQADailyCount(task_id=task_id, day=today, count=1))
+            db.commit()
+            return True
+        if row.count >= PUBLIC_QA_DAILY_CAP:
+            # 캡 초과 — 증가시키지 않고 즉시 차단(추가 비용 0).
+            return False
+        row.count += 1
+        db.commit()
+        return True
+    except Exception:  # noqa: BLE001 — 카운터 장애가 정상 답변을 막지 않게 한다.
+        db.rollback()
+        logger.exception("공개 Q&A 일일 캡 카운터 갱신 실패(통과 처리): task_id=%s", task_id)
+        return True
+
 # 범위 밖 판정 센티넬. Claude 가 강의 주제와 명백히 무관하다고 판단하면 이 토큰만
 # 출력하도록 프롬프트로 지시하고, 응답에 이 토큰이 있으면 거부로 처리한다.
 OUT_OF_SCOPE_SENTINEL = "[[OUT_OF_SCOPE]]"
+
+# H3: RAG 범위 가드 하드 플로어. < SIMILARITY_THRESHOLD(0.4) 경로의 거부를 Claude 의
+# 센티넬 출력에만 맡기면, 크래프티드 질문(프롬프트 인젝션)이 센티넬을 억제해 강의 밖
+# 질문에 일반지식으로 답해 버릴 수 있다(차별점 위반). 유사도가 이 하드 플로어 미만이면
+# (= 사실상 0 에 가까운, 강의와 전혀 무관한 입력) **Claude 호출 없이 결정적으로 거부**해
+# 인젝션 표면과 비용을 줄인다. 단, 임베딩 유사도는 저구간에서 관련성 판별력이 약하므로
+# (표현만 달라 낮은 정상 질문이 존재 — test_qa_rag.answers_beyond_embeddings), 플로어는
+# 매우 낮게 잡아 [floor, 0.4) 구간의 판정은 그대로 Claude 에 맡긴다(설계 정책 유지).
+RAG_HARD_FLOOR_SIMILARITY = 0.05
+
+
+def _lecture_id_for_task(db: Session, task_id: str):
+    """task_id(pipeline_task_id) → lecture_id. 없으면 None."""
+    from app.models.lecture import Lecture
+
+    return (
+        db.query(Lecture.id)
+        .filter(Lecture.pipeline_task_id == task_id)
+        .scalar()
+    )
+
+
+def _record_qa_llm_cost(task_id: str, cost_usd: float) -> None:
+    """학생/공개/미리보기 Q&A 의 Claude 비용을 platform_cost_logs(CostLog, category=llm_qa)에
+    적재한다(별도 커밋 세션).
+
+    종전엔 학생 Q&A 비용이 QALog.cost_usd 에만 들어가, 운영자 비용 대시보드·예산 집계
+    (CostLog/RenderCostLog 합산, 스펙 13 §B)가 학생 Q&A LLM 지출을 **과소집계**했다(H1).
+    호출부(answer_question)의 세션과 무관하게 독립 커밋한다 — 공개/미리보기 경로는 세션을
+    커밋하지 않으므로 같은 세션에 적재하면 롤백돼 사라진다. 비용 0 은 기록하지 않고,
+    어떤 실패도 답변 흐름을 막지 않는다(가용성 우선).
+    """
+    if not cost_usd or cost_usd <= 0:
+        return
+    from app.db.session import SyncSessionLocal
+    from app.models.cost_log import CostCategory, CostLog
+
+    sdb = SyncSessionLocal()
+    try:
+        lecture_id = _lecture_id_for_task(sdb, task_id)
+        if lecture_id is None:
+            return
+        sdb.add(
+            CostLog(
+                lecture_id=lecture_id,
+                category=CostCategory.llm_qa,
+                model=settings.QA_MODEL,
+                cost_usd=float(cost_usd),
+                memo="qa_chat",
+            )
+        )
+        sdb.commit()
+    except Exception as exc:  # noqa: BLE001 — 비용 기록 실패가 답변을 막지 않게.
+        sdb.rollback()
+        logger.warning("Q&A LLM 비용 기록 실패(무시): task=%s err=%s", task_id, exc)
+    finally:
+        sdb.close()
 
 
 # 채팅 말풍선(PlayerV2)·아바타 TTS 는 마크다운을 렌더링하지 않고 텍스트 그대로 표시·
@@ -130,9 +237,9 @@ def _seed_answer_system_prompt(lang_name: str) -> str:
    - 가능하면 핵심 내용부터 바로 들어가거나, 질문의 키워드를 자연스럽게 받아 시작합니다.
    - 매 답변이 똑같은 패턴으로 시작하지 않도록, 실제 교수자가 수업에서 말하듯
      변화를 줍니다.
-6. 답변 길이는 약 300~800자(영어는 ~50~130 단어)로 간결하게 작성합니다. 핵심만
-   담아 한두 단락으로 마무리하고, 800자를 넘기지 않습니다(아바타 발화가 길어지면 학습자
-   집중이 떨어짐).
+6. 답변 길이는 약 200~400자(영어는 ~35~80 단어)로 간결하게 작성합니다. 핵심만
+   담아 한두 단락으로 마무리하고, 어떤 언어로 쓰든 400자를 넘기지 않습니다(아바타 발화가
+   길어지면 학습자 집중이 떨어지고 렌더 비용도 커짐).
 """
 
 
@@ -243,20 +350,32 @@ def generate_seed_answer(
 # 영어 강의면 질문·답변도 영어. 교수자는 결과를 보고 그대로 두거나 수정한다.
 
 
-def _seed_questions_system_prompt(lang_name: str) -> str:
+def _seed_questions_system_prompt(lang_name: str, n: int) -> str:
     return f"""\
-당신은 강의 자료를 바탕으로 학생이 가장 궁금해할 핵심 질문과 그 모범 사전 답변을 만드는 보조자입니다.
-제공된 강의 스크립트(교수자 발화)를 분석해, 학생이 실제로 자주 물을 법한 핵심 질문과 각 질문의 답변을 만듭니다.
+당신은 강의 발화 스크립트(교수자가 강의에서 실제로 말한 내용 전체)를 바탕으로, 이 강의에서 가장
+중요한 핵심 {n}가지를 짚는 질문과 그 모범 사전 답변을 만드는 보조자입니다. 제공된 스크립트 전체를
+먼저 통독해 이 강의가 다루는 주제들을 파악한 뒤, 그중 가장 중요한 {n}개를 골라 질문으로 만드세요.
+
+가장 중요한 원칙 — {n}개의 질문은 반드시 서로 다른 핵심을 짚어야 합니다:
+- 강의에서 가장 중요한 서로 다른 주제·개념을 {n}개 골라(가능하면 강의 앞·중간·뒤에 고루 분포), 각
+  질문이 그중 하나씩만 다루게 합니다.
+- {n}개 질문이 중복되거나 비슷해서는 절대 안 됩니다. 같은 주제를 표현만 바꾼 변형도 금지합니다.
+  예: "어순이 어떻게 다른가요?"와 "SVO·SOV 구조가 구체적으로 어떻게 다른가요?"는 사실상 같은
+  질문이므로 둘 다 넣지 마세요. 하나를 빼고 강의의 다른 핵심을 질문으로 만드세요.
+- 한 개념에 몰린 비슷한 질문 여러 개보다, 서로 다른 핵심을 폭넓게 짚는 편이 학생에게 훨씬 유용합니다.
 
 규칙:
-1. 질문과 답변 모두 {lang_name}(으)로 작성합니다(강의 발화 언어).
-2. 질문은 강의 핵심 개념을 짚는, 학생이 실제로 물을 만한 자연스러운 것이어야 합니다. 서로 다른 개념을 다루도록 겹치지 않게 고릅니다.
+1. 질문과 답변 모두 {lang_name}(으)로 작성합니다. 발화 스크립트의 언어와 질문·답변의 언어는 항상
+   같아야 합니다(강의 발화 언어 = {lang_name}). 다른 언어를 섞지 마세요.
+2. 질문은 학생이 실제로 물을 만한 자연스러운 것이어야 합니다.
 3. 답변은 아바타가 음성으로 읽습니다. 슬라이드 번호 등 출처 표기를 넣지 않고, 말하듯 자연스럽게 작성합니다.
 4. 중국어/한자 용어에 괄호로 음·뜻을 병기하지 않습니다. 예: '大学生(대학생)'(X) → '大学生'(O).
 5. "좋은 질문이네요" 같은 상투적 칭찬 도입부를 쓰지 않습니다. 핵심부터 자연스럽게 시작합니다.
-6. 강의 자료에 근거해 정확히 답합니다. 자료에 없는 내용은 추측하지 않습니다.
+6. 발화 스크립트에 근거해 정확히 답합니다. 스크립트에 없는 내용은 추측하지 않습니다.
+7. 각 답변은 약 200~400자(영어는 ~35~80 단어)로 간결하게, 어떤 언어로 쓰든 400자를 넘기지
+   않습니다(아바타 발화가 길어지면 학습자 집중이 떨어지고 렌더 비용도 커짐).
 
-출력은 아래 형식의 JSON 배열 하나만, 다른 텍스트 없이 출력합니다:
+출력은 아래 형식의 JSON 배열 하나만, 다른 텍스트 없이 출력합니다(질문은 서로 겹치지 않는 다른 핵심이어야 함):
 [{{"question": "질문", "answer": "사전 답변"}}, ...]
 """
 
@@ -270,8 +389,23 @@ def _claude_seed_questions_call(client, system: str, user_content: str):
     )
 
 
+def _normalize_question_key(q: str) -> str:
+    """중복 판정용 정규화 — 공백·문장부호를 모두 제거하고 소문자화한다.
+
+    한글·한자 등 글자(\\w)는 보존하고 공백/물음표/쉼표 같은 기호만 떼어내, '어순이
+    다른가요?' 와 '어순이 다른가요' 처럼 표기만 다른 같은 질문을 한 번만 채택한다.
+    의미는 같지만 표현이 다른 변형(패러프레이즈)까지 잡진 못하며, 그건 프롬프트의
+    '서로 다른 개념' 지시로 막는다.
+    """
+    return re.sub(r"[\s\W_]+", "", q).lower()
+
+
 def _parse_seed_questions_json(raw: str, n: int) -> list[dict]:
-    """Claude 응답에서 첫 JSON 배열을 뽑아 [{question, answer}] 로 정규화(최대 n개)."""
+    """Claude 응답에서 첫 JSON 배열을 뽑아 [{question, answer}] 로 정규화(최대 n개).
+
+    동일·표기만 다른 중복 질문은 제거한다 — 모델이 같은 질문을 N번 내놓아도 카드 N장이
+    같은 내용으로 채워지지 않게(교수자 요청 2026-06-16).
+    """
     match = re.search(r"\[.*\]", raw, re.DOTALL)
     if not match:
         return []
@@ -280,39 +414,75 @@ def _parse_seed_questions_json(raw: str, n: int) -> list[dict]:
     except (json.JSONDecodeError, ValueError):
         return []
     out: list[dict] = []
+    seen: set[str] = set()
     for item in arr if isinstance(arr, list) else []:
         if not isinstance(item, dict):
             continue
         q = _strip_markdown(str(item.get("question", "")).strip())
         a = _strip_markdown(str(item.get("answer", "")).strip())
-        if q:
-            out.append({"question": q, "answer": a})
+        if not q:
+            continue
+        key = _normalize_question_key(q)
+        if key in seen:
+            continue  # 동일·표기만 다른 중복 질문 → 건너뜀.
+        seen.add(key)
+        out.append({"question": q, "answer": a})
         if len(out) >= n:
             break
     return out
 
 
 def generate_seed_questions(
-    db: Session, task_id: str, n: int = 3, lang: str = "ko"
+    db: Session, task_id: str, n: int = 3, lang: str = "ko",
+    exclude: list[str] | None = None,
 ) -> list[dict]:
-    """강의 스크립트에서 핵심 질문 n개와 각 사전 답변을 ``lang`` 으로 생성.
+    """강의 발화 스크립트에서 가장 중요한 핵심 질문 n개와 각 사전 답변을 ``lang`` 으로 생성.
+
+    Claude 가 발화 스크립트 전체를 보고 이 강의에서 가장 중요한 n개의 핵심을 골라, 서로
+    겹치지 않는 질문 n개와 답변을 만든다(교수자 요청 2026-06-16: 자동 생성된 질문 3개가 모두
+    같은 주제로 중복되던 문제). 근거는 PPT 가 아니라 발화 스크립트만 쓴다 — 학생 Q&A
+    (answer_question)·사전 답변과 동일한 정책(2026-06-12). 질문·답변 언어는 발화 언어(lang)와
+    항상 같다. 동일·표기만 다른 중복은 파싱 단계에서 한 번 더 제거하므로, 결과가 n개보다
+    적을 수 있다(중복 대신 서로 다른 질문만 남긴다).
+
+    ``exclude``: 이미 다른 카드에 들어 있는 질문들. 프론트는 카드별로 1개씩 생성하는데
+    (page.tsx handleAutoGenerateSeedQuestion), 매 호출이 독립적이라 모델이 "가장 중요한
+    핵심"(예: 어순)을 매번 #1 로 다시 뽑아, 표현만 다른 같은 주제가 3카드에 반복되던 문제를
+    막는다. 이 목록의 주제·내용과 명백히 다른(겹치지 않는) 질문을 만들도록 프롬프트에 싣는다.
 
     반환 ``[{"question": ..., "answer": ...}]`` (최대 n개). 스크립트가 없거나
     Claude 오류/파싱 실패면 빈 리스트(프론트는 빈 결과를 토스트로 안내).
     발화 언어(lecture.voice_lang)로 작성하므로 영어 강의는 질문·답변도 영어.
     """
+    # 발화 스크립트 전체(슬라이드 순)를 컨텍스트로 준다 — Claude 가 강의 전체를 보고 가장
+    # 중요한 핵심 n개를 서로 다른 주제로 고른다. PPT 는 쓰지 않는다(2026-06-12 정책).
     context = _script_context_for_task(db, task_id)
     if not context:
+        # 발화 스크립트가 없으면(파이프라인 미완 등) 생성 불가.
         return []
+
+    # 이미 만든 질문(다른 카드)들 — 이 주제들을 피해 강의의 또 다른 핵심을 뽑게 한다.
+    exclude_clean = [q.strip() for q in (exclude or []) if q and q.strip()]
+    exclude_block = ""
+    if exclude_clean:
+        listed = "\n".join(f"- {q}" for q in exclude_clean)
+        exclude_block = (
+            "\n\n## 이미 만든 질문 (반드시 피하기)\n"
+            f"{listed}\n"
+            "위 질문들과 같은 주제·핵심을 다루거나 표현만 바꾼 질문은 절대 만들지 마세요. "
+            "위 목록과 분명히 다른, 강의의 또 다른 핵심을 짚는 질문을 만드세요."
+        )
 
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=60.0)
     try:
         response = _claude_seed_questions_call(
             client,
-            _seed_questions_system_prompt(_lang_name(lang)),
-            f"## 강의 스크립트\n{context}\n\n"
-            f"위 강의에서 학생이 가장 궁금해할 핵심 질문 {n}개와 각 사전 답변을 "
-            f"만들어 주세요. 정확히 {n}개의 항목을 JSON 배열로 출력하세요.",
+            _seed_questions_system_prompt(_lang_name(lang), n),
+            f"## 강의 발화 스크립트 (전체)\n{context}{exclude_block}\n\n"
+            f"위 발화 스크립트 전체를 읽고, 이 강의에서 가장 중요한 핵심 {n}가지를 골라 학생이 "
+            f"물을 만한 질문 {n}개와 각 사전 답변을 만들어 주세요. {n}개 질문은 반드시 서로 다른 "
+            f"핵심을 짚어야 하며, 중복되거나 비슷해서는 안 됩니다. 정확히 {n}개의 항목을 JSON "
+            f"배열로 출력하세요.",
         )
     except anthropic.APIError as exc:
         logger.error("사전 질문 자동 생성 Claude 호출 실패: %s", exc)
@@ -347,7 +517,17 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
     - 스크립트 최고 유사도 < 0.4 → 표현만 달라 낮을 수 있으니 Claude 가 최종 판정
       (관련이면 답변, 명백히 무관할 때만 ``[[OUT_OF_SCOPE]]`` 거부).
     - 스크립트가 전혀 없음 → 판단 근거 없음. Claude 호출 없이 비용 0 으로 거부.
+
+    공개(익명) 경로(session_id="public")는 강의별 일일 하드 캡(C3-c)을 먼저 검사한다.
+    캡 초과면 RAG·Claude 없이 안내 메시지를 비용 0 으로 반환해 폭주를 2차로 막는다.
     """
+    if session_id == PUBLIC_SESSION_ID and not _public_qa_within_daily_cap(db, task_id):
+        logger.warning("공개 Q&A 일일 캡 초과 — 차단: task_id=%s", task_id)
+        return QAResult(
+            answer=PUBLIC_QA_CAP_MESSAGE, in_scope=False, top_slides=[],
+            input_tokens=0, output_tokens=0, cost_usd=0.0,
+        )
+
     script_results = search_similar_script(db, task_id, question, top_k=3)
     context = _build_script_context(script_results)
 
@@ -359,7 +539,20 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
         )
 
     best_sim = script_results[0].similarity if script_results else 0.0
-    # ≥ 0.4: 관련 확정 → 항상 답변. < 0.4: Claude 가 관련성 최종 판정(거부 허용).
+
+    # H3: 하드 플로어 미만이면 강의와 명백히 무관 → Claude 호출 없이 결정적 거부(비용 0).
+    # < 0.4 거부를 LLM 센티넬에만 맡길 때의 프롬프트 인젝션 우회를 이 구간에서 차단한다.
+    if best_sim < RAG_HARD_FLOOR_SIMILARITY:
+        logger.info(
+            "Q&A 하드 플로어 미만 — 결정적 거부(Claude 미호출): sim=%.4f task=%s",
+            best_sim, task_id,
+        )
+        return QAResult(
+            answer=OUT_OF_SCOPE_MESSAGE, in_scope=False, top_slides=script_results,
+            input_tokens=0, output_tokens=0, cost_usd=0.0,
+        )
+
+    # ≥ 0.4: 관련 확정 → 항상 답변. [floor, 0.4): Claude 가 관련성 최종 판정(거부 허용).
     allow_refusal = best_sim < SIMILARITY_THRESHOLD
 
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
@@ -391,6 +584,10 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
     input_tokens = response.usage.input_tokens
     output_tokens = response.usage.output_tokens
     cost = (input_tokens * settings.CLAUDE_INPUT_COST_PER_M + output_tokens * settings.CLAUDE_OUTPUT_COST_PER_M) / 1_000_000
+
+    # H1: 학생/공개/미리보기 Q&A 의 Claude 비용을 CostLog(llm_qa)에도 적재(운영자 비용
+    # 대시보드·예산 집계 포함). QALog.cost_usd 는 학생 분석용으로 그대로 유지(별도 테이블).
+    _record_qa_llm_cost(task_id, cost)
 
     # < 0.4 경로에서만 Claude 가 거부할 수 있다(센티넬). 호출은 했으므로 비용은 기록.
     if allow_refusal and OUT_OF_SCOPE_SENTINEL in answer:

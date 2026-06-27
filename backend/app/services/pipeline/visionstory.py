@@ -176,6 +176,11 @@ async def submit_talking_video(
         "aspect_ratio": settings.VISIONSTORY_ASPECT_RATIO,
         "resolution": settings.VISIONSTORY_RESOLUTION,
     }
+    # 캐릭터 표현(emotion) — 설정값이 있으면 항상 적용(기본 "news" = 엄숙·차분 톤).
+    # 비어 있으면 생략(모델이 거부할 때 환경변수로 끌 수 있게).
+    emotion = (settings.VISIONSTORY_EMOTION or "").strip()
+    if emotion:
+        payload["emotion"] = emotion
     resp = await _request_json("POST", "/api/v1/video", json=payload, timeout=60.0)
     if resp.status_code >= 400:
         raise VisionStoryError(

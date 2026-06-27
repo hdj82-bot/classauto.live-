@@ -305,6 +305,82 @@ async def test_upload_profile_photo_rejects_non_image(client, professor):
     assert resp.status_code == 400
 
 
+# ── DELETE /api/avatars/me/photo-avatar ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_delete_own_photo_avatar_clears_all(client, professor, db):
+    # 직접 올린 본인 사진 아바타 + 그 사진으로 만든 VisionStory 캐시 + 미리보기 캐시.
+    professor.photo_avatar_id = "tp_self"
+    professor.photo_avatar_look_id = None
+    professor.profile_image_url = "https://b.s3.amazonaws.com/thumbnails/profile/x.jpg"
+    professor.visionstory_avatar_id = "vs_av"
+    professor.visionstory_avatar_source = professor.profile_image_url
+    professor.photo_avatar_preview_url = "https://b.s3/old.mp4"
+    professor.photo_avatar_preview_voice_id = "v1"
+    await db.flush()
+
+    del_tp = AsyncMock(return_value=True)
+    del_s3 = MagicMock(return_value=True)
+    with patch(
+        "app.services.pipeline.heygen.delete_talking_photo", new=del_tp
+    ), patch("app.services.pipeline.s3.delete_file", new=del_s3):
+        resp = await client.delete(
+            "/api/avatars/me/photo-avatar", headers=make_auth_header(professor)
+        )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    # HeyGen 슬롯 회수 + S3 원본 삭제가 호출됐는지(best-effort).
+    del_tp.assert_awaited_once_with("tp_self")
+    del_s3.assert_called_once()
+
+    await db.refresh(professor)
+    assert professor.photo_avatar_id is None
+    assert professor.profile_image_url is None
+    # 사진 기반 VisionStory 캐시 무효화.
+    assert professor.visionstory_avatar_id is None
+    assert professor.visionstory_avatar_source is None
+    # 미리보기 캐시 무효화.
+    assert professor.photo_avatar_preview_url is None
+    assert professor.photo_avatar_preview_voice_id is None
+
+
+@pytest.mark.asyncio
+async def test_delete_own_photo_avatar_keeps_look_based_vs_cache(
+    client, professor, db
+):
+    # VisionStory 캐시 소스가 프로필 사진이 아니라 '기본 룩' 이면 건드리지 않는다.
+    professor.photo_avatar_id = "tp_self"
+    professor.profile_image_url = "https://b.s3.amazonaws.com/thumbnails/profile/x.jpg"
+    professor.visionstory_avatar_id = "vs_av"
+    professor.visionstory_avatar_source = "look-uuid-1234"  # 룩 기반 소스.
+    await db.flush()
+
+    with patch(
+        "app.services.pipeline.heygen.delete_talking_photo",
+        new=AsyncMock(return_value=True),
+    ), patch("app.services.pipeline.s3.delete_file", new=MagicMock(return_value=True)):
+        resp = await client.delete(
+            "/api/avatars/me/photo-avatar", headers=make_auth_header(professor)
+        )
+    assert resp.status_code == 200
+
+    await db.refresh(professor)
+    assert professor.photo_avatar_id is None
+    assert professor.profile_image_url is None
+    # 룩 기반 VisionStory 캐시는 보존(다른 소스라 무효화 대상 아님).
+    assert professor.visionstory_avatar_id == "vs_av"
+    assert professor.visionstory_avatar_source == "look-uuid-1234"
+
+
+@pytest.mark.asyncio
+async def test_delete_own_photo_avatar_requires_professor(client, student):
+    resp = await client.delete(
+        "/api/avatars/me/photo-avatar", headers=make_auth_header(student)
+    )
+    assert resp.status_code in (401, 403)
+
+
 # ── 본인 아바타 "움직이는 미리보기" (POST/GET /api/avatars/me/preview) ──────────
 
 

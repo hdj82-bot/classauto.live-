@@ -42,9 +42,10 @@ class SeedQuestionInput(BaseModel):
     """PUT 항목 — 교수자가 입력하는 질문 + (선택) 사전 대답."""
 
     question: Annotated[str, Field(max_length=500)] = Field(..., description="질문 텍스트")
-    # 권장 답변 길이 300~800자(아바타 발화 분량 적정선 — 2026-06-15). 800자 초과 입력은 거부.
-    answer: Annotated[str, Field(max_length=800)] = Field(
-        "", description="사전 대답(권장 300~800자). 비우면 영상 생성 시 강의 자료 기반 RAG 로 자동 생성."
+    # 답변 길이 상한 400자(어느 언어로 만들든 동일 — VisionStory 렌더 영상 초당 과금이라
+    # 답변이 길수록 비용↑, 2026-06-16 사용자 결정). 400자 초과 입력은 거부.
+    answer: Annotated[str, Field(max_length=400)] = Field(
+        "", description="사전 대답(400자 이하). 비우면 영상 생성 시 강의 자료 기반 RAG 로 자동 생성."
     )
 
 
@@ -78,6 +79,17 @@ class SeedQuestionsResponse(BaseModel):
             "'다시 제작' 시 그 클립을 새 아바타로 다시 만들어야 하는지 여부."
         ),
     )
+    # C-2: 강의당 아바타 제작 횟수 상한(첫 제작 1 + 재제작 N). 프론트가 "재제작 N회
+    # 남음" 안내·차단에 사용. 무제한 계정/상한 비활성은 큰 sentinel 값이 온다.
+    avatar_render_count: int = Field(
+        default=0, description="이 강의의 누적 아바타 제작 패스 수"
+    )
+    avatar_rerender_remaining: int = Field(
+        default=0, description="이 강의에 남은 아바타 제작 횟수(상한 − 누적)"
+    )
+    avatar_rerender_max: int = Field(
+        default=0, description="강의당 아바타 제작 횟수 상한(설정값)"
+    )
 
 
 class GenerateSeedAnswerRequest(BaseModel):
@@ -93,6 +105,21 @@ class GenerateSeedAnswerResponse(BaseModel):
 
     answer: str = Field(..., description="PPT 기반 생성 답변(범위 밖이면 빈 문자열)")
     in_scope: bool = Field(..., description="강의 자료 범위 안 질문 여부")
+
+
+class GenerateSeedQuestionsRequest(BaseModel):
+    """POST .../seed-questions/generate 본문(선택).
+
+    ``exclude``: 이미 다른 카드에 들어 있는 질문들. 프론트가 카드별로 1개씩 생성할 때,
+    이미 만든 질문의 주제를 피해 강의의 또 다른 핵심을 뽑게 하려고 넘긴다(같은 어순 질문이
+    3카드에 반복되던 문제 방지). 본문이 없거나 비어 있으면 평소대로 가장 중요한 핵심부터 뽑는다.
+    """
+
+    exclude: list[Annotated[str, Field(max_length=500)]] = Field(
+        default_factory=list,
+        max_length=SEED_QUESTIONS_MAX,
+        description="이미 만든(피해야 할) 질문 목록 — 이 주제와 겹치지 않는 질문을 생성한다.",
+    )
 
 
 class GeneratedSeedQuestion(BaseModel):

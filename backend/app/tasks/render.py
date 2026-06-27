@@ -12,6 +12,20 @@ from app.services.pipeline import cost_log, s3 as s3_svc
 
 logger = logging.getLogger(__name__)
 
+# M7: 슬라이드 본문 TTS 글자수 상한. 편집기 자유 텍스트(교수자가 임의로 길게 붙여넣은
+# 발화 스크립트)가 ElevenLabs 등 TTS provider 로 무제한 합성·과금되지 않도록 합성 직전에
+# 절단한다. config.py 는 다른 작업 창 소유라 상수를 여기(render.py)에 둔다. 일반적인 한
+# 슬라이드 발화(수십~수백 자)보다 넉넉히 크게 잡아 정상 콘텐츠는 절대 깎이지 않는다.
+MAX_SLIDE_TTS_CHARS = 1500
+
+
+def _cap_tts_text(text: str | None) -> str:
+    """TTS 합성용 텍스트에 글자수 상한(MAX_SLIDE_TTS_CHARS)을 적용한 사본을 돌려준다."""
+    t = text or ""
+    if len(t) > MAX_SLIDE_TTS_CHARS:
+        return t[:MAX_SLIDE_TTS_CHARS]
+    return t
+
 
 def _archive_videos_for_lecture(lecture_id: uuid.UUID) -> None:
     """렌더 최종 실패 시 해당 강의의 rendering 상태 Video를 archived로 마킹."""
@@ -72,7 +86,7 @@ def render_slide(
     import asyncio
     from app.models.lecture import Lecture, VoiceGender
     from app.models.user import User
-    from app.services.pipeline.tts import synthesize
+    from app.services.pipeline.tts import build_subtitle_cues_for_audio, synthesize
     from app.services.pipeline.heygen import create_video
     from app.services.pipeline.budget import assert_heygen_budget, BudgetExceededError
     from app.services.cost_tracker import estimate_tts_cost_usd
@@ -151,6 +165,16 @@ def render_slide(
             render.status = RenderStatus.tts_processing
             db.commit()
 
+        # ── M7: 본문 TTS 글자수 상한 적용 ──
+        # 편집기 자유 텍스트가 그대로 TTS 로 가면 무제한 과금될 수 있으므로 합성·정렬에
+        # 쓰는 텍스트는 항상 캡한 사본(tts_text)을 쓴다. 원본(script_text)은 보존.
+        tts_text = _cap_tts_text(script_text)
+        if len(script_text or "") > MAX_SLIDE_TTS_CHARS:
+            logger.warning(
+                "슬라이드 TTS 텍스트 %d자 > 상한 %d자 — 절단 후 합성(과금 상한): render_id=%s",
+                len(script_text or ""), MAX_SLIDE_TTS_CHARS, render_id,
+            )
+
         # ── Critical 8: TTS 단계 idempotency ──
         # 이미 audio_url 이 있고 S3 객체도 존재하면 TTS 호출 skip
         audio_url = render.audio_url
@@ -160,7 +184,7 @@ def render_slide(
         if not tts_already_done:
             tts_result = loop.run_until_complete(
                 synthesize(
-                    script_text,
+                    tts_text,
                     voice_id=voice_id,
                     gender=voice_gender,
                     speed=voice_speed,
@@ -174,7 +198,7 @@ def render_slide(
             # H: TTS API 성공 직후 별도 트랜잭션으로 비용을 즉시 commit.
             # 이후 S3 업로드(또는 HeyGen 단계)가 실패해 메인 트랜잭션이 rollback 돼도
             # 이미 발생한 provider 비용은 회계에 반드시 남아야 한다.
-            tts_cost = estimate_tts_cost_usd(tts_result.provider, len(script_text))
+            tts_cost = estimate_tts_cost_usd(tts_result.provider, len(tts_text))
             cost_log.record_once_committed(
                 SyncSessionLocal,
                 render.id,
@@ -201,6 +225,34 @@ def render_slide(
                 "TTS idempotent skip — audio_url 및 S3 객체 존재: render_id=%s, key=%s",
                 render_id, s3_audio_key,
             )
+            # ── 자막 정밀 싱크 cue 백필(재합성 없음) ──
+            # 음원은 이미 있으나 cue 가 비면(정렬 기능 도입 전 렌더·정렬 일시 실패·
+            # '다시 제작'에서 텍스트 그대로라 TTS 건너뜀) 기존 음원으로 Forced
+            # Alignment 만 다시 돌려 cue 를 채운다. 이게 없으면 플레이어가 영구히
+            # 글자수 추정으로 폴백해 음성-자막이 어긋난다(발화 속도 무관 → 리드값
+            # 조정으로도 안 맞음). 슬라이드쇼 본문만 해당. 비용/idempotency 불변.
+            if (
+                slideshow_mode
+                and not render.subtitle_cues
+                and tts_text.strip()
+            ):
+                try:
+                    existing_audio = s3_svc.download_file(s3_audio_key)
+                    backfilled = loop.run_until_complete(
+                        build_subtitle_cues_for_audio(existing_audio, tts_text)
+                    )
+                    if backfilled:
+                        render.subtitle_cues = backfilled
+                        db.commit()
+                        logger.info(
+                            "자막 cue 백필 완료(재합성 없음) — render_id=%s, %d문장",
+                            render_id, len(backfilled),
+                        )
+                except Exception as exc:  # noqa: BLE001 — 백필 실패가 렌더를 막지 않게.
+                    logger.warning(
+                        "자막 cue 백필 실패(무시) — render_id=%s, error=%s",
+                        render_id, exc,
+                    )
 
         # ── 슬라이드쇼 모드: HeyGen 렌더 없이 음성만으로 완료 ──
         # 본문은 슬라이드 이미지 + 이 구간 TTS 음성 + 타임라인(VideoScript.segments)을
@@ -238,9 +290,30 @@ def render_slide(
             )
             return {"render_id": render_id, "heygen_job_id": render.heygen_job_id, "skipped": True}
 
+        # ── H2: HeyGen 제출 직전 원자적 claim (중복 렌더 = 중복 과금 방지) ──
+        # reap_stuck_renders 의 재큐잉과 브로커 재전달(task_acks_late + Redis
+        # visibility_timeout)이 겹치면 같은 슬라이드가 두 render_slide 로 동시에 실행돼
+        # create_video 가 2번 호출(HeyGen 잡 2개·이중 과금)될 수 있다. 행을 SELECT ...
+        # FOR UPDATE 로 잠근 뒤 heygen_job_id 를 재확인해 직렬화한다: 먼저 잠근 실행만
+        # 제출하고, 잠금이 풀린 뒤 들어온 두 번째 실행은 job_id 가 채워진 것을 보고 skip.
+        # (FOR UPDATE 라 재시도하는 '동일' 태스크는 — 경쟁자가 없으면 — 정상 통과한다.)
+        db.refresh(render, with_for_update=True)
+        if render.heygen_job_id:
+            logger.info(
+                "HeyGen claim — 잠금 대기 중 다른 실행이 이미 제출함, skip: "
+                "render_id=%s, heygen_job_id=%s",
+                render_id, render.heygen_job_id,
+            )
+            db.commit()  # 잠금 해제
+            return {
+                "render_id": render_id,
+                "heygen_job_id": render.heygen_job_id,
+                "skipped": True,
+            }
         if render.status != RenderStatus.rendering:
             render.status = RenderStatus.rendering
-            db.commit()
+        # 잠금을 create_video 까지 유지하기 위해 여기서 commit 하지 않는다
+        # (heygen_job_id 와 함께 아래에서 한 번에 commit → 잠금 해제).
 
         # HeyGen 이 audio_url 을 직접 다운로드하므로 익명 접근이 가능해야 한다.
         # 운영 버킷(classauto-live-media)은 thumbnails/* 외 prefix 에 public-read 를

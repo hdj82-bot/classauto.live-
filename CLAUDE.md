@@ -42,6 +42,13 @@ ClassAuto는 일반 EdTech가 아닙니다. **학자가 학자를 위해 만든 
 - `05-instructor-pages.md` — 교수자 화면 (대시보드, studio 마법사 등)
 - `06-student-pages.md` — 학생 화면 (진입, 시청, 집중경고)
 - `07-additional-pages.md` — 보조 페이지 (use-cases, trust, security 등)
+- `08-cost-optimization.md` — 비용 최적화 설계 (립싱크 아바타 단가 인하)
+- `09-beta-program.md` — 베타 프로그램·연구 설계 (2026년 9월 학기)
+- `10-research-data-model.md` — 연구·계측 데이터 모델 (베타 로깅 스키마)
+- `11-analytics-dashboard.md` — 학습 분석 대시보드 & AI 대면 수업 브리핑 (`/analytics`)
+- `analytics-spec.md` — 학습 분석 기능 전체 명세 (강의별 A / 학기 전체 B, 집계·판정·프롬프트)
+- `12-self-avatar-onboarding.md` — 교수자 본인 아바타 온보딩 (Photo Avatar 룩)
+- `13-beta-admin-console.md` — 베타 운영자(계정주) 콘솔 구현 스펙 (A~G)
 
 ### 디자인 시스템 (`docs/design-system/`)
 - `00-README.md` — 디자인 시스템 인덱스
@@ -124,12 +131,19 @@ ClassAuto는 일반 EdTech가 아닙니다. **학자가 학자를 위해 만든 
 - dashboard.html — 6가지 개선
 - pricing.html — 새 정책 반영하여 전면 재작성
 
-**4단계** — 교수자 첫 사용 온보딩
+**4단계** — 학습 분석 기능 (A·B)
+- `docs/planning/analytics-spec.md` 명세 기준
+- CourseProfile 주입 구조 먼저 (특정 과목 비종속 보장)
+- A 강의별 분석: 4시나리오(혼란/우등/양극화/이탈) 판정·브리핑·학생별 솔루션
+- B 학기 전체 분석: 10주차 트리거 → 설문 → 총평·논문 (마감주차 = 학기주차−1)
+- 6월: 가상 데이터로 구현·검증, 디자인 톤은 v2 토큰으로 통일
+- 
+**5단계** — 교수자 첫 사용 온보딩
 - 빈 대시보드 empty state
 - 5단계 가이드 체크리스트
 - 학과·강의 정보 입력
 
-**5단계** — 영업·신뢰 페이지
+**6단계** — 영업·신뢰 페이지
 - `/use-cases` 활용 사례
 - `/trust` 학생 데이터 보호
 - `/security` 보안 정책

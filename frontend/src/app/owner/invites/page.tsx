@@ -25,6 +25,7 @@ function OwnerInvitesView() {
   const [invites, setInvites] = useState<OwnerInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [denied, setDenied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -32,17 +33,22 @@ function OwnerInvitesView() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const { data } = await ownerInviteApi.list();
-      setInvites(data);
+      // 부분 200/배열 누락 시 빈 배열로 안전 가드(렌더에서 .map 폭발 방지).
+      setInvites(Array.isArray(data) ? data : []);
       setDenied(false);
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
+      // 403 은 "운영자 전용" 폴백, 그 외 오류는 삼키지 않고 명시적으로 노출한다.
+      // (종전엔 비-403 오류를 무시해 빈 목록처럼 보였다.)
       if (status === 403) setDenied(true);
+      else setError(t("auth.owner.loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -181,6 +187,10 @@ function OwnerInvitesView() {
             {loading ? (
               <p className="mt-3 text-sm" style={{ color: "rgba(10,10,10,0.5)" }}>
                 …
+              </p>
+            ) : error ? (
+              <p className="mt-3 text-sm" style={{ color: "#b91c1c" }} role="alert">
+                {error}
               </p>
             ) : invites.length === 0 ? (
               <p className="mt-3 text-sm" style={{ color: "rgba(10,10,10,0.5)" }}>

@@ -19,6 +19,7 @@ from app.schemas.invite import (
     InvitePublicInfo,
     InviteResponse,
 )
+from app.services.admin_audit import log_admin_action
 from app.services.invite import (
     create_invite,
     delete_invite,
@@ -37,6 +38,7 @@ def _to_response(inv: ProfessorInvite) -> InviteResponse:
         token=inv.token,
         email=inv.email,
         role=inv.role,
+        cohort=inv.cohort,
         status=invite_status(inv),
         invite_url=f"{settings.FRONTEND_URL}/auth/invite?token={inv.token}",
         created_at=inv.created_at,
@@ -56,7 +58,18 @@ async def create_professor_invite(
     owner: User = Depends(require_owner),
     db: AsyncSession = Depends(get_db),
 ):
-    inv = await create_invite(db, email=body.email, created_by=owner.id)
+    inv = await create_invite(
+        db, email=body.email, created_by=owner.id, cohort=body.cohort
+    )
+    # E: god-mode 추적 — 초대 발급을 감사 로그에 남긴다.
+    await log_admin_action(
+        db,
+        owner,
+        "invite.create",
+        target_type="invite",
+        target_id=str(inv.id),
+        detail={"email": inv.email, "cohort": inv.cohort},
+    )
     return _to_response(inv)
 
 
@@ -79,14 +92,27 @@ async def list_professor_invites(
 )
 async def revoke_professor_invite(
     invite_id: uuid.UUID,
-    _owner: User = Depends(require_owner),
+    owner: User = Depends(require_owner),
     db: AsyncSession = Depends(get_db),
 ):
+    # 삭제 전 이메일을 확보해 감사 로그 detail 에 남긴다.
+    target = await db.get(ProfessorInvite, invite_id)
+    target_email = target.email if target is not None else None
+
     ok = await delete_invite(db, invite_id)
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="초대를 찾을 수 없습니다."
         )
+    # E: god-mode 추적 — 초대 취소/삭제를 감사 로그에 남긴다.
+    await log_admin_action(
+        db,
+        owner,
+        "invite.delete",
+        target_type="invite",
+        target_id=str(invite_id),
+        detail={"email": target_email},
+    )
 
 
 @public_router.get(

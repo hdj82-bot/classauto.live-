@@ -191,6 +191,7 @@ export function useSlideshowPlayback(
       try {
         const { data } = await api.get<SlideshowWire>(
           `/api/lectures/${slug}/slideshow`,
+          { timeout: 15000 }, // 재생 핫패스 — 큰 강의도 15s 내 응답, 멈춤은 상한으로 끊음.
         );
         if (cancelled) return;
         if (data.is_expired) {

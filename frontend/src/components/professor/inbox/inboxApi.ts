@@ -235,33 +235,43 @@ function summarise(items: InboxItem[]) {
 
 async function listFromDashboardFanout(): Promise<InboxItem[] | null> {
   try {
-    const { data: courses } = await api.get<CourseRaw[]>("/api/courses");
+    const { data: courses } = await api.get<CourseRaw[]>("/api/courses", {
+      timeout: 12000,
+    });
     if (!Array.isArray(courses) || courses.length === 0) return [];
-    const acc: InboxItem[] = [];
-    for (const course of courses) {
-      let lectures: LectureRaw[] = [];
-      try {
-        const { data } = await api.get<LectureRaw[]>(
-          `/api/courses/${course.id}/lectures`,
-        );
-        lectures = Array.isArray(data) ? data : [];
-      } catch {
-        continue;
-      }
-      for (const lec of lectures) {
+    // 종전엔 course→lecture→qa 를 3중 직렬 루프(O(C×L) 순차 왕복)로 돌아 느렸다.
+    // 두 단계 모두 병렬(Promise.all)로 바꾸고 실패는 빈 배열로 흡수한다(동작 동일).
+    const perCourse = await Promise.all(
+      courses.map(async (course) => {
+        let lectures: LectureRaw[] = [];
         try {
-          const { data } = await api.get<DashboardQaResponse>(
-            `/api/v1/dashboard/${lec.id}/qa?limit=200`,
+          const { data } = await api.get<LectureRaw[]>(
+            `/api/courses/${course.id}/lectures`,
+            { timeout: 12000 },
           );
-          for (const log of data?.logs ?? []) {
-            acc.push(fromDashboardLog(log, lec, course));
-          }
+          lectures = Array.isArray(data) ? data : [];
         } catch {
-          /* skip lecture on failure */
+          return [] as InboxItem[];
         }
-      }
-    }
-    return acc;
+        const perLecture = await Promise.all(
+          lectures.map(async (lec) => {
+            try {
+              const { data } = await api.get<DashboardQaResponse>(
+                `/api/v1/dashboard/${lec.id}/qa?limit=200`,
+                { timeout: 12000 },
+              );
+              return (data?.logs ?? []).map((log) =>
+                fromDashboardLog(log, lec, course),
+              );
+            } catch {
+              return [] as InboxItem[];
+            }
+          }),
+        );
+        return perLecture.flat();
+      }),
+    );
+    return perCourse.flat();
   } catch {
     return null;
   }
