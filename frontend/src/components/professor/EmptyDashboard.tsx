@@ -12,7 +12,6 @@ interface Props {
   onOpenProfileModal: () => void;
   /** 라우팅 / 행동 트리거 */
   onCreateLecture: () => void;
-  onOpenSampleDemo?: () => void;
 }
 
 /**
@@ -32,7 +31,6 @@ export default function EmptyDashboard({
   progress,
   onOpenProfileModal,
   onCreateLecture,
-  onOpenSampleDemo,
 }: Props) {
   const { t } = useProfessorI18n();
   const router = useRouter();
@@ -84,17 +82,6 @@ export default function EmptyDashboard({
           >
             {t("primaryCta")}
           </button>
-          {onOpenSampleDemo && (
-            <button
-              type="button"
-              onClick={onOpenSampleDemo}
-              data-testid="professor-empty-secondary-cta"
-              className="inline-flex items-center justify-center rounded-xl border border-gray-200 hover:border-gray-300 text-gray-700 text-sm font-medium px-5 py-2.5 transition"
-              title={t("openSampleHint")}
-            >
-              {t("secondaryCta")}
-            </button>
-          )}
         </div>
       </section>
 
