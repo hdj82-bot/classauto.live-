@@ -36,6 +36,11 @@ export default function LoginContent() {
   };
   const errorMsg = errorKey && ERROR_KEYS[errorKey] ? t(ERROR_KEYS[errorKey]) : null;
 
+  // 로그인/회원가입은 같은 Google OAuth 흐름이지만 첫 방문자에게 "다시 오신 걸
+  // 환영합니다"가 뜨지 않도록 ?mode=signup 으로 문구만 분기한다(신규 교수자 가입은
+  // 백엔드 초대 게이트가 그대로 적용된다).
+  const isSignup = searchParams.get("mode") === "signup";
+
   const [role, setRole] = useState<"professor" | "student">("student");
   const [isRedirecting, setIsRedirecting] = useState(false);
 
@@ -93,10 +98,10 @@ export default function LoginContent() {
                 "var(--font-display, 'Paperlogy'), 'Pretendard Variable', sans-serif",
             }}
           >
-            {t("auth.loginTitle")}
+            {t(isSignup ? "auth.signupTitle" : "auth.loginTitle")}
           </h1>
           <p className="mt-1.5 text-sm text-[rgba(10,10,10,0.55)]">
-            {t("auth.loginSubtitle")}
+            {t(isSignup ? "auth.signupSubtitle" : "auth.loginSubtitle")}
           </p>
         </div>
 
@@ -165,9 +170,20 @@ export default function LoginContent() {
             <span>
               {isRedirecting
                 ? t("auth.googleRedirecting")
-                : t("auth.googleLogin")}
+                : t(isSignup ? "auth.googleSignup" : "auth.googleLogin")}
             </span>
           </button>
+
+          {/* 로그인 ↔ 회원가입 전환 — 같은 화면, 문구만 다름. */}
+          <p className="text-center text-sm text-[rgba(10,10,10,0.55)]">
+            {isSignup ? t("auth.haveAccount") : t("auth.noAccount")}{" "}
+            <a
+              href={isSignup ? "/auth/login" : "/auth/login?mode=signup"}
+              className="font-semibold text-[#B88308] underline hover:text-[#946a07] transition-colors"
+            >
+              {isSignup ? t("auth.switchLogin") : t("auth.switchSignup")}
+            </a>
+          </p>
 
           <p className="text-center text-xs text-[rgba(10,10,10,0.4)]">
             {t("auth.agreeTerms")}{" "}

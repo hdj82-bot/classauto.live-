@@ -247,6 +247,14 @@ export default function LightMarketingShell({
                 >
                   {t("common.navLogin")}
                 </Link>
+                {/* 회원가입 — 첫 방문자 진입점. 로그인과 분리해 '다시 오신 걸 환영합니다'
+                    가 신규에게 뜨지 않게 한다(로그인 페이지 ?mode=signup 으로 문구 분기). */}
+                <Link
+                  href="/auth/login?mode=signup"
+                  className="hidden sm:inline-flex items-center text-xs font-semibold rounded-lg px-3 py-1.5 border border-[rgba(10,10,10,0.16)] text-[rgba(10,10,10,0.72)] hover:text-[#0A0A0A] hover:border-[#B88308] hover:bg-black/[0.03] transition motion-reduce:transition-none"
+                >
+                  {t("common.navSignup")}
+                </Link>
               </>
             )}
 
@@ -313,13 +321,22 @@ export default function LightMarketingShell({
                   {tRoot("common.logout")}
                 </button>
               ) : (
-                <Link
-                  href="/auth/login"
-                  onClick={() => setMenuOpen(false)}
-                  className="px-2 py-3 text-sm font-semibold text-[#0A0A0A] hover:text-[#B88308] transition motion-reduce:transition-none"
-                >
-                  {t("common.navLogin")}
-                </Link>
+                <>
+                  <Link
+                    href="/auth/login"
+                    onClick={() => setMenuOpen(false)}
+                    className="px-2 py-3 text-sm font-semibold text-[#0A0A0A] hover:text-[#B88308] transition motion-reduce:transition-none"
+                  >
+                    {t("common.navLogin")}
+                  </Link>
+                  <Link
+                    href="/auth/login?mode=signup"
+                    onClick={() => setMenuOpen(false)}
+                    className="px-2 py-3 text-sm font-semibold text-[#0A0A0A] hover:text-[#B88308] transition motion-reduce:transition-none"
+                  >
+                    {t("common.navSignup")}
+                  </Link>
+                </>
               )}
             </div>
           </nav>
