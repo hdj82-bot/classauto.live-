@@ -1,8 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import BetaApplyContent from "@/components/marketing/BetaApplyContent";
 import { I18nProvider } from "@/contexts/I18nContext";
+
+// 베타 신청 제출은 공개 엔드포인트(api.post)로 나간다 — 네트워크 없이 성공 응답을
+// 흉내 내 성공 화면 전환만 검증한다.
+vi.mock("@/lib/api", () => ({
+  api: { post: vi.fn().mockResolvedValue({ data: {} }) },
+}));
 
 const wrap = (ui: ReactNode) => render(<I18nProvider>{ui}</I18nProvider>);
 

@@ -1,6 +1,5 @@
 """베타 신청 스키마 (대문 '베타 신청하기' 폼)."""
 import re
-import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
