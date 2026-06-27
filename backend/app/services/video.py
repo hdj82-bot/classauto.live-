@@ -276,7 +276,10 @@ async def regenerate_slide_segment(
         image_paths=[],
     )
     client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
-    new_text = _generate_single_script(client, slide_content).strip()
+    _usages: list = []
+    new_text = _generate_single_script(
+        client, slide_content, usage_sink=_usages
+    ).strip()
     if not new_text:
         from fastapi import HTTPException, status
         raise HTTPException(
@@ -294,6 +297,15 @@ async def regenerate_slide_segment(
         question_pin_seconds=segments[target_idx].question_pin_seconds,
     )
     script.segments = _segments_to_dict(segments)
+    # H1: 단일 슬라이드 재생성 Claude 비용도 CostLog(llm_summary)에 적재.
+    from app.services.pipeline.script_generator import claude_cost_usd
+    _cost = claude_cost_usd(_usages)
+    if _cost > 0:
+        from app.models.cost_log import CostCategory, CostLog
+        db.add(CostLog(
+            lecture_id=video.lecture_id, category=CostCategory.llm_summary,
+            model=settings.SCRIPT_MODEL, cost_usd=_cost, memo="script_regen_slide",
+        ))
     await db.commit()
     await db.refresh(script)
     return video, script
@@ -382,6 +394,8 @@ async def regenerate_script_language(
         for seg in segments
     ]
 
+    _usages: list = []  # H1: 전 슬라이드 재생성 Claude 토큰 사용량(thread-safe append).
+
     def _regenerate_all() -> list[str]:
         client = anthropic.Anthropic(
             api_key=settings.ANTHROPIC_API_KEY, timeout=30.0
@@ -391,7 +405,8 @@ async def regenerate_script_language(
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = {
                 pool.submit(
-                    _generate_single_script, client, sc, lang=target_lang
+                    _generate_single_script, client, sc, lang=target_lang,
+                    usage_sink=_usages,
                 ): i
                 for i, sc in enumerate(slide_inputs)
             }
@@ -417,6 +432,15 @@ async def regenerate_script_language(
     script.subtitle_segments = None  # 번역 source 가 바뀜 — 기존 자막 무효화
     if lecture is not None:
         lecture.voice_lang = target_lang
+    # H1: 발화 언어 재생성(전 슬라이드 Claude 호출) 비용도 CostLog(llm_summary)에 적재.
+    from app.services.pipeline.script_generator import claude_cost_usd
+    _cost = claude_cost_usd(_usages)
+    if _cost > 0:
+        from app.models.cost_log import CostCategory, CostLog
+        db.add(CostLog(
+            lecture_id=video.lecture_id, category=CostCategory.llm_summary,
+            model=settings.SCRIPT_MODEL, cost_usd=_cost, memo="script_regen_language",
+        ))
     await db.commit()
     await db.refresh(script)
     return video, script

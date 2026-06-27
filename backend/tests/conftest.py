@@ -30,6 +30,25 @@ from app.models.video import Video, VideoScript, VideoStatus
 
 pytest_plugins = ("pytest_asyncio",)
 
+
+# ── 외부 API 프로세스 캐시 격리 ────────────────────────────────────────────────
+# list_avatars / 계정 보이스 목록은 프로세스 메모리에 TTL 캐시된다. 테스트 간
+# 캐시가 남으면(예: list_avatars 성공 → 다음 테스트의 오류 케이스가 캐시 적중으로
+# 가려짐) 순서 의존 플레이키가 생기므로 매 테스트마다 비운다.
+@pytest.fixture(autouse=True)
+def _reset_external_api_caches():
+    from app.services.pipeline import heygen as _heygen
+
+    _heygen.reset_avatars_cache()
+    try:
+        from app.api.v1 import voices as _voices
+
+        _voices.reset_account_voices_cache()
+    except Exception:
+        pass
+    yield
+    _heygen.reset_avatars_cache()
+
 # ── SQLite JSONB→JSON 폴백 ──────────────────────────────────────────────────
 # PostgreSQL JSONB 타입을 SQLite에서 사용할 수 있도록 모든 JSONB 컬럼을 JSON으로 교체
 

@@ -1312,7 +1312,7 @@ function StudentCardsSection({ students }: { students: Student[] }) {
   }, [students, filter, sortBy]);
 
   return (
-    <section>
+    <section id="an-sec-students">
       <div className="section-head">
         <div className="section-head-left">
           <h2 className="section-title">학생 개별 진척도</h2>
@@ -1471,7 +1471,7 @@ function HeatmapSection({
   const tooltipStyle: CSSProperties | undefined = hover ? { left: hover.x + 12, top: hover.y - 12 } : undefined;
 
   return (
-    <section>
+    <section id="an-sec-weakness">
       <div className="section-head">
         <div className="section-head-left">
           <h2 className="section-title">취약점 분석</h2>
@@ -1691,7 +1691,7 @@ function BriefingSection({ briefing }: { briefing: Briefing }) {
   const total = briefing.suggestions.reduce((a, s) => a + (parseInt(s.duration, 10) || 0), 0);
 
   return (
-    <section className="brief2-section">
+    <section className="brief2-section" id="an-sec-briefing">
       <div className="brief2-card">
         <div className="brief2-bg" aria-hidden="true" />
 
@@ -2224,16 +2224,29 @@ function ProfileMenu({ pushToast }: { pushToast: (m: string) => void }) {
   );
 }
 
-const NAV_ITEMS: Array<{ id: string; label: string; icon: IconName; active?: boolean; toast?: string; meta?: string }> = [
-  { id: "dashboard", label: "대시보드", icon: "chart", toast: "대시보드로 이동합니다" },
-  { id: "videos", label: "강의 영상", icon: "video", toast: "강의 영상 페이지로 이동합니다" },
-  { id: "inbox", label: "Q&A 인박스", icon: "inbox", toast: "Q&A 인박스로 이동합니다", meta: "5" },
-  { id: "analytics", label: "분석 리포트", icon: "analytics", active: true },
-  { id: "learners", label: "학습자 관리", icon: "users", toast: "학습자 관리 페이지로 이동합니다" },
-  { id: "settings", label: "강의 설정", icon: "settings", toast: "강의 설정 페이지로 이동합니다" },
+// 좌측 메뉴 = 이 페이지의 주요 섹션. 클릭 시 해당 섹션으로 부드럽게 스크롤한다.
+// target 은 각 섹션 래퍼의 id(an-sec-*). 스크롤 오프셋은 CSS scroll-margin-top 으로 처리.
+const NAV_ITEMS: Array<{ id: string; label: string; icon: IconName; target: string }> = [
+  { id: "overview", label: "한눈에 보기", icon: "chart", target: "an-sec-overview" },
+  { id: "trend", label: "강의별 시청 추이", icon: "analytics", target: "an-sec-trend" },
+  { id: "progress", label: "진도 분포", icon: "video", target: "an-sec-progress" },
+  { id: "students", label: "학생 개별 진척도", icon: "users", target: "an-sec-students" },
+  { id: "weakness", label: "취약점 분석", icon: "inbox", target: "an-sec-weakness" },
+  { id: "solution", label: "AI 차주 대면 수업 솔루션", icon: "sparkles", target: "an-sec-briefing" },
 ];
 
 function Sidebar({ pushToast }: { pushToast: (m: string) => void }) {
+  const [activeId, setActiveId] = useState<string>(NAV_ITEMS[0].id);
+
+  const goToSection = (item: (typeof NAV_ITEMS)[number]) => {
+    setActiveId(item.id);
+    if (typeof document !== "undefined") {
+      document
+        .getElementById(item.target)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -2246,16 +2259,13 @@ function Sidebar({ pushToast }: { pushToast: (m: string) => void }) {
           <button
             key={item.id}
             type="button"
-            className={"nav-item" + (item.active ? " active" : "")}
-            onClick={() => {
-              if (!item.active && item.toast) pushToast(item.toast);
-            }}
+            className={"nav-item" + (item.id === activeId ? " active" : "")}
+            onClick={() => goToSection(item)}
           >
             <span className="nav-icon">
               <Icon name={item.icon} size={17} />
             </span>
             {item.label}
-            {item.meta && <span className="nav-meta">{item.meta}</span>}
           </button>
         ))}
       </nav>
@@ -2404,7 +2414,7 @@ export default function AnalyticsPrototype() {
           </header>
 
           <div className="page">
-            <section>
+            <section id="an-sec-overview">
               <div className="section-head">
                 <div className="section-head-left">
                   <h2 className="section-title">한눈에 보기</h2>
@@ -2421,7 +2431,7 @@ export default function AnalyticsPrototype() {
             </section>
 
             <section className="chart-row">
-              <div className="chart-card">
+              <div className="chart-card" id="an-sec-trend">
                 <div className="chart-head">
                   <div className="chart-title-block">
                     <div className="chart-title">강의별 시청 추이</div>
@@ -2431,7 +2441,7 @@ export default function AnalyticsPrototype() {
                 <LineChart key={dataKey} series={all.series} weeks={all.weeks} />
               </div>
 
-              <div className="chart-card">
+              <div className="chart-card" id="an-sec-progress">
                 <div className="chart-head">
                   <div className="chart-title-block">
                     <div className="chart-title">진도 분포</div>

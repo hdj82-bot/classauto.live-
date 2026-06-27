@@ -4,15 +4,30 @@ import { useEffect, useId, useState } from "react";
 import { useI18n, type Locale } from "@/contexts/I18nContext";
 
 const ONBOARDED_KEY = "ifl_student_onboarded";
+const ONBOARDED_MAX_AGE = 60 * 60 * 24 * 365; // 1년
+
+// CLAUDE.md 정책상 localStorage 금지 → 온보딩 1회성 플래그를 쿠키로 보존한다.
+// SameSite=Lax 로 CSRF 표면을 줄이고, 만료를 1년으로 명시한다.
+function hasOnboardedCookie(): boolean {
+  if (typeof document === "undefined") return false;
+  return new RegExp(`(?:^|;\\s*)${ONBOARDED_KEY}=true(?:;|$)`).test(
+    document.cookie,
+  );
+}
+
+function setOnboardedCookie(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${ONBOARDED_KEY}=true; path=/; max-age=${ONBOARDED_MAX_AGE}; SameSite=Lax`;
+}
 
 /**
  * One-shot welcome modal called for in
  * docs/planning/06-student-pages.md §5 ("학생 첫 사용 온보딩").
  *
  * - Skippable (the user task wording explicitly allows skip).
- * - Persists `ifl_student_onboarded=true` in localStorage so a returning
+ * - Persists `ifl_student_onboarded=true` in a cookie so a returning
  *   student is never prompted again, regardless of save vs skip.
- * - SSR-safe: localStorage is only touched once we've mounted in the
+ * - SSR-safe: the cookie is only touched once we've mounted in the
  *   browser; the initial render returns null so hydration matches.
  */
 export default function OnboardingModal({
@@ -33,13 +48,7 @@ export default function OnboardingModal({
 
   useEffect(() => {
     setMounted(true);
-    try {
-      const stored = window.localStorage.getItem(ONBOARDED_KEY);
-      if (stored !== "true") setOpen(true);
-    } catch {
-      // localStorage may be unavailable (e.g. iOS private mode). In that case
-      // we just don't show the modal rather than throwing.
-    }
+    if (!hasOnboardedCookie()) setOpen(true);
   }, []);
 
   // Keep the picker in sync if locale changes elsewhere while modal is open.
@@ -48,11 +57,7 @@ export default function OnboardingModal({
   }, [locale]);
 
   const persistOnboarded = () => {
-    try {
-      window.localStorage.setItem(ONBOARDED_KEY, "true");
-    } catch {
-      /* see useEffect above */
-    }
+    setOnboardedCookie();
   };
 
   const handleSave = () => {

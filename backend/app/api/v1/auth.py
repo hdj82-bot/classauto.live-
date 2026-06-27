@@ -321,6 +321,13 @@ async def complete_profile(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="유효하지 않거나 만료된 교수자 초대입니다.",
             )
+        # G: 베타 모니터링 동의 필수(교수자 한정). 미동의면 가입 거부.
+        # 학생 흐름은 이 게이트와 무관(아래 student 분기 불변).
+        if not body.beta_consented:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="베타 모니터링 약관에 동의해야 가입할 수 있습니다.",
+            )
     elif role_str == "student":
         if not body.student_number:
             raise HTTPException(
@@ -341,6 +348,14 @@ async def complete_profile(
             role_str, body.locale,
         )
 
+    # G: 교수자는 초대의 cohort 를 복사받고 동의 시각을 기록한다(학생은 둘 다 None).
+    cohort = invite.cohort if invite is not None else None
+    beta_consented_at = (
+        datetime.now(timezone.utc)
+        if (invite is not None and body.beta_consented)
+        else None
+    )
+
     user = await create_user_from_google(
         db=db,
         google_sub=payload["sub"],
@@ -350,6 +365,8 @@ async def complete_profile(
         school=body.school,
         department=body.department,
         student_number=body.student_number,
+        cohort=cohort,
+        beta_consented_at=beta_consented_at,
     )
     # 교수자 가입 성공 — 초대를 단일 사용 처리(이후 동일 링크 재사용 차단).
     if invite is not None:

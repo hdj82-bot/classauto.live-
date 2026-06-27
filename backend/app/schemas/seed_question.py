@@ -72,6 +72,17 @@ class SeedQuestionsResponse(BaseModel):
     max: int = Field(..., description="영상당 사전 질문 최대 개수")
     used_this_month: int = Field(..., description="이번 달 이미 사용한 Q&A 렌더 수")
     remaining: int = Field(..., description="이번 달 남은 Q&A 렌더 수")
+    # C-2: 강의당 아바타 제작 횟수 상한(첫 제작 1 + 재제작 N). 프론트가 "재제작 N회
+    # 남음" 안내·차단에 사용. 무제한 계정/상한 비활성은 큰 sentinel 값이 온다.
+    avatar_render_count: int = Field(
+        default=0, description="이 강의의 누적 아바타 제작 패스 수"
+    )
+    avatar_rerender_remaining: int = Field(
+        default=0, description="이 강의에 남은 아바타 제작 횟수(상한 − 누적)"
+    )
+    avatar_rerender_max: int = Field(
+        default=0, description="강의당 아바타 제작 횟수 상한(설정값)"
+    )
 
 
 class GenerateSeedAnswerRequest(BaseModel):

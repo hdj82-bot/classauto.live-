@@ -12,6 +12,7 @@
     "indexCardPublished": "Published",
     "indexCardDraft": "Draft",
     "lectureBack": "← Back to analytics list",
+    "comprehensiveReportLink": "Comprehensive report",
     "lectureTitle": "{title} — analytics",
     "lectureSubtitle": "Visualizing learning activity for this lecture.",
     "lectureLoading": "Loading analytics data...",
@@ -19,11 +20,125 @@
     "lectureRetry": "Retry",
     "section": {
       "attendance": "Attendance distribution",
+      "kpi": "Current KPIs",
+      "trend": "Achievement trend",
+      "goals": "Learning goals",
+      "actions": "Encouragement & actions",
+      "studentGrid": "Per-student progress",
       "scores": "Accuracy heatmap",
+      "summary": "Summary",
       "engagement": "Learner engagement",
+      "attention": "Attention analysis",
       "watch": "Watch heatmap",
       "qa": "Q&A trend",
+      "qaKeywords": "Frequent question terms",
       "cost": "Cost meter"
+    },
+    "kpi": {
+      "empty": "Collecting KPI data",
+      "emptyDesc": "Current KPIs and week-over-week change appear once daily snapshots accumulate.",
+      "completionRate": "Completion rate",
+      "attendanceRate": "Attendance rate",
+      "avgAccuracy": "Avg. accuracy",
+      "qaCount": "Total questions",
+      "asOf": "As of {date}",
+      "asOfWithPrev": "As of {date} · vs last week ({prev})"
+    },
+    "actions": {
+      "recordOnlyNote": "Actions are currently recorded only (for RQ2 metrics). A channel to actually deliver them to students is in preparation.",
+      "targetLabel": "Target learner",
+      "targetClass": "Whole class",
+      "messageLabel": "Encouragement",
+      "messagePlaceholder": "e.g. You're almost through this week — keep going!",
+      "send": "Record",
+      "formError": "Enter a message.",
+      "saveError": "Failed to record.",
+      "empty": "No intervention actions yet",
+      "emptyDesc": "Once you leave encouragement based on the data, the log appears here.",
+      "type": {
+        "encouragement": "Encouragement",
+        "adopt_recommendation": "Adopted",
+        "note": "Note"
+      }
+    },
+    "goals": {
+      "empty": "No learning goals set",
+      "emptyDesc": "Set a metric and target to see progress (start → now → target).",
+      "metricLabel": "Metric",
+      "nameLabel": "Goal name",
+      "namePlaceholder": "e.g. 80% completion before midterm",
+      "targetLabel": "Target",
+      "add": "Add",
+      "achieved": "Achieved",
+      "delete": "Delete",
+      "start": "Start",
+      "now": "Now",
+      "target": "Target",
+      "formError": "Enter a name and target value.",
+      "saveError": "Failed to save the goal.",
+      "deleteError": "Failed to delete the goal.",
+      "metric": {
+        "completionRate": "Completion rate",
+        "attendanceRate": "Attendance rate",
+        "avgAccuracy": "Avg. accuracy",
+        "qaCount": "Total questions"
+      }
+    },
+    "trend": {
+      "empty": "Collecting trend data",
+      "emptyDesc": "The trend appears once at least two daily snapshots accumulate.",
+      "legendCompletion": "Completion rate",
+      "legendAttendance": "Attendance rate",
+      "legendAccuracy": "Avg. accuracy",
+      "latestQa": "Total questions",
+      "latestLearners": "Learners"
+    },
+    "qaKeywords": {
+      "empty": "No question terms yet",
+      "emptyDesc": "Frequent keywords appear once students ask Q&A questions.",
+      "countLabel": "mentioned {count}x",
+      "totalLabel": "Analyzed {count} questions"
+    },
+    "attention": {
+      "score": "Class average attention",
+      "scoreUnit": "pts",
+      "studentCount": "{count}",
+      "empty": "No attention data yet.",
+      "emptyDesc": "Once students watch the lecture, the focused/moderate/distracted split and score appear.",
+      "bucket": {
+        "focused": "Focused",
+        "moderate": "Moderate",
+        "distracted": "Distracted"
+      }
+    },
+    "summary": {
+      "wrongValue": "{count}x",
+      "wrongLabel": "Most-missed",
+      "wrongSub": "{count} missed questions",
+      "noResponseLabel": "No-response events",
+      "noResponseSub": "No reaction to prompts",
+      "outOfScopeLabel": "Out-of-scope questions",
+      "outOfScopeSub": "Outside lecture material"
+    },
+    "studentGrid": {
+      "empty": "No student progress data yet.",
+      "emptyDesc": "Once students start the lecture, per-student progress appears here.",
+      "filterAll": "All ({count})",
+      "filterIncomplete": "Incomplete ({count})",
+      "filterNotStarted": "Not started ({count})",
+      "filterAtRisk": "At risk ({count})",
+      "sortWeakest": "Weakest first",
+      "sortName": "By name",
+      "progress": "Progress",
+      "badgeLive": "Live",
+      "badgeVod": "VOD",
+      "statusCompleted": "Completed",
+      "statusInProgress": "In progress",
+      "statusNotStarted": "Not started",
+      "riskAtRisk": "At risk",
+      "riskHint": "Under 50% progress or not started",
+      "noNumber": "No ID",
+      "noName": "No name"
     },
     "attendance": {
       "summaryTotal": "Total",
@@ -114,6 +229,10 @@
       "success": "CSV file downloaded.",
       "error": "CSV export failed.",
       "ariaLabel": "Download per-student progress CSV for the current lecture"
+    },
+    "pdf": {
+      "label": "Export PDF",
+      "ariaLabel": "Export the analytics report as PDF (browser print)"
     },
     "legend": {
       "patternHigh": "Diagonal (high accuracy)",

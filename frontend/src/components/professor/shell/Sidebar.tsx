@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
+import { useOptionalAuth } from "@/contexts/AuthContext";
+import { canSeeAnalyticsPro } from "@/lib/analyticsProAccess";
 import { fetchProfessorData } from "@/lib/professorData";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
@@ -31,8 +33,12 @@ interface NavItem {
 
 /**
  * "강의 영상 생성" 메뉴의 기본 목적지 = 영상 제작 마법사 진입(Step 1) 페이지.
- * 클릭 시에는 진행 중인 강의가 있으면 그 강의의 제작 화면으로 바로 이어서 이동하고
- * (resolveStudioContinueHref), 없으면 이 진입 페이지로 폴백한다.
+ * 클릭 시 목적지 해석 우선순위:
+ *   1) 현재 URL 에 `?lecture={id}` 가 있으면(예: 제작 화면에서 "페르소나 변경"으로
+ *      넘어온 아바타 페이지) 바로 그 강의의 제작 화면으로 복귀 — 작업 중이던 정확한
+ *      강의를 보존한다.
+ *   2) 없으면 진행 중 강의를 추정해 이어서 이동(resolveStudioContinueHref).
+ *   3) 그것도 없으면 진입 페이지(Step 1)로 폴백.
  */
 const STUDIO_HREF = "/professor/studio";
 
@@ -175,6 +181,26 @@ const navItems: NavItem[] = [
     ),
   },
   {
+    href: "/professor/analytics-pro",
+    labelKey: "nav.analyticsPro",
+    iconId: "ic-analytics-pro",
+    icon: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="url(#nav-grad-electric)"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M12 2a10 10 0 1 0 10 10" />
+        <path d="M12 12 7 7" />
+        <path d="M12 6v6h6" />
+      </svg>
+    ),
+  },
+  {
     href: "/professor/learners",
     labelKey: "nav.learners",
     iconId: "ic-learners",
@@ -219,9 +245,19 @@ const sectionHeaderStyle: CSSProperties = {
 export default function ProfessorSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { t } = useI18n();
+  const auth = useOptionalAuth();
   // "강의 영상 생성" 클릭 → 진행 중 강의 해석 중 표시(중복 클릭 방지 + 시각 피드백).
   const [studioResolving, setStudioResolving] = useState(false);
+
+  // 학습 분석 PRO(실기능)는 계정주 2계정에만 노출 — 베타테스터에겐 메뉴를 숨긴다.
+  // 실제 접근 차단은 백엔드 require_analytics_pro 가 담당(이 필터는 진입점 노출 제어).
+  const visibleNavItems = navItems.filter(
+    (it) =>
+      it.href !== "/professor/analytics-pro" ||
+      canSeeAnalyticsPro(auth?.user?.email),
+  );
 
   const isActive = (href: string) =>
     pathname === href || pathname?.startsWith(href + "/");
@@ -234,6 +270,14 @@ export default function ProfessorSidebar() {
     }
     e.preventDefault();
     if (studioResolving) return;
+    // 현재 페이지가 특정 강의 컨텍스트(`?lecture={id}`)를 들고 있으면 그 강의의
+    // 제작 화면으로 정확히 복귀한다. 아바타 페이지에서 "페르소나 변경"으로 넘어온
+    // 뒤 다시 "강의 영상 생성"을 눌렀을 때 작업 중이던 강의가 사라지지 않게 한다.
+    const lectureId = searchParams?.get("lecture");
+    if (lectureId) {
+      router.push(`${STUDIO_HREF}/${lectureId}`);
+      return;
+    }
     setStudioResolving(true);
     try {
       router.push(await resolveStudioContinueHref());
@@ -246,7 +290,7 @@ export default function ProfessorSidebar() {
     <aside style={sidebarStyle} aria-label={t("nav.lectureManage")}>
       <div style={sectionHeaderStyle}>{t("nav.lectureManage")}</div>
       <nav className="flex flex-col gap-0.5 px-3 pb-4">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const active = isActive(item.href);
           const isStudio = item.href === STUDIO_HREF;
           return (

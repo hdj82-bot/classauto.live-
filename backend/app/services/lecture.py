@@ -17,6 +17,12 @@ from app.utils.slug import slugify
 
 logger = logging.getLogger(__name__)
 
+# 부정행위 방지(C2) — 슬라이드쇼 구간 음성 presign 만료(초). 슬라이드쇼는 전 슬라이드의
+# audio_url 을 한 번에 내려주므로, 본문 음성은 기본 6시간이 아니라 단기 만료로 발급해
+# 한 번 받은 URL 로 무기한 직접 소비·재배포되는 것을 제한한다. 짧은 플립러닝 클립의
+# 1회 연속 시청을 덮을 만큼은 길게(30분) 둔다. (s3.py 는 호출만, 수정 금지)
+SLIDESHOW_AUDIO_PRESIGN_TTL = 1800
+
 try:
     import sentry_sdk
 except ImportError:  # pragma: no cover
@@ -394,7 +400,10 @@ async def get_lecture_slideshow_by_slug(
             SlideshowSlide(
                 slide_index=idx,
                 image_url=presign_stored_s3_url(images_by_index.get(idx)),
-                audio_url=presign_stored_s3_url(audio_by_index.get(idx)),
+                # 본문 음성은 단기 만료 presign 으로만 발급(미디어 게이팅, C2).
+                audio_url=presign_stored_s3_url(
+                    audio_by_index.get(idx), SLIDESHOW_AUDIO_PRESIGN_TTL
+                ),
                 start_seconds=float(seg.get("start_seconds") or 0),
                 end_seconds=end,
                 text=seg.get("text") or "",

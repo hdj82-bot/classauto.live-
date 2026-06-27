@@ -1,0 +1,52 @@
+{
+  "analyticsPro": {
+    "title": "강의별 학습 분석 (PRO)",
+    "subtitle": "사전학습 데이터를 집계·판정하고 AI가 대면 수업 운영안과 학생별 처방을 제시합니다. 베타 기간에는 합성 데이터로 검증합니다.",
+    "generate": "분석 생성",
+    "generating": "분석 생성 중...",
+    "form": {
+      "subject": "과목",
+      "field": "분야",
+      "weaknessAxes": "취약 개념 축 (쉼표로 구분)",
+      "weaknessAxesHint": "예: 오개념, 공식 적용 오류",
+      "presets": "빠른 채우기",
+      "scenario": "시나리오"
+    },
+    "verdict": {
+      "excelling": "우등",
+      "confused": "혼란",
+      "polarized": "양극화",
+      "dropout": "구간 이탈"
+    },
+    "source": {
+      "ai": "AI 생성",
+      "fallback": "규칙 기반"
+    },
+    "kpi": {
+      "understanding": "평균 이해도",
+      "completion": "완주율",
+      "watched": "평균 시청 진도",
+      "questions": "인당 질문 수"
+    },
+    "briefing": {
+      "heading": "AI 대면 수업 브리핑",
+      "openingMove": "첫 5분",
+      "recommendedMinutes": "권장 {minutes}분"
+    },
+    "solutions": {
+      "heading": "학생별 개인화 솔루션",
+      "colName": "이름",
+      "colLevel": "수준",
+      "colWeakness": "약점",
+      "colAction": "교수 처방"
+    },
+    "gated": {
+      "title": "학습 분석 PRO 베타 권한이 필요합니다",
+      "body": "이 기능은 베타테스터 전용입니다. 운영자에게 활성화를 요청하세요."
+    },
+    "errors": {
+      "incomplete": "과목·분야·취약 개념 축을 모두 입력하세요.",
+      "failed": "분석 생성에 실패했습니다. 잠시 후 다시 시도하세요."
+    }
+  }
+}

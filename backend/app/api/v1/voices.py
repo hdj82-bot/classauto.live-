@@ -12,6 +12,7 @@ ElevenLabs 보이스를 나열하되, 키 미설정·장애 시에는 빈 목록
 import asyncio
 import logging
 import re
+import time
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from sqlalchemy import delete, select
@@ -66,6 +67,33 @@ DEFAULT_CURATED_VOICE_IDS: tuple[str, ...] = (
 # 개별 조회한 큐레이션 보이스 raw 메타 캐시 (프로세스 수명). 보이스 목록은 거의
 # 안 바뀌므로 첫 성공 이후엔 ElevenLabs 재호출 없이 재사용한다.
 _CURATED_RAW_CACHE: dict[str, dict] = {}
+
+# 계정 보이스 목록(GET /v1/voices) TTL 캐시. /api/voices 는 교수자가 음성 패널을
+# 열 때마다(아바타·studio 페이지 마운트 포함) 호출돼, 캐시가 없으면 매번
+# ElevenLabs 를 친다. 계정 보이스는 거의 안 바뀌므로 5분 캐시로 매 요청 외부
+# 호출을 없앤다. 성공 결과만 캐시(오류는 호출부가 빈 목록으로 degrade).
+_ACCOUNT_VOICES_TTL = 300.0
+_account_voices_cache: tuple[float, list[dict]] | None = None
+
+
+def reset_account_voices_cache() -> None:
+    """계정 보이스 목록 캐시를 비운다(테스트·강제 갱신용)."""
+    global _account_voices_cache
+    _account_voices_cache = None
+
+
+async def _list_account_voices_cached() -> list[dict]:
+    """계정 보이스 목록을 5분 캐시로 조회. 실패(ElevenLabsError)는 호출부로 전파."""
+    global _account_voices_cache
+    now = time.monotonic()
+    if _account_voices_cache is not None and now - _account_voices_cache[0] < _ACCOUNT_VOICES_TTL:
+        return _account_voices_cache[1]
+    from app.services.pipeline.elevenlabs_client import list_voices
+
+    # show_legacy=True 로 레거시 premade 보이스까지 포함해 선택 폭을 넓힌다.
+    raw = await list_voices(show_legacy=True)
+    _account_voices_cache = (now, raw)
+    return raw
 
 
 def _curated_voice_ids() -> list[str]:
@@ -196,13 +224,12 @@ async def list_tts_voices(
     user: User = Depends(require_professor),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.pipeline.elevenlabs_client import ElevenLabsError, list_voices
+    from app.services.pipeline.elevenlabs_client import ElevenLabsError
 
     # 0) 계정 보이스(교수자 커스텀 포함). 실패해도 빈 목록으로 진행 — 큐레이션
-    #    보이스만으로도 목록을 구성할 수 있다.
+    #    보이스만으로도 목록을 구성할 수 있다. (5분 프로세스 캐시 — 위 헬퍼)
     try:
-        # show_legacy=True 로 레거시 premade 보이스까지 포함해 선택 폭을 넓힌다.
-        account_raw = await list_voices(show_legacy=True)
+        account_raw = await _list_account_voices_cached()
     except ElevenLabsError:
         account_raw = []
     account_by_id: dict[str, dict] = {

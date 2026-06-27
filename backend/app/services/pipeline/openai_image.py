@@ -7,13 +7,10 @@ train(최대 15분) 병목을 제거하기 위한 전환 (docs/planning/12-self-
 책임 경계: 이 서비스는 **이미지 bytes 생성까지만** 한다. 생성 결과의 S3 저장과
 ``PhotoAvatarLook`` 행 생성은 호출부(``tasks/photo_avatar``)가 맡는다.
 
-────────────────────────────────────────────────────────────────────────────
-⚠️ 계약 스텁 (창1 작성, 2026-05-31)
-  - 예외 클래스, ``generate_instructor_looks`` 시그니처, MOCK 경로는 **확정**이다.
-  - 실제 OpenAI 호출부(`images/edits` + input_fidelity)와 프롬프트 매핑 정교화는
-    **창2(feat/pa-backend-core)** 가 구현한다. 아래 ``_TODO_REAL_CALL`` 지점 참조.
-  - 시그니처/예외/enum 을 바꿔야 하면 창1에 먼저 보고할 것(다른 창이 의존).
-────────────────────────────────────────────────────────────────────────────
+구현 상태: 실제 OpenAI 호출부(`images/edits` + input_fidelity), 프롬프트 매핑,
+MOCK 경로, 예외 클래스가 모두 구현 완료다(`generate_instructor_looks` 참조 —
+호출별 N 분할 + 포즈 로테이션, v0.3 2026-06-01). 시그니처/예외/enum 은 다른 창이
+의존하므로 변경 시 호출부(`tasks/photo_avatar`)와 함께 점검할 것.
 """
 from __future__ import annotations
 

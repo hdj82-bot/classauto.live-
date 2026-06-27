@@ -14,7 +14,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_professor, require_student
+from app.api.deps import (
+    get_current_user_optional,
+    require_professor,
+    require_student,
+)
 from app.core.redis import get_redis
 from app.db.session import SyncSessionLocal, get_db
 from app.models.course import Course
@@ -364,17 +368,29 @@ async def quiz_delete(
 @router.get(
     "/lectures/{lecture_id}/quiz/playback",
     response_model=PlaybackQuizListResponse,
-    summary="영상 재생 중 트리거할 인터랙티브 퀴즈 목록 (학생 전용)",
+    summary="영상 재생 중 트리거할 인터랙티브 퀴즈 목록 (발행 강의는 익명도 조회)",
 )
 async def quiz_playback(
     lecture_id: uuid.UUID,
-    current_user: User = Depends(require_student),
+    viewer: User | None = Depends(get_current_user_optional),
 ):
-    """타임스탬프 순으로 정렬된 퀴즈. 정답·해설은 절대 포함하지 않는다(부정행위 방지)."""
+    """타임스탬프 순으로 정렬된 퀴즈. 정답·해설은 절대 포함하지 않는다(부정행위 방지).
+
+    /public·/slideshow 와 동일하게 선택 인증 — 비로그인(홍보·익명 시청)도 **발행
+    (is_published) 강의**면 퀴즈가 영상 중간에 뜬다(종전 require_student 라 익명이
+    401 → /auth/login 으로 튕겼다). 익명에겐 미발행 강의를 노출하지 않는다.
+    """
     loop = asyncio.get_event_loop()
 
     def _run():
         with SyncSessionLocal() as db:
+            # 익명 시청자에겐 발행 강의만 — 미발행 강의의 문제 노출 방지.
+            if viewer is None:
+                lecture = db.execute(
+                    select(Lecture).where(Lecture.id == lecture_id)
+                ).scalar_one_or_none()
+                if lecture is None or not lecture.is_published:
+                    return []
             rows = quiz_svc.list_playback(db, lecture_id)
             return [PlaybackQuizItem.model_validate(r).model_dump() for r in rows]
 

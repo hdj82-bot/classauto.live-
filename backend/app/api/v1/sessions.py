@@ -20,6 +20,10 @@ async def create_session(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_student),
 ):
+    """학습 세션 시작.
+
+    같은 user+lecture 의 활성(미완료) 세션이 이미 있으면 409 로 거부한다(동시 재생 제한).
+    """
     if total_sec <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -39,6 +43,8 @@ async def update_session(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_student),
 ):
+    # 부정행위 방지: watched_sec 는 서버가 total_sec·경과 실시간 상한으로 깎고,
+    # progress_pct 클라 보고는 신뢰하지 않는다(서버가 잰 시청량으로 재산출).
     # SessionStatus enum 검증
     try:
         new_status = SessionStatus(status_param)
@@ -63,6 +69,11 @@ async def complete_session(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_student),
 ):
+    """세션 완료.
+
+    클라가 100% 라고 보고해도 무조건 신뢰하지 않는다. 서버가 잰 시청량(경과 실시간·
+    하트비트 기반)이 완료 기준에 못 미치면 409 로 거부하고 측정 진행률만 반영한다.
+    """
     session = await session_svc.complete_session(db, user.id, session_id, watched_sec)
     return {"id": str(session.id), "status": session.status.value, "progress_pct": session.progress_pct}
 

@@ -167,7 +167,9 @@ def _system_blocks_for_lang(lang: str | None) -> list[dict]:
     ]
 
 
-def generate_scripts(slides: list[SlideContent], lang: str = "ko") -> list[SlideScript]:
+def generate_scripts(
+    slides: list[SlideContent], lang: str = "ko", usage_sink: list | None = None
+) -> list[SlideScript]:
     """모든 슬라이드에 대해 발화 스크립트를 병렬 생성.
 
     - 첫 슬라이드는 동기 호출로 먼저 끝내 사용자가 가장 먼저 보는 화면을
@@ -188,14 +190,19 @@ def generate_scripts(slides: list[SlideContent], lang: str = "ko") -> list[Slide
     results: dict[int, str] = {}
 
     first, rest = slides[0], slides[1:]
-    results[first.slide_number] = _generate_single_script(client, first, lang=lang)
+    results[first.slide_number] = _generate_single_script(
+        client, first, lang=lang, usage_sink=usage_sink
+    )
     logger.info("슬라이드 %d 스크립트 생성 완료 (priming)", first.slide_number)
 
     if rest:
         max_workers = max(1, min(settings.SCRIPT_CONCURRENCY, len(rest)))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             future_to_slide: dict[Future, SlideContent] = {
-                pool.submit(_generate_single_script, client, slide, lang=lang): slide
+                pool.submit(
+                    _generate_single_script, client, slide, lang=lang,
+                    usage_sink=usage_sink,
+                ): slide
                 for slide in rest
             }
             for fut in future_to_slide:
@@ -211,8 +218,32 @@ def generate_scripts(slides: list[SlideContent], lang: str = "ko") -> list[Slide
 
 @track_external_api("claude")
 @retry_external(label="claude.messages.create", extra_retry_on=_RETRY_ON)
+def claude_cost_usd(usages: list) -> float:
+    """usage dict 리스트(``_generate_single_script`` 의 usage_sink)의 Claude 비용 합계(USD).
+
+    토큰 값이 비정상(테스트 mock 등)이면 0 을 반환한다 — 비용 기록은 회계 보조이며
+    파이프라인 흐름을 막지 않는다. 캐시 토큰은 입력 단가로 근사 합산한다.
+    """
+    try:
+        ti = sum(
+            int(u.get("input", 0) or 0)
+            + int(u.get("cache_read", 0) or 0)
+            + int(u.get("cache_write", 0) or 0)
+            for u in usages
+        )
+        to = sum(int(u.get("output", 0) or 0) for u in usages)
+        return round(
+            (ti * settings.CLAUDE_INPUT_COST_PER_M + to * settings.CLAUDE_OUTPUT_COST_PER_M)
+            / 1_000_000,
+            6,
+        )
+    except Exception:  # noqa: BLE001 — mock/비정상 usage 는 0 으로.
+        return 0.0
+
+
 def _generate_single_script(
-    client: anthropic.Anthropic, slide: SlideContent, lang: str = "ko"
+    client: anthropic.Anthropic, slide: SlideContent, lang: str = "ko",
+    usage_sink: list | None = None,
 ) -> str:
     content_blocks: list[dict] = []
 
@@ -270,6 +301,15 @@ def _generate_single_script(
             cache_read,
             cache_write,
         )
+        # H1: 호출부(step3·재생성)가 usage_sink 를 넘기면 토큰 사용량을 적립한다.
+        # list.append 는 GIL 하에서 thread-safe — generate_scripts 의 병렬 풀에서 안전.
+        if usage_sink is not None:
+            usage_sink.append({
+                "input": getattr(usage, "input_tokens", 0) or 0,
+                "output": getattr(usage, "output_tokens", 0) or 0,
+                "cache_read": cache_read,
+                "cache_write": cache_write,
+            })
 
     if not response.content:
         logger.warning("슬라이드 %d: 빈 응답", slide.slide_number)

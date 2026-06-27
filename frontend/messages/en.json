@@ -153,6 +153,7 @@
     "studio": "Create Lecture Video",
     "inbox": "Inbox",
     "analytics": "Analytics",
+    "analyticsPro": "Analytics PRO",
     "learners": "Learners",
     "dashboard": "Dashboard",
     "lectureList": "Lectures",
@@ -343,6 +344,11 @@
     "userInactive": "Inactive",
     "userActivate": "Activate",
     "userDeactivate": "Deactivate",
+    "userColAnalyticsPro": "Analytics PRO",
+    "analyticsProOn": "ON",
+    "analyticsProOff": "OFF",
+    "userAnalyticsProChanged": "Analytics PRO access updated.",
+    "userAnalyticsProChangeError": "Failed to update Analytics PRO access.",
     "loadingLabel": "Loading...",
     "costsTitle": "Cost Analytics",
     "costsLoadingLabel": "Loading costs...",
@@ -365,7 +371,117 @@
     "systemDbSize": "Database size",
     "systemRedisMemory": "Memory used",
     "systemRedisClients": "Connected clients",
-    "systemQueueLen": "Queue length"
+    "systemQueueLen": "Queue length",
+    "navBeta": "Beta overview",
+    "navFeedback": "Feedback",
+    "navAudit": "Audit log",
+    "betaTitle": "Beta overview",
+    "betaLoadingLabel": "Loading beta overview...",
+    "betaLoadError": "Failed to load beta overview.",
+    "betaCohortAll": "All cohorts",
+    "betaFunnelTitle": "Activation funnel",
+    "betaFunnelInvited": "Invited",
+    "betaFunnelSignedUp": "Signed up",
+    "betaFunnelCreatedCourse": "Created course",
+    "betaFunnelPublishedLecture": "Published lecture",
+    "betaFunnelRanSession": "Student session",
+    "betaFunnelConversion": "{pct}%",
+    "betaTableTitle": "Usage by tester",
+    "betaColInstructor": "Instructor",
+    "betaColCohort": "Cohort",
+    "betaColCourses": "Courses",
+    "betaColLectures": "Lectures",
+    "betaColPublished": "Published",
+    "betaColRenders": "Renders",
+    "betaColSpendMonth": "This month $",
+    "betaColSpendTotal": "Total $",
+    "betaColSpendAvg": "Monthly avg $",
+    "betaColLastActive": "Last active",
+    "betaNoInstructors": "No instructors in this cohort.",
+    "betaDrilldownLectures": "Lectures",
+    "betaDrilldownMonthly": "Monthly spend",
+    "betaDrilldownConsent": "Beta consent",
+    "betaDrilldownConsentYes": "Consented",
+    "betaDrilldownConsentNo": "Not consented",
+    "betaDrilldownLoadError": "Failed to load tester detail.",
+    "betaDrilldownEmpty": "No lectures.",
+    "betaNever": "—",
+    "feedbackTitle": "Feedback",
+    "feedbackLoadingLabel": "Loading feedback...",
+    "feedbackLoadError": "Failed to load feedback.",
+    "feedbackStatusError": "Failed to change status.",
+    "feedbackFilterAll": "All statuses",
+    "feedbackEmpty": "No feedback yet.",
+    "feedbackStatus": {
+      "open": "New",
+      "triaged": "Triaged",
+      "resolved": "Resolved"
+    },
+    "auditTitle": "Audit log",
+    "auditLoadingLabel": "Loading audit log...",
+    "auditLoadError": "Failed to load audit log.",
+    "auditEmpty": "No operator actions recorded.",
+    "auditColTime": "Time",
+    "auditColActor": "Operator",
+    "auditColAction": "Action",
+    "auditColTarget": "Target",
+    "auditColDetail": "Detail",
+    "auditFilterActorPlaceholder": "Search operator email",
+    "auditFilterActionPlaceholder": "Filter by action",
+    "auditPrev": "Prev",
+    "auditNext": "Next",
+    "auditPageInfo": "Page {page} · {total} total"
+  },
+  "feedback": {
+    "buttonLabel": "Feedback",
+    "title": "Send feedback",
+    "subtitle": "Tell us about bugs, ideas, or anything confusing. It goes straight to the beta operator.",
+    "placeholder": "Write anything…",
+    "submit": "Send",
+    "submitting": "Sending...",
+    "close": "Close",
+    "thanks": "Thanks for your feedback!",
+    "error": "Failed to send. Please try again.",
+    "category": {
+      "bug": "Bug",
+      "idea": "Idea",
+      "confusing": "Confusing",
+      "other": "Other"
+    }
+  },
+  "board": {
+    "title": "Community board",
+    "subtitle": "Share your thoughts, ideas, and pain points using ClassAuto. This is an open space for beta testers.",
+    "writeCta": "New post",
+    "loginToWrite": "Log in to post",
+    "empty": "No posts yet. Be the first to write one.",
+    "loadError": "Failed to load posts. Please try again shortly.",
+    "backToList": "Back to list",
+    "more": "Load more",
+    "commentsTitle": "Comments",
+    "commentCount": "{count} comments",
+    "noComments": "No comments yet.",
+    "commentPlaceholder": "Write a comment…",
+    "commentSubmit": "Post comment",
+    "commentSubmitting": "Posting…",
+    "loginToComment": "Log in to comment.",
+    "pinnedBadge": "Notice",
+    "deleteConfirm": "Delete this? This cannot be undone.",
+    "delete": "Delete",
+    "deleteError": "Failed to delete. Please try again.",
+    "anonymous": "Anonymous",
+    "newPost": {
+      "title": "Write a post",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Enter a title",
+      "bodyLabel": "Body",
+      "bodyPlaceholder": "Write your post",
+      "submit": "Post",
+      "submitting": "Posting…",
+      "cancel": "Cancel",
+      "error": "Failed to post. Please try again.",
+      "validation": "Please enter both a title and body."
+    }
   },
   "demo": {
     "meta": {
@@ -431,8 +547,8 @@
       "cta": "Apply for beta"
     },
     "fieldSelectV3": {
-      "title": "Pick one of the two fields",
-      "subtitle": "Humanities and natural sciences — compare how the same guardrails play out in two very different lectures.",
+      "title": "Explore our example lectures",
+      "subtitle": "See how ClassAuto works through these example lectures.",
       "social": {
         "tagline": "A · Liberal Arts",
         "metaLine": "Humanities · {minutes}-min clip",
@@ -654,8 +770,8 @@
       "bottomTail": "."
     },
     "demoFieldShowcase": {
-      "title": "Pick one of the two fields",
-      "subtitle": "Humanities and natural sciences — compare how the same guardrails play out in two very different lectures."
+      "title": "Explore our example lectures",
+      "subtitle": "See how ClassAuto works through these example lectures."
     },
     "demoTrustStrip": {
       "ariaLabel": "Data protection notice",
@@ -780,8 +896,10 @@
       "navFeatures": "Features",
       "navStudentGuide": "Student guide",
       "navAnalytics": "Analytics example",
+      "navComprehensive": "Comprehensive analysis",
       "navPricing": "Pricing",
       "navUseCases": "Use cases",
+      "navBoard": "Community",
       "navTrust": "Student data",
       "navSecurity": "Security",
       "navBeta": "Beta",
@@ -795,7 +913,7 @@
     },
     "analyticsExample": {
       "previewBadge": "PREVIEW",
-      "previewBody": "This is a static preview of one screen from the analytics report. The left sidebar and other console menus are not clickable here — they become functional inside the real console once your beta account is approved.",
+      "previewBody": "This is a static preview of one screen from the analytics report. Click a left-menu item to jump to that section. Some features such as the top toolbar become functional inside the real console once your beta account is approved.",
       "previewCta": "Apply for beta"
     },
     "useCases": {
@@ -1333,6 +1451,8 @@
       "submit": "Complete sign-up",
       "submitting": "Signing up…",
       "error": "Something went wrong. Please try again.",
+      "betaConsentLabel": "I agree to the beta monitoring terms (required)",
+      "betaConsentNotice": "During the beta, usage data such as the lectures you create, activity, and API costs may be aggregated and reviewed by the operator to improve the service. I agree to the beta terms that apply until the official launch.",
       "loading": "Verifying Google credentials…"
     },
     "onboardingV2": {
@@ -1425,6 +1545,7 @@
         "chatPickHint": "Pick an answer from the options above.",
         "leadIn": "Let's pause for a quick check-in quiz.",
         "previewNote": "Not graded in preview — students respond right here.",
+        "demoNote": "Not graded in trial viewing — log in to get instant answers and explanations.",
         "continue": "Continue"
       },
       "deploy": {
@@ -1481,5 +1602,25 @@
       "scoreDetail": "{correct} / {total} correct",
       "backToPlayer": "Back to lecture"
     }
+  },
+  "ownerCosts": {
+    "title": "API Cost Dashboard",
+    "subtitle": "Per-tester (instructor) external API spend, broken down by service.",
+    "denied": "Owner-only screen. Please sign in with the owner account.",
+    "loadError": "Failed to load cost data.",
+    "refresh": "Refresh",
+    "refreshing": "Loading…",
+    "generatedAt": "As of: {time}",
+    "empty": "No costs recorded yet.",
+    "totalCost": "Total cost (last 12 months)",
+    "monthToDate": "Month to date",
+    "userCount": "Active instructors",
+    "byServiceTitle": "Cost by service",
+    "byMonthTitle": "Monthly trend",
+    "byUserTitle": "Usage by instructor",
+    "yearMonth": "{year}-{month}",
+    "exportCsv": "Export CSV",
+    "colUser": "Instructor",
+    "colTotal": "Total"
   }
 }

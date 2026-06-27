@@ -839,6 +839,16 @@ export default function SettingsPanel({
                 현재 아바타로 답변 다시 만들기
               </button>
             )}
+
+            {/* C-2(스펙 13): 강의당 아바타 제작 횟수 상한 사전 안내. 성공한 제작만
+                카운트되며, 상한 도달 시 재제작이 차단된다(차단 메시지는 page.tsx 가
+                429 응답을 받아 토스트로 표시). */}
+            {seedAllReady && onForceRenderSeed && (
+              <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--text-subtle)", lineHeight: 1.5 }}>
+                본인·표준 아바타 수정은 강의당 재제작 2회로 제한됩니다. 성공한 제작만
+                카운트되니 신중히 진행해 주세요.
+              </p>
+            )}
           </div>
         </details>
       </div>
@@ -1269,11 +1279,16 @@ function SeedQuestionCard({
         </button>
       )}
       {item.status === "failed" && (
-        // 백엔드/제공자(VisionStory·HeyGen)의 원시 오류 문자열(예: "VisionStory
-        // 렌더 제출 오류 [403]: 30302…")은 교수자에게 의미가 없고 혼란만 주므로
-        // 노출하지 않는다. 항상 사람이 읽을 수 있는 고정 안내만 보여준다.
+        // 백엔드가 만든 '사람이 읽을 수 있는' 실패 사유(예: "강의 자료를 찾지
+        // 못했습니다.", "이번 달 추천 질문 제작 한도를 모두 사용했어요…", "본인 아바타를
+        // 준비하지 못했습니다…")는 그대로 보여 준다 — 교수자가 다음 행동(다시 시도·자료
+        // 보강·한도 문의)을 판단하려면 사유가 필요하다. 단, 제공자(VisionStory·HeyGen)·
+        // DB 의 원시 오류 문자열(예: "VisionStory 렌더 제출 오류 [403]: 30302…",
+        // "(psycopg2.errors…) invalid input value for enum…")은 의미가 없고 혼란만 주므로
+        // 숨기고 고정 안내로 대체한다(humanReadableSeedError 가 분기).
         <p style={{ margin: 0, fontSize: 11, color: "#B42318", lineHeight: 1.5 }}>
-          생성에 실패했어요. 잠시 후 ‘답변 자동 생성’으로 다시 시도해주세요.
+          {humanReadableSeedError(item.error_message) ??
+            "생성에 실패했어요. 잠시 후 ‘답변 자동 생성’으로 다시 시도해주세요."}
         </p>
       )}
     </div>
@@ -1281,6 +1296,28 @@ function SeedQuestionCard({
 }
 
 /* ───────── helpers ───────── */
+
+/**
+ * 사전 질문 실패 사유를 카드에 보여줄지 결정한다.
+ *
+ * 백엔드(app/tasks/qa_batch.py)는 교수자가 읽고 행동할 수 있는 한국어 안내문을
+ * error_message 에 담아 내려준다(자료 없음·한도 초과·아바타 미준비 등) — 이런 건
+ * 그대로 노출한다. 반면 제공자(VisionStory·HeyGen)·DB 의 원시 오류 문자열(영문
+ * 코드·예외 클래스·HTTP 상태·SQL/enum 키워드 등)은 교수자에게 의미가 없으므로
+ * null 을 돌려 호출부가 고정 안내로 대체하게 한다.
+ *
+ * 판정: (1) 원시 오류 신호가 있으면 숨김, (2) 한국어가 한 글자도 없으면(영문-only =
+ * 대개 원시 오류) 숨김, (3) 그 외에는 그대로 노출.
+ */
+function humanReadableSeedError(msg?: string | null): string | null {
+  const raw = (msg ?? "").trim();
+  if (!raw) return null;
+  const technical =
+    /(psycopg2|sqlalchemy|traceback|exception|invalid input|enum |null value|\[\d{3}\]|\b[A-Za-z]+Error\b|https?:\/\/|<[a-z/]+>)/i;
+  if (technical.test(raw)) return null;
+  if (!/[가-힣]/.test(raw)) return null;
+  return raw;
+}
 
 /** 속도 배율을 보기 좋게 표기 (1.0→"1.0", 1.05→"1.05", 0.7→"0.7"). */
 function formatSpeed(v: number): string {

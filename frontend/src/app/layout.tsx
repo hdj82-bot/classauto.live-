@@ -3,6 +3,10 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ToastProvider } from "@/components/ui/Toast";
+// 우하단 글로벌 피드백 버튼은 제거됨(2026-06-27) — 스튜디오 ActionBar CTA 와 겹쳐
+// 보였고, 베타 의견 수집 창구를 대문 nav 의 공개 "자유게시판"(/board)으로 일원화했다.
+// 운영자 비공개 피드백 콘솔(/admin/feedback)과 백엔드(POST /api/v1/feedback)는 그대로
+// 유지되므로, 특정 페이지에서 다시 띄우고 싶으면 GlobalFeedbackButton 을 직접 import 한다.
 // 사용자 결정 2026-05-13 PM: 글로벌 OfflineBanner 제거 (모든 페이지에서 상단
 // 빨간 띠 노출 차단). 컴포넌트 파일(`@/components/OfflineBanner`) 자체는 보존
 // 하므로 특정 페이지에서 다시 켜고 싶으면 그쪽에서 직접 import 하면 된다.
@@ -39,19 +43,31 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-bg text-text">
-        {/* 폰트 CDN 조기 연결 + Pretendard 스타일시트 프리로드. globals.css 의
-            @import 는 CSS 파싱이 끝나야 발견되어 첫 렌더를 늦췄다. 같은 URL 을
-            head 에서 미리 preload 하면 병렬·조기 fetch 되어 @import 가 캐시에서
-            즉시 해소된다(폰트 로딩 경로 자체는 @import 가 그대로 보장). */}
+        {/* 폰트 CDN 조기 연결 + 스타일시트 프리로드. globals.css 의 @import 는 CSS
+            파싱이 끝나야 발견되어 첫 렌더를 늦췄다. 같은 URL 을 head 에서 preconnect
+            (TLS 핸드셰이크 선행) + preload(병렬·조기 fetch)하면 @import 가 캐시에서
+            즉시 해소된다. Pretendard(jsdelivr)·Noto Serif(googleapis) 둘 다 적용하고,
+            Paperlogy woff2(jsdelivr)·Noto woff2(gstatic) 출처도 preconnect 로 커버. */}
         <link
           rel="preconnect"
           href="https://cdn.jsdelivr.net"
+          crossOrigin="anonymous"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
           crossOrigin="anonymous"
         />
         <link
           rel="preload"
           as="style"
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
+        />
+        <link
+          rel="preload"
+          as="style"
+          href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600&display=swap"
         />
         <I18nProvider>
           <ToastProvider>

@@ -40,7 +40,10 @@ export default function Header() {
       ? [{ href: "/dashboard", label: t("nav.myLectures") }]
       : [];
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  // pathname 은 usePathname() 이 null 을 줄 수 있어 optional chaining 으로 가드한다
+  // (아래 corePublicLinks/모바일 메뉴의 pathname?.startsWith 와 일관).
+  const isActive = (href: string) =>
+    pathname === href || (pathname?.startsWith(href + "/") ?? false);
 
   // 비로그인 + 로그인 모두 노출되는 공개 메뉴.
   // v2: accent 구분 제거. CTA 성격(/demo, /beta-apply) 만 gold 강조, 나머지는

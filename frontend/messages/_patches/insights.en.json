@@ -18,7 +18,11 @@
       "accuracy": "Avg. accuracy",
       "qa": "Questions",
       "warnings": "Distraction alerts",
-      "students": "{count} learners"
+      "students": "{count} learners",
+      "completedOf": "{completed}/{total} completed",
+      "totalQuestions": "{count} questions",
+      "rejected": "{count} rejected · {rate}%",
+      "highWarning": "{count} high-warning"
     },
     "summary": {
       "title": "Learning data summary",
@@ -28,6 +32,9 @@
       "title": "Top weak concepts",
       "subtitle": "With supporting evidence — candidates for in-class focus",
       "empty": "No weak concepts above threshold.",
+      "chartTitle": "Accuracy by weak concept",
+      "classAvg": "Class avg {value}%",
+      "chartHint": "Shorter, redder bars are concepts students struggled with most. Dashed line = class average.",
       "severity": "Severity",
       "accuracy": "{value}% correct",
       "responses": "{count} responses",

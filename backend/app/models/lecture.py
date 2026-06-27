@@ -98,6 +98,15 @@ class Lecture(Base):
     # 정규화 좌표(0~1, 자막 박스 중심). NULL = 기본(하단 중앙). 학생 플레이어가 적용.
     subtitle_position: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 강의당 성공한 아바타 제작(렌더 패스) 횟수 — "첫 제작 1 + 재제작 N"
+    # (docs/planning/13-beta-admin-console.md §C-2). 교수자가 트리거한 Q&A 아바타
+    # 제작/재제작 패스가 성공 제출될 때 +1(qa_batch._render_seed_questions). 클러스터·
+    # 클립 수와 무관하게 한 번의 제작은 1로 센다. settings.AVATAR_RERENDER_MAX_PER_LECTURE
+    # 를 넘으면 재제작이 차단되며(budget.assert_avatar_rerender_quota), 운영자가
+    # /api/v1/admin/lectures/{id}/reset-avatar-rerender 로 0 으로 리셋할 수 있다.
+    avatar_render_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     # 교수자가 만든 컬렉션(Folder)으로 강의를 묶기 위한 옵션 외래키.
     # NULL = 미분류. 폴더 삭제 시 ondelete=SET NULL 로 자동 해제(강의 자체는 보존).
     folder_id: Mapped[uuid.UUID | None] = mapped_column(

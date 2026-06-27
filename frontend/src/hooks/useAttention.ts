@@ -30,6 +30,9 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
   });
   const configLoaded = useRef(false);
   const consecutiveFailuresRef = useRef(0);
+  // 서버 config 로드 시 bump → 하트비트 interval effect 가 재실행되며 로드된
+  // heartbeat_interval_ms 로 setInterval 을 다시 건다(아래 deps 에 포함).
+  const [configVersion, setConfigVersion] = useState(0);
 
   // 마운트 시점 타임스탬프 초기화 + 서버 설정 로드 (한 번만)
   useEffect(() => {
@@ -41,6 +44,9 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
       .get<AttentionConfig>("/api/v1/attention/config")
       .then(({ data }) => {
         configRef.current = data;
+        // 로드 전에는 기본 10s 로 interval 이 고정됐었다. 버전을 올려
+        // 하트비트 effect 를 재실행시켜 서버 설정 간격으로 교체한다.
+        setConfigVersion((v) => v + 1);
       })
       .catch(() => {
         // 실패 시 기본값 유지
@@ -54,6 +60,9 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
 
   // 하트비트 전송
   useEffect(() => {
+    // 세션이 없으면(비로그인 익명 시청) 인증 필요한 heartbeat 를 호출하지 않는다.
+    // 호출 시 401 → 전역 인터셉터가 /auth/login 으로 튕겨 익명 시청이 끊긴다.
+    if (!sessionId) return;
     heartbeatTimer.current = setInterval(async () => {
       if (isPaused) return;
       try {
@@ -72,10 +81,13 @@ export function useAttention({ sessionId }: UseAttentionOptions) {
     }, configRef.current.heartbeat_interval_ms);
 
     return () => clearInterval(heartbeatTimer.current);
-  }, [sessionId, isPaused]);
+    // configVersion: 서버 config 로드 후 로드된 간격으로 interval 재생성.
+  }, [sessionId, isPaused, configVersion]);
 
   // 무반응 감지
   useEffect(() => {
+    // 세션이 없으면(익명) 인증 필요한 no-response 를 호출하지 않는다(401 방지).
+    if (!sessionId) return;
     noResponseTimer.current = setInterval(async () => {
       if (isPaused) return;
       const elapsed = Date.now() - lastResponseRef.current;

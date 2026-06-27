@@ -72,6 +72,10 @@ interface SeedQuestionsWire {
   max: number;
   used_this_month: number;
   remaining: number;
+  // C-2(스펙 13): 강의당 아바타 제작 횟수 상한. 무제한/상한 비활성이면 큰 sentinel.
+  avatar_render_count?: number;
+  avatar_rerender_remaining?: number;
+  avatar_rerender_max?: number;
 }
 
 export interface SeedQuestionsResult {
@@ -82,6 +86,12 @@ export interface SeedQuestionsResult {
   usedThisMonth: number;
   /** 이번 달 남은 렌더 슬롯 수. */
   remaining: number;
+  /** C-2: 이 강의의 누적 아바타 제작 패스 수. */
+  avatarRenderCount: number;
+  /** C-2: 이 강의에 남은 아바타 제작 횟수(상한 − 누적). 무제한이면 매우 큰 값. */
+  avatarRerenderRemaining: number;
+  /** C-2: 강의당 아바타 제작 횟수 상한(설정값). */
+  avatarRerenderMax: number;
   /** 백엔드 미응답/404 로 빈 목록을 쓰는 중인지. */
   deferred: boolean;
 }
@@ -92,6 +102,9 @@ function _parse(data: SeedQuestionsWire, deferred: boolean): SeedQuestionsResult
     max: data.max ?? 3,
     usedThisMonth: data.used_this_month ?? 0,
     remaining: data.remaining ?? 0,
+    avatarRenderCount: data.avatar_render_count ?? 0,
+    avatarRerenderRemaining: data.avatar_rerender_remaining ?? 0,
+    avatarRerenderMax: data.avatar_rerender_max ?? 0,
     deferred,
   };
 }
@@ -110,6 +123,9 @@ export async function getSeedQuestions(
       max: 3,
       usedThisMonth: 0,
       remaining: 0,
+      avatarRenderCount: 0,
+      avatarRerenderRemaining: 0,
+      avatarRerenderMax: 0,
       deferred: true,
     };
   }

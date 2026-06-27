@@ -144,6 +144,33 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // 전체화면은 영상 영역만이 아니라 플레이어 전체(영상+Q&A 패널)를 대상으로 한다.
   // stageRef(.video)만 전체화면하면 우측 채팅이 사라지고 슬라이드가 레터박스된다.
   const playerRef = useRef<HTMLDivElement | null>(null);
+  // 강의 화면 ↔ Q&A 채팅 좌우 비율(데스크탑). 경계 핸들을 드래그해 바꾼다.
+  // 0.3~0.8 로 클램프. CSS 변수 --stage-basis 로 .stage 폭에 전달한다(모바일은
+  // 미디어쿼리가 세로 스택으로 덮어써 이 값은 무시된다).
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [stageRatio, setStageRatio] = useState(0.6);
+  const resizingRef = useRef(false);
+  const startResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    resizingRef.current = true;
+  }, []);
+  const moveResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizingRef.current) return;
+    const rect = bodyRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return;
+    const ratio = (e.clientX - rect.left) / rect.width;
+    setStageRatio(Math.min(0.8, Math.max(0.3, ratio)));
+  }, []);
+  const endResize = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizingRef.current) return;
+    resizingRef.current = false;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* no-op */
+    }
+  }, []);
   const handleProgressRef = useRef<(sec: number) => void>(() => {});
   const handleProgress = useCallback(
     (sec: number) => handleProgressRef.current(sec),
@@ -232,6 +259,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   // 추천 질문은 기본 접힘 — 채팅 영역을 잠식하지 않게 버튼으로 펼친다.
   const [seedOpen, setSeedOpen] = useState(false);
   const qaBottomRef = useRef<HTMLDivElement>(null);
+  // Q&A 영상(아바타 클립) 답변이 추가될 때, 직전 질문 말풍선을 채팅 뷰 맨 위로
+  // 올려 그 아래 영상이 잘리지 않고 통째로 보이게 한다. qaBottomRef(맨 끝 앵커)로
+  // 스크롤하면 키 큰 영상의 윗부분이 뷰 위로 밀려 잘리므로 별도 앵커를 둔다.
+  const qaLatestUserRef = useRef<HTMLDivElement>(null);
 
   // ── Q&A 아바타 영상 재생 위치 ───────────────────────────────────────────────
   // "stage"(기본) = 좌측 강의 화면에 크게 재생, "chat" = 우측 채팅창에서 재생.
@@ -317,9 +348,12 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   }, [user]);
 
   // "다시 보지 않기" — 즉시 숨기고 서버에 영구 스킵 기록(fire-and-forget).
+  // 비로그인(익명) 시청자는 서버 플래그가 없고 markOnboarded 가 인증 필요(401 →
+  // /auth/login 리다이렉트)라 호출하지 않는다. 익명은 컴포넌트 sessionStorage 가드로
+  // 같은 세션 내 재노출만 막으면 충분하다.
   const handleDismissOnboardingForever = () => {
     setShowOnboarding(false);
-    userApi.markOnboarded().catch(() => {});
+    if (user) userApi.markOnboarded().catch(() => {});
   };
 
   // ─── 강의 fetch ───
@@ -335,7 +369,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       // 그래서 fetch 전에 refresh 쿠키로 access 토큰을 선제 복원한다(비로그인은 그냥 통과).
       await bootstrapAuth();
       try {
-        const { data } = await api.get<LectureData>(`/api/lectures/${slug}/public`);
+        const { data } = await api.get<LectureData>(`/api/lectures/${slug}/public`, {
+          timeout: 12000, // 시청 진입 핫패스 — 멈춤 상한.
+        });
         if (data.is_expired) {
           router.replace("/expired");
           return;
@@ -349,6 +385,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   }, [slug, router]);
 
   // ─── 세션 생성 + 첫 환영 메시지 ───
+  // 부정행위 방지(C2): total_sec 만 클라가 알려주고, 진행률·완료 판정은 서버가
+  // 잰 경과 실시간·하트비트로만 한다. 같은 강의의 활성 세션이 이미 있으면 서버가
+  // 409 로 거부(동시 재생 제한)하며, 그 경우 sessionId 가 null 로 남아 no-op 된다.
   useEffect(() => {
     // 미리보기 모드: 학생 시청 세션·집중도를 만들지 않는다(분석 오염 방지).
     // sessionId 가 null 로 남으면 퀴즈 제출·Q&A·집중도 등은 기존 가드로 no-op.
@@ -371,7 +410,61 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     })();
   }, [lecture, user, durationSec, preview]);
 
+  // ─── 재생 구간 히트맵 계측 (스펙 11 §F, 10 §3.1) ───
+  // 슬라이드 진입/완료 이벤트를 watch_events 로 적재한다(분석 대시보드 §F 의 1차 자료,
+  // 소급 수집 불가). 로그인 학생의 실제 세션(sessionId)에서만 발생하며 익명·미리보기는
+  // sessionId 가 null 이라 no-op. 학습 흐름과 무관한 fire-and-forget — 실패·예외는 전부
+  // 삼켜 재생에 영향 주지 않는다. 슬라이드가 바뀔 때 직전 슬라이드 완료(+체류시간)와
+  // 새 슬라이드 진입을 함께 보낸다.
+  const watchSlideRef = useRef<{ index: number; enteredAt: number } | null>(null);
+  useEffect(() => {
+    if (!sessionId || !currentSlide) return;
+    const idx = currentSlide.slide_index;
+    const prev = watchSlideRef.current;
+    if (prev && prev.index === idx) return;
+    const now = Date.now();
+    const events: Record<string, unknown>[] = [];
+    if (prev) {
+      events.push({
+        event_type: "segment_complete",
+        slide_index: prev.index,
+        meta: { dwell_seconds: Math.max(0, Math.round((now - prev.enteredAt) / 1000)) },
+      });
+    }
+    events.push({ event_type: "segment_enter", slide_index: idx });
+    watchSlideRef.current = { index: idx, enteredAt: now };
+    void api
+      .post("/api/v1/dashboard/watch-events", { session_id: sessionId, events })
+      .catch(() => {
+        /* 분석 계측 실패는 무시 — 재생에 영향 없음 */
+      });
+  }, [currentSlide, sessionId]);
+
+  // ─── 강의 끝 도달 → 서버에 완료 보고(판정은 서버) ───
+  // 부정행위 방지(C2): 로컬에서 끝까지 재생했다는 사실 자체를 '완료'로 단정하지
+  // 않는다. 서버가 잰 시청량(경과 실시간·하트비트 기반)이 기준 미달이면 완료를
+  // 거부(409)하며 그대로 수용하고, 충분하면 서버가 completed 로 확정한다. 즉
+  // 진행률·완료 게이트는 클라가 아니라 서버가 최종 판정한다.
+  const completionReportedRef = useRef(false);
+  useEffect(() => {
+    if (!sessionId || !durationSec) return;
+    if (completionReportedRef.current) return;
+    // 마지막 슬라이드 끝(currentTime ≈ duration) 근처에 도달했을 때만.
+    if (progressSec < Math.floor(durationSec) - 1) return;
+    completionReportedRef.current = true;
+    void api
+      .post(`/api/v1/sessions/${sessionId}/complete`, null, {
+        params: { watched_sec: Math.round(durationSec) },
+      })
+      .catch(() => {
+        /* 서버가 완료를 인정하지 않으면(409 등) 로컬에서 완료로 처리하지 않는다 */
+      });
+  }, [progressSec, durationSec, sessionId]);
+
   // ─── 인터스티셜 퀴즈 목록 fetch (타임스탬프 트리거용, 정답·해설 미포함) ───
+  // /quiz/playback 은 선택 인증으로 바뀌어(발행 강의는 익명도 조회) 비로그인 홍보
+  // 시청에서도 퀴즈가 영상 중간에 뜬다. 정답·해설은 응답에 없고, 익명은 세션이 없어
+  // 제출 시 안내만 표시된다(채점은 로그인 학생만). 교수자 미리보기는 preview 경로.
   useEffect(() => {
     if (!lecture?.id) return;
     let cancelled = false;
@@ -524,9 +617,16 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const answerQuiz = async (quiz: PlaybackQuiz, userAnswer: string) => {
     if (quizSubmitting || quizResult !== null) return;
 
-    // 미리보기(세션 없음): 채점·기록 없이 안내만 오버레이에 표시.
+    // 세션 없음 — 채점·기록 없이 안내만 표시. 교수자 미리보기 vs 비로그인(홍보 익명
+    // 시청)을 구분한다: 미리보기는 "학생이 응답" 안내, 익명은 로그인 유도.
     if (!sessionId) {
-      setQuizResult(t("student.playerV2.quiz.previewNote"));
+      setQuizResult(
+        t(
+          preview
+            ? "student.playerV2.quiz.previewNote"
+            : "student.playerV2.quiz.demoNote",
+        ),
+      );
       return;
     }
 
@@ -593,9 +693,36 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
     } else {
-      el.requestFullscreen?.().catch(() => {});
+      el.requestFullscreen?.()
+        .then(() => {
+          // 모바일: 전체화면 진입 시 가로로 회전(세로 스택은 영상이 너무 납작해
+          // 보기 힘들다). 지원 브라우저(주로 Android)만 적용되고, 미지원(데스크탑·
+          // iOS Safari)에선 reject 돼 조용히 무시된다.
+          const orientation = screen.orientation as ScreenOrientation & {
+            lock?: (o: "landscape") => Promise<void>;
+          };
+          orientation?.lock?.("landscape").catch(() => {});
+        })
+        .catch(() => {});
     }
   };
+
+  // 전체화면을 벗어나면(컨트롤 버튼·시스템 뒤로가기·ESC 모두 포함) 가로 잠금을 푼다.
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) {
+        try {
+          (
+            screen.orientation as ScreenOrientation & { unlock?: () => void }
+          )?.unlock?.();
+        } catch {
+          /* no-op */
+        }
+      }
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
 
   // ─── 배포하기(미리보기 전용) — 강의 발행 후 학생 링크·QR 모달 표시 ───
   const openDeploy = async () => {
@@ -619,6 +746,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     setQaInput("");
     setQaMessages((m) => [...m, { role: "user", text: question }]);
     setQaSending(true);
+    // 답변에 아바타 영상이 함께 오면 스크롤을 "질문 말풍선 상단 정렬"로 바꿔
+    // 영상이 잘리지 않게 한다(영상 없으면 기존처럼 맨 아래로).
+    let answeredWithVideo = false;
     try {
       // 호출 경로 3종:
       //  - 미리보기(교수자): 소유 교수자 전용 /qa/preview (세션 없음)
@@ -645,6 +775,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
             );
       // 겹치는 질문이라 사전 렌더된 아바타 클립이 있으면 함께 재생(부가).
       const avatarUrl: string | null = data.avatar?.video_url ?? null;
+      answeredWithVideo = Boolean(avatarUrl);
       setQaMessages((m) => [
         ...m,
         {
@@ -669,7 +800,16 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       ]);
     }
     setQaSending(false);
-    setTimeout(() => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    setTimeout(() => {
+      if (answeredWithVideo) {
+        qaLatestUserRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      } else {
+        qaBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      }
+    }, 50);
   };
 
   // ─── 추천(사전 제작) 질문 클릭 — 실시간 RAG 대신 미리 만든 Q&A 영상 재생 ───
@@ -688,9 +828,15 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     ]);
     // stage 모드면 좌측 강의 화면에 자동 재생(채팅 모드는 채팅에서 인라인 재생).
     routeAvatarToStage(q.video_url);
+    // 방금 추가한 질문 말풍선을 채팅 뷰 맨 위로 올려 그 아래 Q&A 영상이 통째로
+    // 보이게 한다(맨 아래 앵커로 스크롤하면 영상 윗부분이 잘림).
     setTimeout(
-      () => qaBottomRef.current?.scrollIntoView({ behavior: "smooth" }),
-      50,
+      () =>
+        qaLatestUserRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        }),
+      80,
     );
   };
 
@@ -714,6 +860,12 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   if (!lecture) return null;
 
   const titleSegments = parseCourseTitle(lecture.title);
+  // 마지막 사용자 질문 말풍선 인덱스 — Q&A 영상 답변 시 이 말풍선을 뷰 상단으로
+  // 올려 영상이 잘리지 않게 스크롤하기 위한 앵커 대상(qaLatestUserRef).
+  let lastUserMsgIdx = -1;
+  for (let i = 0; i < qaMessages.length; i++) {
+    if (qaMessages[i].role === "user") lastUserMsgIdx = i;
+  }
   const week = lecture.week_number ?? null;
   const userInitial = (user?.name ?? user?.email ?? "?").trim().charAt(0).toUpperCase();
   const userSchoolDept = (() => {
@@ -800,7 +952,13 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         </header>
 
         {/* Body */}
-        <div className={styles.body}>
+        <div
+          className={styles.body}
+          ref={bodyRef}
+          style={
+            { "--stage-basis": `${stageRatio * 100}%` } as React.CSSProperties
+          }
+        >
           <div className={styles.stage}>
             <div className={styles.video} ref={stageRef}>
               {/* 본문 = 슬라이드쇼: 현재 슬라이드 이미지 + 숨겨진 구간 음성 + 자막. */}
@@ -1133,8 +1291,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                   </span>
                 </div>
                 <div className={styles.controlsRight}>
-                  {preview && (
-                    <div className={styles.avSettingsWrap}>
+                  {/* 자막·속도 설정 — 미리보기·학생·익명 모두에게 노출(자막 모양·속도는
+                      시청자 로컬 환경설정). 단 '위치'는 강의에 저장돼 학생 화면에 반영되므로
+                      미리보기(교수자)에서만 보인다. */}
+                  <div className={styles.avSettingsWrap}>
                       <button
                         type="button"
                         className={styles.ctrl}
@@ -1239,28 +1399,33 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                                   setCapScale(Number(parseFloat(e.target.value).toFixed(2)))
                                 }
                               />
-                              {/* 위치 — 자막을 끌어서 옮긴다(강의에 저장 → 학생 화면 반영). */}
-                              <div className={styles.avField}>
-                                <span className={styles.avLabel}>위치</span>
-                                <div className={styles.avBtns}>
-                                  <button
-                                    type="button"
-                                    className={styles.avChip}
-                                    onClick={() => {
-                                      setCapPos(null);
-                                      void saveCapPos(null);
-                                    }}
-                                    disabled={!capPos}
-                                  >
-                                    기본 위치로
-                                  </button>
-                                </div>
-                              </div>
-                              <p className={styles.avHint}>
-                                {capPos
-                                  ? "자막을 끌어서 위치를 옮길 수 있어요. 위치는 강의에 저장돼 학생 화면에도 적용됩니다."
-                                  : "영상 위 자막을 끌어서 원하는 위치에 놓으세요. (강의에 저장 → 학생 화면 반영)"}
-                              </p>
+                              {/* 위치 — 자막을 끌어서 옮긴다(강의에 저장 → 학생 화면 반영).
+                                  강의에 영구 저장되므로 미리보기(교수자)에서만 노출. */}
+                              {preview && (
+                                <>
+                                  <div className={styles.avField}>
+                                    <span className={styles.avLabel}>위치</span>
+                                    <div className={styles.avBtns}>
+                                      <button
+                                        type="button"
+                                        className={styles.avChip}
+                                        onClick={() => {
+                                          setCapPos(null);
+                                          void saveCapPos(null);
+                                        }}
+                                        disabled={!capPos}
+                                      >
+                                        기본 위치로
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <p className={styles.avHint}>
+                                    {capPos
+                                      ? "자막을 끌어서 위치를 옮길 수 있어요. 위치는 강의에 저장돼 학생 화면에도 적용됩니다."
+                                      : "영상 위 자막을 끌어서 원하는 위치에 놓으세요. (강의에 저장 → 학생 화면 반영)"}
+                                  </p>
+                                </>
+                              )}
                             </div>
 
                             {/* 음성 빠르기 */}
@@ -1321,7 +1486,6 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                         </>
                       )}
                     </div>
-                  )}
                   {preview && (
                     <button
                       type="button"
@@ -1445,6 +1609,19 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
             </div>
           </div>
 
+          {/* 강의 화면 ↔ Q&A 채팅 경계 핸들 — 잡고 좌우로 끌어 비율 조절(데스크탑).
+              모바일(세로 스택)에선 CSS 로 숨긴다. */}
+          <div
+            className={styles.resizer}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="강의 화면과 채팅창 비율 조절"
+            onPointerDown={startResize}
+            onPointerMove={moveResize}
+            onPointerUp={endResize}
+            onPointerCancel={endResize}
+          />
+
           {/* Q&A panel */}
           <aside className={styles.qa} aria-label={t("student.playerV2.qaTitle")}>
             <div className={styles.qaHead}>
@@ -1551,7 +1728,11 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
                     </div>
                   </div>
                 ) : (
-                  <div key={i} className={`${styles.msg} ${styles.me}`}>
+                  <div
+                    key={i}
+                    ref={i === lastUserMsgIdx ? qaLatestUserRef : undefined}
+                    className={`${styles.msg} ${styles.me}`}
+                  >
                     <span className={`${styles.msgAv} ${styles.msgAvMe}`}>나</span>
                     <div className={styles.bubble}>{m.text}</div>
                   </div>

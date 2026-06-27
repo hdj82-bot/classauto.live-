@@ -85,10 +85,35 @@ class Settings(BaseSettings):
     VOICE_SCRIPT_MAX_TOKENS: int = 768
     CLAUDE_INPUT_COST_PER_M: float = 3.00
     CLAUDE_OUTPUT_COST_PER_M: float = 15.00
+    # 학습 분석 PRO(베타 전용) AI 브리핑·학생솔루션(docs/planning/analytics-spec.md
+    # §2.4). 강의×주 1회 수준의 저빈도·고가치 분석이라 다른 경로와 달리 품질 우선
+    # 모델(Sonnet)을 기본으로 둔다(스펙 권장). env 로 즉시 하향 가능. 키 미설정/오류
+    # 시 규칙기반 폴백.
+    ANALYTICS_BRIEFING_MODEL: str = "claude-sonnet-4-6"
+    ANALYTICS_BRIEFING_MAX_TOKENS: int = 1500
+    # 학기 전체 분석(§3) 설문/총평 — 출력이 길어 별도 상한. 설문 6문항(근거·DOI)·
+    # 총평(장단점·논문 제안)이라 브리핑보다 토큰이 크다. 학기말 저빈도라 비용 영향 작다.
+    ANALYTICS_SURVEY_MAX_TOKENS: int = 2000
+    ANALYTICS_REVIEW_MAX_TOKENS: int = 2000
+    # 학습 분석 PRO 전역 킬스위치. False 면 운영자(ADMIN_EMAILS) 외 전원 차단(인시던트).
+    ANALYTICS_PRO_ENABLED: bool = True
+    # 실기능을 노출할 명시 허용 이메일(쉼표 구분). 현재는 계정주 2계정에만 노출하고
+    # 베타테스터에게는 숨긴다. classauto101@gmail.com 은 ADMIN_EMAILS 라 자동 포함되므로
+    # 여기엔 hdj82@kyonggi.ac.kr 만 둔다. env 로 추가 가능.
+    ANALYTICS_PRO_ALLOWED_EMAILS: str = "hdj82@kyonggi.ac.kr"
+    # 정식 베타 오픈 스위치. True 로 켜면 운영자 콘솔 토글(analytics_pro_enabled)이
+    # 베타테스터에게도 작동한다. 기본 False = 토글이 켜져 있어도 베타테스터에겐 비노출.
+    ANALYTICS_PRO_OPEN_TO_TESTERS: bool = False
 
     # ── OpenAI (임베딩) ─────────────────────────────────────────
     OPENAI_API_KEY: str = ""
     EMBEDDING_MODEL: str = "text-embedding-3-small"
+
+    # ── 플랜 차등(아바타/음성 등) 게이트 ─────────────────────────────
+    # AVATAR_VOICE_FEATURE_ROADMAP.md 의 Free/Basic/Pro 차등을 위한 전역 킬스위치.
+    # 베타는 결제 UI 가 가려져 전원 무제한이므로 기본 False(게이팅 비활성 — 전원 통과).
+    # 정식 런칭 시 True 로 켜면 deps.require_plan 이 구독 플랜으로 실제 게이팅한다.
+    PLAN_GATING_ENABLED: bool = False
 
     # ── 평가 시스템 ─────────────────────────────────────────────
     FORMATIVE_SERVE_COUNT: int = 5
@@ -120,8 +145,16 @@ class Settings(BaseSettings):
     # mock 완료 처리 시 사용할 placeholder 영상 URL (비우면 mock 렌더는 완료되지 않음).
     HEYGEN_MOCK_VIDEO_URL: str = ""
     # 예산 서킷 브레이커 — create_video 직전 누적 HeyGen 비용 검사. 0 이면 해당 한도 비활성.
-    HEYGEN_DAILY_BUDGET_USD: float = 3.0
-    HEYGEN_MONTHLY_BUDGET_USD: float = 15.0
+    # ── C(스펙 13): 베타 규모 예산 (2026-06-18) ──────────────────────────────────
+    # 개발 기본값(일$3/월$15)은 베타에선 즉시 BudgetExceededError 로 모든 교수자의
+    # 렌더가 차단되므로 베타 규모로 둔다. 산정: 월예산 ≈ 테스터 수 × 월 강의 수 ×
+    # 강의당 평균 비용(Q&A 아바타 ≤3클립) × 안전계수. 강의 본문은 slideshow 라
+    # HeyGen 을 쓰지 않는다. 강의당 변동비는 재렌더 상한(C-2)으로 따로 죈다.
+    # ⚠️ 실제 운영값은 .env.production 의 환경변수로 override 해 코드 재배포 없이
+    #    조정한다(테스터가 늘면 env 만 올린다). 실질 하드캡은 HeyGen 계정 잔액
+    #    (auto-refill OFF)이며 이 브레이커는 사고(재시도 루프·대량 생성) 2차 방어선.
+    HEYGEN_DAILY_BUDGET_USD: float = 250.0
+    HEYGEN_MONTHLY_BUDGET_USD: float = 600.0
 
     # ── VisionStory (본인 얼굴 Q&A·미리보기 렌더 — V-Talk) ───────────────────────
     # HeyGen Photo Avatar 는 계정당 3개 한도라 다수 사용자에게 본인 얼굴을 줄 수 없다.
@@ -145,11 +178,29 @@ class Settings(BaseSettings):
     # 비우면 emotion 을 payload 에서 생략한다(모델이 거부하면 빈 문자열로 끌 수 있음).
     VISIONSTORY_EMOTION: str = "news"
     # 영상 1초당 USD 환산(회계용 근사치). VisionStory 는 크레딧 과금이라 정확치는 응답
-    # cost_credit 으로 본다.
-    VISIONSTORY_COST_USD_PER_SECOND: float = 0.033
+    # cost_credit 으로 본다. 단가 = HeyGen 공용 아바타(HEYGEN_COST_USD_PER_SECOND
+    # 0.0167)의 정확히 2배 = 0.0334 (2026-06-19 사용자 확인).
+    VISIONSTORY_COST_USD_PER_SECOND: float = 0.0334
     # mock: 켜면 실제 VisionStory 호출 0 — 제출/폴링을 placeholder 로 시뮬레이션.
     VISIONSTORY_MOCK: bool = False
     VISIONSTORY_MOCK_VIDEO_URL: str = ""
+    # VisionStory 전역 $ 서킷 브레이커(본인 얼굴 Q&A 렌더). HeyGen 과 달리 VS 비용은
+    # platform_cost_logs(category=AVATAR_QA, model='visionstory')에 적재되므로 그 합으로
+    # 일/월 한도를 본다(budget.assert_visionstory_budget). 0 이면 해당 검사 비활성.
+    # 2026-06-19 결정: 일 200 / 월 1500 — 20명 베타 정상 사용(~$960/월) 위, C-2 하향 후
+    # 이론상 최대(~$3.8k) 아래에서 재시도 폭주·버그성 대량 렌더만 끊는 2차 방어선.
+    # (1차 방어선은 강의당 횟수 상한 AVATAR_RERENDER_MAX_PER_LECTURE.)
+    VISIONSTORY_DAILY_BUDGET_USD: float = 200.0
+    VISIONSTORY_MONTHLY_BUDGET_USD: float = 1500.0
+
+    # $ 서킷 브레이커는 '완료 시점'에 기록된 비용만 합산하므로, 짧은 시간에 다수 제출이
+    # 몰리면(재시도 폭주·버그성 대량 렌더) 아직 완료되지 않은 in-flight 렌더가 0 으로
+    # 잡혀 한도를 크게 초과할 수 있었다. budget.inflight_*_spend_usd 가 DB 의 in-flight
+    # 상태(rendering)를 직접 세어 "추정 길이 × 단가"를 합계에 더해 즉시 반영한다. 이 값은
+    # 미완료 렌더 1건의 보수적 추정 길이(초)다. Q&A 답변은 ≤400자(QA_AVATAR_MAX_ANSWER_
+    # CHARS)·1.2배속이라 최대 ~90초. 보수적으로 잡아 폭주를 일찍 끊되, 너무 크면 정상
+    # 동시 렌더를 막으므로 env 로 조정 가능. 0 이면 in-flight 가산 비활성(완료분만 합산).
+    INFLIGHT_RENDER_ESTIMATE_SECONDS: float = 90.0
 
     # ── 아바타 Q&A 캐시 (docs/planning/08 §5, 09 §5) ─────────────
     # 실시간 HeyGen 렌더 금지(지연). 질문은 항상 즉시 RAG 텍스트로 답하고, 겹치는
@@ -192,6 +243,16 @@ class Settings(BaseSettings):
     QA_AVATAR_VOICE_SPEED: float = 1.2
     # 야간 배치 실행 시각(UTC 시). 기본 18시(UTC) = KST 03:00 — 일일 백업(03 UTC) 이후.
     QA_AVATAR_BATCH_HOUR_UTC: int = 18
+    # 강의당 아바타 제작(렌더 패스) 횟수 상한 — "첫 제작 1 + 재제작 2 = 총 3회"
+    # (docs/planning/13-beta-admin-console.md §C-2). 월 한도(QA_AVATAR_MONTHLY_…)는
+    # '배포된 강의 수'를 세지 같은 강의의 재제작 횟수를 세지 않아, 결과가 맘에 안 들어
+    # 여러 번 다시 뽑으면 비용이 매번 발생해도 슬롯은 1로만 친다. 특히 VisionStory(본인
+    # 얼굴)는 전역 $ 서킷 브레이커가 없어 이 횟수 상한이 유일한 방어선이다. HeyGen·
+    # VisionStory 둘 다 동일 적용. 성공한 제작 패스만 카운트(실패/취소 제외). 면제
+    # 계정(QA_AVATAR_UNLIMITED_EMAILS)은 무제한. **0 이하면 상한 비활성(무제한)**.
+    # 2026-06-19: 5 → 3 으로 하향(첫 제작 1 + 재제작 2). 20명 베타 규모에서 VisionStory
+    # 본인얼굴 렌더의 이론상 천장을 낮추기 위함(전역 $ 브레이커 도입 전 노출 축소).
+    AVATAR_RERENDER_MAX_PER_LECTURE: int = 3
 
     # ── 강의 본문 렌더 방식 (docs/planning/08-cost-optimization.md) ──────────────
     # "slideshow"(기본) = 본문을 HeyGen 영상으로 굽지 않고, 슬라이드 이미지 + 구간
@@ -354,6 +415,11 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PRICE_BASIC: str = ""   # Stripe Price ID for BASIC plan
     STRIPE_PRICE_PRO: str = ""     # Stripe Price ID for PRO plan
+    # 결제 실패(invoice.payment_failed) 시 즉시 다운그레이드하지 않고 두는 그레이스
+    # 기간(일). Stripe 가 smart retries 로 수 일에 걸쳐 재시도하므로, 일시적 카드 오류로
+    # 플랜이 깎이지 않게 past_due(subscriptions.expires_at)로만 표시하고 이 기간이 지나도
+    # 복구되지 않으면 downgrade_overdue_subscriptions(beat 훅)가 FREE 로 내린다(M8).
+    PAYMENT_DUNNING_GRACE_DAYS: int = 7
 
     # ── pgvector ──────────────────────────────────────────────────
     # 학생 실시간 Q&A 범위 게이트(is_in_scope). 0.7 은 정상 강의 질문(유사도
@@ -364,6 +430,13 @@ class Settings(BaseSettings):
     # ── Sentry ──────────────────────────────────────────────────
     SENTRY_DSN: str = ""
     SENTRY_TRACES_SAMPLE_RATE: float = 0.1  # 프로덕션 트레이싱 10%
+
+    # ── /metrics 게이트 (L4) ────────────────────────────────────
+    # Prometheus 스크래핑 엔드포인트 보호 토큰. Railway 엔 nginx 가 없어 /metrics 가
+    # 공개 도달 가능하므로, production 에선 이 토큰이 있어야 노출한다(없으면 404 비활성).
+    # 스크래퍼는 `Authorization: Bearer <토큰>` 또는 `?token=<토큰>` 으로 전달한다.
+    # development/staging 은 토큰 없이도 열어 로컬 Prometheus 가 그대로 동작한다.
+    METRICS_TOKEN: str = ""
 
     # ── 베타 초대제 (교수자 가입 게이트) ─────────────────────────
     # 계정주(운영자) 이메일 목록 — 교수자 초대 링크를 발급할 수 있는 사람.
@@ -380,12 +453,25 @@ class Settings(BaseSettings):
     # 예: "https://classauto.live,https://www.classauto.live"
     CORS_EXTRA_ORIGINS: str = ""
     # Vercel 프리뷰 배포(https://*.vercel.app) 허용 — 프리뷰에서 API 테스트 시 필요.
+    # production 에선 기본 False(.env.production 에서도 명시적 false). 켜더라도 아래
+    # CORS_VERCEL_PREVIEW_REGEX 로 우리 팀 프로젝트 프리뷰만 허용한다(M9).
     CORS_ALLOW_VERCEL_PREVIEWS: bool = False
+    # CORS_ALLOW_VERCEL_PREVIEWS=True 일 때 쓰는 origin 정규식. 종전 코드의
+    # r"https://.*\.vercel\.app" 는 **임의의 Vercel 앱 전체**를 허용해 과대했다.
+    # 우리 프로젝트 프리뷰 origin 은 "<project>-<git/hash>-<team>.vercel.app" 형태로
+    # 프로젝트명(classauto)으로 시작하므로 그 프리픽스로 좁힌다. starlette 는 이
+    # 정규식을 fullmatch 하므로 앵커는 불필요. 프로젝트명이 바뀌면 env 로 덮어쓴다.
+    CORS_VERCEL_PREVIEW_REGEX: str = r"https://classauto[a-z0-9-]*\.vercel\.app"
 
     @property
     def admin_email_set(self) -> set[str]:
         """ADMIN_EMAILS(쉼표 구분)를 소문자 set 으로 정규화 — 운영자 식별용."""
         return {e.strip().lower() for e in self.ADMIN_EMAILS.split(",") if e.strip()}
+
+    @property
+    def analytics_pro_allowed_email_set(self) -> set[str]:
+        """ANALYTICS_PRO_ALLOWED_EMAILS(쉼표 구분)를 소문자 set 으로 — 실기능 허용 이메일."""
+        return {e.strip().lower() for e in self.ANALYTICS_PRO_ALLOWED_EMAILS.split(",") if e.strip()}
 
 
 settings = Settings()

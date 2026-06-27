@@ -22,6 +22,7 @@ celery = Celery(
         "app.tasks.photo_avatar",
         "app.tasks.export",
         "app.tasks.qa_batch",
+        "app.tasks.cohort",
     ],
 )
 
@@ -99,6 +100,12 @@ celery.conf.beat_schedule = {
     "qa-avatar-nightly-batch": {
         "task": "app.tasks.qa_batch.run_qa_avatar_batch",
         "schedule": crontab(hour=settings.QA_AVATAR_BATCH_HOUR_UTC, minute=0),
+    },
+    # 성취율 추이 일배치 — 강의별 누적 지표를 일자 스냅샷(스펙 11 §C).
+    # KST 23:50(= UTC 14:50) 에 '오늘(KST)' 1행을 upsert → 하루 마감 직전 값.
+    "cohort-daily-metrics-snapshot": {
+        "task": "app.tasks.cohort.snapshot_cohort_daily_metrics",
+        "schedule": crontab(hour=14, minute=50),
     },
 }
 

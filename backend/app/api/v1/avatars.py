@@ -23,7 +23,7 @@ from fastapi import (
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_professor
+from app.api.deps import require_plan, require_professor
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.avatar_favorite import AvatarFavorite
@@ -968,6 +968,9 @@ async def get_my_voice(user: User = Depends(require_professor)):
     "/api/avatars/me/voice",
     response_model=VoiceCloneResponse,
     summary="음성 샘플(mp3 등) 업로드 → 본인 음성 클론 생성/교체",
+    # 음성 클론(IVC)은 Basic/Pro 한정(roadmap). 베타엔 PLAN_GATING_ENABLED=False 라
+    # 게이트가 비활성(전원 통과) — 정식 런칭 시 플래그만 켜면 적용.
+    dependencies=[Depends(require_plan("basic", "pro"))],
 )
 async def create_my_voice(
     file: UploadFile = File(...),
@@ -1142,6 +1145,8 @@ async def generate_voice_recording_script(
     "/api/avatars/me/photo-avatar",
     response_model=PhotoAvatarStatusResponse,
     summary="사진 업로드 → Photo Avatar 그룹 생성 + 학습 시작",
+    # 커스텀 본인 아바타는 Basic/Pro 한정(roadmap). 베타엔 게이트 비활성(전원 통과).
+    dependencies=[Depends(require_plan("basic", "pro"))],
 )
 async def create_photo_avatar(
     file: UploadFile = File(...),
@@ -2615,7 +2620,8 @@ async def register_standard_avatar(
         )
 
         try:
-            avatars = await heygen_list_avatars()
+            # 등록 검증 경로 — 방금 만든 아바타가 캐시에 안 잡히면 안 되므로 캐시 우회.
+            avatars = await heygen_list_avatars(use_cache=False)
         except HeyGenError as e:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,

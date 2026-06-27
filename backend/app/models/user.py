@@ -102,6 +102,22 @@ class User(Base):
     onboarded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # 베타 코호트 태그(예: "2026-08", "2026-09"). 교수자는 초대의 cohort 를 가입 시
+    # 복사받는다(services/invite + auth). NULL = 미분류. 운영자 콘솔의 코호트 필터·
+    # 이탈 분석에 쓴다.
+    cohort: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # 베타 모니터링 동의(PIPA) 시각. 교수자 가입 시 동의 체크 시 기록한다. NULL =
+    # 미동의(베타 동안 교수자는 동의 없이는 가입 불가 — 학생 흐름과 무관).
+    beta_consented_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # 학습 분석 PRO(베타 전용 실기능, docs/planning/analytics-spec.md) 접근 토글.
+    # 운영자 콘솔(/admin/users)에서 베타테스터별로 켜고 끈다. 기본 False = 미허용.
+    # 게이트는 deps.require_analytics_pro 가 본 플래그 + 전역 ANALYTICS_PRO_ENABLED 로
+    # 판정하며, 운영자(ADMIN_EMAILS)는 플래그와 무관하게 항상 접근 가능하다.
+    analytics_pro_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

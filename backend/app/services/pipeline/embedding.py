@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.metrics import track_external_api
-from app.models.embedding import SlideEmbedding
+from app.models.embedding import ScriptSegmentEmbedding, SlideEmbedding
 from app.services.pipeline.schemas import SlideContent
 
 logger = logging.getLogger(__name__)
@@ -89,4 +89,59 @@ def store_slide_embeddings(
     db.add_all(records)
     db.flush()
     logger.info("태스크 %s: %d개 슬라이드 임베딩 저장 완료", task_id, len(records))
+    return len(records)
+
+
+def store_script_segment_embeddings(
+    db: Session,
+    task_id: str,
+    segments: list[tuple[int, str]],
+) -> int:
+    """생성된 스크립트 세그먼트를 **1회** 임베딩해 저장하고 저장 수를 반환한다.
+
+    질문마다 전체 스크립트를 재임베딩하던 비용 증폭(C3-b)을 없애기 위해, 파이프라인
+    step3 에서 세그먼트 임베딩을 미리 저장한다. retriever 는 질문 임베딩 1회 + pgvector
+    조회만 한다.
+
+    Args:
+        db: 동기 SQLAlchemy 세션.
+        task_id: 파이프라인 task_id (= lecture.pipeline_task_id).
+        segments: ``[(slide_number(1-based), 발화 텍스트)]``. 빈/공백 텍스트는 건너뛴다.
+
+    멱등: 같은 ``task_id`` 의 기존 행을 먼저 지우고 다시 넣어 step3 재시도·재생성에도
+    중복이 쌓이지 않는다.
+    """
+    items = [
+        (int(slide_no), text.strip())
+        for slide_no, text in segments
+        if text and text.strip()
+    ]
+    if not items:
+        logger.info("스크립트 임베딩할 세그먼트가 없습니다: task_id=%s", task_id)
+        # 재생성으로 세그먼트가 비게 된 경우에도 과거 저장분은 지워 일관성을 유지한다.
+        db.query(ScriptSegmentEmbedding).filter(
+            ScriptSegmentEmbedding.task_id == task_id
+        ).delete(synchronize_session=False)
+        return 0
+
+    embeddings = get_embeddings([text for _, text in items])
+
+    db.query(ScriptSegmentEmbedding).filter(
+        ScriptSegmentEmbedding.task_id == task_id
+    ).delete(synchronize_session=False)
+
+    records = [
+        ScriptSegmentEmbedding(
+            task_id=task_id,
+            slide_number=slide_no,
+            text_content=text,
+            embedding=emb,
+        )
+        for (slide_no, text), emb in zip(items, embeddings)
+    ]
+    db.add_all(records)
+    db.flush()
+    logger.info(
+        "태스크 %s: %d개 스크립트 세그먼트 임베딩 저장 완료", task_id, len(records)
+    )
     return len(records)

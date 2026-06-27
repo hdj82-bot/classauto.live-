@@ -16,6 +16,8 @@ import {
 } from "@/components/professor/studio/v2";
 import { useStudioI18n } from "@/components/professor/studio/useStudioI18n";
 import { langLabel } from "@/components/professor/studio/studioTypes";
+import StudioTitleEditor from "@/components/professor/studio/StudioTitleEditor";
+import { useShell } from "@/components/professor/shell/ShellContext";
 import {
   deleteQuiz,
   listAuthoredQuizzes,
@@ -112,9 +114,21 @@ const RENDER_STALL_MS = 240_000; // 4분
  * 진행 정보는 GenerationModal 의 "진행 정보" 박스(슬라이드 진행률·예상 영상
  * 길이·월 한도 편수) 로만 제공.
  */
+/**
+ * 제목 끝에 붙은 "(… 음성 … 자막)" 표기를 떼어낸 순수 제목을 돌려준다.
+ * 음성·자막은 별도 메타로 보여주므로 제목엔 섞지 않는다(사용자 결정 2026-06-24).
+ * 반각 () · 전각 （） 모두 처리.
+ */
+function stripAvSuffix(title: string): string {
+  return title
+    .replace(/\s*[（(][^（()）]*음성[^（()）]*자막[^（()）]*[）)]\s*$/, "")
+    .trim();
+}
+
 export default function StudioWizardPage() {
   const { lectureId } = useParams<{ lectureId: string }>();
   const router = useRouter();
+  const shell = useShell();
   const { toast } = useToast();
   const { t } = useStudioI18n();
   const reducedMotion = useReducedMotion();
@@ -666,6 +680,26 @@ export default function StudioWizardPage() {
     },
     [lectureId, toast],
   );
+
+  // ── Topbar 중앙에 편집 가능한 강의 제목 + 음성·자막 메타 주입 ────────────────
+  // 제목엔 음성·자막 표기를 섞지 않고(스트립), 별도 메타 칩으로 보여준다.
+  // 제목 저장은 persistLecture({ title }) → PATCH /api/lectures/{id}.
+  const cleanTitle = lecture ? stripAvSuffix(lecture.title) : "";
+  const avMeta = `${langLabel(voiceLang)} 음성 · ${
+    subtitleSame ? langLabel(voiceLang) : langLabel(subtitleLang)
+  } 자막`;
+  const setCenterSlot = shell?.setCenterSlot;
+  useEffect(() => {
+    if (!setCenterSlot || !lecture) return;
+    setCenterSlot(
+      <StudioTitleEditor
+        title={cleanTitle}
+        meta={avMeta}
+        onSave={(next) => persistLecture({ title: next })}
+      />,
+    );
+    return () => setCenterSlot(null);
+  }, [setCenterSlot, lecture, cleanTitle, avMeta, persistLecture]);
 
   const handleChangeSubtitleLang = useCallback(
     (lang: LangCode | null) => {
@@ -1287,7 +1321,12 @@ export default function StudioWizardPage() {
     );
     if (!ok) return;
     try {
-      await renderSeedQuestions(lectureId, { force: true });
+      // C-2: 성공 응답에 강의당 남은 제작 횟수가 실려 온다. 무제한 계정은 매우 큰
+      // sentinel(9999) 이므로 그때는 안내하지 않는다.
+      const res = await renderSeedQuestions(lectureId, { force: true });
+      if (res.avatarRerenderMax > 0 && res.avatarRerenderRemaining < 100) {
+        toast(`아바타 제작 ${res.avatarRerenderRemaining}회 남았습니다.`, "info");
+      }
       setSeedAwaitingRender(true);
       void reloadSeedQuestions();
       // 슬라이드는 이미 완성 — 모달은 Q&A 진행만 보인다.
@@ -1299,11 +1338,20 @@ export default function StudioWizardPage() {
       setGenCompleted(slides.length);
       setGenOpen(true);
       setRenderPollNonce((n) => n + 1);
-    } catch {
-      toast(
-        "Q&A 답변 강제 재생성을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
-        "error",
-      );
+    } catch (err) {
+      // C-2: 강의당 제작 횟수 상한 도달 시 백엔드가 429 + 명확한 사유를 준다.
+      // 그 사유를 그대로 보여 주고(일반 오류로 뭉뚱그리지 않음), 그 외는 일반 메시지.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response
+        ?.data?.detail;
+      if (status === 429 && detail) {
+        toast(detail, "error");
+      } else {
+        toast(
+          "Q&A 답변 강제 재생성을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.",
+          "error",
+        );
+      }
     }
   }, [lectureId, videoId, slides.length, reloadSeedQuestions, toast]);
 
