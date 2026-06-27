@@ -36,7 +36,10 @@ import httpx
 
 from app.core.config import settings
 from app.services.pipeline import elevenlabs_client
-from app.services.pipeline.text_cleanup import strip_pinyin_annotations
+from app.services.pipeline.text_cleanup import (
+    strip_cross_lang_gloss,
+    strip_pinyin_annotations,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -121,8 +124,9 @@ async def synthesize(
     # 한자 뒤 병음 괄호 표기는 합성기가 로마자를 그대로 읽어 발음을 깨뜨린다.
     # 생성 단계에서 1차 제거하지만, 이미 병음이 박힌 기존 스크립트·교수자 수동
     # 편집본도 깨끗하게 발화되도록 합성 직전에 한 번 더 제거한다(본 합성·미리듣기
-    # 모두 이 경로를 거친다).
-    text = strip_pinyin_annotations(text)
+    # 모두 이 경로를 거친다). '한국어(중국어)' 병기 괄호도 함께 제거해 합성기가 같은
+    # 뜻을 두 번 읽지 않게 한다(교수자 요청).
+    text = strip_cross_lang_gloss(strip_pinyin_annotations(text))
 
     # 폴백을 두지 않으므로 fallback_reason 은 항상 None(회계 스키마 호환 위해 필드만 유지).
     fallback_reason: str | None = None

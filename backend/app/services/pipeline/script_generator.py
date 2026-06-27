@@ -14,7 +14,10 @@ from app.core.metrics import track_external_api
 from app.core.retry import retry_external
 from app.services.pipeline.parser import encode_image_base64
 from app.services.pipeline.schemas import SlideContent, SlideScript
-from app.services.pipeline.text_cleanup import strip_pinyin_annotations
+from app.services.pipeline.text_cleanup import (
+    strip_cross_lang_gloss,
+    strip_pinyin_annotations,
+)
 from app.services.pipeline.translator import _lang_name
 
 logger = logging.getLogger(__name__)
@@ -318,5 +321,8 @@ def _generate_single_script(
         return "(스크립트를 생성할 수 없었습니다.)"
 
     # 마크다운 제거 + (프롬프트로 1차 차단해도 모델이 가끔 넣는) 한자 뒤 병음
-    # 괄호 표기 제거 — 저장·표시·합성 모두 한자만 남도록 보장.
-    return strip_pinyin_annotations(_strip_markdown(text_block.text))
+    # 괄호 표기 제거 + '한국어(중국어)'·'중국어(한국어)' 병기 괄호 제거 — 저장·표시·
+    # 합성 모두 한 언어 단어만 남도록 보장(교수자 요청).
+    return strip_cross_lang_gloss(
+        strip_pinyin_annotations(_strip_markdown(text_block.text))
+    )
