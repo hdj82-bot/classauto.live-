@@ -291,6 +291,40 @@ export const feedbackApi = {
     api.patch<FeedbackItem>(`/api/v1/admin/feedback/${encodeURIComponent(id)}`, { status }),
 };
 
+export interface BetaApplicationItem {
+  id: string;
+  name: string;
+  school: string;
+  department: string;
+  professor_title: string;
+  email: string;
+  subject: string;
+  student_count: string | null;
+  start_timing: string;
+  channel: string;
+  message: string | null;
+  status: "new" | "contacted" | "approved" | "rejected";
+  created_at: string;
+}
+
+// 베타 신청(대문 '베타 신청하기'). 제출은 공개(비로그인), 목록/상태변경은 운영자
+// 전용(백엔드 require_owner = ADMIN_EMAILS 강제).
+export const betaApplicationsApi = {
+  adminList: (params: { page?: number; status?: string }) =>
+    api.get<{
+      total: number;
+      new_count: number;
+      page: number;
+      limit: number;
+      applications: BetaApplicationItem[];
+    }>("/api/admin/beta-applications", { params }),
+  adminSetStatus: (id: string, status: string) =>
+    api.patch<BetaApplicationItem>(
+      `/api/admin/beta-applications/${encodeURIComponent(id)}`,
+      { status },
+    ),
+};
+
 // ── 자유게시판 (베타 테스터 커뮤니티) ──────────────────────────────────────────
 // 열람은 공개(비로그인 포함), 작성/삭제는 로그인 필요(백엔드가 강제). 공개 노출은
 // 표시 이름(author_name)만 — 이메일은 응답에 포함되지 않는다.
