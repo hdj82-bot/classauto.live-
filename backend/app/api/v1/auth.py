@@ -166,12 +166,20 @@ async def google_callback(
     email: str = userinfo["email"]
     name: str = userinfo.get("name", email.split("@")[0])
 
+    is_owner = (email or "").strip().lower() in settings.admin_email_set
     existing_user = await get_user_by_google_sub(db, google_sub)
     if existing_user:
-        # 위험 방향 차단: 학습자 계정이 '교수자'로 로그인을 시도하면 거부한다.
-        # (반대 방향 — 교수자가 '학습자' 선택 — 은 권한 상승이 아니므로 허용하고
+        # 계정주(ADMIN_EMAILS)는 항상 교수자로 운영한다. 학습자로 잘못 가입돼 있어도
+        # 교수자 로그인을 막지 않고 역할을 교수자로 자가 교정한다 — 운영자가 베타 초대
+        # 발급 등 교수자 화면(/owner/invites 포함)에 들어갈 수 있어야 하기 때문.
+        if is_owner and existing_user.role == UserRole.student:
+            existing_user.role = UserRole.professor
+            await db.commit()
+            await db.refresh(existing_user)
+        # 위험 방향 차단: (계정주가 아닌) 학습자 계정이 '교수자'로 로그인을 시도하면
+        # 거부한다. (반대 방향 — 교수자가 '학습자' 선택 — 은 권한 상승이 아니므로 허용하고
         #  실제 역할인 교수자로 로그인된다.) 기존 계정은 가입 시 역할이 권위 있다.
-        if existing_user.role == UserRole.student and role_str == "professor":
+        elif existing_user.role == UserRole.student and role_str == "professor":
             return RedirectResponse(f"{frontend}/auth/login?error=role_denied")
         auth_code = str(uuid.uuid4())
         await save_auth_code(auth_code, str(existing_user.id), existing_user.role.value)
