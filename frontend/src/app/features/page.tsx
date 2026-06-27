@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
-import LectureCreationPrototype from "@/components/features/lectureCreationPrototype/LectureCreationPrototype";
+import LectureCreationPrototypeLazy from "@/components/features/LectureCreationPrototypeLazy";
 
 /**
  * `/features` — 강의 제작 프로토타입 React 재구현 (2026-05-15).
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 export default function FeaturesPage() {
   return (
     <LightMarketingShell>
-      <LectureCreationPrototype />
+      <LectureCreationPrototypeLazy />
     </LightMarketingShell>
   );
 }

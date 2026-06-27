@@ -1,7 +1,14 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import LightMarketingShell from "@/components/marketing/LightMarketingShell";
-import StudentFlowPrototype from "@/components/studentGuide/studentFlowPrototype/StudentFlowPrototype";
+import PrototypeSkeleton from "@/components/marketing/PrototypeSkeleton";
+
+// 1200+줄 인터랙티브 데모는 클라이언트 전용 지연 로딩 — 초기 JS·하이드레이션 비용 절감.
+const StudentFlowPrototype = dynamic(
+  () => import("@/components/studentGuide/studentFlowPrototype/StudentFlowPrototype"),
+  { ssr: false, loading: () => <PrototypeSkeleton /> },
+);
 
 /**
  * `/student-guide` — 학습자 가이드 (2026-05-15).

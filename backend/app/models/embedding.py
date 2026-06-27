@@ -5,6 +5,7 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    Index,
     Integer,
     String,
     Text,
@@ -19,6 +20,12 @@ EMBEDDING_DIMENSIONS = 1536  # OpenAI text-embedding-3-small
 
 class SlideEmbedding(Base):
     __tablename__ = "slide_embeddings"
+
+    # 슬라이드쇼·studio 가 task_id 로 조회하며 slide_number=1 필터·정렬을 자주 한다.
+    # (task_id 필터 + slide_number 정렬)을 한 번에 커버하는 복합 인덱스.
+    __table_args__ = (
+        Index("ix_slide_embeddings_task_slide", "task_id", "slide_number"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(String(64), nullable=False, index=True)

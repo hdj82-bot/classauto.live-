@@ -119,15 +119,22 @@ export default function LectureAnalyticsPage() {
       const lectureMetaPromise = (async () => {
         const { data: courses } = await api.get<{ id: string }[]>(
           "/api/courses",
+          { timeout: 12000 },
         );
-        for (const c of courses) {
-          const { data: lecs } = await api.get<LectureMeta[]>(
-            `/api/courses/${c.id}/lectures`,
-          );
-          const found = lecs.find((l) => l.id === lectureId);
-          if (found) return found;
-        }
-        return null;
+        // 강의 목록을 강의(course)마다 직렬로 받던 것을 병렬로 바꾼다(조기 종료는
+        // 잃지만 베타 교수자의 course 수가 적어 병렬이 더 빠르다). 개별 실패는 빈
+        // 목록으로 흡수해 한 course 오류가 메타 조회 전체를 깨지 않게 한다.
+        const lists = await Promise.all(
+          courses.map((c) =>
+            api
+              .get<LectureMeta[]>(`/api/courses/${c.id}/lectures`, {
+                timeout: 12000,
+              })
+              .then((r) => r.data)
+              .catch(() => [] as LectureMeta[]),
+          ),
+        );
+        return lists.flat().find((l) => l.id === lectureId) ?? null;
       })();
 
       const [

@@ -30,14 +30,22 @@ export default function DashboardPage() {
     (async () => {
       setError(null);
       try {
-        const { data } = await api.get("/api/courses");
-        setCourses(data);
-        const lectureMap: Record<string, Lecture[]> = {};
-        for (const course of data) {
-          const { data: lecs } = await api.get(`/api/courses/${course.id}/lectures`);
-          lectureMap[course.id] = lecs;
-        }
-        setLectures(lectureMap);
+        const { data } = await api.get("/api/courses", { timeout: 12000 });
+        const courseList = data as Course[];
+        setCourses(courseList);
+        // 강의 목록을 강의(course)마다 직렬로 받던 것을 병렬(Promise.all)로 바꾼다.
+        // N개 강의 = N번 순차 왕복 → 1라운드. 실패 시 의미(any 실패 → 에러 화면)는
+        // Promise.all 의 reject 전파로 그대로 유지한다. 각 호출에 타임아웃도 건다.
+        const entries = await Promise.all(
+          courseList.map(async (course) => {
+            const { data: lecs } = await api.get(
+              `/api/courses/${course.id}/lectures`,
+              { timeout: 12000 },
+            );
+            return [course.id, lecs as Lecture[]] as const;
+          }),
+        );
+        setLectures(Object.fromEntries(entries));
       } catch {
         setError(t("dashboard.loadError"));
       }

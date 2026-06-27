@@ -43,19 +43,31 @@ export default function RootLayout({
   return (
     <html lang="ko" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-bg text-text">
-        {/* 폰트 CDN 조기 연결 + Pretendard 스타일시트 프리로드. globals.css 의
-            @import 는 CSS 파싱이 끝나야 발견되어 첫 렌더를 늦췄다. 같은 URL 을
-            head 에서 미리 preload 하면 병렬·조기 fetch 되어 @import 가 캐시에서
-            즉시 해소된다(폰트 로딩 경로 자체는 @import 가 그대로 보장). */}
+        {/* 폰트 CDN 조기 연결 + 스타일시트 프리로드. globals.css 의 @import 는 CSS
+            파싱이 끝나야 발견되어 첫 렌더를 늦췄다. 같은 URL 을 head 에서 preconnect
+            (TLS 핸드셰이크 선행) + preload(병렬·조기 fetch)하면 @import 가 캐시에서
+            즉시 해소된다. Pretendard(jsdelivr)·Noto Serif(googleapis) 둘 다 적용하고,
+            Paperlogy woff2(jsdelivr)·Noto woff2(gstatic) 출처도 preconnect 로 커버. */}
         <link
           rel="preconnect"
           href="https://cdn.jsdelivr.net"
+          crossOrigin="anonymous"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
           crossOrigin="anonymous"
         />
         <link
           rel="preload"
           as="style"
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
+        />
+        <link
+          rel="preload"
+          as="style"
+          href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600&display=swap"
         />
         <I18nProvider>
           <ToastProvider>
