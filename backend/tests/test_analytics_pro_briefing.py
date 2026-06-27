@@ -183,8 +183,14 @@ async def test_briefing_endpoint_global_killswitch(client, db, professor, monkey
     """전역 킬스위치가 꺼지면 허용 이메일(비운영자)도 차단(운영자만 예외)."""
     from app.core.config import settings
 
+    # 비운영자 + 허용목록 이메일로 검증한다. 기본 허용 이메일(hdj82)은 이제 ADMIN_EMAILS
+    # 운영자라 킬스위치 예외로 통과하므로, 운영자가 아닌 별도 베타테스터 이메일을 쓴다.
+    tester = "killswitch-tester@example.ac.kr"
+    monkeypatch.setattr(settings, "ANALYTICS_PRO_ALLOWED_EMAILS", tester)
     monkeypatch.setattr(settings, "ANALYTICS_PRO_ENABLED", False)
-    await _enable_pro(db, professor)
+    professor.email = tester
+    professor.analytics_pro_enabled = True
+    await db.flush()
     resp = await client.post(
         "/api/v1/analytics-pro/briefing", json=_BODY, headers=make_auth_header(professor)
     )

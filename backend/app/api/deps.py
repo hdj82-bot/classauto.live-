@@ -208,12 +208,20 @@ async def require_student(user: User = Depends(get_current_user)) -> User:
 
 
 async def require_admin(user: User = Depends(get_current_user)) -> User:
-    if user.role.value != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="관리자 권한이 필요합니다.",
-        )
-    return user
+    """관리자 콘솔 게이트 — 역할(admin) 이거나 운영자 이메일(ADMIN_EMAILS).
+
+    require_owner 와 동일하게 ADMIN_EMAILS 를 인정한다. 계정주가 교수자 계정이어도
+    role 을 admin 으로 바꿀 필요 없이 콘솔(베타테스터 현황·비용·피드백 등)을 쓸 수
+    있다 — role 을 바꾸면 require_professor 의존 기능(강의 제작·학습분석 PRO)이 깨지므로,
+    운영자 식별은 role 이 아니라 ADMIN_EMAILS 로 한다.
+    """
+    email = (user.email or "").strip().lower()
+    if user.role.value == "admin" or email in settings.admin_email_set:
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="관리자 권한이 필요합니다.",
+    )
 
 
 async def require_owner(user: User = Depends(get_current_user)) -> User:
