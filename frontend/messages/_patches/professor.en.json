@@ -5,7 +5,6 @@
     "welcomeTitleAnonymous": "Welcome to ClassAuto",
     "welcomeSubtitle": "One PPT is all it takes — your first lecture clip is ready in about 12 minutes. We'll walk you through it in five steps.",
     "primaryCta": "Create your first lecture",
-    "secondaryCta": "Browse a sample lecture",
     "skip": "Skip for now",
     "checklistTitle": "First-lecture setup",
     "checklistSubtitle": "Complete these five steps and your students can start watching.",
@@ -69,7 +68,6 @@
     "tipDraftFirst": "It's fine to leave a draft and polish later — nothing bills until you start the render.",
     "tipQrFromPpt": "Put the QR on your final slide so attendance and access take one tap from students.",
     "tipPolicy": "One lecture at a time is plenty — pace yourself.",
-    "openProfile": "Edit profile",
-    "openSampleHint": "The sample demo opens in a new tab"
+    "openProfile": "Edit profile"
   }
 }

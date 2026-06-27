@@ -166,11 +166,6 @@ export default function ProfessorDashboardPage() {
     router.push("/professor/studio");
   }, [router]);
 
-  const handleOpenSampleDemo = useCallback(() => {
-    if (typeof window === "undefined") return;
-    window.open("/demo", "_blank", "noopener,noreferrer");
-  }, []);
-
   const handleProfileSaved = useCallback((profile: InstructorProfileDraft) => {
     setProfileDraft(profile);
   }, []);
@@ -336,7 +331,6 @@ export default function ProfessorDashboardPage() {
           progress={progress}
           onCreateLecture={handleCreateLecture}
           onOpenProfileModal={() => setProfileModalOpen(true)}
-          onOpenSampleDemo={handleOpenSampleDemo}
         />
         <InstructorProfileModal
           open={profileModalOpen}
