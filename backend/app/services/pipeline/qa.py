@@ -32,8 +32,14 @@ _CLAUDE_RETRY_ON = (
 )
 
 
+# 대화형 Q&A 는 학습자가 채팅창에서 실시간으로 기다리는 경로다. 프론트(PlayerV2)는
+# 75초 안에 응답이 없으면 요청을 끊고 "답변 생성에 실패했습니다"를 띄운다. 기본
+# 재시도(3회 × per-call 30초 + 지수 백오프)는 Anthropic 이 잠깐 느리거나 과부하일 때
+# 최악 ~100초까지 늘어나 이 75초 예산을 넘겨, 백엔드는 계속 재시도 중인데 프론트만
+# 끊겨 "답변 실패"가 간헐적으로 뜨던 직접 원인이었다. 그래서 이 경로만 재시도를 2회로
+# 줄이고(아래 client timeout=20s 와 함께 최악 ~44초 < 75초) 프론트 예산 안에 가둔다.
 @track_external_api("claude")
-@retry_external(label="claude.qa.create", extra_retry_on=_CLAUDE_RETRY_ON)
+@retry_external(label="claude.qa.create", max_attempts=2, extra_retry_on=_CLAUDE_RETRY_ON)
 def _claude_qa_call(client, user_content: str, allow_refusal: bool = False):
     # allow_refusal=True(스크립트 유사도 < 0.4)일 때만 Claude 가 범위 밖을 거부할 수 있다.
     # 유사도 ≥ 0.4 면 관련성이 확정된 것으로 보고 반드시 답변하게 한다(교수자 결정).
@@ -560,7 +566,10 @@ def answer_question(db: Session, task_id: str, session_id: str, question: str) -
     # ≥ 0.4: 관련 확정 → 항상 답변. [floor, 0.4): Claude 가 관련성 최종 판정(거부 허용).
     allow_refusal = best_sim < SIMILARITY_THRESHOLD
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=30.0)
+    # 대화형 Q&A 는 프론트 75초 예산 안에 응답해야 한다(_claude_qa_call 주석 참조).
+    # per-call 20초 × 재시도 2회 + 백오프 → 최악 ~44초 < 75초. (사전답변/질문 자동생성
+    # 등 배치 경로는 각자 더 넉넉한 timeout 을 그대로 쓴다.)
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=20.0)
     try:
         response = _claude_qa_call(
             client,

@@ -103,17 +103,40 @@ api.interceptors.response.use(
   },
 );
 
+// 동일 메시지 토스트 폭주 방지 — 백그라운드 폴링(스튜디오 스크립트/슬라이드/렌더
+// 상태를 3~6초 간격으로 조회)이 일시적 네트워크 끊김·재시작에 걸리면 같은 빨간
+// 토스트가 몇 초마다 반복적으로 떠 거슬린다("가끔 뜬다"의 정체). 같은 문구는 이
+// 간격 안에서 1회만 발행한다.
+const _ERROR_TOAST_THROTTLE_MS = 6000;
+const _lastErrorToastAt: Record<string, number> = {};
+
 // 네트워크/서버 에러 시 커스텀 이벤트 발행 → ToastProvider가 수신
 api.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
     if (typeof window !== "undefined") {
-      const msg = !error.response
-        ? "서버에 연결할 수 없습니다."
-        : error.response.status >= 500
-          ? "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-          : null;
-      if (msg) window.dispatchEvent(new CustomEvent("api-error", { detail: msg }));
+      // (1) 취소된 요청(페이지 이동·컴포넌트 언마운트로 abort)은 장애가 아니다 —
+      //     토스트 금지. 예전엔 ERR_CANCELED 도 error.response 가 없어
+      //     "서버에 연결할 수 없습니다"가 가끔 잘못 떴다.
+      // (2) 호출자가 silenceErrorToast 를 켠 요청(백그라운드 폴링 등)도 침묵.
+      const silenced =
+        axios.isCancel(error) ||
+        (error.config as { silenceErrorToast?: boolean } | undefined)
+          ?.silenceErrorToast === true;
+      const msg = silenced
+        ? null
+        : !error.response
+          ? "서버에 연결할 수 없습니다."
+          : error.response.status >= 500
+            ? "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+            : null;
+      if (msg) {
+        const now = Date.now();
+        if (now - (_lastErrorToastAt[msg] ?? 0) > _ERROR_TOAST_THROTTLE_MS) {
+          _lastErrorToastAt[msg] = now;
+          window.dispatchEvent(new CustomEvent("api-error", { detail: msg }));
+        }
+      }
     }
     return Promise.reject(error);
   },

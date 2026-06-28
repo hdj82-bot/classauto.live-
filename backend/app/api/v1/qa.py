@@ -161,6 +161,12 @@ async def ask_question(
     except PermissionError:
         raise HTTPException(status_code=403, detail=_MSG_NO_SESSION)
     except Exception:
+        # 고정 문구는 클라이언트에만 노출하고, 실제 원인은 traceback 으로 남긴다.
+        # (예전엔 이 경로가 원인을 삼켜 "답변 실패"가 반복돼도 진단이 불가능했다.)
+        logger.exception(
+            "학생 Q&A 처리 실패: session=%s lecture=%s",
+            body.session_id, body.lecture_id,
+        )
         raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
 
     return {
@@ -213,6 +219,7 @@ async def preview_question(
     except PermissionError:
         raise HTTPException(status_code=403, detail=_MSG_PREVIEW_OWNER_ONLY)
     except Exception:
+        logger.exception("미리보기 Q&A 처리 실패: lecture=%s", body.lecture_id)
         raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
 
     return {
@@ -269,6 +276,7 @@ async def public_question(
     except PermissionError:
         raise HTTPException(status_code=403, detail=_MSG_NOT_PUBLISHED)
     except Exception:
+        logger.exception("공개 Q&A 처리 실패: lecture=%s", body.lecture_id)
         raise HTTPException(status_code=500, detail="Q&A 처리 중 오류가 발생했습니다.")
 
     return {
