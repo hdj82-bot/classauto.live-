@@ -38,12 +38,16 @@ def search_similar_slides(
     # 벡터를 PostgreSQL array 문자열로 변환 (파라미터 바인딩으로 안전하게 전달)
     vec_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
+    # 캐스트는 반드시 CAST(:query_vec AS vector) 로 쓴다. ``:query_vec::vector`` 로
+    # 쓰면 SQLAlchemy text() 가 파라미터 바로 뒤의 ``::`` 를 보고 :query_vec 을 바인드
+    # 파라미터로 인식하지 못해, 컴파일된 SQL 에 ``:query_vec`` 가 문자 그대로 남고
+    # psycopg2 가 ``syntax error at or near ":"`` 를 던진다(= Q&A 전건 실패의 근본원인).
     sql = text("""
         SELECT slide_number, text_content,
-               1 - (embedding <=> :query_vec::vector) AS similarity
+               1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
         FROM slide_embeddings
         WHERE task_id = :task_id
-        ORDER BY embedding <=> :query_vec::vector
+        ORDER BY embedding <=> CAST(:query_vec AS vector)
         LIMIT :top_k
     """)
 
@@ -129,10 +133,10 @@ def _search_stored_script_embeddings(
     vec_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
     sql = text("""
         SELECT slide_number, text_content,
-               1 - (embedding <=> :query_vec::vector) AS similarity
+               1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
         FROM script_segment_embeddings
         WHERE task_id = :task_id
-        ORDER BY embedding <=> :query_vec::vector
+        ORDER BY embedding <=> CAST(:query_vec AS vector)
         LIMIT :top_k
     """)
     try:

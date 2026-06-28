@@ -98,13 +98,13 @@ def find_ready_avatar(
         row = db.execute(
             text(
                 """
-                SELECT id, 1 - (question_embedding <=> :vec::vector) AS similarity
+                SELECT id, 1 - (question_embedding <=> CAST(:vec AS vector)) AS similarity
                 FROM qa_answer_cache
                 WHERE lecture_id = :lecture_id
                   AND status = 'ready'
                   AND s3_video_url IS NOT NULL
                   AND question_embedding IS NOT NULL
-                ORDER BY question_embedding <=> :vec::vector
+                ORDER BY question_embedding <=> CAST(:vec AS vector)
                 LIMIT 1
                 """
             ),
