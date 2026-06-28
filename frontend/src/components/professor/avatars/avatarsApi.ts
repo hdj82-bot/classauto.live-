@@ -996,10 +996,14 @@ function toStandardAvatar(w: StandardAvatarWire): StandardAvatar {
  */
 export async function listHeyGenAccountAvatars(): Promise<Avatar[]> {
   try {
-    const { data } = await api.get<AvatarWire[]>("/api/avatars/heygen-account");
+    const { data } = await api.get<AvatarWire[]>("/api/avatars/heygen-account", {
+      timeout: _AVATARS_FETCH_TIMEOUT_MS,
+    });
     return (data ?? []).map(toAvatar);
   } catch (err) {
-    if (isDeferredError(err)) return [];
+    // 공유 HeyGen 계정이 느리거나 매달려도(전역 axios timeout 없음) 카탈로그 한
+    // 호출이 페이지를 통째로 멈추지 않게 한다. timeout/미배포는 빈 목록 폴백.
+    if (isDeferredError(err) || _isTimeout(err)) return [];
     throw err;
   }
 }
@@ -1021,6 +1025,7 @@ export async function listHeyGenAvatarGroups(): Promise<HeyGenAvatarGroup[]> {
   try {
     const { data } = await api.get<HeyGenAvatarGroupWire[]>(
       "/api/avatars/heygen-groups",
+      { timeout: _AVATARS_FETCH_TIMEOUT_MS },
     );
     return (data ?? []).map((g) => ({
       group_id: g.group_id,
@@ -1029,7 +1034,9 @@ export async function listHeyGenAvatarGroups(): Promise<HeyGenAvatarGroup[]> {
       preview_image_url: g.preview_image_url ?? null,
     }));
   } catch (err) {
-    if (isDeferredError(err)) return [];
+    // 둘러보기 페이지는 이 호출과 heygen-account 를 Promise.allSettled 로 함께
+    // 기다린다 — 하나라도 매달리면 로딩이 영원히 안 끝난다. timeout 폴백으로 차단.
+    if (isDeferredError(err) || _isTimeout(err)) return [];
     throw err;
   }
 }
@@ -1039,10 +1046,11 @@ export async function listHeyGenGroupLooks(groupId: string): Promise<Avatar[]> {
   try {
     const { data } = await api.get<AvatarWire[]>(
       `/api/avatars/heygen-groups/${encodeURIComponent(groupId)}/looks`,
+      { timeout: _AVATARS_FETCH_TIMEOUT_MS },
     );
     return (data ?? []).map(toAvatar);
   } catch (err) {
-    if (isDeferredError(err)) return [];
+    if (isDeferredError(err) || _isTimeout(err)) return [];
     throw err;
   }
 }
@@ -1123,10 +1131,14 @@ export async function deleteStandardAvatar(
 /** GET /api/avatars/favorites — 즐겨찾기한 avatar_id 목록. deferred 면 빈 목록. */
 export async function listFavoriteAvatars(): Promise<string[]> {
   try {
-    const { data } = await api.get<string[]>("/api/avatars/favorites");
+    const { data } = await api.get<string[]>("/api/avatars/favorites", {
+      timeout: _AVATARS_FETCH_TIMEOUT_MS,
+    });
     return data ?? [];
   } catch (err) {
-    if (isDeferredError(err)) return [];
+    // 표준 등록 카드는 이 호출과 heygen-account 를 Promise.all 로 묶어 기다린다 —
+    // 하나라도 매달리면 "즐겨찾기 불러오는 중…"이 영원히 안 끝난다. timeout 폴백.
+    if (isDeferredError(err) || _isTimeout(err)) return [];
     throw err;
   }
 }
