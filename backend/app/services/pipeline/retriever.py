@@ -38,12 +38,16 @@ def search_similar_slides(
     # 벡터를 PostgreSQL array 문자열로 변환 (파라미터 바인딩으로 안전하게 전달)
     vec_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
 
+    # 캐스트는 반드시 CAST(:query_vec AS vector) 로 쓴다. ``:query_vec::vector`` 로
+    # 쓰면 SQLAlchemy text() 가 파라미터 바로 뒤의 ``::`` 를 보고 :query_vec 을 바인드
+    # 파라미터로 인식하지 못해, 컴파일된 SQL 에 ``:query_vec`` 가 문자 그대로 남고
+    # psycopg2 가 ``syntax error at or near ":"`` 를 던진다(= Q&A 전건 실패의 근본원인).
     sql = text("""
         SELECT slide_number, text_content,
-               1 - (embedding <=> :query_vec::vector) AS similarity
+               1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
         FROM slide_embeddings
         WHERE task_id = :task_id
-        ORDER BY embedding <=> :query_vec::vector
+        ORDER BY embedding <=> CAST(:query_vec AS vector)
         LIMIT :top_k
     """)
 
@@ -52,6 +56,9 @@ def search_similar_slides(
             sql, {"query_vec": vec_str, "task_id": task_id, "top_k": top_k}
         ).fetchall()
     except Exception as exc:
+        # 실패한 쿼리가 세션을 '실패 트랜잭션' 상태로 남겨 후속 쿼리를 500 으로
+        # 만들지 않도록 롤백한다(저장 스크립트 임베딩 경로와 동일 방어).
+        db.rollback()
         logger.error("pgvector 검색 실패: task_id=%s, error=%s", task_id, exc)
         return []
 
@@ -126,10 +133,10 @@ def _search_stored_script_embeddings(
     vec_str = "[" + ",".join(str(v) for v in query_embedding) + "]"
     sql = text("""
         SELECT slide_number, text_content,
-               1 - (embedding <=> :query_vec::vector) AS similarity
+               1 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
         FROM script_segment_embeddings
         WHERE task_id = :task_id
-        ORDER BY embedding <=> :query_vec::vector
+        ORDER BY embedding <=> CAST(:query_vec AS vector)
         LIMIT :top_k
     """)
     try:
@@ -137,8 +144,14 @@ def _search_stored_script_embeddings(
             sql, {"query_vec": vec_str, "task_id": task_id, "top_k": top_k}
         ).fetchall()
     except Exception as exc:
-        # pgvector 미지원/조회 오류 — on-the-fly 폴백에 맡긴다.
-        logger.warning("저장 스크립트 임베딩 조회 실패(폴백): task_id=%s, error=%s", task_id, exc)
+        # 실패한 SQL 은 세션 트랜잭션을 '실패' 상태로 남긴다. 여기서 롤백하지 않으면
+        # 폴백 경로(_search_script_on_the_fly → _script_segments_for_task)의 다음
+        # 쿼리가 PendingRollbackError 로 터져, '회복 가능한 검색 실패'가 500 으로
+        # 둔갑한다 — 대화형 Q&A 가 모든 질문에 "답변 생성에 실패"로 떨어지던 직접
+        # 원인이었다(예: script_segment_embeddings 미생성/pgvector 오류 강의).
+        # 롤백해 세션을 정상으로 되돌린 뒤 on-the-fly 폴백에 맡긴다.
+        db.rollback()
+        logger.warning("저장 스크립트 임베딩 조회 실패(롤백 후 폴백): task_id=%s, error=%s", task_id, exc)
         return None
 
     if not rows:
@@ -163,7 +176,12 @@ def _search_script_on_the_fly(
     질문 임베딩(query_embedding)은 이미 1회 만들었으므로 세그먼트만 임베딩한다.
     저장 마이그레이션 전에 만들어진 구 강의가 여전히 답하도록 보장한다.
     """
-    segments = _script_segments_for_task(db, task_id)
+    try:
+        segments = _script_segments_for_task(db, task_id)
+    except Exception as exc:  # DB 오류가 검색만 건너뛰게(상위로 500 전파 금지).
+        db.rollback()
+        logger.error("스크립트 세그먼트 조회 실패: task_id=%s, error=%s", task_id, exc)
+        return []
     if not segments:
         return []
     try:
