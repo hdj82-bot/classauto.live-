@@ -19,11 +19,15 @@ def _db():
 
 
 def test_passes_when_under_limits():
+    # inflight 두 종을 0 으로 고정해 결정적으로 검증(_db() MagicMock 의 __float__
+    # 기본값에 의존하지 않게). 완료분 1.0 < 3.0 → 통과.
     with patch.object(settings, "HEYGEN_MOCK", False), \
          patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
          patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 15.0), \
          patch.object(budget, "heygen_spend_usd", return_value=1.0), \
-         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0):
+         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0), \
+         patch.object(budget, "inflight_heygen_spend_usd", return_value=0.0), \
+         patch.object(budget, "inflight_heygen_qa_spend_usd", return_value=0.0):
         assert_heygen_budget(_db())  # 예외 없어야 함
 
 
