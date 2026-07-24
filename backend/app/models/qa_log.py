@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     String,
     Text,
     func,
@@ -53,7 +54,10 @@ class QALog(Base):
     # 토큰/비용 추적
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    # 금액은 float 누적 오차 방지를 위해 Numeric 저장(asdecimal=False → 읽기는 float).
+    cost_usd: Mapped[float] = mapped_column(
+        Numeric(12, 6, asdecimal=False), default=0.0, nullable=False
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

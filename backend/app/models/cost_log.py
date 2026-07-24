@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -46,7 +46,12 @@ class CostLog(Base):
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    cost_usd: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    # 금액은 float 누적 오차(운영자 비용 대시보드·예산 SUM)를 피하려고 Numeric 저장.
+    # asdecimal=False 로 읽기는 float 를 돌려줘 기존 계산/직렬화와 호환(혼용 크래시 방지),
+    # 저장·SUM 은 Postgres numeric 으로 정확하다.
+    cost_usd: Mapped[float] = mapped_column(
+        Numeric(12, 6, asdecimal=False), default=0.0, nullable=False
+    )
     memo: Mapped[str | None] = mapped_column(Text, nullable=True)
     # B(스펙 13): admin /costs 가 월별 GROUP BY + 시간 윈도우로 집계 — 색인 필요.
     created_at: Mapped[datetime] = mapped_column(
