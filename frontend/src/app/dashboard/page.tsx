@@ -27,11 +27,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
     (async () => {
       setError(null);
       try {
         const { data } = await api.get("/api/courses", { timeout: 12000 });
         const courseList = data as Course[];
+        if (cancelled) return;
         setCourses(courseList);
         // 강의 목록을 강의(course)마다 직렬로 받던 것을 병렬(Promise.all)로 바꾼다.
         // N개 강의 = N번 순차 왕복 → 1라운드. 실패 시 의미(any 실패 → 에러 화면)는
@@ -45,12 +47,16 @@ export default function DashboardPage() {
             return [course.id, lecs as Lecture[]] as const;
           }),
         );
+        if (cancelled) return;
         setLectures(Object.fromEntries(entries));
       } catch {
-        setError(t("dashboard.loadError"));
+        if (!cancelled) setError(t("dashboard.loadError"));
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [user, t]);
 
   if (isLoading || !user) return <LoadingSpinner fullScreen label={t("common.loading")} />;

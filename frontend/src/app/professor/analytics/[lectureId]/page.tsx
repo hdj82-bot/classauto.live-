@@ -110,7 +110,7 @@ export default function LectureAnalyticsPage() {
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(0);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (isCancelled?: () => boolean) => {
     setLoading(true);
     setError(null);
     try {
@@ -159,6 +159,11 @@ export default function LectureAnalyticsPage() {
         api.get<KpiDeltaData>(`/api/v1/dashboard/${lectureId}/kpi`),
       ]);
 
+      // 경쟁 조건 가드: [lectureId] 세그먼트는 param 변경 시 재마운트 없이 effect 만
+      // 재실행되므로, 이전 lecture 의 늦게 도착한 응답이 현재 lecture 화면을 덮어쓰지
+      // 않게 결과 적용 직전에 취소 여부를 확인한다.
+      if (isCancelled?.()) return;
+
       if (lectureRes.status === "fulfilled" && lectureRes.value) {
         setLecture(lectureRes.value);
       }
@@ -192,14 +197,19 @@ export default function LectureAnalyticsPage() {
         setError(t("lectureLoadError"));
       }
     } catch {
+      if (isCancelled?.()) return;
       setError(t("lectureLoadError"));
     } finally {
-      setLoading(false);
+      if (!isCancelled?.()) setLoading(false);
     }
   }, [lectureId, t]);
 
   useEffect(() => {
-    fetchAll();
+    let cancelled = false;
+    fetchAll(() => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [fetchAll, retry]);
 
   if (loading) {
@@ -353,7 +363,7 @@ export default function LectureAnalyticsPage() {
 
       {/* D (스펙 11 §D): 집중 분석 도넛 + 점수 — engagement.summary.attention. */}
       <Section id="attention" title={t("section.attention")}>
-        <AttentionScore data={engagement?.summary.attention ?? null} />
+        <AttentionScore data={engagement?.summary?.attention ?? null} />
       </Section>
 
       <Section id="watch" title={t("section.watch")}>

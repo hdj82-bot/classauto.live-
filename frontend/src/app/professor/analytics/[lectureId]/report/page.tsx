@@ -53,7 +53,7 @@ export default function InsightsReportPage() {
   const [retry, setRetry] = useState(0);
 
   const fetchReport = useCallback(
-    async (refresh = false) => {
+    async (refresh = false, isCancelled?: () => boolean) => {
       if (refresh) setRefreshing(true);
       else setLoading(true);
       setError(null);
@@ -90,20 +90,30 @@ export default function InsightsReportPage() {
             `/api/v1/insights/${lectureId}/report${refresh ? "?refresh=true" : ""}`,
           ),
         ]);
+        // 경쟁 조건 가드: param 변경 시 재마운트 없이 재실행되므로, 이전 lecture 의
+        // 늦게 도착한 응답이 현재 화면을 덮어쓰지 않게 적용 직전 취소 여부 확인.
+        if (isCancelled?.()) return;
         if (meta) setLecture(meta);
         setReport(reportRes.data);
       } catch {
+        if (isCancelled?.()) return;
         setError(t("loadError"));
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (!isCancelled?.()) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [lectureId, t],
   );
 
   useEffect(() => {
-    fetchReport(false);
+    let cancelled = false;
+    fetchReport(false, () => cancelled);
+    return () => {
+      cancelled = true;
+    };
   }, [fetchReport, retry]);
 
   if (loading) {

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
 import { startGoogleLogin } from "@/lib/auth";
@@ -456,9 +455,9 @@ function Step1({
             <polyline points="13 6 19 12 13 18" />
           </svg>
         </button>
-        <div className={styles.altLink}>
-          <Link href="/v/access-code">{t("student.signupV2.step1.altUseCode")}</Link>
-        </div>
+        {/* '접근 코드로 입장' 링크 제거: /v/access-code 는 /v/[slug] 로 잡혀 404 였다
+            (슬러그 자체가 접근 코드라 별도 코드 입력 라우트가 없음). 수동 코드 입력
+            페이지가 필요하면 기획 문서에 따라 신설 후 여기 다시 연결한다. */}
       </div>
     </div>
   );
