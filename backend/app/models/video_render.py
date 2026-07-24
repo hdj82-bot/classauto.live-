@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -96,7 +96,10 @@ class RenderCostLog(Base):
     )
     service: Mapped[str] = mapped_column(String(50), nullable=False)
     operation: Mapped[str] = mapped_column(String(100), nullable=False)
-    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    # 금액은 float 누적 오차 방지를 위해 Numeric 저장(asdecimal=False → 읽기는 float).
+    cost_usd: Mapped[float] = mapped_column(
+        Numeric(12, 6, asdecimal=False), default=0.0
+    )
     duration_seconds: Mapped[float | None] = mapped_column(Float)
     metadata_json: Mapped[str | None] = mapped_column(Text)
     # T5: admin.get_costs 가 월별 GROUP BY 에 created_at 을 사용 — 색인 필수.
