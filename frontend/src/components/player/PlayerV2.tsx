@@ -362,6 +362,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
       router.replace("/dashboard");
       return;
     }
+    // 형제 effect(온보딩·퀴즈·seed)와 동일하게 취소 가드. slug 변경·언마운트 중
+    // 늦게 도착한 이전 강의 응답이 stale 렌더 또는 잘못된 /expired·/dashboard
+    // 리다이렉트를 일으키지 않게 한다.
+    let cancelled = false;
     (async () => {
       // 새 탭(교수자 미리보기)·직접 진입은 메모리상 access 토큰이 휘발돼 있다.
       // /public 은 소유 교수자면 미발행 강의도 내려주는데(owner-bypass), 토큰이
@@ -372,16 +376,20 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         const { data } = await api.get<LectureData>(`/api/lectures/${slug}/public`, {
           timeout: 12000, // 시청 진입 핫패스 — 멈춤 상한.
         });
+        if (cancelled) return;
         if (data.is_expired) {
           router.replace("/expired");
           return;
         }
         setLecture(data);
       } catch {
-        router.replace("/dashboard");
+        if (!cancelled) router.replace("/dashboard");
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [slug, router]);
 
   // ─── 세션 생성 + 첫 환영 메시지 ───

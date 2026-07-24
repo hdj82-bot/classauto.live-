@@ -19,7 +19,7 @@ export default function AdminAuditPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     setLoading(true);
     setError(null);
     try {
@@ -28,21 +28,28 @@ export default function AdminAuditPage() {
         ...(actor.trim() ? { actor: actor.trim() } : {}),
         ...(action.trim() ? { action: action.trim() } : {}),
       });
+      if (isCancelled?.()) return;
       setLogs(data.logs ?? []);
       setTotal(data.total ?? 0);
     } catch {
+      if (isCancelled?.()) return;
       setError(t("admin.auditLoadError"));
     }
-    setLoading(false);
+    if (!isCancelled?.()) setLoading(false);
   }, [page, actor, action, t]);
 
   // load() 첫 줄의 동기 setState 가 effect 동기 경로에서 호출되면 린트가 막으므로
   // rAF 로 다음 프레임에 비동기 실행한다(레포 표준 회피책).
+  // 필터/페이지 변경 시 이전 요청의 늦은 응답이 새 상태를 덮어쓰지 않게 취소 플래그.
   useEffect(() => {
+    let cancelled = false;
     const raf = requestAnimationFrame(() => {
-      void load();
+      void load(() => cancelled);
     });
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
   }, [load]);
 
   // 필터 변경 시 1페이지로.

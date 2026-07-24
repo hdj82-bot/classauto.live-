@@ -116,42 +116,24 @@ export default function SignupWizard({ next }: SignupWizardProps) {
 
   const sendMail = () => {
     if (emailInfo.validity !== "valid") return;
-    // 실제 메일 발송은 백엔드가 처리. 본 마법사는 OAuth 라운드트립을 위해
-    // hint 만 sessionStorage 에 stash 한다.
-    try {
-      window.sessionStorage.setItem(
-        "ifl_student_signup_hint",
-        JSON.stringify({
-          email: email.trim(),
-          name: name.trim() || null,
-          major: major.trim() || null,
-          year: year || null,
-          student_number: studentNumber.trim() || null,
-          next: next || null,
-        }),
-      );
-    } catch {
-      /* ignore */
-    }
+    // 실제 메일 발송은 백엔드가 처리. hint stash 는 OAuth 직전(completeSignup)에서만
+    // 하므로 여기서는 단계만 진행한다(종전의 stash 는 어디서도 읽히지 않는 죽은 쓰기였다).
     goNext();
   };
 
   const completeSignup = () => {
     if (!agree || redirecting) return;
-    // 동의 시점에 sessionStorage 마지막 업데이트 후 OAuth.
+    // OAuth 라운드트립을 건너 살아남도록 딥링크(next)만 sessionStorage 에 보관한다
+    // (same-tab 이라 프론트 origin 의 sessionStorage 는 왕복 후에도 유지된다).
+    // complete-profile 이 가입 완료 후 이 값을 읽어 안전한 내부 경로면 그리로 보낸다.
+    // 나머지 프로필 필드는 complete-profile 이 다시 수집하므로 stash 하지 않는다
+    // (종전엔 email/name/major 등을 통째로 저장했으나 아무도 읽지 않는 죽은 쓰기였다).
     try {
-      window.sessionStorage.setItem(
-        "ifl_student_signup_hint",
-        JSON.stringify({
-          email: email.trim(),
-          name: name.trim(),
-          student_number: studentNumber.trim() || null,
-          school: detectedSchool ?? null,
-          major: major || null,
-          year,
-          next: next || null,
-        }),
-      );
+      if (next) {
+        window.sessionStorage.setItem("ifl_student_signup_next", next);
+      } else {
+        window.sessionStorage.removeItem("ifl_student_signup_next");
+      }
     } catch {
       /* ignore */
     }

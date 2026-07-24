@@ -23,25 +23,32 @@ export default function AdminBetaApplicationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     setLoading(true);
     setError(null);
     try {
       const { data } = await betaApplicationsApi.adminList(
         statusFilter ? { status: statusFilter } : {},
       );
+      if (isCancelled?.()) return;
       setItems(data.applications ?? []);
     } catch {
+      if (isCancelled?.()) return;
       setError(t("admin.applicationsLoadError"));
     }
-    setLoading(false);
+    if (!isCancelled?.()) setLoading(false);
   }, [statusFilter, t]);
 
+  // 필터 변경 시 이전 요청의 늦은 응답이 새 상태를 덮어쓰지 않게 취소 플래그.
   useEffect(() => {
+    let cancelled = false;
     const raf = requestAnimationFrame(() => {
-      void load();
+      void load(() => cancelled);
     });
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
   }, [load]);
 
   const setStatus = async (id: string, status: string) => {
