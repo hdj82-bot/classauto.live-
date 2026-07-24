@@ -842,6 +842,47 @@ def test_seed_webhook_success_marks_ready(sync_db, monkeypatch):
     assert row.s3_video_url == "s3://qa/clip.mp4"
 
 
+def test_seed_webhook_success_records_render_cost(sync_db, monkeypatch):
+    """웹훅 성공 완료 시 렌더 비용을 기록한다 (HeyGen Q&A 과소집계 방지).
+
+    웹훅은 Q&A 클립 완료의 주 경로이므로, 폴링(_poll_inflight)과 동일하게
+    _record_qa_render_cost 를 호출해야 한다. is_vs=False(HeyGen 전용 매칭)와
+    duration 이 그대로 전달되는지 검증한다.
+    """
+    from app.api.v1 import webhooks
+    from app.tasks import qa_batch
+
+    async def _fake_upload(url, lecture_id, *a, **kw):  # noqa: ANN001
+        return ("s3://qa/clip.mp4", 0.0)
+
+    monkeypatch.setattr(webhooks.s3_svc, "upload_from_url", _fake_upload)
+
+    calls: list = []
+    monkeypatch.setattr(
+        qa_batch, "_record_qa_render_cost",
+        lambda rep, **kw: calls.append(kw),
+    )
+
+    prof, _c, lec = _seed_lecture(sync_db)
+    _rendering_seed(sync_db, lec, prof, "heygen-seed-cost")
+    sync_db.commit()
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(
+            webhooks._handle_seed_clip_webhook(
+                sync_db, "heygen-seed-cost", "avatar_video.success",
+                {"url": "https://heygen/clip.mp4", "duration": 7.0},
+            )
+        )
+    finally:
+        loop.close()
+
+    assert len(calls) == 1
+    assert calls[0]["is_vs"] is False
+    assert calls[0]["duration"] == 7.0
+
+
 def test_seed_webhook_fail_marks_failed(sync_db, monkeypatch):
     from app.api.v1 import webhooks
 
