@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.advisory_lock import advisory_xact_lock
 from app.models.session import (
     LearningSession,
     SessionStatus,
@@ -100,6 +101,13 @@ def _effective_watched_sec(session: LearningSession, client_watched_sec: int | N
 async def create_session(
     db: AsyncSession, user_id: uuid.UUID, lecture_id: uuid.UUID, total_sec: int
 ) -> LearningSession:
+    # 동시 생성 직렬화(TOCTOU): 같은 (user, lecture) 에 대한 '검사 → 삽입' 을 원자화해,
+    # 두 탭·기기 동시 오픈이 둘 다 concurrency 검사를 통과해 활성 세션이 2개 만들어지던
+    # race 를 막는다(부정행위 방지 차별점). staleness(_is_live_session) 로직은 그대로
+    # 보존된다 — 정적 유니크 인덱스로는 '최근 활동' 조건을 표현할 수 없기 때문.
+    # 커밋/롤백 시 락 자동 해제. SQLite 테스트는 no-op(직렬 실행이라 race 없음).
+    await advisory_xact_lock(db, "learning_session_create", user_id, lecture_id)
+
     # 동시 재생 제한 — 같은 user+lecture 의 '재생 중'(활성 상태 + 최근 활동) 세션이
     # 상한 이상이면 거부한다. staleness 로 거른 뒤 세어 크래시로 남은 세션이 학생을
     # 영구히 잠그지 않게 한다.

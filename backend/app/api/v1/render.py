@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_professor
+from app.db.advisory_lock import advisory_xact_lock
 from app.db.session import get_db
 from app.models.user import User
 from app.models.video_render import RenderStatus, VideoRender
@@ -109,6 +110,12 @@ async def create_render_request(
             "skipped_slides": skipped_slides,
             "message": "모든 슬라이드가 이미 생성됐거나 진행 중입니다. 다시 만들려면 force=true 로 요청하세요.",
         }
+
+    # 동시 요청 직렬화(TOCTOU): 아래 check_limit(월 사용량 count)과 이어지는 INSERT
+    # 사이가 비원자적이라, 같은 교수자의 동시 렌더 요청이 둘 다 한도 미만으로 통과해
+    # 월 플랜 한도를 초과 생성할 수 있었다. 사용자 단위 advisory lock 으로 count+insert
+    # 를 직렬화한다(같은 트랜잭션의 commit 까지 유지 → line 133 커밋에서 자동 해제).
+    await advisory_xact_lock(db, "render_monthly_limit", user.id)
 
     # 과금 한도는 실제로 렌더할 슬라이드 수만 기준으로 검사
     try:
