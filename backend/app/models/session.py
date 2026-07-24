@@ -69,6 +69,10 @@ class LearningSession(Base):
     is_network_unstable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     total_pause_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # 현재 진행 중인 일시정지의 시작 시각. is_paused=True 인 동안만 세팅되고, 재개 시
+    # (now - paused_at) 을 total_pause_seconds 에 누적한 뒤 None 으로 되돌린다. 완료
+    # 판정의 서버 경과시간에서 '일시정지 실시간' 을 빼기 위한 기록(안티치트).
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pause_reason: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # 시청 진행 (NestJS 포팅)

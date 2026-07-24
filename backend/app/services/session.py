@@ -70,11 +70,47 @@ def _is_live_session(session: LearningSession, now: datetime) -> bool:
 
 
 def _server_elapsed_seconds(session: LearningSession) -> float:
-    """세션 시작(started_at) 이후 서버 기준 경과 실시간(초). 음수 방지."""
+    """세션 시작 이후 서버 기준 '활성(비-일시정지)' 경과 실시간(초). 음수 방지.
+
+    벽시계 경과에서 누적 일시정지 시간(total_pause_seconds)과, 지금 일시정지 중이면
+    진행 중인 구간(now - paused_at)까지 뺀다. 종전엔 순수 벽시계라, 영상 길이의 절반을
+    실시간으로 일시정지·방치한 뒤 watched_sec=total_sec 을 보고하면 완료가 인정되던
+    우회가 가능했다(완료 상한이 일시정지 시간만큼 부풀려짐).
+    """
     started = _aware(session.started_at)
     if started is None:
         return 0.0
-    return max(0.0, (datetime.now(timezone.utc) - started).total_seconds())
+    now = datetime.now(timezone.utc)
+    wall = (now - started).total_seconds()
+    pause = float(session.total_pause_seconds or 0)
+    if session.is_paused:
+        pstart = _aware(session.paused_at)
+        if pstart is not None:
+            pause += max(0.0, (now - pstart).total_seconds())
+    return max(0.0, wall - pause)
+
+
+def _apply_pause_state(session: LearningSession, paused: bool, now: datetime) -> None:
+    """is_paused 전이 시 total_pause_seconds 를 누적/마감한다(멱등).
+
+    - 재생중 → 일시정지: paused_at=now 만 기록(구간 길이는 재개 시 확정).
+    - 일시정지 → 재생중: total_pause_seconds += (now - paused_at), paused_at=None.
+    이미 같은 상태면 아무 것도 하지 않는다(중복 호출 안전). is_paused 를 세팅하던 모든
+    경로(상태전이 paused·attention 자동 pause·resume)를 이 헬퍼로 일원화한다.
+    """
+    if paused:
+        if not session.is_paused:
+            session.is_paused = True
+            session.paused_at = now
+    else:
+        if session.is_paused:
+            pstart = _aware(session.paused_at)
+            if pstart is not None:
+                session.total_pause_seconds = (session.total_pause_seconds or 0) + int(
+                    max(0.0, (now - pstart).total_seconds())
+                )
+            session.is_paused = False
+            session.paused_at = None
 
 
 def _max_server_watchable(session: LearningSession) -> float:
@@ -164,14 +200,15 @@ async def update_session_status(
 
     from_status = session.status
     session.status = new_status
-    session.last_active_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+    session.last_active_at = now
 
     if new_status == SessionStatus.paused:
         session.pause_reason = pause_reason or "network_disconnect"
-        session.is_paused = True
+        _apply_pause_state(session, True, now)
     elif from_status == SessionStatus.paused and new_status == SessionStatus.in_progress:
         session.pause_reason = None
-        session.is_paused = False
+        _apply_pause_state(session, False, now)
 
     if pause_reason == "no_response":
         session.no_response_cnt += 1
@@ -320,7 +357,7 @@ async def handle_no_response(
 
     should_pause = session.warning_level >= 3
     if should_pause:
-        session.is_paused = True
+        _apply_pause_state(session, True, datetime.now(timezone.utc))
 
     await db.commit()
     await db.refresh(session)
@@ -348,9 +385,10 @@ async def resume_session(db: AsyncSession, user_id: uuid.UUID, session_id: uuid.
     if not session.is_paused:
         return session
 
-    session.is_paused = False
+    now = datetime.now(timezone.utc)
+    _apply_pause_state(session, False, now)
     session.warning_level = max(session.warning_level - 1, 0)
-    session.last_heartbeat_at = datetime.now(timezone.utc)
+    session.last_heartbeat_at = now
     await db.commit()
     await db.refresh(session)
     return session
