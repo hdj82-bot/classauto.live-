@@ -365,6 +365,40 @@ async def test_generate_questions_student_forbidden(client, student, lecture):
     assert resp.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_generate_questions_other_professor_forbidden(client, db, lecture):
+    """비소유 교수자가 타인 강의에 문제 생성 시도 → 404 (IDOR 방지).
+
+    ownership 검증이 Claude 호출·rate limit 보다 먼저 수행되므로 mock 없이도
+    타인 강의에 대한 문제 주입이 차단된다.
+    """
+    from app.models.user import User, UserRole
+
+    other = User(
+        id=uuid.uuid4(),
+        google_sub="other-prof-qgen",
+        email="otherqgen@test.ac.kr",
+        name="다른교수",
+        role=UserRole.professor,
+        school="다른대학교",
+        is_active=True,
+    )
+    db.add(other)
+    await db.flush()
+
+    resp = await client.post(
+        f"/api/lectures/{lecture.id}/questions/generate",
+        headers=make_auth_header(other),
+        json={
+            "ppt_content": "슬라이드 1: 침입 시도",
+            "formative_count": 1,
+            "summative_count": 1,
+            "video_duration_seconds": 300,
+        },
+    )
+    assert resp.status_code == 404
+
+
 # ── Critical 9: 입력 한도 + rate limit ─────────────────────────────────────
 
 
