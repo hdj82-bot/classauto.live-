@@ -104,10 +104,13 @@ export default function DemoVideo({ field }: Props) {
         )}
 
         {hasSource && (
+          // 큰 탭 영역으로 재생/일시정지를 토글하되, 하단 네이티브 컨트롤바
+          // (스크러버·볼륨·전체화면) 영역(약 56px)은 덮지 않는다. inset-0 로
+          // 전체를 덮으면 오버레이가 모든 클릭을 가로채 controls 가 죽는다.
           <button
             type="button"
             onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB627]"
+            className="absolute top-0 left-0 right-0 bottom-14 flex items-center justify-center bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB627]"
             aria-label={playing ? t("experience.videoControlsPause") : t("experience.videoControlsPlay")}
           >
             <span className="sr-only">

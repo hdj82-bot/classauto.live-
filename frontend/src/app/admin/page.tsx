@@ -35,11 +35,12 @@ export default function AdminDashboardPage() {
   if (error) return <div className="text-red-600 text-center py-20" role="alert">{error}</div>;
   if (!stats) return null;
 
+  // 부분 200 응답(필드 누락)에서도 .toLocaleString() 크래시가 나지 않게 기본값 0.
   const cards = [
-    { label: t("admin.totalUsers"), value: stats.total_users, color: "bg-blue-500" },
-    { label: t("admin.totalCourses"), value: stats.total_courses, color: "bg-green-500" },
-    { label: t("admin.totalLectures"), value: stats.total_lectures, color: "bg-purple-500" },
-    { label: t("admin.totalSessions"), value: stats.total_sessions, color: "bg-orange-500" },
+    { label: t("admin.totalUsers"), value: stats.total_users ?? 0, color: "bg-blue-500" },
+    { label: t("admin.totalCourses"), value: stats.total_courses ?? 0, color: "bg-green-500" },
+    { label: t("admin.totalLectures"), value: stats.total_lectures ?? 0, color: "bg-purple-500" },
+    { label: t("admin.totalSessions"), value: stats.total_sessions ?? 0, color: "bg-orange-500" },
   ];
 
   return (
@@ -62,7 +63,7 @@ export default function AdminDashboardPage() {
       {/* 렌더링 통계 */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-2">{t("admin.renderStatusTitle")}</h2>
-        <p className="text-4xl font-bold text-indigo-600">{stats.total_renders.toLocaleString()}</p>
+        <p className="text-4xl font-bold text-indigo-600">{(stats.total_renders ?? 0).toLocaleString()}</p>
         <p className="text-sm text-gray-500 mt-1">{t("admin.renderStatusDesc")}</p>
       </div>
     </div>

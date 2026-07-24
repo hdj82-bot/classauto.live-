@@ -38,8 +38,9 @@ export default function AdminUsersPage() {
         if (roleFilter) params.role = roleFilter;
         const { data } = await api.get("/api/v1/admin/users", { params });
         if (cancelled) return;
-        setUsers(data.users);
-        setTotal(data.total);
+        // 부분 200 응답(users 누락)에서 setUsers(undefined) → 이후 .map 크래시 방지.
+        setUsers(data.users ?? []);
+        setTotal(data.total ?? 0);
         setError(null);
       } catch {
         if (!cancelled) setError(t("admin.userLoadError"));

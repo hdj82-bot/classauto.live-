@@ -33,7 +33,11 @@ export default function AdminCostsPage() {
   if (error) return <div className="text-red-600 text-center py-20" role="alert">{error}</div>;
   if (!data) return null;
 
-  const maxServiceCost = Math.max(...data.by_service.map((s) => s.cost_usd), 0.01);
+  // 부분 200 응답(배열/숫자 필드 누락)에서도 .map()/.toFixed() 크래시를 막는다.
+  const byService = data.by_service ?? [];
+  const byMonth = data.by_month ?? [];
+  const totalCostUsd = data.total_cost_usd ?? 0;
+  const maxServiceCost = Math.max(...byService.map((s) => s.cost_usd), 0.01);
 
   return (
     <div>
@@ -43,18 +47,18 @@ export default function AdminCostsPage() {
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
         <p className="text-sm text-gray-500">{t("admin.totalCost")}</p>
         <p className="text-4xl font-bold text-gray-900 mt-1">
-          ${data.total_cost_usd.toFixed(2)}
+          ${totalCostUsd.toFixed(2)}
         </p>
       </div>
 
       {/* 서비스별 막대 차트 */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">{t("admin.byService")}</h2>
-        {data.by_service.length === 0 ? (
+        {byService.length === 0 ? (
           <p className="text-gray-500 text-sm">{t("admin.noData")}</p>
         ) : (
           <div className="space-y-3">
-            {data.by_service.map((item) => (
+            {byService.map((item) => (
               <div key={item.service} className="flex items-center gap-3">
                 <span className="text-sm font-medium text-gray-700 w-24 truncate">
                   {item.service}
@@ -77,7 +81,7 @@ export default function AdminCostsPage() {
       {/* 월별 비용 테이블 */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">{t("admin.byMonth")}</h2>
-        {data.by_month.length === 0 ? (
+        {byMonth.length === 0 ? (
           <p className="text-gray-500 text-sm">{t("admin.noData")}</p>
         ) : (
           <div className="overflow-x-auto">
@@ -89,7 +93,7 @@ export default function AdminCostsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {data.by_month.map((item) => (
+              {byMonth.map((item) => (
                 <tr key={`${item.year}-${item.month}`}>
                   <td className="px-4 py-2">{t("admin.yearMonth", { year: item.year, month: item.month })}</td>
                   <td className="px-4 py-2 text-right font-mono">${item.cost_usd.toFixed(4)}</td>

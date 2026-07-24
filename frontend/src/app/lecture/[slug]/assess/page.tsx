@@ -55,20 +55,31 @@ export default function AssessmentPage() {
   const [assessmentSessionId, setAssessmentSessionId] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const { data: lecture } = await api.get(`/api/lectures/${slug}/public`);
+        if (cancelled) return;
+        // 만료 강의는 평가도 로드하지 않고 만료 안내로 보낸다(진입·플레이어와 일관).
+        if (lecture.is_expired) {
+          router.replace("/expired");
+          return;
+        }
         const { data } = await api.get(`/api/questions/${lecture.id}`, {
           params: { assessment_type: "formative" },
         });
+        if (cancelled) return;
         setQuestions(data.questions ?? []);
         setAssessmentSessionId(data.session_id ?? "");
       } catch {
-        setError(t("student.assessV2.loadError"));
+        if (!cancelled) setError(t("student.assessV2.loadError"));
       }
-      setLoading(false);
+      if (!cancelled) setLoading(false);
     })();
-  }, [slug, t]);
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, t, router]);
 
   const currentQuestion = questions[currentIndex];
   const isFirst = currentIndex === 0;
