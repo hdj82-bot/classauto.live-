@@ -510,18 +510,26 @@ def _looks_like_placeholder(value: str) -> bool:
 
 
 def _validate_settings() -> None:
-    """프로덕션 환경에서 필수 설정값 검증."""
-    if settings.ENVIRONMENT == "production":
+    """비개발 환경에서 필수 설정값 검증."""
+    # JWT 시크릿 강도는 인터넷에 노출될 수 있는 모든 비개발 환경에서 강제한다.
+    # staging(Railway/Vercel preview 등)이 기본값 시크릿으로 부팅되면 누구나
+    # 알려진 값으로 임의 sub/role 토큰을 위조해 사용자·관리자를 사칭할 수 있으므로,
+    # 종전 production 전용이던 이 검사를 staging 까지 확장한다.
+    if settings.ENVIRONMENT in ("production", "staging"):
         if settings.JWT_SECRET_KEY == "change-me-in-production":
-            raise RuntimeError("프로덕션에서 JWT_SECRET_KEY를 반드시 변경해야 합니다.")
+            raise RuntimeError(
+                f"{settings.ENVIRONMENT} 에서 JWT_SECRET_KEY를 반드시 변경해야 합니다."
+            )
         if len(settings.JWT_SECRET_KEY) < 32:
             raise RuntimeError("JWT_SECRET_KEY는 최소 32자 이상이어야 합니다.")
         if settings.JWT_ALGORITHM != "HS256":
             raise RuntimeError("JWT_ALGORITHM은 HS256만 허용됩니다.")
-        if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
-            raise RuntimeError("프로덕션에서 Google OAuth 설정은 필수입니다.")
         if _looks_like_placeholder(settings.JWT_SECRET_KEY):
             raise RuntimeError("JWT_SECRET_KEY 가 placeholder 값입니다 — 실제 시크릿으로 교체하세요.")
+
+    if settings.ENVIRONMENT == "production":
+        if not settings.GOOGLE_OAUTH_CLIENT_ID or not settings.GOOGLE_OAUTH_CLIENT_SECRET:
+            raise RuntimeError("프로덕션에서 Google OAuth 설정은 필수입니다.")
 
         # 빈 문자열·공백만 들어간 값도 누락으로 간주 — pydantic 의 default ""
         # 가 환경변수로 무심코 덮어써졌을 때 production 에서 사일런트 통과 차단.

@@ -3,6 +3,7 @@ import logging
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -80,13 +81,28 @@ async def submit_responses(
         q.id: q for q in q_result.scalars().all()
     }
 
+    # 이미 답한 (session, question) 은 재삽입하지 않는다(멱등). 인터스티셜 퀴즈
+    # '제출' 더블클릭·재전송이 uq_responses_session_question 을 위반해 500(그리고
+    # 배치 총괄평가에선 유효 응답까지 롤백)나던 것을 방지한다. 첫 응답이 유지된다.
+    existing_result = await db.execute(
+        select(Response.question_id).where(
+            Response.session_id == session_id,
+            Response.question_id.in_(question_ids),
+        )
+    )
+    already_answered: set[uuid.UUID] = set(existing_result.scalars().all())
+
     skipped_ids: list[str] = []
+    duplicate_ids: list[str] = []
     saved: list[Response] = []
     assessment_records: list[AssessmentResult] = []
     for item in responses:
         question = questions_map.get(item.question_id)
         if question is None:
             skipped_ids.append(str(item.question_id))
+            continue
+        if item.question_id in already_answered:
+            duplicate_ids.append(str(item.question_id))
             continue
 
         timestamp_valid = _check_timestamp(question, item.video_timestamp_seconds)
@@ -122,18 +138,29 @@ async def submit_responses(
 
     if skipped_ids:
         logger.warning("존재하지 않는 question_id 건너뜀: %s", skipped_ids)
+    if duplicate_ids:
+        logger.info("이미 답한 question_id 재제출 무시(멱등): %s", duplicate_ids)
 
     for ar in assessment_records:
         db.add(ar)
 
-    # commit 전에 ID 수집 — commit 후 ORM 객체가 expired됨
-    saved_ids = [r.id for r in saved]
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # 사전 체크를 통과한 동시 제출 race — 다른 트랜잭션이 같은 (session, question)
+        # 을 먼저 커밋. 멱등 처리: 롤백 후 제출 문항의 현재 응답을 재조회해 반환한다
+        # (같은 학습자의 동일 답안 재전송이라 승자 데이터와 동치).
+        await db.rollback()
+        logger.info("응답 제출 동시성 충돌 — 멱등 재조회로 처리: session_id=%s", session_id)
 
-    # question 관계 포함 일괄 재조회 (N번 refresh 대신 단일 쿼리)
+    # question 관계 포함 일괄 재조회. 제출한 문항의 (기존+신규) 응답을 모두 반환해
+    # 재제출/부분중복에서도 일관된 결과를 준다(단일 쿼리).
     reloaded = await db.execute(
         select(Response)
-        .where(Response.id.in_(saved_ids))
+        .where(
+            Response.session_id == session_id,
+            Response.question_id.in_(question_ids),
+        )
         .options(selectinload(Response.question))
     )
     return list(reloaded.scalars().all())

@@ -42,11 +42,31 @@ class AvatarRerenderQuotaError(BudgetExceededError):
 
 
 def heygen_spend_usd(db: Session, since: datetime) -> float:
-    """``since`` 이후 기록된 HeyGen 비용 합계(USD)."""
+    """``since`` 이후 기록된 HeyGen 본문 렌더 비용 합계(USD, render_cost_logs)."""
     total = db.execute(
         select(func.coalesce(func.sum(RenderCostLog.cost_usd), 0.0)).where(
             RenderCostLog.service == _HEYGEN_SERVICE,
             RenderCostLog.created_at >= since,
+        )
+    ).scalar()
+    return float(total or 0.0)
+
+
+def heygen_qa_spend_usd(db: Session, since: datetime) -> float:
+    """``since`` 이후 기록된 HeyGen Q&A 아바타 렌더 비용 합계(USD, platform_cost_logs).
+
+    Q&A 아바타 렌더는 VideoRender 가 없어 render_cost_logs 가 아닌
+    CostLog(category=AVATAR_QA, model="heygen")에 적재된다(qa_batch._record_qa_render_cost).
+    종전 assert_heygen_budget 은 render_cost_logs 만 합산해 이 지출을 전혀 못 잡아,
+    HeyGen Q&A 렌더가 $ 브레이커의 사각지대였다(VisionStory 는 이미 동형으로 반영됨).
+    """
+    from app.models.cost_log import CostCategory, CostLog  # noqa: PLC0415
+
+    total = db.execute(
+        select(func.coalesce(func.sum(CostLog.cost_usd), 0.0)).where(
+            CostLog.category == CostCategory.avatar_qa,
+            CostLog.model == _HEYGEN_SERVICE,
+            CostLog.created_at >= since,
         )
     ).scalar()
     return float(total or 0.0)
@@ -63,11 +83,13 @@ def assert_heygen_budget(db: Session, *, now: datetime | None = None) -> None:
     now = now or datetime.now(timezone.utc)
     daily_limit = settings.HEYGEN_DAILY_BUDGET_USD
     monthly_limit = settings.HEYGEN_MONTHLY_BUDGET_USD
-    inflight = inflight_heygen_spend_usd(db)
+    # 본문 렌더(render_cost_logs) + Q&A 아바타 렌더(platform_cost_logs) + in-flight 추정.
+    # Q&A 항목을 빠뜨리면 HeyGen Q&A 지출이 브레이커에 안 잡혀 재시도 폭주 시 차단 불가.
+    inflight = inflight_heygen_spend_usd(db) + inflight_heygen_qa_spend_usd(db)
 
     if daily_limit and daily_limit > 0:
         day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        spent = heygen_spend_usd(db, day_start) + inflight
+        spent = heygen_spend_usd(db, day_start) + heygen_qa_spend_usd(db, day_start) + inflight
         if spent >= daily_limit:
             logger.error(
                 "[BUDGET] HeyGen 일 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
@@ -81,7 +103,7 @@ def assert_heygen_budget(db: Session, *, now: datetime | None = None) -> None:
         month_start = now.replace(
             day=1, hour=0, minute=0, second=0, microsecond=0
         )
-        spent = heygen_spend_usd(db, month_start) + inflight
+        spent = heygen_spend_usd(db, month_start) + heygen_qa_spend_usd(db, month_start) + inflight
         if spent >= monthly_limit:
             logger.error(
                 "[BUDGET] HeyGen 월 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
@@ -142,6 +164,29 @@ def inflight_heygen_spend_usd(db: Session) -> float:
         secs = settings.INFLIGHT_RENDER_ESTIMATE_SECONDS
         return float(n or 0) * float(secs) * settings.HEYGEN_COST_USD_PER_SECOND
     except Exception:  # noqa: BLE001 — fail-open: 추정 실패가 렌더를 막지 않게.
+        return 0.0
+
+
+def inflight_heygen_qa_spend_usd(db: Session) -> float:
+    """제출됐지만 아직 완료되지 않은 HeyGen Q&A 렌더(대표 행)의 보수적 추정 비용.
+
+    inflight_visionstory_spend_usd 와 대칭. VisionStory 접두(``visionstory:``)가
+    아닌 rendering 대표 행만 센다(= HeyGen job_id). 클러스터 형제는 heygen_job_id 가
+    없어 자동 제외된다.
+    """
+    from app.services.pipeline import qa_avatar  # noqa: PLC0415 — 순환 import 회피
+
+    try:
+        n = db.execute(
+            select(func.count(QAAnswerCache.id)).where(
+                QAAnswerCache.status == qa_avatar.STATUS_RENDERING,
+                QAAnswerCache.heygen_job_id.isnot(None),
+                QAAnswerCache.heygen_job_id.notlike(_VS_JOB_PREFIX + "%"),
+            )
+        ).scalar()
+        secs = settings.INFLIGHT_RENDER_ESTIMATE_SECONDS
+        return float(n or 0) * float(secs) * settings.HEYGEN_COST_USD_PER_SECOND
+    except Exception:  # noqa: BLE001 — fail-open.
         return 0.0
 
 

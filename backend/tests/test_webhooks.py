@@ -80,6 +80,48 @@ async def test_heygen_webhook_success(client, professor, lecture, db):
     assert resp.json()["status"] == "processed"
 
 
+@pytest.mark.asyncio
+async def test_heygen_webhook_success_without_url_marks_failed(client, professor, lecture):
+    """#9: URL 없는 success 이벤트는 영상 없는 'ready'(빈 화면·비용 기록) 대신
+    failed 로 처리해야 한다(seed 클립 경로와 동일)."""
+    render = VideoRender(
+        id=uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        heygen_job_id="heygen-nourl-job",
+        avatar_id="test-avatar",
+        tts_provider="elevenlabs",
+        slide_number=1,
+        status=RenderStatus.rendering,
+    )
+
+    mock_db = MagicMock()
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = render
+    mock_db.execute.return_value = mock_result
+    mock_db.__enter__ = MagicMock(return_value=mock_db)
+    mock_db.__exit__ = MagicMock(return_value=False)
+
+    payload = {
+        "event_type": "avatar_video.success",
+        "event_data": {"video_id": "heygen-nourl-job"},  # url 없음
+    }
+    body = json.dumps(payload).encode()
+
+    with patch.object(settings, "HEYGEN_WEBHOOK_SECRET", _SECRET), \
+         patch("app.api.v1.webhooks.SyncSessionLocal", return_value=mock_db), \
+         patch("app.api.v1.webhooks.cost_log.record_once") as rec:
+        resp = await client.post(
+            "/api/v1/webhooks/heygen",
+            content=body,
+            headers=_signed_headers(body),
+        )
+    assert resp.status_code == 200
+    assert resp.json()["reason"] == "no_video_url"
+    assert render.status == RenderStatus.failed
+    rec.assert_not_called()  # 영상 없는 성공은 비용도 기록하지 않는다.
+
+
 # ── 렌더링 실패 웹훅 ─────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
