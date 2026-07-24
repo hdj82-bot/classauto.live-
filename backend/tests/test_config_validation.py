@@ -85,3 +85,41 @@ def test_placeholder_jwt_secret_raises(monkeypatch):
     monkeypatch.setattr(config.settings, "JWT_SECRET_KEY", "CHANGE_ME_JWT_SECRET_AAAAAAAAAAAAAA")
     with pytest.raises(RuntimeError, match="placeholder"):
         config._validate_settings()
+
+
+# ── M1: staging 도 JWT 시크릿 강도를 강제 (토큰 위조 방지) ────────────────────────
+
+
+def test_staging_default_jwt_secret_raises(monkeypatch):
+    # 종전엔 production 에서만 검사해, staging 이 기본 시크릿으로 부팅되면 누구나
+    # 알려진 값으로 토큰을 위조할 수 있었다. staging 도 부팅에서 차단해야 한다.
+    monkeypatch.setattr(config.settings, "ENVIRONMENT", "staging")
+    monkeypatch.setattr(config.settings, "JWT_SECRET_KEY", "change-me-in-production")
+    monkeypatch.setattr(config.settings, "JWT_ALGORITHM", "HS256")
+    with pytest.raises(RuntimeError, match="JWT_SECRET_KEY"):
+        config._validate_settings()
+
+
+def test_staging_short_jwt_secret_raises(monkeypatch):
+    monkeypatch.setattr(config.settings, "ENVIRONMENT", "staging")
+    monkeypatch.setattr(config.settings, "JWT_SECRET_KEY", "tooshort")
+    monkeypatch.setattr(config.settings, "JWT_ALGORITHM", "HS256")
+    with pytest.raises(RuntimeError):
+        config._validate_settings()
+
+
+def test_staging_placeholder_jwt_secret_raises(monkeypatch):
+    monkeypatch.setattr(config.settings, "ENVIRONMENT", "staging")
+    monkeypatch.setattr(config.settings, "JWT_SECRET_KEY", "YOUR_JWT_SECRET_AAAAAAAAAAAAAAAAAAAA")
+    monkeypatch.setattr(config.settings, "JWT_ALGORITHM", "HS256")
+    with pytest.raises(RuntimeError, match="placeholder"):
+        config._validate_settings()
+
+
+def test_staging_valid_jwt_passes_without_prod_keys(monkeypatch):
+    # staging 은 강한 JWT 만 있으면 통과 — OAuth·필수 API 키는 prod 전용이라
+    # staging 배포에 강제하지 않는다(과도 제약 방지).
+    monkeypatch.setattr(config.settings, "ENVIRONMENT", "staging")
+    monkeypatch.setattr(config.settings, "JWT_SECRET_KEY", "s" * 40)
+    monkeypatch.setattr(config.settings, "JWT_ALGORITHM", "HS256")
+    config._validate_settings()  # 예외 없어야 함

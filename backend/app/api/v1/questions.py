@@ -5,12 +5,14 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_professor, require_student
 from app.core.config import settings
 from app.core.redis import get_redis
 from app.db.session import get_db
+from app.models.lecture import Lecture
 from app.models.question import AssessmentType
 from app.models.user import User
 from app.schemas.question import (
@@ -210,6 +212,17 @@ async def get_questions(
     - `formative`: 형성평가 (기본값)
     - `summative`: 총괄평가
     """
+    # 접근 가드: 게시된 강의만 조회·세션 생성 허용. 임의 lecture_id 열거로 미게시
+    # 강의의 문제셋을 끌어오거나 세션을 만드는 것을 차단한다(존재 여부도 숨김 → 404 통일).
+    lecture = (
+        await db.execute(select(Lecture).where(Lecture.id == lecture_id))
+    ).scalar_one_or_none()
+    if lecture is None or not lecture.is_published:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="강의를 찾을 수 없습니다.",
+        )
+
     session = await question_svc.get_or_create_session(
         db=db,
         user_id=current_user.id,

@@ -22,7 +22,8 @@ def test_passes_when_under_limits():
     with patch.object(settings, "HEYGEN_MOCK", False), \
          patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
          patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 15.0), \
-         patch.object(budget, "heygen_spend_usd", return_value=1.0):
+         patch.object(budget, "heygen_spend_usd", return_value=1.0), \
+         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0):
         assert_heygen_budget(_db())  # 예외 없어야 함
 
 
@@ -30,7 +31,20 @@ def test_blocks_when_daily_exceeded():
     with patch.object(settings, "HEYGEN_MOCK", False), \
          patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
          patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 15.0), \
-         patch.object(budget, "heygen_spend_usd", return_value=3.0):
+         patch.object(budget, "heygen_spend_usd", return_value=3.0), \
+         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0):
+        with pytest.raises(BudgetExceededError):
+            assert_heygen_budget(_db())
+
+
+def test_blocks_when_qa_avatar_spend_exceeds():
+    # 본문 렌더(render_cost_logs)는 0 이지만 Q&A 아바타 지출(platform_cost_logs)만으로
+    # 일 한도를 넘으면 차단해야 한다 — 종전 브레이커의 사각지대(HeyGen QA) 회귀 방지.
+    with patch.object(settings, "HEYGEN_MOCK", False), \
+         patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
+         patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 15.0), \
+         patch.object(budget, "heygen_spend_usd", return_value=0.0), \
+         patch.object(budget, "heygen_qa_spend_usd", return_value=3.5):
         with pytest.raises(BudgetExceededError):
             assert_heygen_budget(_db())
 
@@ -44,7 +58,8 @@ def test_blocks_when_monthly_exceeded():
     with patch.object(settings, "HEYGEN_MOCK", False), \
          patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
          patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 15.0), \
-         patch.object(budget, "heygen_spend_usd", side_effect=by_window):
+         patch.object(budget, "heygen_spend_usd", side_effect=by_window), \
+         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0):
         with pytest.raises(BudgetExceededError):
             assert_heygen_budget(_db())
 
@@ -63,7 +78,8 @@ def test_zero_limit_disables_that_window():
     with patch.object(settings, "HEYGEN_MOCK", False), \
          patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 0.0), \
          patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 15.0), \
-         patch.object(budget, "heygen_spend_usd", return_value=100.0):
+         patch.object(budget, "heygen_spend_usd", return_value=100.0), \
+         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0):
         # 일 한도가 0 이라 일 검사는 건너뛰지만 월(100 >= 15)에서 막힌다.
         with pytest.raises(BudgetExceededError):
             assert_heygen_budget(_db())
@@ -71,7 +87,8 @@ def test_zero_limit_disables_that_window():
     with patch.object(settings, "HEYGEN_MOCK", False), \
          patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 0.0), \
          patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 0.0), \
-         patch.object(budget, "heygen_spend_usd", return_value=100.0):
+         patch.object(budget, "heygen_spend_usd", return_value=100.0), \
+         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0):
         # 둘 다 0 = 완전 비활성 → 통과.
         assert_heygen_budget(_db())
 
@@ -295,6 +312,8 @@ def test_heygen_inflight_counts_toward_daily_limit():
          patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
          patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 100.0), \
          patch.object(budget, "heygen_spend_usd", return_value=1.0), \
+         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0), \
+         patch.object(budget, "inflight_heygen_qa_spend_usd", return_value=0.0), \
          patch.object(budget, "inflight_heygen_spend_usd", return_value=2.5):
         with pytest.raises(BudgetExceededError):
             assert_heygen_budget(_db())
@@ -305,6 +324,8 @@ def test_heygen_inflight_under_limit_passes():
          patch.object(settings, "HEYGEN_DAILY_BUDGET_USD", 3.0), \
          patch.object(settings, "HEYGEN_MONTHLY_BUDGET_USD", 100.0), \
          patch.object(budget, "heygen_spend_usd", return_value=1.0), \
+         patch.object(budget, "heygen_qa_spend_usd", return_value=0.0), \
+         patch.object(budget, "inflight_heygen_qa_spend_usd", return_value=0.0), \
          patch.object(budget, "inflight_heygen_spend_usd", return_value=0.5):
         assert_heygen_budget(_db())  # 1.5 < 3.0 → 통과
 

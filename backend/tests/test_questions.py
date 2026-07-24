@@ -79,6 +79,30 @@ async def test_get_questions_professor_forbidden(client, professor, lecture):
 
 
 @pytest.mark.asyncio
+async def test_get_questions_unpublished_lecture_404(client, student, course, db):
+    """M2: 미게시 강의는 임의 lecture_id 열거로 문제셋·세션을 못 만들게 404."""
+    from app.models.lecture import Lecture
+
+    lec = Lecture(
+        id=uuid.uuid4(),
+        course_id=course.id,
+        title="비공개 강의",
+        slug=f"unpublished-{uuid.uuid4().hex}",
+        order=2,
+        is_published=False,
+    )
+    db.add(lec)
+    await db.flush()
+
+    resp = await client.get(
+        f"/api/questions/{lec.id}",
+        headers=make_auth_header(student),
+        params={"assessment_type": "formative"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_get_questions_same_session_same_order(
     client, student, lecture, db, _formative_questions
 ):
@@ -150,6 +174,43 @@ async def test_submit_responses_correct(client, student, lecture, db, _formative
     assert len(data) == 1
     assert data[0]["is_correct"] is True
     assert data[0]["timestamp_valid"] is True
+
+
+@pytest.mark.asyncio
+async def test_submit_responses_duplicate_no_500(
+    client, student, lecture, db, _formative_questions
+):
+    """#6: 같은 (session, question) 재제출(더블클릭)이 500(uq IntegrityError) 대신
+    멱등 처리돼야 한다. 사전 체크 + commit try/except 이중 방어."""
+    for q in _formative_questions:
+        db.add(q)
+    await db.flush()
+    await db.commit()
+
+    r = await client.get(
+        f"/api/questions/{lecture.id}",
+        headers=make_auth_header(student),
+        params={"assessment_type": "formative"},
+    )
+    session_id = r.json()["session_id"]
+    question_id = r.json()["questions"][0]["id"]
+    payload = {
+        "session_id": session_id,
+        "responses": [
+            {"question_id": question_id, "user_answer": "0", "video_timestamp_seconds": 0}
+        ],
+    }
+
+    first = await client.post(
+        "/api/responses", headers=make_auth_header(student), json=payload
+    )
+    assert first.status_code == 201
+    # 동일 응답 재제출 — 종전엔 uq_responses_session_question 위반으로 500 이 났다.
+    second = await client.post(
+        "/api/responses", headers=make_auth_header(student), json=payload
+    )
+    assert second.status_code != 500
+    assert second.status_code in (200, 201)
 
 
 @pytest.mark.asyncio

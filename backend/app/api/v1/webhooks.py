@@ -136,6 +136,16 @@ async def heygen_webhook(
                     db.commit()
                     return {"status": "error", "reason": "s3_upload_failed"}
 
+            # URL 없는 success 이벤트는 영상 없는 'ready' 를 만들어 슬라이드가 빈 화면으로
+            # 재생되고(그리고 finalize_video_if_all_ready 가 Video 를 done 으로 넘길 수 있다)
+            # 비용까지 기록된다. seed 클립 경로와 동일하게 실패로 처리한다.
+            if not render.s3_video_url:
+                logger.error("HeyGen success 이벤트에 영상 URL 이 없음: render_id=%s", render.id)
+                render.status = RenderStatus.failed
+                render.error_message = "HeyGen 응답에 영상 URL 이 없습니다."
+                db.commit()
+                return {"status": "error", "reason": "no_video_url"}
+
             render.status = RenderStatus.ready
             render.completed_at = datetime.now(timezone.utc)
 
