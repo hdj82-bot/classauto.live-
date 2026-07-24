@@ -28,7 +28,7 @@ import { I18nProvider } from "@/contexts/I18nContext";
 
 const wrap = (ui: ReactNode) => render(<I18nProvider>{ui}</I18nProvider>);
 
-const SESSION_KEY = "ifl_student_signup_hint";
+const SESSION_KEY = "ifl_student_signup_next";
 
 beforeEach(() => {
   mocks.startGoogleLogin.mockReset();
@@ -107,7 +107,7 @@ describe("SignupWizard — Step 2 (인증 메일 resend 카운트다운)", () =>
 });
 
 describe("SignupWizard — Step 3 (OAuth start + sessionStorage stash)", () => {
-  it("kicks off Google OAuth as student and stashes the signup hint", () => {
+  it("kicks off Google OAuth as student and stashes only the deeplink", () => {
     vi.useFakeTimers();
     try {
       wrap(<SignupWizard next="/v/demo-slug" />);
@@ -152,14 +152,10 @@ describe("SignupWizard — Step 3 (OAuth start + sessionStorage stash)", () => {
       });
       expect(mocks.startGoogleLogin).toHaveBeenCalledWith("student");
 
+      // 딥링크(next)만 보관한다 — 나머지 프로필 필드는 complete-profile 이 다시
+      // 수집하므로 저장하지 않는다(종전의 통짜 JSON stash 는 죽은 쓰기였다).
       const stash = window.sessionStorage.getItem(SESSION_KEY);
-      expect(stash).toBeTruthy();
-      const parsed = JSON.parse(stash!);
-      expect(parsed.name).toBe("어흥");
-      expect(parsed.student_number).toBe("20240001");
-      expect(parsed.next).toBe("/v/demo-slug");
-      expect(parsed.school).toBe("경기대학교");
-      expect(parsed.major).toBe("중어중문학과");
+      expect(stash).toBe("/v/demo-slug");
     } finally {
       vi.useRealTimers();
     }
