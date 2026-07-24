@@ -29,7 +29,11 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - run: pip install ruff
+      # ruff 버전 고정: `pip install ruff`(미고정)는 새 릴리스가 나오면 기본 규칙
+      # 세트가 넓어져(0.16.0 에서 B/I/UP/SIM 등 대량 유입) 기존 코드가 전량 red 로
+      # 바뀐다. main 이 통과하던 시점(2026-06-28)의 최신인 0.15.20 으로 고정해
+      # 린트 동작을 결정적으로 유지한다. 규칙을 새로 도입할 때만 의도적으로 bump.
+      - run: pip install "ruff==0.15.20"
       - run: ruff check backend/
 
   backend-test:

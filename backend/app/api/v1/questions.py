@@ -21,6 +21,7 @@ from app.schemas.question import (
 from app.schemas.response import SessionResponsesResult, SubmitResponsesRequest
 from app.services import question as question_svc
 from app.services import response as response_svc
+from app.services.lecture import assert_professor_owns_lecture
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,13 @@ async def generate_questions(
     current_user: User = Depends(require_professor),
 ):
     """Claude API를 통해 PPT 슬라이드 내용으로 형성/총괄평가 문제 자동 생성."""
+    # ── 소유권 검증 (IDOR 방지) ──
+    # 비소유 강의는 assert_professor_owns_lecture 가 404 로 거부한다. 다른
+    # 교수자 리소스 엔드포인트(lectures/videos/folders 등)와 동일한 패턴.
+    # 소유권 확인을 rate limit·PPT 처리보다 먼저 수행해 타인 강의에 대한
+    # 비용/부수효과를 원천 차단한다.
+    await assert_professor_owns_lecture(db, lecture_id, current_user.id)
+
     # ── Critical 9: ppt_content 50KB 한도 (Claude API 토큰 비용 폭주 방지) ──
     ppt_bytes = len(body.ppt_content.encode("utf-8"))
     if ppt_bytes > MAX_PPT_CONTENT_BYTES:

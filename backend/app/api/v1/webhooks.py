@@ -207,12 +207,18 @@ async def _handle_seed_clip_webhook(
     호출부가 "unknown video_id" 로 흘려보낸다(= 이 웹훅은 seed 가 아님).
 
     성공: HeyGen url 을 S3 로 올린 뒤 ready 로 전이(폴링 경로 _mark_cluster_ready 와
-    동일 상태). 실패/URL 없음: failed. 비용 기록은 기존 폴링 완료 경로(_poll_inflight)
-    와 동일하게 생략한다. 멱등성은 호출부의 WebhookEventLog + 여기 종료상태 가드로 보장.
+    동일 상태). 실패/URL 없음: failed. 비용은 폴링 완료 경로(_poll_inflight)와 **동일하게**
+    _record_qa_render_cost 로 기록한다 — 웹훅이 Q&A 클립 완료의 주 경로이므로 여기서
+    누락하면 운영자 비용 대시보드가 HeyGen Q&A 지출을 전량 과소집계한다.
+    멱등성은 호출부의 WebhookEventLog + 여기 종료상태 가드로 보장.
     """
     from app.models.qa_answer_cache import QAAnswerCache
     from app.services.pipeline import qa_avatar
-    from app.tasks.qa_batch import _mark_cluster_failed, _mark_cluster_ready
+    from app.tasks.qa_batch import (
+        _mark_cluster_failed,
+        _mark_cluster_ready,
+        _record_qa_render_cost,
+    )
 
     rep = db.execute(
         select(QAAnswerCache).where(QAAnswerCache.heygen_job_id == video_id)
@@ -250,6 +256,13 @@ async def _handle_seed_clip_webhook(
             _mark_cluster_failed(db, rep.cluster_key, "HeyGen 응답에 영상 URL 이 없습니다.")
             return {"status": "error", "reason": "no_video_url"}
         _mark_cluster_ready(db, rep, s3_url, duration)
+        # 폴링 완료 경로(qa_batch._poll_inflight)와 동일하게 렌더 비용을 기록한다.
+        # 이 웹훅은 HeyGen 전용 매칭(heygen_job_id)이므로 is_vs=False.
+        # _record_qa_render_cost 는 별도 sync 세션으로 독립 커밋하며, rendering→ready
+        # 전이 시점에만 호출돼(이후 폴링 쿼리에서 빠짐) 사실상 멱등이다.
+        _record_qa_render_cost(
+            rep, is_vs=False, duration=duration, mock=settings.HEYGEN_MOCK
+        )
         return {"status": "processed", "seed_id": str(rep.id)}
 
     # avatar_video.fail

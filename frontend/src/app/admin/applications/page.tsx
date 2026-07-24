@@ -135,11 +135,11 @@ export default function AdminBetaApplicationsPage() {
                 ) : null}
                 <span>
                   {t("admin.applicationsTiming")}:{" "}
-                  {t(`betaApply.fields.startOptions.${a.start_timing}`)}
+                  {t(`marketing.betaApply.fields.startOptions.${a.start_timing}`)}
                 </span>
                 <span>
                   {t("admin.applicationsChannel")}:{" "}
-                  {t(`betaApply.fields.channelOptions.${a.channel}`)}
+                  {t(`marketing.betaApply.fields.channelOptions.${a.channel}`)}
                 </span>
               </div>
 
