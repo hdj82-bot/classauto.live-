@@ -29,27 +29,34 @@ export default function AdminFeedbackPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (isCancelled?: () => boolean) => {
     setLoading(true);
     setError(null);
     try {
       const { data } = await feedbackApi.adminList(
         statusFilter ? { status: statusFilter } : {},
       );
+      if (isCancelled?.()) return;
       setItems(data.feedback ?? []);
     } catch {
+      if (isCancelled?.()) return;
       setError(t("admin.feedbackLoadError"));
     }
-    setLoading(false);
+    if (!isCancelled?.()) setLoading(false);
   }, [statusFilter, t]);
 
   // load() 첫 줄의 동기 setState 가 effect 동기 경로에서 호출되면 린트가 막으므로
   // rAF 로 다음 프레임에 비동기 실행한다(레포 표준 회피책).
+  // 필터 변경 시 이전 요청의 늦은 응답이 새 상태를 덮어쓰지 않게 취소 플래그.
   useEffect(() => {
+    let cancelled = false;
     const raf = requestAnimationFrame(() => {
-      void load();
+      void load(() => cancelled);
     });
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
   }, [load]);
 
   const setStatus = async (id: string, status: string) => {
