@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, API_URL, userApi, bootstrapAuth } from "@/lib/api";
+import axios from "axios";
+import { api, API_URL, userApi, bootstrapAuth, enrollmentApi } from "@/lib/api";
 import { useSlideshowPlayback } from "./useSlideshowPlayback";
 import {
   pickActiveCaptionWithCues,
@@ -392,6 +393,10 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     };
   }, [slug, router]);
 
+  // 등록 호출은 slug 당 한 번만 — 이 이펙트가 lecture/durationSec 변화로 다시 돌아도
+  // 같은 요청을 반복해 보내지 않게 한다(서버에서 멱등이지만 불필요한 왕복).
+  const joinedSlugRef = useRef<string | null>(null);
+
   // ─── 세션 생성 + 첫 환영 메시지 ───
   // 부정행위 방지(C2): total_sec 만 클라가 알려주고, 진행률·완료 판정은 서버가
   // 잰 경과 실시간·하트비트로만 한다. 같은 강의의 활성 세션이 이미 있으면 서버가
@@ -403,6 +408,29 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
     if (!lecture || !user || !durationSec) return;
     (async () => {
       try {
+        // 수강 등록 확보(스펙 15 §4.1) — 세션 생성 **직전**에 멱등 호출한다.
+        // /v/[slug] 진입에서 이미 등록됐으면 같은 등록이 그대로 돌아오고, 학생이
+        // /lecture/[slug] 를 북마크해 바로 들어온 경우는 여기서 처음 만들어진다.
+        // 이 호출이 없으면 게이트를 켠 뒤 북마크 진입이 전부 403 이 된다.
+        //
+        // 교수자는 호출하지 않는다 — join 은 require_student 라 403 이고,
+        // 본인 강의 미리보기(preview 아닌 실제 시청 경로)가 깨진다.
+        if (user.role === "student" && slug && joinedSlugRef.current !== slug) {
+          joinedSlugRef.current = slug;
+          try {
+            await enrollmentApi.join({ lecture_slug: slug });
+          } catch (err) {
+            // 제적(403)은 삼키지 않는다. 여기서 조용히 넘기면 학생은 영상이 안
+            // 나오는 이유를 모른 채 빈 화면을 본다. 안내는 진입 페이지가 맡는다.
+            if (axios.isAxiosError(err) && err.response?.status === 403) {
+              router.replace(`/v/${slug}`);
+              return;
+            }
+            // 그 외(네트워크 등)는 재생을 막지 않는다 — 게이트가 꺼져 있으면
+            // 등록 없이도 시청되고, 켜져 있으면 아래 세션 생성이 403 으로 걸린다.
+          }
+        }
+
         const { data } = await api.post("/api/v1/sessions", null, {
           params: { lecture_id: lecture.id, total_sec: Math.ceil(durationSec) },
         });
@@ -416,7 +444,7 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
         /* ignore */
       }
     })();
-  }, [lecture, user, durationSec, preview]);
+  }, [lecture, user, durationSec, preview, slug, router]);
 
   // ─── 재생 구간 히트맵 계측 (스펙 11 §F, 10 §3.1) ───
   // 슬라이드 진입/완료 이벤트를 watch_events 로 적재한다(분석 대시보드 §F 의 1차 자료,

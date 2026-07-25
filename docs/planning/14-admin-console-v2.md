@@ -30,8 +30,8 @@
    않는다. "관리자니까 대신 고쳐준다"는 유혹을 코드에 남기지 말 것 — **이 문서가 새로 추가하는
    쓰기는 §5 의 4개뿐이다**(기존 쓰기는 §5 후단 참조).
 4. **마이그레이션은 수기 작성**(autogenerate 아님). 기존 `00XX_*.py` 컨벤션(`Revision ID`,
-   `Revises`, 한글 docstring, upgrade/downgrade)을 따른다. ~~현재 head 는 `0070`~~ →
-   **`0071_open_professor_invites` 가 머지되어 head 는 `0071`, 다음 번호는 `0072`.**
+   `Revises`, 한글 docstring, upgrade/downgrade)을 따른다.
+   **번호는 착수 시점의 `alembic heads` + 1** — 이 문서에 구체 번호를 적지 않는다.
 5. **디자인은 v2 토큰만.** `docs/design-system/` 의 라이트 베이지 + 골드. 현 `/admin/*` 페이지의
    `bg-gray-50` · `indigo-600` 은 v2 이전 잔재이므로 이번에 전부 교체한다. 프로토타입 08 이 기준.
 6. **차트 색은 골드 단일 시퀀셜 램프만.** 서비스 5종에 5색을 배정하는 카테고리컬 팔레트는 v2 정책
@@ -174,9 +174,9 @@
 
 **목표**: 실패한 렌더를 `error_message` 원문까지 펼쳐 보고, 확인/해결 상태를 남긴다.
 
-**마이그레이션 `0073_add_render_triage.py`** *(0071 = 공개 초대, 0072 = 수강 등록(스펙 15).
-착수 시점의 실제 head 를 확인하고 그 다음 번호를 쓸 것 — 미구현 작업에 번호를 예약해 두면
-먼저 머지되는 쪽과 계속 어긋난다.)*
+**마이그레이션 `<head+1>_add_render_triage.py`** *(착수 시점의 `alembic heads` 를 확인하고
+그 다음 번호를 쓸 것. 기획 문서에 구체 번호를 적지 않는다 — 미구현 작업에 번호를 예약해
+두면 먼저 머지되는 쪽과 계속 어긋난다. 이 프로젝트에서 이미 두 번 어긋났다.)*
 ```
 video_renders.triaged_at   TIMESTAMPTZ NULL   -- 운영자가 확인한 시각
 video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
@@ -286,10 +286,10 @@ video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
 ## 3. 마이그레이션 순서
 
 ```
-0071  professor_invites.email nullable + ix_professor_invites_unused   (공개 초대 — 머지됨)
-0072  enrollments + courses.term                                       (스펙 15 1단계 — 머지됨)
-0073  video_renders.triaged_at + triage_note + ix_video_renders_status_created   (C)
+video_renders.triaged_at + triage_note + ix_video_renders_status_created   (C)
 ```
+번호는 착수 시점 `alembic heads` + 1. (참고: 공개 초대·수강 등록 마이그레이션이 이미 머지돼
+있으므로 head 는 그보다 뒤다.)
 그 외 작업(A·B·D·E·F)은 **스키마 변경 없음** — 전부 read 엔드포인트와 프론트다.
 적용: `docker compose exec backend alembic upgrade head`.
 

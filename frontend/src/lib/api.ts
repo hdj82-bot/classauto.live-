@@ -206,6 +206,35 @@ export const authApi = {
     ),
 };
 
+export interface EnrollmentResponse {
+  id: string;
+  course_id: string;
+  status: "active" | "withdrawn";
+  section: string | null;
+  source: string;
+}
+
+/**
+ * 수강 등록 (스펙 15). 학생이 강의/강좌 링크로 들어왔을 때 **등록을 만드는 전용
+ * 진입점**이다.
+ *
+ * 등록은 강의가 아니라 **강좌(Course) 단위**다 — `lecture_slug` 를 보내도 백엔드가
+ * 그 강의가 속한 강좌로 수렴시킨다. 매주 새 영상마다 다시 등록할 필요가 없다.
+ *
+ * 멱등하다. 이미 등록돼 있으면 같은 행을 그대로 돌려준다(`UNIQUE(course_id,
+ * student_id)`), 두 탭을 열거나 새로고침해도 안전하다.
+ *
+ * 제적된 학생은 **403** — 자동 복구하지 않는다. 호출부는 이 403 을 삼키지 말고
+ * "수강 종료" 안내를 보여줘야 한다.
+ *
+ * 교수자는 `require_student` 에 걸려 403 이므로 호출하지 않는다(미리보기 경로 보호).
+ */
+export const enrollmentApi = {
+  join: (body: { lecture_slug?: string; course_slug?: string }) =>
+    api.post<EnrollmentResponse>("/api/v1/enrollments/join", body),
+  mine: () => api.get<EnrollmentResponse[]>("/api/v1/enrollments/me"),
+};
+
 export interface OwnerInvite {
   id: string;
   token: string;

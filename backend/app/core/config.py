@@ -116,6 +116,20 @@ class Settings(BaseSettings):
     # 정식 런칭 시 True 로 켜면 deps.require_plan 이 구독 플랜으로 실제 게이팅한다.
     PLAN_GATING_ENABLED: bool = False
 
+    # ── 수강 등록 게이트 (스펙 15 §4.3) ──────────────────────────────
+    # True 면 세션 시작 시 "강의가 속한 강좌에 활성 등록이 있는가"를 강제한다.
+    #
+    # 기본 False 인 이유는 **배포 원자성이 없기 때문**이다. 프론트(Vercel)와
+    # 백엔드(Railway)가 독립 배포라 동시에 올릴 수 없다. 게이트를 켠 백엔드가 먼저
+    # 나가면, 아직 join 을 호출하지 않는 프론트 때문에 그 순간 모든 학생이 재생
+    # 불가가 된다. 그래서 배포는 3단계로 나눈다 (docs/planning/15-enrollment-roster.md
+    # §11 배포 절차):
+    #   1) flag=False 로 백엔드 배포 — 등록은 기록되지만 차단은 안 함(무해)
+    #   2) 프론트 join 호출 배포
+    #   3) 등록이 실제로 쌓이는 걸 확인한 뒤 flag=True
+    # 롤백도 이 환경변수 하나를 False 로 되돌리면 끝난다(재배포 불필요).
+    ENROLLMENT_GATE_ENABLED: bool = False
+
     # ── 평가 시스템 ─────────────────────────────────────────────
     FORMATIVE_SERVE_COUNT: int = 5
     SUMMATIVE_SERVE_COUNT: int = 5
