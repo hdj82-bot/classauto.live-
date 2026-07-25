@@ -199,8 +199,9 @@ export const authApi = {
   logout: () => api.delete("/api/auth/logout"),
 
   // 초대 랜딩 페이지용 — 토큰으로 초대 대상 이메일·상태 조회 (토큰 보유자 공개).
+  // email 이 null 이면 공개 초대(대상 미지정) — 링크를 연 첫 1명이 가입한다.
   inviteInfo: (token: string) =>
-    api.get<{ email: string; role: string; status: string }>(
+    api.get<{ email: string | null; role: string; status: string }>(
       `/api/auth/invite/${encodeURIComponent(token)}`,
     ),
 };
@@ -208,7 +209,8 @@ export const authApi = {
 export interface OwnerInvite {
   id: string;
   token: string;
-  email: string;
+  // null = 공개 초대(대상 미지정) — 링크를 연 첫 1명이 가입한다.
+  email: string | null;
   role: string;
   // 베타 코호트 태그(예: "2026-08"). 가입 시 users.cohort 로 전파된다.
   cohort: string | null;
@@ -223,11 +225,13 @@ export interface OwnerInvite {
 // ADMIN_EMAILS 로 권한을 강제하므로, 비운영자가 호출하면 403 이 떨어진다.
 export const ownerInviteApi = {
   list: () => api.get<OwnerInvite[]>("/api/owner/invites"),
-  // cohort 는 백엔드 InviteCreateRequest 가 이미 받는 선택 필드다(빈 문자열은
-  // 서버에서 None 으로 정규화됨). 미지정이면 아예 보내지 않는다.
-  create: (email: string, cohort?: string | null) =>
+  // email·cohort 모두 백엔드 InviteCreateRequest 의 선택 필드다(빈 문자열은 서버에서
+  // None 으로 정규화됨). 미지정이면 키 자체를 보내지 않는다.
+  // email 을 생략하면 **공개 초대** — 대상을 미리 알 필요 없이 링크·QR 만 만들고
+  // 그 링크를 연 첫 1명이 가입한다.
+  create: (email?: string | null, cohort?: string | null) =>
     api.post<OwnerInvite>("/api/owner/invites", {
-      email,
+      ...(email ? { email } : {}),
       ...(cohort ? { cohort } : {}),
     }),
   revoke: (id: string) =>

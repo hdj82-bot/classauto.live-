@@ -104,13 +104,13 @@ describe("AdminInvitesPage", () => {
     render(wrap(<AdminInvitesPage />));
     await screen.findByText("아직 발급한 초대가 없습니다.");
 
-    fireEvent.change(screen.getByLabelText("초대할 이메일"), {
+    fireEvent.change(screen.getByLabelText("초대할 이메일 (선택)"), {
       target: { value: "prof@k.ac.kr" },
     });
     fireEvent.change(screen.getByLabelText("코호트"), {
       target: { value: "2026-08" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "초대 링크 발급" }));
+    fireEvent.click(screen.getByRole("button", { name: "초대 링크 · QR 생성" }));
 
     await waitFor(() =>
       expect(mocks.create).toHaveBeenCalledWith("prof@k.ac.kr", "2026-08"),
@@ -126,6 +126,31 @@ describe("AdminInvitesPage", () => {
     );
   });
 
+  it("이메일 없이도 발급된다 — 공개 초대(1회용 링크·QR)", async () => {
+    mocks.list.mockResolvedValue({ data: [] });
+    mocks.create.mockResolvedValue({ data: { ...SAMPLE[0], email: null } });
+
+    render(wrap(<AdminInvitesPage />));
+    await screen.findByText("아직 발급한 초대가 없습니다.");
+
+    // 이메일을 비운 채 바로 발급 — 버튼이 잠겨 있으면 안 된다.
+    const createBtn = screen.getByRole("button", { name: "초대 링크 · QR 생성" });
+    expect(createBtn.hasAttribute("disabled")).toBe(false);
+    fireEvent.click(createBtn);
+
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith(null, null));
+    // 발급 직후 QR 이 바로 떠야 전달할 수 있다.
+    expect(await screen.findByAltText("초대 링크 QR")).toBeTruthy();
+  });
+
+  it("공개 초대는 목록에서 대상 미지정임을 밝힌다", async () => {
+    mocks.list.mockResolvedValue({ data: [{ ...SAMPLE[0], email: null }] });
+    render(wrap(<AdminInvitesPage />));
+
+    const row = await screen.findByRole("listitem");
+    expect(within(row).getByText("공개 초대 (대상 미지정)")).toBeTruthy();
+  });
+
   it("코호트 미지정이면 cohort 를 null 로 보낸다", async () => {
     mocks.list.mockResolvedValue({ data: [] });
     mocks.create.mockResolvedValue({ data: { ...SAMPLE[0], cohort: null } });
@@ -133,11 +158,11 @@ describe("AdminInvitesPage", () => {
     render(wrap(<AdminInvitesPage />));
     await screen.findByText("아직 발급한 초대가 없습니다.");
 
-    fireEvent.change(screen.getByLabelText("초대할 이메일"), {
+    fireEvent.change(screen.getByLabelText("초대할 이메일 (선택)"), {
       target: { value: "p2@k.ac.kr" },
     });
     fireEvent.change(screen.getByLabelText("코호트"), { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "초대 링크 발급" }));
+    fireEvent.click(screen.getByRole("button", { name: "초대 링크 · QR 생성" }));
 
     await waitFor(() =>
       expect(mocks.create).toHaveBeenCalledWith("p2@k.ac.kr", null),

@@ -9,12 +9,17 @@ import { ownerInviteApi, type OwnerInvite } from "@/lib/api";
  * /admin/invites — 교수자 초대 발급 + QR. 스펙 14 §A.
  *
  * 기존 `/owner/invites` 를 운영자 콘솔 안으로 옮긴 화면이다. API 클라이언트
- * (`ownerInviteApi` → `/api/owner/invites`)는 그대로 재사용하므로 백엔드
- * 변경은 없다. 옮기면서 두 가지가 붙었다.
+ * (`ownerInviteApi` → `/api/owner/invites`)는 그대로 재사용한다.
  *   1. cohort 셀렉트 — `InviteCreateRequest.cohort` 를 백엔드가 이미 받는데
  *      입력란이 없어 항상 NULL 로 발급되고 있었다.
  *   2. QR — 오프라인 워크숍용. 발급 직후 자동으로 펼쳐지고, 목록 각 행의 QR
  *      버튼으로 과거 초대도 다시 꺼낼 수 있다(재인쇄).
+ *
+ * **공개 초대** — 이메일은 이제 선택 입력이다. 비워 두고 발급하면 대상을 잠그지
+ * 않는 링크·QR 이 나오고, 그 링크를 연 **첫 1명**이 교수자로 가입한다. 받는 사람의
+ * Google 이메일을 미리 몰라도 모집할 수 있게 하기 위함이며, 공유되더라도 단일 사용
+ * 이라 두 번째 사람은 가입할 수 없다(백엔드 `claim_invite` 가 원자적으로 보장).
+ * 이메일을 적으면 종전처럼 그 계정만 가입할 수 있는 지정 초대가 된다.
  *
  * 권한 가드는 `admin/layout.tsx` 의 ProtectedRoute(admin + allowOwner) 가
  * 이미 감싸므로 페이지 내부에서 다시 감싸지 않는다. 다만 최종 판정은 서버의
@@ -65,11 +70,12 @@ export default function AdminInvitesPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || creating) return;
+    // 이메일은 선택 — 비어 있으면 공개 초대로 발급한다(대상 미지정, 첫 1명 가입).
+    if (creating) return;
     setCreating(true);
     setCreateError(null);
     try {
-      const { data } = await ownerInviteApi.create(email.trim(), cohort || null);
+      const { data } = await ownerInviteApi.create(email.trim() || null, cohort || null);
       setInvites((prev) => [data, ...prev]);
       setEmail("");
       // 발급 직후 QR 을 바로 보여준다(수용 기준: "발급 → QR이 즉시 뜨고").
@@ -158,6 +164,9 @@ export default function AdminInvitesPage() {
                 >
                   {t("admin.invites.emailLabel")}
                 </label>
+                <p className="mt-1 text-xs text-text-subtle">
+                  {t("admin.invites.emailOptionalHelp")}
+                </p>
                 <input
                   id="invite-email"
                   type="email"
@@ -194,7 +203,7 @@ export default function AdminInvitesPage() {
             <div className="mt-4 flex items-center gap-3">
               <button
                 type="submit"
-                disabled={!email.trim() || creating}
+                disabled={creating}
                 className="rounded-lg bg-gold-on-light px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gold-deep disabled:opacity-60"
               >
                 {creating
@@ -248,8 +257,13 @@ export default function AdminInvitesPage() {
                       className="rounded-xl border border-line bg-bg-card px-4 py-3"
                     >
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        {/* 공개 초대는 대상이 없다 — 빈칸 대신 성격을 밝힌다. */}
                         <span className="min-w-0 flex-[1_1_180px] text-sm font-medium text-text [overflow-wrap:anywhere]">
-                          {inv.email}
+                          {inv.email ?? (
+                            <span className="text-text-muted">
+                              {t("admin.invites.openInvite")}
+                            </span>
+                          )}
                         </span>
 
                         {inv.cohort && (
@@ -307,7 +321,12 @@ export default function AdminInvitesPage() {
                       </div>
 
                       {qrOpen && (
-                        <InviteQr url={inv.invite_url} label={inv.email} />
+                        // 공개 초대는 파일명에 쓸 이메일이 없어 토큰 앞자리로 구분한다
+                        // (워크숍에서 여러 장을 내려받아도 파일이 겹치지 않게).
+                        <InviteQr
+                          url={inv.invite_url}
+                          label={inv.email ?? `open-${inv.token.slice(0, 8)}`}
+                        />
                       )}
                     </li>
                   );

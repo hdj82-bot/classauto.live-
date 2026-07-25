@@ -40,7 +40,7 @@ from app.services.auth import (
     save_temp_code,
     validate_and_delete_refresh_token,
 )
-from app.services.invite import consume_invite, validate_invite
+from app.services.invite import attach_invite_user, claim_invite, validate_invite
 
 logger = logging.getLogger(__name__)
 
@@ -364,6 +364,18 @@ async def complete_profile(
         else None
     )
 
+    # 초대 자리를 **유저 생성 전에** 원자적으로 잡는다(단일 사용 확정).
+    #
+    # 순서가 중요하다. 종전처럼 만들고 나서 소비하면, 같은 링크를 동시에 연 두 사람이
+    # 둘 다 validate 를 통과해 각자 교수자로 생성된 뒤에야 소비 단계에 도달한다 —
+    # 한 초대로 두 계정이 생긴다. 공개 초대는 이메일 잠금이 없어 이 경합이 곧 베타
+    # 게이트 무력화이므로, 조건부 UPDATE(used_at IS NULL)로 먼저 자리를 잡고 진다.
+    if invite is not None and not await claim_invite(db, invite.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="이미 사용된 초대입니다. 운영자에게 새 초대 링크를 요청하세요.",
+        )
+
     user = await create_user_from_google(
         db=db,
         google_sub=payload["sub"],
@@ -376,9 +388,9 @@ async def complete_profile(
         cohort=cohort,
         beta_consented_at=beta_consented_at,
     )
-    # 교수자 가입 성공 — 초대를 단일 사용 처리(이후 동일 링크 재사용 차단).
+    # 누가 썼는지 감사 추적용으로 연결(자리는 위에서 이미 잡았다).
     if invite is not None:
-        await consume_invite(db, invite, user.id)
+        await attach_invite_user(db, invite.id, user.id)
     tokens = await issue_tokens(user)
     return _to_access_only(tokens, response)
 
