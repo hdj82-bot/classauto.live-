@@ -11,6 +11,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const navItems = [
     { href: "/admin", label: t("admin.navDashboard") },
+    // 스펙 14 §A — /owner/invites 를 콘솔로 흡수. 사이드바 최종 9개 구성(§E)은
+    // E 작업에서 그룹(운영·품질·감시)까지 정리한다.
+    { href: "/admin/invites", label: t("admin.navInvites") },
     { href: "/admin/applications", label: t("admin.navApplications") },
     { href: "/admin/beta", label: t("admin.navBeta") },
     { href: "/admin/users", label: t("admin.navUsers") },
