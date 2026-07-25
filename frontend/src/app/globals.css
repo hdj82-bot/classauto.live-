@@ -77,6 +77,15 @@
   --gold-medium:   rgba(255, 182, 39, 0.20);
   --gold-glow:     rgba(255, 182, 39, 0.40);
 
+  /* 차트 — 골드 단일 시퀀셜 램프(colors.md v2 / 스펙 14 §0-6).
+     색은 크기(magnitude)만 인코딩한다. 항목 구분은 형태·직접 라벨·표가 맡는다.
+     서비스 N종에 N색을 배정하는 카테고리컬 팔레트는 v2 정책 위반. */
+  --seq-1: #FDF3DC;
+  --seq-2: #F6DFA0;
+  --seq-3: #EDC55C;
+  --seq-4: #E89E0E;
+  --seq-5: #B88308;
+
   /* Semantic */
   --success: #10B981;
   --warning: #EF4444;
@@ -129,6 +138,13 @@
   --color-gold-bright:   var(--gold-bright);
   --color-gold-deep:     var(--gold-deep);
   --color-gold-on-light: var(--gold-on-light);
+
+  /* 차트 시퀀셜 램프 — bg-seq-1 … bg-seq-5 */
+  --color-seq-1: var(--seq-1);
+  --color-seq-2: var(--seq-2);
+  --color-seq-3: var(--seq-3);
+  --color-seq-4: var(--seq-4);
+  --color-seq-5: var(--seq-5);
 
   /* Semantic */
   --color-success: var(--success);
