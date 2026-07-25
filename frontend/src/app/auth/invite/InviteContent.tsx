@@ -8,7 +8,8 @@ import { startGoogleLogin } from "@/lib/auth";
 
 type InviteState =
   | { kind: "loading" }
-  | { kind: "active"; email: string }
+  // email === null 이면 공개 초대 — 대상이 잠겨 있지 않다.
+  | { kind: "active"; email: string | null }
   | { kind: "invalid" }
   | { kind: "used" }
   | { kind: "expired" };
@@ -16,9 +17,15 @@ type InviteState =
 /**
  * /auth/invite?token=… — 교수자 초대 랜딩.
  *
- * 계정주가 보낸 초대 링크의 진입점. 토큰으로 초대 대상 이메일·상태를 조회해
- * 보여주고, 유효하면 그 이메일의 Google 계정으로 교수자 가입을 시작한다
+ * 계정주가 보낸 초대 링크·QR 의 진입점. 토큰으로 초대 상태를 조회해 보여주고,
+ * 유효하면 Google 계정으로 교수자 가입을 시작한다
  * (startGoogleLogin("professor", token) → 백엔드가 가입 시 초대를 검증·소비).
+ *
+ * 초대는 두 형태다.
+ *  - **공개 초대**(email null): 대상이 잠겨 있지 않다. 아무 Google 계정으로나 가입할
+ *    수 있지만 **첫 1명만** 가능하다. 링크를 남에게 넘겨도 이미 쓰였으면 "used" 로
+ *    떨어진다. 이 화면은 그 1회성을 눈에 보이게 알려 준다.
+ *  - **이메일 지정 초대**: 그 이메일 계정만 가입할 수 있다(종전 동작).
  *
  * 로그인 페이지와 동일한 라이트 베이지 + 골드 톤.
  */
@@ -130,7 +137,9 @@ export default function InviteContent() {
           {state.kind === "active" && (
             <div className="space-y-6">
               <p className="text-sm" style={{ color: "rgba(10,10,10,0.7)" }}>
-                {t("auth.invite.subtitle", { email: state.email })}
+                {state.email
+                  ? t("auth.invite.subtitle", { email: state.email })
+                  : t("auth.invite.openSubtitle")}
               </p>
               <button
                 onClick={handleSignup}
@@ -148,7 +157,9 @@ export default function InviteContent() {
                 className="text-xs"
                 style={{ color: "rgba(10,10,10,0.45)", lineHeight: 1.6 }}
               >
-                {t("auth.invite.emailNote", { email: state.email })}
+                {state.email
+                  ? t("auth.invite.emailNote", { email: state.email })
+                  : t("auth.invite.openNote")}
               </p>
             </div>
           )}

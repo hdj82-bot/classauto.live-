@@ -58,17 +58,23 @@ async def create_professor_invite(
     owner: User = Depends(require_owner),
     db: AsyncSession = Depends(get_db),
 ):
+    """초대 링크·QR 발급.
+
+    ``email`` 을 생략하면 공개 초대 — 대상을 미리 알 필요 없이 링크만 만들어 전달하고
+    첫 1명이 가입한다. 값을 주면 그 이메일만 가입할 수 있다.
+    """
     inv = await create_invite(
         db, email=body.email, created_by=owner.id, cohort=body.cohort
     )
     # E: god-mode 추적 — 초대 발급을 감사 로그에 남긴다.
+    # 공개 초대는 email 이 없으므로 open=True 로 어떤 형태였는지 남긴다.
     await log_admin_action(
         db,
         owner,
         "invite.create",
         target_type="invite",
         target_id=str(inv.id),
-        detail={"email": inv.email, "cohort": inv.cohort},
+        detail={"email": inv.email, "cohort": inv.cohort, "open": inv.email is None},
     )
     return _to_response(inv)
 

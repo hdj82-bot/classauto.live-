@@ -13,16 +13,25 @@
 
 ## 0. 절대 불변 규칙 (깨지 말 것)
 
-1. **초대 게이트는 교수자 전용.** 교수자 가입은 유효한 `ProfessorInvite`(이메일 잠금 + 단일 사용 +
-   만료)를 통과해야만 가능하다.
+1. **초대 게이트는 교수자 전용.** 교수자 가입은 유효한 `ProfessorInvite`(단일 사용 + 만료)를
+   통과해야만 가능하다.
+   > **2026-07-25 변경 — 이메일 잠금은 선택이 됐다.** 베타테스터 모집에서 상대의 Google 이메일을
+   > 미리 알아야 발급할 수 있는 게 실무상 걸림돌이라, `professor_invites.email` 을 nullable 로
+   > 바꿔 **공개 초대**(대상 미지정)를 허용한다. 운영자는 링크·QR 만 만들어 전달하고 그 링크를 연
+   > **첫 1명**이 가입한다. 이메일을 적으면 종전처럼 그 계정만 가입하는 지정 초대가 된다.
+   >
+   > 이메일 잠금이 빠지면 **토큰 자체가 자격증명(bearer)** 이므로 단일 사용이 마지막 방어선이
+   > 된다. 따라서 소비는 반드시 `used_at IS NULL` 조건부 UPDATE(`services/invite.claim_invite`)로
+   > **원자적**이어야 하고, **유저를 만들기 전에** 자리를 잡아야 한다. 만들고 나서 소비하면 같은
+   > 링크를 동시에 연 두 사람이 둘 다 교수자로 생성된 뒤에야 소비 단계에 도달한다.
 2. **학생은 초대 게이트와 무관.** 학생은 교수자가 만든 강의 링크로 자유 가입한다. 이 문서의 어떤
    작업도 **학생 회원가입 흐름을 건드려선 안 된다.**
 3. **운영자 임퍼서네이션은 읽기 전용이다.** F 작업의 view-as 세션은 어떤 경로로도 쓰기를 허용하지
    않는다. "관리자니까 대신 고쳐준다"는 유혹을 코드에 남기지 말 것 — **이 문서가 새로 추가하는
    쓰기는 §5 의 4개뿐이다**(기존 쓰기는 §5 후단 참조).
 4. **마이그레이션은 수기 작성**(autogenerate 아님). 기존 `00XX_*.py` 컨벤션(`Revision ID`,
-   `Revises`, 한글 docstring, upgrade/downgrade)을 따른다. **현재 head 는 `0070_add_session_paused_at`
-   이므로 다음 번호는 `0071`.**
+   `Revises`, 한글 docstring, upgrade/downgrade)을 따른다. ~~현재 head 는 `0070`~~ →
+   **`0071_open_professor_invites` 가 머지되어 head 는 `0071`, 다음 번호는 `0072`.**
 5. **디자인은 v2 토큰만.** `docs/design-system/` 의 라이트 베이지 + 골드. 현 `/admin/*` 페이지의
    `bg-gray-50` · `indigo-600` 은 v2 이전 잔재이므로 이번에 전부 교체한다. 프로토타입 08 이 기준.
 6. **차트 색은 골드 단일 시퀀셜 램프만.** 서비스 5종에 5색을 배정하는 카테고리컬 팔레트는 v2 정책
@@ -165,7 +174,7 @@
 
 **목표**: 실패한 렌더를 `error_message` 원문까지 펼쳐 보고, 확인/해결 상태를 남긴다.
 
-**마이그레이션 `0071_add_render_triage.py`**
+**마이그레이션 `0072_add_render_triage.py`** *(0071 은 공개 초대가 가져갔다 — §0-1 참조)*
 ```
 video_renders.triaged_at   TIMESTAMPTZ NULL   -- 운영자가 확인한 시각
 video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
@@ -272,10 +281,11 @@ video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
 
 ---
 
-## 3. 마이그레이션 순서 (head `0070` 기준)
+## 3. 마이그레이션 순서
 
 ```
-0071  video_renders.triaged_at + triage_note + ix_video_renders_status_created   (C)
+0071  professor_invites.email nullable + ix_professor_invites_unused   (공개 초대 — 머지됨)
+0072  video_renders.triaged_at + triage_note + ix_video_renders_status_created   (C)
 ```
 그 외 작업(A·B·D·E·F)은 **스키마 변경 없음** — 전부 read 엔드포인트와 프론트다.
 적용: `docker compose exec backend alembic upgrade head`.
@@ -352,6 +362,10 @@ video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
 
 ## 변경 이력
 
+- 2026-07-25: **공개 초대 도입** — `professor_invites.email` 을 nullable 로 바꿔 대상 이메일 없이
+  1회용 링크·QR 을 발급할 수 있게 했다(`0071`). 이메일 잠금이 빠진 만큼 단일 사용이 마지막
+  방어선이 되므로 소비를 `claim_invite` 의 조건부 UPDATE 로 원자화하고, 순서를 "유저 생성 → 소비"
+  에서 **"자리 선점 → 유저 생성"** 으로 뒤집었다. §0-1·§3·§C 마이그레이션 번호 갱신.
 - 2026-07-25: **E 착수 시 발견한 문서 내부 모순 3건 정정.** (1) §5 는 "이 문서가 새로 추가하는
   쓰기"의 상한인데 절대 규칙처럼 쓰여 있어, 스펙 13 에서 이미 머지된 `/admin/users` 의 쓰기 4종을
   제거 대상으로 오독할 수 있었다 — 그 4종은 전부 감사 로그를 남기므로 §5 의 실제 기준을 이미
