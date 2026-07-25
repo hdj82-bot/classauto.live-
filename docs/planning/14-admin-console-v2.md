@@ -228,6 +228,12 @@ video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
 - `/admin/testers/[id]` 는 드릴다운이므로 사이드바에 넣지 않는다.
 - 미처리 이슈·피드백 수는 **사이드바 배지**로 노출(개요의 카드와 같은 소스). E 시점엔 피드백만,
   이슈 배지는 C 에서 추가.
+- **교수자 셸 사이드바의 진입점도 함께 바꾼다** — `components/professor/shell/Sidebar.tsx` 의
+  "베타 초대"(`/owner/invites`) → **"운영자 콘솔"(`/admin`)**. A 에서 `/owner/invites` 가
+  `/admin/invites` 로 redirect 되게 바뀌어 구 경로는 리다이렉트를 한 번 타고, 초대 화면 하나만
+  열려 나머지 콘솔 화면은 계정주가 주소를 외워야 한다. `/admin` 으로 보내면 콘솔 전체가 열리고
+  초대는 그 안의 탭이 된다. 노출 게이트도 `canManageInvites` → `isOwnerEmail` 로 바꾼다
+  (둘 다 같은 `OWNER_EMAILS` 를 보지만, 이제 판정 대상이 초대가 아니라 콘솔 전체 진입이다).
 
 **디자인 전환** — 대상 파일 전부(`admin/**/page.tsx`, `admin/layout.tsx`):
 - `bg-gray-50`/`gray-900`/`indigo-600` → v2 토큰(`bg-bg`, `bg-bg-subtle`, `text-gold-on-light`,

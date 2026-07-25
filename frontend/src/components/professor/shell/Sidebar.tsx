@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { canSeeAnalyticsPro } from "@/lib/analyticsProAccess";
-import { canManageInvites } from "@/lib/ownerAccess";
+import { isOwnerEmail } from "@/lib/ownerAccess";
 import { fetchProfessorData } from "@/lib/professorData";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
@@ -202,9 +202,13 @@ const navItems: NavItem[] = [
     ),
   },
   {
-    // 계정주(운영자) 전용 — 베타테스터 초대 링크 발급/관리. canManageInvites 로 노출 제어.
-    href: "/owner/invites",
-    labelKey: "nav.betaInvites",
+    // 계정주(운영자) 전용 — 관리자 콘솔 진입점. isOwnerEmail 로 노출 제어.
+    // 스펙 14 §E: 종전엔 `/owner/invites` 를 직접 가리켰는데, §A 에서 그 경로가
+    // `/admin/invites` 로 redirect 되게 바뀌어 리다이렉트를 한 번 타게 됐고, 초대
+    // 화면 하나만 열려 나머지 콘솔 화면은 주소를 외워야 했다. `/admin` 으로 보내면
+    // 콘솔 전체가 열리고 초대는 그 안의 탭이 된다.
+    href: "/admin",
+    labelKey: "nav.adminConsole",
     iconId: "ic-invite",
     icon: (
       <svg
@@ -273,13 +277,15 @@ export default function ProfessorSidebar() {
   // "강의 영상 생성" 클릭 → 진행 중 강의 해석 중 표시(중복 클릭 방지 + 시각 피드백).
   const [studioResolving, setStudioResolving] = useState(false);
 
-  // 학습 분석 PRO(실기능)는 계정주 2계정에만, 베타 초대는 계정주(ADMIN_EMAILS)에게만
+  // 학습 분석 PRO(실기능)는 계정주 2계정에만, 운영자 콘솔은 계정주(ADMIN_EMAILS)에게만
   // 노출 — 베타테스터에겐 두 메뉴를 숨긴다. 실제 접근 차단은 백엔드(require_analytics_pro·
   // require_owner)가 담당하며 이 필터는 진입점 노출 제어다.
   const email = auth?.user?.email;
   const visibleNavItems = navItems.filter((it) => {
     if (it.href === "/professor/analytics-pro") return canSeeAnalyticsPro(email);
-    if (it.href === "/owner/invites") return canManageInvites(email);
+    // 초대 하나가 아니라 콘솔 전체 진입이므로 isOwnerEmail 로 판정한다
+    // (ProtectedRoute 의 allowOwner 와 같은 함수 — 노출과 접근 판정이 어긋나지 않는다).
+    if (it.href === "/admin") return isOwnerEmail(email);
     return true;
   });
 
