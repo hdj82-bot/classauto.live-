@@ -50,6 +50,7 @@ ClassAuto는 일반 EdTech가 아닙니다. **학자가 학자를 위해 만든 
 - `12-self-avatar-onboarding.md` — 교수자 본인 아바타 온보딩 (Photo Avatar 룩)
 - `13-beta-admin-console.md` — 베타 운영자(계정주) 콘솔 구현 스펙 (A~G)
 - `14-admin-console-v2.md` — 운영자 콘솔 v2: 통합·QR·자료열람·이슈추적 (A~F, 프로토타입 08 과 한 쌍)
+- `15-enrollment-roster.md` — 수강 등록·명단·반 관리 설계 (Enrollment 모델, 제적, 반별 통계)
 
 ### 디자인 시스템 (`docs/design-system/`)
 - `00-README.md` — 디자인 시스템 인덱스

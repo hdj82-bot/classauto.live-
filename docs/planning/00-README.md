@@ -22,6 +22,9 @@
 | 10 | [10-research-data-model.md](./10-research-data-model.md) | 연구·계측 데이터 모델 (베타 로깅 스키마, 테이블 명세) | 🟡 설계 v0.1 |
 | 11 | [11-analytics-dashboard.md](./11-analytics-dashboard.md) | 학습 분석 대시보드 & AI 대면 수업 브리핑 (`/analytics`) | 🟡 설계 v0.1 |
 | 12 | [12-self-avatar-onboarding.md](./12-self-avatar-onboarding.md) | 교수자 본인 아바타 온보딩 (Photo Avatar 룩 / Design with AI, Avatar III) | 🟡 설계 v0.1 |
+| 13 | [13-beta-admin-console.md](./13-beta-admin-console.md) | 베타 운영자(계정주) 콘솔 구현 스펙 (A~G) | ✓ 머지 완료 |
+| 14 | [14-admin-console-v2.md](./14-admin-console-v2.md) | 운영자 콘솔 v2 — 통합·QR·자료열람·이슈추적 (A~F, 프로토타입 08 과 한 쌍) | 🟡 A·E 머지, B~F 대기 |
+| 15 | [15-enrollment-roster.md](./15-enrollment-roster.md) | 수강 등록·명단·반 관리 (Enrollment 모델, 제적, 반별 통계) | 🟡 설계 v0.1 — 열린 질문 3건 |
 
 ---
 
