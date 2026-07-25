@@ -259,6 +259,26 @@ async def lecture(db: AsyncSession, course: Course) -> Lecture:
 
 
 @pytest_asyncio.fixture
+async def enrolled_student(db: AsyncSession, course: Course, student: User) -> User:
+    """`student` 를 `course` 에 등록시킨 뒤 그대로 돌려준다.
+
+    스펙 15 §4.3 이후 세션 시작은 **활성 등록**을 요구한다. 세션 API 를 호출하는
+    테스트는 이 픽스처를 받아 전제를 명시한다(등록 없이 부르면 403 이 정상이다).
+    """
+    from app.models.enrollment import Enrollment
+
+    db.add(
+        Enrollment(
+            id=uuid.uuid4(),
+            course_id=course.id,
+            student_id=student.id,
+        )
+    )
+    await db.flush()
+    return student
+
+
+@pytest_asyncio.fixture
 async def video_pending(db: AsyncSession, lecture: Lecture, professor: User) -> Video:
     """pending_review 상태의 영상 + 스크립트."""
     v = Video(

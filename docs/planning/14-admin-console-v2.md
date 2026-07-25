@@ -174,7 +174,9 @@
 
 **목표**: 실패한 렌더를 `error_message` 원문까지 펼쳐 보고, 확인/해결 상태를 남긴다.
 
-**마이그레이션 `0072_add_render_triage.py`** *(0071 은 공개 초대가 가져갔다 — §0-1 참조)*
+**마이그레이션 `0073_add_render_triage.py`** *(0071 = 공개 초대, 0072 = 수강 등록(스펙 15).
+착수 시점의 실제 head 를 확인하고 그 다음 번호를 쓸 것 — 미구현 작업에 번호를 예약해 두면
+먼저 머지되는 쪽과 계속 어긋난다.)*
 ```
 video_renders.triaged_at   TIMESTAMPTZ NULL   -- 운영자가 확인한 시각
 video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
@@ -285,7 +287,8 @@ video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
 
 ```
 0071  professor_invites.email nullable + ix_professor_invites_unused   (공개 초대 — 머지됨)
-0072  video_renders.triaged_at + triage_note + ix_video_renders_status_created   (C)
+0072  enrollments + courses.term                                       (스펙 15 1단계 — 머지됨)
+0073  video_renders.triaged_at + triage_note + ix_video_renders_status_created   (C)
 ```
 그 외 작업(A·B·D·E·F)은 **스키마 변경 없음** — 전부 read 엔드포인트와 프론트다.
 적용: `docker compose exec backend alembic upgrade head`.

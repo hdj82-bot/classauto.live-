@@ -12,11 +12,12 @@ from tests.conftest import make_auth_header
 # ── 세션 생성 ────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_create_session(client, student, lecture):
+async def test_create_session(client, enrolled_student, lecture):
+    # 스펙 15 §4.3 — 세션 시작은 활성 등록을 요구한다(미등록은 403).
     resp = await client.post(
         "/api/v1/sessions",
         params={"lecture_id": str(lecture.id), "total_sec": 600},
-        headers=make_auth_header(student),
+        headers=make_auth_header(enrolled_student),
     )
     assert resp.status_code == 200
     data = resp.json()
