@@ -18,7 +18,7 @@ from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.user import User, UserRole
 from app.models.video_render import VideoRender
-from app.services import admin_analytics
+from app.services import admin_analytics, admin_budget
 from app.services.admin_audit import log_admin_action
 
 logger = logging.getLogger(__name__)
@@ -295,6 +295,26 @@ async def get_costs(
         ],
         "by_month": breakdown["by_month"],
     }
+
+
+# ── GET /api/v1/admin/budget ─────────────────────────────────────────────────
+
+
+@router.get("/budget")
+async def get_budget(
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """예산 서킷 브레이커 소진율 + 활성 교수자 수 대비 1인당 소진 (스펙 13 §C-1).
+
+    전역 브레이커라 **한 명이 한도를 채우면 나머지 전원의 렌더가 동시에 멈춘다.**
+    베타 인원을 늘리기 전에 이 값을 보고 예산을 먼저 올려야 하며, 콘솔 개요가
+    ``warn_threshold_pct``(80%)를 넘으면 경고를 띄운다.
+
+    집계 정의는 브레이커(`services/pipeline/budget.py`)와 동일하다 — 미터가 60%
+    라는데 브레이커가 터지면 원인을 못 찾는다.
+    """
+    return await admin_budget.budget_overview(db)
 
 
 # ── GET /api/v1/admin/system ─────────────────────────────────────────────────
