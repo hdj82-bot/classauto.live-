@@ -210,6 +210,8 @@ export interface OwnerInvite {
   token: string;
   email: string;
   role: string;
+  // 베타 코호트 태그(예: "2026-08"). 가입 시 users.cohort 로 전파된다.
+  cohort: string | null;
   status: "active" | "used" | "expired";
   invite_url: string;
   created_at: string;
@@ -221,8 +223,13 @@ export interface OwnerInvite {
 // ADMIN_EMAILS 로 권한을 강제하므로, 비운영자가 호출하면 403 이 떨어진다.
 export const ownerInviteApi = {
   list: () => api.get<OwnerInvite[]>("/api/owner/invites"),
-  create: (email: string) =>
-    api.post<OwnerInvite>("/api/owner/invites", { email }),
+  // cohort 는 백엔드 InviteCreateRequest 가 이미 받는 선택 필드다(빈 문자열은
+  // 서버에서 None 으로 정규화됨). 미지정이면 아예 보내지 않는다.
+  create: (email: string, cohort?: string | null) =>
+    api.post<OwnerInvite>("/api/owner/invites", {
+      email,
+      ...(cohort ? { cohort } : {}),
+    }),
   revoke: (id: string) =>
     api.delete(`/api/owner/invites/${encodeURIComponent(id)}`),
 };
