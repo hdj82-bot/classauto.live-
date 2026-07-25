@@ -6,13 +6,14 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useI18n } from "@/contexts/I18nContext";
 
 // 운영자 베타 신청 수신함 — 대문 '베타 신청하기' 제출 목록 + 상태 토글.
+// 스펙 14 §E — v2 토큰 전환. 의미 컬러는 상태 칩에만(§0-6).
 const STATUSES = ["new", "contacted", "approved", "rejected"] as const;
 
 const STATUS_STYLE: Record<string, string> = {
-  new: "bg-amber-100 text-amber-700",
-  contacted: "bg-blue-100 text-blue-700",
-  approved: "bg-green-100 text-green-700",
-  rejected: "bg-gray-200 text-gray-600",
+  new: "bg-warning/10 text-warning",
+  contacted: "bg-info/10 text-info",
+  approved: "bg-success/10 text-success",
+  rejected: "bg-text/5 text-text-subtle",
 };
 
 export default function AdminBetaApplicationsPage() {
@@ -77,14 +78,14 @@ export default function AdminBetaApplicationsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold text-gray-900">
+      <div className="animate-fade-in-up mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-text">
           {t("admin.applicationsTitle")}
         </h1>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+          className="rounded-lg border border-line-strong bg-bg-card px-3 py-2 text-sm text-text outline-none focus:border-gold-on-light"
           aria-label={t("admin.applicationsFilterAll")}
         >
           <option value="">{t("admin.applicationsFilterAll")}</option>
@@ -97,48 +98,49 @@ export default function AdminBetaApplicationsPage() {
       </div>
 
       {error && (
-        <div className="text-red-600 mb-4 text-sm" role="alert">
+        <div className="mb-4 text-sm text-warning" role="alert">
           {error}
         </div>
       )}
 
       {items.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-10 text-center text-gray-500 text-sm">
+        <div className="animate-fade-in-up rounded-2xl border border-line bg-bg-card p-10 text-center text-sm text-text-subtle shadow-sm">
           {t("admin.applicationsEmpty")}
         </div>
       ) : (
         <div className="space-y-3">
           {items.map((a) => (
-            <div key={a.id} className="bg-white rounded-xl shadow-sm p-4">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold text-gray-900">
-                    {a.name}
-                  </span>
-                  <span className="text-xs text-gray-500">
+            <div
+              key={a.id}
+              className="animate-fade-in-up rounded-2xl border border-line bg-bg-card p-4 shadow-sm"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-bold text-text">{a.name}</span>
+                  <span className="text-xs text-text-muted">
                     {a.school} · {a.department} · {a.professor_title}
                   </span>
                   <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[a.status]}`}
+                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[a.status]}`}
                   >
                     {t(`admin.applicationsStatus.${a.status}`)}
                   </span>
                 </div>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs tabular-nums text-text-subtle">
                   {a.created_at.slice(0, 16).replace("T", " ")}
                 </span>
               </div>
 
-              <div className="text-xs text-gray-600 mt-2 flex flex-wrap gap-x-4 gap-y-1">
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-muted">
                 <a
                   href={`mailto:${a.email}`}
-                  className="text-[#B88308] hover:underline font-medium"
+                  className="font-medium text-gold-on-light hover:underline"
                 >
                   {a.email}
                 </a>
                 <span>{t("admin.applicationsSubject")}: {a.subject}</span>
                 {a.student_count ? (
-                  <span>{t("admin.applicationsStudents")}: {a.student_count}</span>
+                  <span className="tabular-nums">{t("admin.applicationsStudents")}: {a.student_count}</span>
                 ) : null}
                 <span>
                   {t("admin.applicationsTiming")}:{" "}
@@ -151,22 +153,22 @@ export default function AdminBetaApplicationsPage() {
               </div>
 
               {a.message ? (
-                <p className="text-sm text-gray-800 mt-2 whitespace-pre-wrap border-l-2 border-gray-200 pl-3">
+                <p className="mt-2 border-l-2 border-line-strong pl-3 text-sm whitespace-pre-wrap text-text">
                   {a.message}
                 </p>
               ) : null}
 
-              <div className="flex items-center justify-end gap-1 mt-3 flex-wrap">
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-1">
                 {STATUSES.map((s) => (
                   <button
                     key={s}
                     type="button"
                     disabled={busy === a.id || a.status === s}
                     onClick={() => setStatus(a.id, s)}
-                    className={`text-xs px-2 py-1 rounded-md border transition ${
+                    className={`rounded-md border px-2 py-1 text-xs font-semibold transition ${
                       a.status === s
-                        ? "border-indigo-500 bg-indigo-50 text-indigo-700 cursor-default"
-                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                        ? "cursor-default border-gold-on-light bg-gold/10 text-gold-on-light"
+                        : "border-line-strong text-text-muted hover:bg-bg-hover"
                     } disabled:opacity-60`}
                   >
                     {t(`admin.applicationsStatus.${s}`)}

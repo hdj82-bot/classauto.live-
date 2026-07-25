@@ -316,9 +316,11 @@
     "en": "English"
   },
   "admin": {
-    "title": "IFL Admin",
-    "subtitle": "Admin Console",
-    "navDashboard": "Dashboard",
+    "subtitle": "Beta Operator Console",
+    "navGroupOps": "Operations",
+    "navGroupQuality": "Quality",
+    "navGroupWatch": "Monitoring",
+    "navDashboard": "Overview",
     "navInvites": "Invites · QR",
     "navUsers": "Users",
     "invites": {
@@ -413,9 +415,12 @@
     "systemRedisClients": "Connected clients",
     "systemQueueLen": "Queue length",
     "navApplications": "Beta applications",
-    "navBeta": "Beta overview",
+    "navBeta": "Beta status",
     "navFeedback": "Feedback",
     "navAudit": "Audit log",
+    "betaRowMenu": "Row menu",
+    "betaMenuAnalyticsPro": "PRO analytics",
+    "betaMenuManageUsers": "Role · deletion in Users",
     "applicationsTitle": "Beta application inbox",
     "applicationsLoadingLabel": "Loading beta applications...",
     "applicationsLoadError": "Failed to load beta applications.",

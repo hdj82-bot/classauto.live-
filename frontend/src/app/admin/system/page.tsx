@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useI18n } from "@/contexts/I18nContext";
 
+// 스펙 14 §E — v2 토큰 전환. 온라인/불명 dot 은 §0-6 이 허용하는 상태 인디케이터.
 interface SystemData {
   db_size_mb: number | null;
   redis_used_memory_mb: number | null;
@@ -46,7 +47,13 @@ export default function AdminSystemPage() {
   }, [fetchData]);
 
   if (loading) return <LoadingSpinner fullScreen label={t("admin.systemLoadingLabel")} />;
-  if (error) return <div className="text-red-600 text-center py-20" role="alert">{error}</div>;
+  if (error) {
+    return (
+      <div className="py-20 text-center text-warning" role="alert">
+        {error}
+      </div>
+    );
+  }
   if (!data) return null;
 
   const items = [
@@ -76,32 +83,39 @@ export default function AdminSystemPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{t("admin.systemTitle")}</h1>
+      <div className="animate-fade-in-up mb-6 flex items-center justify-between">
+        <h1 className="font-display text-2xl font-extrabold tracking-tight text-text">
+          {t("admin.systemTitle")}
+        </h1>
         <button
+          type="button"
           onClick={fetchData}
-          className="text-sm text-indigo-600 hover:underline"
+          className="rounded-lg border border-line-strong px-3 py-1.5 text-sm font-semibold text-text-muted transition hover:bg-bg-hover"
         >
           {t("admin.systemRefresh")}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {items.map((item) => (
-          <div key={item.title} className="bg-white rounded-xl shadow-sm p-6">
-            <div className="flex items-center gap-2 mb-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {items.map((item, i) => (
+          <div
+            key={item.title}
+            className={`animate-fade-in-up stagger-${i + 1} rounded-2xl border border-line bg-bg-card p-5 shadow-sm`}
+          >
+            <div className="mb-4 flex items-center gap-2">
               <span
-                className={`inline-block w-2.5 h-2.5 rounded-full ${
-                  item.status === "online" ? "bg-green-500" : "bg-gray-400"
+                aria-hidden
+                className={`inline-block h-2.5 w-2.5 rounded-full ${
+                  item.status === "online" ? "bg-success" : "bg-text-faint"
                 }`}
               />
-              <h3 className="text-lg font-semibold text-gray-900">{item.title}</h3>
+              <h3 className="text-base font-bold text-text">{item.title}</h3>
             </div>
             <div className="space-y-2">
               {item.metrics.map((m) => (
                 <div key={m.label} className="flex justify-between text-sm">
-                  <span className="text-gray-500">{m.label}</span>
-                  <span className="font-mono text-gray-900">{m.value}</span>
+                  <span className="text-text-muted">{m.label}</span>
+                  <span className="font-mono tabular-nums text-text">{m.value}</span>
                 </div>
               ))}
             </div>
@@ -109,7 +123,7 @@ export default function AdminSystemPage() {
         ))}
       </div>
 
-      <p className="text-xs text-gray-400 mt-6 text-center">{t("admin.systemAutoRefresh")}</p>
+      <p className="mt-6 text-center text-xs text-text-subtle">{t("admin.systemAutoRefresh")}</p>
     </div>
   );
 }
