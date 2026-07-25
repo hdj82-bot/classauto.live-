@@ -1400,6 +1400,8 @@
       "privacyLink": "Read the student data policy",
       "lectureNotFoundTitle": "Lecture not found",
       "lectureNotFoundDesc": "The link may be wrong or the lecture has been removed.",
+      "withdrawnTitle": "Your enrollment in this course has ended",
+      "withdrawnDesc": "Please contact your professor. To take the course again, your professor needs to restore you to the roster.",
       "backToHome": "Back to home",
       "loadingLecture": "Loading lecture…",
       "metaPlaceholder": "Loading lecture details",

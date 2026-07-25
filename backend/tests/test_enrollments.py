@@ -166,9 +166,23 @@ async def test_reactivate_reuses_same_row(
 # ── 세션 시작 게이트 (스펙 15 §1.3 구멍 차단) ───────────────────────────────────
 
 
+@pytest.fixture
+def gate_on(monkeypatch):
+    """등록 게이트를 켠다.
+
+    운영 기본값은 False 다 — 프론트(Vercel)와 백엔드(Railway)를 원자적으로 배포할
+    수 없어, 게이트를 켠 백엔드가 먼저 나가면 아직 join 을 호출하지 않는 프론트
+    때문에 모든 학생이 재생 불가가 되기 때문(스펙 15 §11 배포 절차).
+    """
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ENROLLMENT_GATE_ENABLED", True)
+    return settings
+
+
 @pytest.mark.asyncio
 async def test_session_start_requires_active_enrollment(
-    client, db, other_student_factory, lecture: Lecture
+    client, db, gate_on, other_student_factory, lecture: Lecture
 ):
     """**핵심 회귀 가드** — lecture_id 만 아는 미등록 학생은 세션을 시작할 수 없다.
 
@@ -181,6 +195,22 @@ async def test_session_start_requires_active_enrollment(
     )
     assert resp.status_code == 403
     assert "등록되지 않았습니다" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_gate_disabled_does_not_block_unenrolled(
+    client, db, other_student_factory, lecture: Lecture
+):
+    """**배포 1단계 무해성** — flag=False 면 미등록 학생도 종전처럼 통과한다.
+
+    백엔드가 프론트보다 먼저 나가는 구간에서 학생 재생이 멈추면 안 된다.
+    """
+    outsider = await other_student_factory()
+    resp = await client.post(
+        f"/api/v1/sessions?lecture_id={lecture.id}&total_sec=600",
+        headers=make_auth_header(outsider),
+    )
+    assert resp.status_code == 200, resp.text
 
 
 @pytest.mark.asyncio
@@ -206,7 +236,7 @@ async def test_session_start_allowed_after_join(
 
 @pytest.mark.asyncio
 async def test_withdrawn_student_cannot_start_session(
-    client, db, student: User, professor: User, lecture: Lecture, course: Course
+    client, db, gate_on, student: User, professor: User, lecture: Lecture, course: Course
 ):
     """제적 후에는 이미 알고 있던 lecture_id 로도 시청할 수 없다."""
     enrollment = await enrollment_svc.join_course(db, course.id, student.id)

@@ -11,7 +11,9 @@ from pydantic import BaseModel, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_student
+from app.core.config import settings
 from app.db.session import get_db
+from app.models.enrollment import ENROLLMENT_ACTIVE
 from app.models.user import User
 from app.services import enrollment as enrollment_svc
 
@@ -124,7 +126,15 @@ async def assert_enrolled_for_lecture(
     종전에는 `lecture_id`(UUID) 하나만 알면 세션이 시작됐다(스펙 15 §1.3). 이제는
     등록 진입점을 통과한 학생만 시청·퀴즈·질문을 할 수 있고, UUID 가 로그·API 응답·
     공유 화면으로 새어도 그것만으로는 아무것도 못 한다.
+
+    **``settings.ENROLLMENT_GATE_ENABLED`` 뒤에 있다.** 프론트(Vercel)와 백엔드
+    (Railway)를 원자적으로 배포할 수 없어, 게이트를 켠 백엔드가 먼저 나가면 아직
+    join 을 호출하지 않는 프론트 때문에 모든 학생이 재생 불가가 된다. 배포 순서는
+    스펙 15 §11 을 따르고, 롤백은 이 환경변수 하나로 끝난다.
     """
+    if not settings.ENROLLMENT_GATE_ENABLED:
+        return
+
     course_id = await enrollment_svc.resolve_course_id(db, lecture_id=lecture_id)
     if course_id is None:
         raise HTTPException(
@@ -136,7 +146,7 @@ async def assert_enrolled_for_lecture(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=NOT_ENROLLED_DETAIL
         )
-    if existing.status != "active":
+    if existing.status != ENROLLMENT_ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail=WITHDRAWN_DETAIL
         )
