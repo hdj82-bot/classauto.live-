@@ -21,6 +21,7 @@ from app.api.v1.questions import router as questions_router
 from app.api.v1.videos import router as videos_router
 
 # 통합된 새 라우터
+from app.api.v1.enrollments import router as enrollments_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.render import router as render_router
@@ -107,6 +108,7 @@ app.include_router(videos_router)
 
 # 새 라우터 등록
 app.include_router(sessions_router)
+app.include_router(enrollments_router)
 app.include_router(dashboard_router)
 app.include_router(render_router)
 app.include_router(webhooks_router)

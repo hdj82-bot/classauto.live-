@@ -19,7 +19,9 @@ def _utcnow():
 # ── 동시 재생 제한 ────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_concurrent_session_limit(client, student, lecture):
+async def test_concurrent_session_limit(client, enrolled_student, lecture):
+    # 스펙 15 §4.3 — 세션 시작은 활성 등록을 요구한다.
+    student = enrolled_student
     """같은 user+lecture 의 두 번째 활성 세션 생성은 409 로 거부된다."""
     first = await client.post(
         "/api/v1/sessions",
@@ -37,7 +39,9 @@ async def test_concurrent_session_limit(client, student, lecture):
 
 
 @pytest.mark.asyncio
-async def test_completed_session_does_not_block_new(client, student, lecture, db):
+async def test_completed_session_does_not_block_new(client, enrolled_student, lecture, db):
+    # 스펙 15 §4.3 — 세션 시작은 활성 등록을 요구한다.
+    student = enrolled_student
     """완료된 세션은 활성으로 치지 않으므로 새 세션 생성이 가능하다."""
     done = LearningSession(
         id=uuid.uuid4(),

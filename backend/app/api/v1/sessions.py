@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, require_student
+from app.api.v1.enrollments import assert_enrolled_for_lecture
 from app.db.session import get_db
 from app.models.session import SessionStatus
 from app.models.user import User
@@ -23,12 +24,18 @@ async def create_session(
     """학습 세션 시작.
 
     같은 user+lecture 의 활성(미완료) 세션이 이미 있으면 409 로 거부한다(동시 재생 제한).
+
+    **등록 게이트(스펙 15 §4.3)**: 강의가 속한 강좌에 활성 등록이 있어야 한다. 종전에는
+    `require_student` 만 봐서 `lecture_id`(UUID) 하나만 알면 타 학교 학생도 세션을
+    시작할 수 있었다. 등록은 `POST /api/v1/enrollments/join` 이 만든다 — 여기서 자동
+    생성하면 그 구멍이 그대로 남는다.
     """
     if total_sec <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="total_sec는 양수여야 합니다.",
         )
+    await assert_enrolled_for_lecture(db, lecture_id, user.id)
     session = await session_svc.create_session(db, user.id, lecture_id, total_sec)
     return {"id": str(session.id), "status": session.status.value}
 
