@@ -18,7 +18,7 @@ from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.user import User, UserRole
 from app.models.video_render import VideoRender
-from app.services import admin_analytics, admin_budget
+from app.services import admin_analytics, admin_artifacts, admin_budget
 from app.services.admin_audit import log_admin_action
 
 logger = logging.getLogger(__name__)
@@ -435,6 +435,30 @@ async def get_beta_overview(
         "cohort": cohort,
         "instructors": rows[start : start + limit],
     }
+
+
+# ── B: GET /api/v1/admin/users/{user_id}/artifacts ───────────────────────────
+
+
+@router.get("/users/{user_id}/artifacts")
+async def get_user_artifacts(
+    user_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """테스터가 만든 자료 — 강의별 PPT/스크립트/아바타/퀴즈 4단계 (스펙 14 §B).
+
+    `/usage` 가 강의 제목만 줘서 "어떤 자료를 만들어 쓰는지"가 안 보이던 걸 메운다.
+    재렌더 잔여(count/cap)·실패 렌더 수·강의 귀속 비용을 함께 돌려준다.
+
+    쿼리 수는 강의 수와 무관하게 고정이다(N+1 금지 — §B 구현 주의).
+    """
+    result = await admin_artifacts.user_artifacts(db, user_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다."
+        )
+    return result
 
 
 # ── A: GET /api/v1/admin/users/{user_id}/usage ───────────────────────────────
