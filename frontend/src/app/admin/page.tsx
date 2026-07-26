@@ -21,10 +21,20 @@ interface Stats {
   total_renders: number;
 }
 
+interface UnitCosts {
+  heygen_usd_per_second: number;
+  visionstory_usd_per_second: number;
+  visionstory_to_heygen_ratio: number | null;
+  expected_ratio: number;
+  /** false = 한쪽만 env override 된 상태일 수 있다(스펙 13 §C-1a). */
+  ratio_consistent: boolean;
+}
+
 interface BudgetService {
   service: string;
   mock: boolean;
-  unit_cost_usd_per_second: number;
+  /** 지금 실제로 적용 중인 단가 — 코드 기본값과 env 가 갈려도 이걸로 드러난다. */
+  effective_unit_cost_usd_per_second: number;
   daily_budget_usd: number;
   spent_today_usd: number;
   day_pct: number | null;
@@ -38,6 +48,7 @@ interface BudgetService {
 interface BudgetOverview {
   active_professor_count: number;
   warn_threshold_pct: number;
+  unit_costs: UnitCosts;
   services: BudgetService[];
 }
 
@@ -119,6 +130,21 @@ export default function AdminDashboardPage() {
             </span>
           </div>
           <p className="mt-1 text-xs text-text-subtle">{t("admin.budgetHint")}</p>
+
+          {/* 단가 드리프트 경고 — VisionStory 단가는 HeyGen 에서 유도된 값이라
+              한쪽만 env override 되면 코드가 전제하는 2배 관계가 깨진다.
+              이게 조용히 넘어가서 아무도 모르던 게 §C-1a 를 만든 이유다. */}
+          {!budget.unit_costs.ratio_consistent && (
+            <p
+              className="mt-3 rounded-lg bg-warning/10 px-3 py-2 text-xs font-semibold text-warning"
+              role="alert"
+            >
+              {t("admin.budgetRatioWarning", {
+                ratio: budget.unit_costs.visionstory_to_heygen_ratio ?? "—",
+                expected: budget.unit_costs.expected_ratio,
+              })}
+            </p>
+          )}
 
           <div className="mt-4 space-y-4">
             {budget.services.map((s) => (
@@ -206,6 +232,13 @@ function BudgetMeter({
           {t("admin.budgetPerProfessor", {
             amount: data.per_professor_month_usd.toFixed(2),
           })}
+          {/* 지금 적용 중인 단가를 함께 보여준다 — 어느 값으로 계산된 숫자인지
+              화면에서 바로 알 수 있어야 드리프트가 숨지 않는다. */}
+          <span className="ml-2 text-text-faint">
+            {t("admin.budgetUnitCost", {
+              rate: data.effective_unit_cost_usd_per_second,
+            })}
+          </span>
         </span>
         {/* "몇 명까지 더 초대해도 되나" — 1인당 소진이 0이면 추정 근거가 없어 숨긴다. */}
         {data.headroom_professors !== null && (

@@ -75,8 +75,69 @@ async def test_budget_reports_limits_and_active_professors(client, db, owner_fac
     assert set(services) == {"heygen", "visionstory"}
     assert services["heygen"]["monthly_budget_usd"] == settings.HEYGEN_MONTHLY_BUDGET_USD
     assert services["heygen"]["daily_budget_usd"] == settings.HEYGEN_DAILY_BUDGET_USD
-    # 인원 확대 판단의 근거가 되는 단가도 함께 노출한다.
-    assert services["heygen"]["unit_cost_usd_per_second"] == settings.HEYGEN_COST_USD_PER_SECOND
+    # 인원 확대 판단의 근거가 되는 **유효** 단가도 함께 노출한다.
+    assert (
+        services["heygen"]["effective_unit_cost_usd_per_second"]
+        == settings.HEYGEN_COST_USD_PER_SECOND
+    )
+    assert (
+        services["visionstory"]["effective_unit_cost_usd_per_second"]
+        == settings.VISIONSTORY_COST_USD_PER_SECOND
+    )
+
+
+# ── 단가 드리프트 감시 (스펙 13 §C-1a) ─────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_budget_exposes_effective_unit_costs(client, db, owner_factory):
+    """지금 어느 단가로 돌고 있는지가 응답에 드러나야 한다.
+
+    코드 기본값과 Railway env 가 갈렸는데 아무도 몰랐던 게 이 기능의 존재 이유다.
+    """
+    owner = await owner_factory()
+    data = (
+        await client.get("/api/v1/admin/budget", headers=make_auth_header(owner))
+    ).json()
+
+    costs = data["unit_costs"]
+    assert costs["heygen_usd_per_second"] == settings.HEYGEN_COST_USD_PER_SECOND
+    assert costs["visionstory_usd_per_second"] == settings.VISIONSTORY_COST_USD_PER_SECOND
+    assert costs["expected_ratio"] == 2.0
+    # 기본값은 0.0334 / 0.0167 = 정확히 2배.
+    assert costs["ratio_consistent"] is True
+
+
+@pytest.mark.asyncio
+async def test_ratio_inconsistency_is_flagged(client, db, owner_factory, monkeypatch):
+    """한쪽만 env override 되면(예: HeyGen 만 0.0083) 비율이 깨진 걸 알려야 한다.
+
+    VisionStory 단가는 HeyGen 에서 유도된 값이라, HeyGen 만 절반으로 낮추면
+    비율이 2 가 아니라 4 가 된다 — 조용히 넘어가면 안 되는 상태다.
+    """
+    monkeypatch.setattr(settings, "HEYGEN_COST_USD_PER_SECOND", 0.0083)
+    owner = await owner_factory()
+    data = (
+        await client.get("/api/v1/admin/budget", headers=make_auth_header(owner))
+    ).json()
+
+    costs = data["unit_costs"]
+    assert costs["ratio_consistent"] is False
+    # 0.0334 / 0.0083 = 4.024… — 2배 전제에서 두 배 넘게 벌어진다.
+    assert costs["visionstory_to_heygen_ratio"] == pytest.approx(
+        settings.VISIONSTORY_COST_USD_PER_SECOND / 0.0083, abs=0.001
+    )
+    assert costs["visionstory_to_heygen_ratio"] > 4.0
+
+
+def test_ratio_helpers_handle_disabled_accounting(monkeypatch):
+    """단가 0 = 회계 비활성 — 0으로 나누지 말고 비율 판정도 하지 않는다."""
+    from app.core import cost_rates
+
+    monkeypatch.setattr(settings, "HEYGEN_COST_USD_PER_SECOND", 0.0)
+    assert cost_rates.visionstory_to_heygen_ratio() is None
+    # 비율을 따질 대상이 아니므로 '불일치'로 보고하지 않는다.
+    assert cost_rates.ratio_is_consistent() is True
 
 
 @pytest.mark.asyncio

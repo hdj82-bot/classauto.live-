@@ -370,6 +370,8 @@
     "budgetActiveProfessors": "{count} active professors",
     "budgetPerProfessor": "${amount} per professor",
     "budgetHeadroom": "room for {count} more at this rate",
+    "budgetUnitCost": "${rate}/sec",
+    "budgetRatioWarning": "Unit-cost ratio is not {expected}x (currently {ratio}x). The VisionStory rate is derived from HeyGen's, so overriding only one via env breaks the assumption. Check both values.",
     "budgetDisabled": "{service} — no cap set (breaker disabled)",
     "budgetNearWarning": "{service} budget passed {pct}%. Raise the cap before inviting more.",
     "budgetOverWarning": "{service} monthly budget exceeded. Avatar generation is blocked for every professor.",
