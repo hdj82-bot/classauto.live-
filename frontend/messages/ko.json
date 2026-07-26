@@ -1780,7 +1780,10 @@
       "joining": "수강 등록 중...",
       "lecturesTitle": "강의 목록",
       "noLectures": "아직 발행된 강의가 없습니다. 교수님이 영상을 올리면 여기에 나타납니다.",
-      "lectureExpired": "시청 기간이 끝났습니다"
+      "lectureExpired": "시청 기간이 끝났습니다",
+      "previewTitle": "미리보기 — 학생에게는 이렇게 보입니다",
+      "previewDesc": "교수자 계정으로 열었습니다. 수강 등록은 하지 않으며, 강의는 학생 화면 대신 스튜디오에서 확인하세요.",
+      "previewOpenStudio": "스튜디오에서 열기"
     }
   },
   "ownerCosts": {

@@ -4,6 +4,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { authApi } from "@/lib/api";
+import { takeAuthNext } from "@/lib/authNext";
 
 function parseJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -19,7 +20,10 @@ function redirectByRole(role: string | undefined, router: ReturnType<typeof useR
   } else if (role === "professor") {
     router.replace("/professor/dashboard");
   } else {
-    router.replace("/dashboard");
+    // 학생은 보관해 둔 딥링크로 돌려보낸다(예: 스캔한 /c/[slug]). 이걸 빼면
+    // **이미 계정이 있는 학생**이 강좌 QR 을 찍어도 대시보드로 떨어져 등록이
+    // 호출되지 않는다 — 신규 가입만 complete-profile 에서 복귀하기 때문이다.
+    router.replace(takeAuthNext() ?? "/dashboard");
   }
 }
 

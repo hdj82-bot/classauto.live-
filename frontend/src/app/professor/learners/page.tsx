@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import {
   fetchProfessorData,
   getCachedProfessorData,
+  type CourseLite,
 } from "@/lib/professorData";
+import CourseQrPanel from "@/components/professor/learners/CourseQrPanel";
+import CourseRoster from "@/components/professor/learners/CourseRoster";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import PrivacyNotice from "@/components/professor/learners/PrivacyNotice";
 import { useLearnersI18n } from "@/components/professor/learners/useLearnersI18n";
@@ -15,10 +18,8 @@ import {
   Card,
 } from "@/components/professor/shell";
 
-interface Course {
-  id: string;
-  title: string;
-}
+/** 강좌 카드에서 열 수 있는 패널. 한 번에 하나만 연다. */
+type CoursePanel = "qr" | "roster";
 
 interface Lecture {
   id: string;
@@ -42,7 +43,7 @@ interface Lecture {
 export default function LearnersIndexPage() {
   const router = useRouter();
   const { t } = useLearnersI18n();
-  const [courses, setCourses] = useState<Course[]>(
+  const [courses, setCourses] = useState<CourseLite[]>(
     () => getCachedProfessorData<Lecture>()?.courses ?? [],
   );
   const [lectures, setLectures] = useState<Lecture[]>(
@@ -52,6 +53,15 @@ export default function LearnersIndexPage() {
     () => getCachedProfessorData<Lecture>() === null,
   );
   const [error, setError] = useState(false);
+  // 강좌별로 열려 있는 패널. 한 번에 하나만 열어 카드가 길어지지 않게 한다.
+  const [openPanel, setOpenPanel] = useState<Record<string, CoursePanel | null>>(
+    {},
+  );
+  const togglePanel = (courseId: string, panel: CoursePanel) =>
+    setOpenPanel((prev) => ({
+      ...prev,
+      [courseId]: prev[courseId] === panel ? null : panel,
+    }));
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +87,7 @@ export default function LearnersIndexPage() {
   }, []);
 
   const grouped = useMemo(() => {
-    const byCourse = new Map<string, { course: Course; lectures: Lecture[] }>();
+    const byCourse = new Map<string, { course: CourseLite; lectures: Lecture[] }>();
     for (const c of courses) byCourse.set(c.id, { course: c, lectures: [] });
     for (const l of lectures) {
       const cid = l.course_id;
@@ -85,9 +95,9 @@ export default function LearnersIndexPage() {
         byCourse.get(cid)!.lectures.push(l);
       }
     }
-    return Array.from(byCourse.values()).filter(
-      (g) => g.lectures.length > 0,
-    );
+    // 강의가 0개인 강좌도 남긴다 — 학기 초에 QR 을 띄워 수강 등록을 먼저 받는 것이
+    // 정상 순서다(스펙 15 §1.1). 종전에는 강의가 있어야만 강좌가 보였다.
+    return Array.from(byCourse.values());
   }, [courses, lectures]);
 
   if (loading) return <LoadingSpinner fullScreen label={t("loading")} />;
@@ -131,7 +141,7 @@ export default function LearnersIndexPage() {
                   borderBottom: "1px solid var(--line)",
                 }}
               >
-                <div>
+                <div className="min-w-0">
                   <p style={{ margin: 0, fontSize: 10, letterSpacing: "0.10em", textTransform: "uppercase", fontWeight: 700, color: "var(--text-faint)" }}>
                     {t("courseLabel")}
                   </p>
@@ -139,7 +149,52 @@ export default function LearnersIndexPage() {
                     {course.title}
                   </h2>
                 </div>
+                {/* 강좌 단위 도구 — 새 메뉴를 만들지 않고 이 카드 안에 둔다. */}
+                <div className="flex shrink-0 gap-2">
+                  {/* slug 는 백엔드 배포 전이면 없다. 그때는 QR 버튼만 빠진다. */}
+                  {course.slug && (
+                    <button
+                      type="button"
+                      onClick={() => togglePanel(course.id, "qr")}
+                      aria-expanded={openPanel[course.id] === "qr"}
+                      style={panelBtn(openPanel[course.id] === "qr")}
+                      data-testid={`course-qr-toggle-${course.id}`}
+                    >
+                      {t("courseQrButton")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => togglePanel(course.id, "roster")}
+                    aria-expanded={openPanel[course.id] === "roster"}
+                    style={panelBtn(openPanel[course.id] === "roster")}
+                    data-testid={`course-roster-toggle-${course.id}`}
+                  >
+                    {t("courseRosterButton")}
+                  </button>
+                </div>
               </header>
+
+              {openPanel[course.id] === "qr" && course.slug && (
+                <CourseQrPanel courseSlug={course.slug} courseTitle={course.title} />
+              )}
+              {openPanel[course.id] === "roster" && (
+                <CourseRoster courseId={course.id} />
+              )}
+              {lecs.length === 0 ? (
+                <p
+                  style={{
+                    margin: 0,
+                    padding: "14px 20px",
+                    fontSize: 12,
+                    color: "var(--text-subtle)",
+                    borderTop: "1px solid var(--line)",
+                  }}
+                  data-testid={`learners-course-empty-${course.id}`}
+                >
+                  {t("courseNoLectures")}
+                </p>
+              ) : (
               <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
                 {lecs.map((l, i) => (
                   <li
@@ -203,6 +258,7 @@ export default function LearnersIndexPage() {
                   </li>
                 ))}
               </ul>
+              )}
             </Card>
           ))}
         </section>
@@ -210,4 +266,20 @@ export default function LearnersIndexPage() {
       </div>
     </PageContainer>
   );
+}
+
+/** 강좌 카드 헤더의 패널 토글. 열려 있으면 골드로 눌린 상태를 드러낸다. */
+function panelBtn(active: boolean) {
+  return {
+    padding: "6px 11px",
+    fontSize: 11.5,
+    fontWeight: 600,
+    borderRadius: 8,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    transition: "all 140ms var(--ease-out)",
+    color: active ? "var(--gold)" : "var(--text-muted)",
+    background: active ? "var(--gold-soft)" : "var(--bg-card)",
+    border: `1px solid ${active ? "var(--gold-medium)" : "var(--line)"}`,
+  } as const;
 }

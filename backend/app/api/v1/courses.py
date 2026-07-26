@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, require_professor
+from app.api.deps import (
+    get_current_user,
+    get_current_user_optional,
+    require_professor,
+)
 from app.db.session import get_db
 from app.models.course import Course
 from app.models.lecture import Lecture
@@ -51,6 +55,7 @@ async def post_course(
 async def get_public_course(
     slug: str,
     db: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_current_user_optional),
 ):
     """`/c/[slug]` 가 여는 화면의 데이터.
 
@@ -63,6 +68,11 @@ async def get_public_course(
 
     발행되지 않은 강의는 목록에서 제외한다. 만료된 강의는 `is_expired` 로 표시하되
     목록에는 남긴다 — 사라지면 학생이 "내 강의가 없어졌다"고 문의한다.
+
+    **인증은 선택**이다(`get_current_user_optional`). 토큰이 있으면 `is_owner` 를
+    채워 주는데, 교수자가 QR 을 학생에게 띄우기 전에 **본인이 먼저 스캔해 보는**
+    미리보기에 쓰인다. 소유자여도 보이는 목록은 학생과 동일하다 — 미발행 강의를
+    끼워 주면 "학생에게 이렇게 보입니다"가 거짓말이 된다.
     """
     now = datetime.now(timezone.utc)
 
@@ -124,5 +134,8 @@ async def get_public_course(
         # 발행 강의가 전부 만료면 강좌 자체가 끝난 것으로 본다 —
         # `courses` 에는 만료 컬럼이 없어 강의 만료에서 파생한다.
         "is_expired": bool(items) and all(i["is_expired"] for i in items),
+        # 소유 교수자 여부. 미리보기에서 "스튜디오로 열기"를 붙일지만 정한다 —
+        # 미리보기 자체는 학생이 아닌 로그인 사용자 전부에게 적용된다.
+        "is_owner": viewer is not None and viewer.id == course.instructor_id,
         "lectures": items,
     }

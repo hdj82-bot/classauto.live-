@@ -57,6 +57,8 @@ import CallbackContent from "@/app/auth/callback/CallbackContent";
 
 const FAKE_JWT =
   "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1LTEiLCJyb2xlIjoicHJvZmVzc29yIn0.sig";
+const STUDENT_JWT =
+  "eyJ0eXAiOiAiSldUIiwgImFsZyI6ICJIUzI1NiJ9.eyJzdWIiOiAidS0yIiwgInJvbGUiOiAic3R1ZGVudCJ9.sig";
 
 describe("CallbackContent", () => {
   beforeEach(() => {
@@ -117,6 +119,52 @@ describe("CallbackContent", () => {
     expect(window.sessionStorage.getItem("ifl_oauth_state")).toBe(
       "legacy-stale-value",
     );
+  });
+
+  // ── 학생 딥링크 복귀 (스펙 15 2단계) ────────────────────────────────────
+  // 강좌 QR 을 스캔한 학생이 로그인 후 원래 주소로 돌아오지 못하면 등록(join)이
+  // 영영 호출되지 않는다. 신규 가입은 complete-profile 에서 복귀하지만, **이미
+  // 계정이 있는 학생**은 여기로 돌아온다 — 한쪽만 읽으면 그 학생들이 통째로 샌다.
+
+  it("returns a student to the stashed deep link", async () => {
+    window.sessionStorage.setItem("ifl_student_signup_next", "/c/my-course-a1b2c3d4");
+    mocks.searchParams = new URLSearchParams("code=abc");
+    mocks.exchange.mockResolvedValue({ data: { access_token: STUDENT_JWT } });
+    render(<CallbackContent />);
+    await waitFor(() => {
+      expect(mocks.replace).toHaveBeenCalledWith("/c/my-course-a1b2c3d4");
+    });
+    // 1회용 — 남겨 두면 다음 로그인 때 엉뚱한 강좌로 튄다.
+    expect(window.sessionStorage.getItem("ifl_student_signup_next")).toBeNull();
+  });
+
+  it("falls back to /dashboard when no deep link was stashed", async () => {
+    mocks.searchParams = new URLSearchParams("code=abc");
+    mocks.exchange.mockResolvedValue({ data: { access_token: STUDENT_JWT } });
+    render(<CallbackContent />);
+    await waitFor(() => {
+      expect(mocks.replace).toHaveBeenCalledWith("/dashboard");
+    });
+  });
+
+  it("ignores an external deep link", async () => {
+    window.sessionStorage.setItem("ifl_student_signup_next", "https://evil.example.com");
+    mocks.searchParams = new URLSearchParams("code=abc");
+    mocks.exchange.mockResolvedValue({ data: { access_token: STUDENT_JWT } });
+    render(<CallbackContent />);
+    await waitFor(() => {
+      expect(mocks.replace).toHaveBeenCalledWith("/dashboard");
+    });
+  });
+
+  it("does not send a professor to a student deep link", async () => {
+    window.sessionStorage.setItem("ifl_student_signup_next", "/c/my-course-a1b2c3d4");
+    mocks.searchParams = new URLSearchParams("code=abc");
+    mocks.exchange.mockResolvedValue({ data: { access_token: FAKE_JWT } });
+    render(<CallbackContent />);
+    await waitFor(() => {
+      expect(mocks.replace).toHaveBeenCalledWith("/professor/dashboard");
+    });
   });
 
   it("redirects to /auth/login on exchange failure", async () => {

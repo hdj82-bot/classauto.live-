@@ -20,6 +20,13 @@ import { api } from "./api";
 export interface CourseLite {
   id: string;
   title: string;
+  /**
+   * 학생 진입 주소 `/c/[slug]` (스펙 15 2단계). Course QR 이 이걸로 그려진다.
+   *
+   * optional 인 이유는 배포 순서다 — 프론트(Vercel)가 백엔드(Railway)보다 먼저
+   * 나가면 응답에 아직 slug 가 없다. 그때 QR 버튼만 빠지고 나머지 화면은 산다.
+   */
+  slug?: string;
 }
 
 interface ProfessorData {

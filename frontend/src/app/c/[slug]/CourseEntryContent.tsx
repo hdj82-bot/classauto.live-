@@ -8,6 +8,7 @@ import { api, enrollmentApi } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useI18n } from "@/contexts/I18nContext";
 import { startGoogleLogin } from "@/lib/auth";
+import { stashAuthNext } from "@/lib/authNext";
 import StudentSurfaceLight from "@/components/student/v2/StudentSurfaceLight";
 
 /**
@@ -37,6 +38,8 @@ interface PublicCourse {
   instructor_name: string | null;
   lecture_count: number;
   is_expired: boolean;
+  /** 소유 교수자인가 — 미리보기에서 스튜디오 링크를 붙일지만 정한다. */
+  is_owner?: boolean;
   lectures: PublicCourseLecture[];
 }
 
@@ -60,8 +63,10 @@ export default function CourseEntryContent() {
   const [joining, setJoining] = useState(false);
 
   // 강좌 정보는 **로그인 전에도** 보여준다 — 학생이 무슨 강좌인지 보고 판단해야 한다.
+  // 다만 인증 복원이 끝난 뒤에 부른다. 토큰이 붙기 전에 나가면 응답의 `is_owner` 가
+  // 항상 false 로 와서 소유 교수자가 미리보기 도구를 못 본다.
   useEffect(() => {
-    if (!slug) return;
+    if (!slug || authLoading) return;
     let cancelled = false;
     (async () => {
       try {
@@ -77,7 +82,12 @@ export default function CourseEntryContent() {
     return () => {
       cancelled = true;
     };
-  }, [slug]);
+  }, [slug, authLoading]);
+
+  // 학생이 아닌 로그인 사용자(교수자·운영자)는 **미리보기**다. 교수는 학기 초에 QR 을
+  // 띄우기 전에 본인이 먼저 스캔해 보는데, 그때 화면이 깨지면 배포를 포기한다.
+  // 소유 여부와 무관하다 — 남의 강좌를 열어도 등록은 안 되고 열람만 된다.
+  const isPreview = !!user && user.role !== "student";
 
   // 등록은 slug 당 한 번만 — 이 이펙트는 state(객체)에 의존해서 강좌 조회가 다시
   // 돌면 함께 재실행된다. 서버에서 멱등이지만 같은 요청을 반복해 보낼 이유가 없다.
@@ -114,9 +124,12 @@ export default function CourseEntryContent() {
   }, [state, user, authLoading, slug]);
 
   const handleLogin = useCallback(() => {
+    // 돌아올 주소를 먼저 보관한다. 이게 없으면 로그인 후 대시보드로 떨어져
+    // **등록이 영영 호출되지 않는다** — 학기 초 QR 스캔이 정확히 이 경로다.
+    if (slug) stashAuthNext(`/c/${slug}`);
     // 학생 가입 흐름은 건드리지 않는다(스펙 14 §0-2) — 기존 진입과 같은 함수.
     startGoogleLogin("student");
-  }, []);
+  }, [slug]);
 
   if (state.kind === "loading" || authLoading) {
     return (
@@ -174,6 +187,22 @@ export default function CourseEntryContent() {
           )}
         </header>
 
+        {/* 미리보기 — 교수자가 QR 을 띄우기 전에 본인이 먼저 스캔한 경우. */}
+        {isPreview && (
+          <div
+            role="status"
+            data-testid="course-entry-preview-banner"
+            className="animate-fade-in-up stagger-1 mt-6 rounded-2xl border border-gold-medium bg-gold/10 p-5"
+          >
+            <p className="text-sm font-bold text-gold-on-light">
+              {t("student.courseEntry.previewTitle")}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-text-muted">
+              {t("student.courseEntry.previewDesc")}
+            </p>
+          </div>
+        )}
+
         {/* 비로그인 — 강좌는 이미 보여줬고, 시청하려면 로그인해야 한다. */}
         {!user && (
           <div className="animate-fade-in-up stagger-1 mt-6 rounded-2xl border border-line bg-bg-card p-5 shadow-sm">
@@ -218,7 +247,31 @@ export default function CourseEntryContent() {
             <ul className="mt-3 space-y-2">
               {course.lectures.map((lec) => (
                 <li key={lec.id}>
-                  {lec.is_expired ? (
+                  {isPreview ? (
+                    // 미리보기에서는 학생 플레이어로 보내지 않는다 — 세션 시작이
+                    // require_student 라 교수자는 곧바로 막히고, 확인하러 온 사람이
+                    // 확인 대신 에러를 본다. 소유자에게만 스튜디오 링크를 준다.
+                    <div className="rounded-xl border border-line bg-bg-card px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="min-w-0 text-sm font-medium text-text">
+                          {lec.title}
+                        </p>
+                        {course.is_owner && (
+                          <Link
+                            href={`/professor/studio/${lec.id}`}
+                            className="shrink-0 rounded-lg border border-line px-2.5 py-1 text-xs font-semibold text-text-muted transition hover:border-line-strong hover:bg-bg-hover"
+                          >
+                            {t("student.courseEntry.previewOpenStudio")}
+                          </Link>
+                        )}
+                      </div>
+                      {lec.is_expired && (
+                        <p className="mt-0.5 text-xs text-text-faint">
+                          {t("student.courseEntry.lectureExpired")}
+                        </p>
+                      )}
+                    </div>
+                  ) : lec.is_expired ? (
                     // 만료 강의는 목록에서 없애지 않는다 — 사라지면 학생이
                     // "내 강의가 없어졌다"고 문의한다. 열리지 않을 뿐이다.
                     <div className="rounded-xl border border-line bg-bg-subtle px-4 py-3 opacity-60">

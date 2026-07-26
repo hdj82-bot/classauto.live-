@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { authApi } from "@/lib/api";
+import { takeAuthNext } from "@/lib/authNext";
 import { useI18n } from "@/contexts/I18nContext";
 import StudentSurfaceLight from "@/components/student/v2/StudentSurfaceLight";
 import tokens from "@/components/student/v2/tokens-v2.module.css";
@@ -111,24 +112,12 @@ export default function CompleteProfileContent() {
             }),
       });
       login(data.access_token);
-      // 역할별 착지. 학생은 가입 마법사가 OAuth 직전에 보관한 딥링크(next)가 안전한
-      // 내부 경로면 그리로(예: 원래 보려던 /v/[slug]), 아니면 기본 대시보드로 보낸다.
-      // 교수자는 항상 교수자 대시보드.
+      // 역할별 착지. 학생은 OAuth 직전에 보관한 딥링크로(예: 원래 보려던 /v/[slug],
+      // 스캔한 /c/[slug]), 없으면 기본 대시보드. 교수자는 항상 교수자 대시보드.
       if (role === "professor") {
         router.replace("/professor/dashboard");
       } else {
-        let dest = "/dashboard";
-        try {
-          const stashed = window.sessionStorage.getItem("ifl_student_signup_next");
-          window.sessionStorage.removeItem("ifl_student_signup_next");
-          // open-redirect 방어: 반드시 '/' 로 시작하는 내부 경로 + '//'(프로토콜 상대) 금지.
-          if (stashed && stashed.startsWith("/") && !stashed.startsWith("//")) {
-            dest = stashed;
-          }
-        } catch {
-          /* ignore */
-        }
-        router.replace(dest);
+        router.replace(takeAuthNext() ?? "/dashboard");
       }
     } catch {
       setError(t("student.completeProfileV2.error"));

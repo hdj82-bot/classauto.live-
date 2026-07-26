@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   join: vi.fn(),
   push: vi.fn(),
   startGoogleLogin: vi.fn(),
+  stashAuthNext: vi.fn(),
   user: null as { role: string } | null,
   authLoading: false,
 }));
@@ -38,6 +39,10 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/lib/auth", () => ({
   startGoogleLogin: mocks.startGoogleLogin,
+}));
+
+vi.mock("@/lib/authNext", () => ({
+  stashAuthNext: mocks.stashAuthNext,
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -97,6 +102,7 @@ describe("CourseEntryContent — /c/[slug]", () => {
     mocks.join.mockReset();
     mocks.push.mockReset();
     mocks.startGoogleLogin.mockReset();
+    mocks.stashAuthNext.mockReset();
     mocks.user = null;
     mocks.authLoading = false;
     mocks.get.mockResolvedValue({ data: COURSE });
@@ -146,12 +152,67 @@ describe("CourseEntryContent — /c/[slug]", () => {
     expect(screen.queryByText("1주차 — 어순")).toBeNull();
   });
 
-  it("교수자에게는 join 을 호출하지 않는다", async () => {
+  it("로그인하러 나가기 전에 돌아올 주소를 보관한다", async () => {
+    renderPage();
+    const btn = await screen.findByRole("button", { name: /Google/i });
+    btn.click();
+
+    // 이게 없으면 로그인 후 대시보드로 떨어져 등록이 영영 호출되지 않는다.
+    expect(mocks.stashAuthNext).toHaveBeenCalledWith("/c/chinese-grammar-a1b2c3d4");
+    expect(mocks.startGoogleLogin).toHaveBeenCalledWith("student");
+  });
+
+  // ── 교수자 미리보기 ──────────────────────────────────────────────────────
+  // 교수는 학기 초에 QR 을 학생에게 띄우기 전에 본인이 먼저 스캔해 본다.
+  // 그때 화면이 깨지면 배포 자체를 포기한다.
+
+  it("교수자에게는 join 을 호출하지 않고 미리보기로 알린다", async () => {
     mocks.user = { role: "professor" };
     renderPage();
 
-    await screen.findByText("중국어문법의 이해");
+    expect(await screen.findByTestId("course-entry-preview-banner")).toBeTruthy();
     expect(mocks.join).not.toHaveBeenCalled();
+    // 미리보기여도 강의 목록은 그대로 보여야 한다 — 그게 확인하려는 대상이다.
+    expect(screen.getByText("1주차 — 어순")).toBeTruthy();
+  });
+
+  it("운영자도 같은 미리보기로 처리한다", async () => {
+    mocks.user = { role: "admin" };
+    renderPage();
+
+    expect(await screen.findByTestId("course-entry-preview-banner")).toBeTruthy();
+    expect(mocks.join).not.toHaveBeenCalled();
+  });
+
+  it("미리보기에서는 학생 플레이어로 보내지 않는다", async () => {
+    mocks.user = { role: "professor" };
+    mocks.get.mockResolvedValue({ data: { ...COURSE, is_owner: true } });
+    renderPage();
+
+    await screen.findByTestId("course-entry-preview-banner");
+    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    // 세션 시작이 require_student 라 교수자는 곧바로 막힌다.
+    expect(hrefs).not.toContain("/v/week-1");
+    // 소유자에게는 대신 스튜디오로 가는 길을 준다.
+    expect(hrefs).toContain("/professor/studio/l1");
+  });
+
+  it("소유자가 아닌 교수자에게는 스튜디오 링크를 주지 않는다", async () => {
+    mocks.user = { role: "professor" };
+    mocks.get.mockResolvedValue({ data: { ...COURSE, is_owner: false } });
+    renderPage();
+
+    await screen.findByTestId("course-entry-preview-banner");
+    const hrefs = screen.queryAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).not.toContain("/professor/studio/l1");
+  });
+
+  it("학생에게는 미리보기 배너를 보이지 않는다", async () => {
+    mocks.user = { role: "student" };
+    renderPage();
+
+    await screen.findByText("1주차 — 어순");
+    expect(screen.queryByTestId("course-entry-preview-banner")).toBeNull();
   });
 
   it("등록이 네트워크 오류여도 목록은 막지 않는다", async () => {

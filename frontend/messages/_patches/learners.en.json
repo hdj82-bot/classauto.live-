@@ -9,7 +9,6 @@
     "lectureLabel": "Lecture",
     "publishedBadge": "Published",
     "unpublishedBadge": "Draft",
-
     "tableTitle": "Roster",
     "tableSubtitle": "{lecture} · {total} learners",
     "backToList": "Back to lectures",
@@ -24,7 +23,6 @@
     "filterInProgress": "In progress",
     "searchPlaceholder": "Search by name or ID",
     "searchAriaLabel": "Search learners by name or student ID",
-
     "colName": "Name",
     "colStudentNumber": "Student ID",
     "colProgress": "Progress",
@@ -34,12 +32,10 @@
     "colRisk": "Status",
     "colLastActivity": "Last activity",
     "actionViewDetail": "Detail",
-
     "selectionLabel": "selected",
     "selectAll": "Select all",
     "deselectAll": "Clear selection",
     "selectRow": "Select {name}",
-
     "riskHigh": "High risk",
     "riskMedium": "Watch",
     "riskLow": "OK",
@@ -48,7 +44,6 @@
     "riskTooltipMedium": "Progress 30-70%, or focus below 50%",
     "riskTooltipLow": "Progress 70%+ with healthy focus",
     "riskTooltipCompleted": "Finished the lecture",
-
     "bulkTitle": "Bulk action on selected learners",
     "bulkPickPrompt": "Pick learners in the table to enable bulk actions.",
     "bulkSendNudge": "Send watch nudge",
@@ -56,7 +51,6 @@
     "bulkExportSelected": "Export selection",
     "bulkBackendPending": "This action will be enabled when the backend endpoint ships.",
     "bulkBackendPendingShort": "Pending",
-
     "detailBack": "Back to roster",
     "detailLoading": "Loading learner detail...",
     "detailNotFound": "No watch record for this learner.",
@@ -79,20 +73,44 @@
     "detailQaCount": "Questions sent",
     "detailRespondedCount": "Got reply",
     "detailNoResponseCnt": "No-response events",
-
     "privacyHeading": "Student data protection",
     "privacyBullet1": "Student data is used only for learning analytics — no advertising, no third-party sharing.",
     "privacyBullet2": "Personal data is auto-deleted after the retention window expires (graduation / course end).",
     "privacyBullet3": "Each instructor can only see learners enrolled in their own lectures.",
     "privacyMoreLink": "Read the student data protection policy",
     "privacyMoreHref": "/trust",
-
     "toastNotImplemented": "Backend endpoint not ready yet. See BACKEND_ASKS.LEARNERS.md.",
-
     "minutesUnit": "{count} min",
     "secondsUnit": "{count} sec",
     "daysAgo": "{count}d ago",
     "today": "today",
-    "never": "no record"
+    "never": "no record",
+    "courseQrButton": "Course QR",
+    "courseRosterButton": "Roster",
+    "courseNoLectures": "No lectures yet. You can still share the course QR to enroll students first.",
+    "qrHelp": "Show this on your slide in the first class of the semester and have everyone scan it once. After enrolling, each newly published lecture appears on their screen automatically — no need to redistribute a link every week.",
+    "qrAlt": "Course enrollment QR code",
+    "qrLinkLabel": "Student entry link",
+    "qrDownload": "Download PNG",
+    "qrCopy": "Copy link",
+    "qrPreview": "Preview student view",
+    "rosterLoading": "Loading roster...",
+    "rosterLoadError": "Could not load the roster.",
+    "rosterEmpty": "No students have enrolled yet. Try showing the course QR in class.",
+    "rosterActive": "Enrolled",
+    "rosterWithdrawn": "Withdrawn",
+    "rosterNeverWatched": "Never watched",
+    "rosterNeverWatchedCell": "No sessions yet",
+    "rosterColName": "Name",
+    "rosterColNumber": "Student no.",
+    "rosterColJoined": "Joined",
+    "rosterColLastWatched": "Last watched",
+    "rosterColAction": "Manage",
+    "rosterWithdraw": "Withdraw",
+    "rosterWithdrawConfirm": "Confirm",
+    "rosterCancel": "Cancel",
+    "rosterReactivate": "Re-enroll",
+    "rosterWithdrawnBadge": "Withdrawn",
+    "rosterWithdrawNote": "Withdrawing keeps the record. Students cannot undo it themselves — re-enroll them here if needed."
   }
 }
