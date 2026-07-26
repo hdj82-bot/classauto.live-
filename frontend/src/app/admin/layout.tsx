@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { useI18n } from "@/contexts/I18nContext";
-import { feedbackApi } from "@/lib/api";
+import { feedbackApi, issuesApi } from "@/lib/api";
 
 /**
  * 운영자 콘솔 셸 — 스펙 14 §E.
@@ -14,8 +14,8 @@ import { feedbackApi } from "@/lib/api";
  * `indigo-600`)를 v2 토큰(라이트 베이지 + 골드)으로 전면 교체했다. 디자인 기준은
  * 프로토타입 08 이되 CSS 를 복붙하지 않고 `globals.css` 의 토큰 유틸리티를 쓴다.
  *
- * 사이드바는 E 시점 **8개**다. 스펙 §E 의 최종 구성 9개 중 이슈 인박스는 C 가
- * 만드는 화면이라, 여기서 먼저 링크를 걸면 C 머지 전까지 404 다.
+ * 사이드바는 스펙 §E 최종 구성 **9개**다. 이슈 인박스(`/admin/issues`)는 C 가 화면과
+ * 함께 붙였다 — E 시점에 먼저 링크를 걸었으면 C 머지 전까지 404 였을 자리다.
  *
  * `/admin/users` 는 사이드바에서만 뺐다(라우트는 유지). "테스터 목록이 두 개"인
  * 게 문제였을 뿐이고, `/admin/beta` 모집단은 `instructor_rollup` 이
@@ -43,9 +43,17 @@ function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useI18n();
   const [openFeedback, setOpenFeedback] = useState<number>(0);
+  const [newIssues, setNewIssues] = useState<number>(0);
 
-  // 미처리 피드백 배지. 상태 토글은 /admin/feedback 에서 일어나므로 화면 이동마다
-  // 다시 센다(스펙 §E "개요의 카드와 같은 소스"). 이슈 배지는 C 에서 추가.
+  // 미처리 피드백·미확인 이슈 배지. 상태 토글은 각 화면에서 일어나므로 화면 이동마다
+  // 다시 센다(스펙 §E "개요의 카드와 같은 소스").
+  //
+  // 이슈 배지는 **패스 수**다(행 수가 아니라) — 목록이 강의+패스 단위로 묶여 있어서
+  // 행을 세면 슬라이드 수만큼 부풀어 배지와 목록이 어긋난다. 서버가 준 counts.new 를
+  // 그대로 쓴다.
+  //
+  // 두 배지는 독립적으로 실패할 수 있어야 한다. 하나로 묶어 await 하면 이슈 조회가
+  // 죽었을 때 피드백 배지까지 0 이 된다.
   const loadBadges = useCallback(async () => {
     try {
       const { data } = await feedbackApi.adminList({ status: "open" });
@@ -53,6 +61,12 @@ function AdminShell({ children }: { children: React.ReactNode }) {
     } catch {
       // 배지는 보조 정보다. 실패해도 콘솔 자체는 그대로 쓸 수 있어야 하므로 조용히 0.
       setOpenFeedback(0);
+    }
+    try {
+      const { data } = await issuesApi.list({ since: "7d", limit: 1 });
+      setNewIssues(data.counts?.new ?? 0);
+    } catch {
+      setNewIssues(0);
     }
   }, []);
 
@@ -76,9 +90,13 @@ function AdminShell({ children }: { children: React.ReactNode }) {
     },
     {
       title: t("admin.navGroupQuality"),
-      // TODO(스펙 14 §C): 이슈 인박스(/admin/issues)를 이 그룹 맨 앞에 추가.
-      // 미처리 렌더 실패 배지도 그때 함께 붙인다(개요 카드와 같은 소스).
       items: [
+        {
+          href: "/admin/issues",
+          label: t("admin.navIssues"),
+          icon: <IconIssue />,
+          badge: newIssues,
+        },
         {
           href: "/admin/feedback",
           label: t("admin.navFeedback"),
@@ -259,6 +277,23 @@ function IconUsers() {
         strokeWidth="1.7"
         strokeLinecap="round"
       />
+    </NavIcon>
+  );
+}
+
+function IconIssue() {
+  // 경고 삼각형 — 프로토타입 08 의 이슈 내비 아이콘. 개요 카드의 'warn' 과 같은 의미라
+  // 같은 SVG 를 쓴다(icons.md v2 — 같은 의미는 같은 아이콘).
+  return (
+    <NavIcon>
+      <path
+        d="M12 4.3L21 19.4H3L12 4.3z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path d="M12 10v3.6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      <path d="M12 16.5h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </NavIcon>
   );
 }

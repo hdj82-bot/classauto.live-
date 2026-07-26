@@ -397,6 +397,20 @@ video_renders.triaged_at + triage_note + ix_video_renders_status_created   (C)
 
 ## 변경 이력
 
+- 2026-07-26: **C 구현 완료** (마이그레이션 `0075` — 착수 시점 head 가 `0074` 였다).
+  구현 중 §C 의 전제 하나가 실코드와 다른 것을 확인했다 — **`video_renders` 에는
+  VisionStory 렌더가 없다.** 본문 렌더 파이프라인(`app/tasks/render.py`)에는 VisionStory
+  분기가 아예 없고(HeyGen `create_video` 단일 경로), VisionStory 는 Q&A 답변 클립
+  (`qa_answer_caches`)에만 쓰인다. `budget.inflight_heygen_spend_usd` 가 `VideoRender`
+  전량을 HeyGen 으로 세는 것도 같은 전제다. 따라서 §C 의 "`avatar_id`·`tts_provider` 로
+  heygen | visionstory 판별"은 이 테이블에서 성립하지 않는다. 구현은 (1) `provider` 를
+  job id 접두(`visionstory:` — qa_batch·budget 이 쓰는 유일한 표식)로 판별해 지금은 항상
+  `heygen` 이 나오되 본문에 VisionStory 가 붙는 날 스키마 변경 없이 맞는 값이 나오게 하고,
+  (2) 실제로 갈리는 `tts_provider`(elevenlabs | google)를 별도 필드로 함께 준다.
+  **Q&A 답변 클립 실패를 인박스에 포함할지는 별건**(테이블이 다르고 §7 범위 밖).
+  렌더 패스는 패스 id 컬럼이 없어 **시간 간격 30분**으로 끊었다(한 패스는 슬라이드를
+  한꺼번에 제출해 수초~수분 안에 붙는다). 에러 문구로는 나누지 않는다 — 한 패스 안에서
+  슬라이드마다 메시지가 달라도 사고는 하나다.
 - 2026-07-25: **공개 초대 도입** — `professor_invites.email` 을 nullable 로 바꿔 대상 이메일 없이
   1회용 링크·QR 을 발급할 수 있게 했다(`0071`). 이메일 잠금이 빠진 만큼 단일 사용이 마지막
   방어선이 되므로 소비를 `claim_invite` 의 조건부 UPDATE 로 원자화하고, 순서를 "유저 생성 → 소비"

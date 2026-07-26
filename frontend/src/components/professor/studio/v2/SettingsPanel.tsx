@@ -33,6 +33,15 @@ export interface SettingsPanelProps {
   voiceGender?: VoiceGender;
   monthlyUsed?: number;
   monthlyLimit?: number | null;
+  /**
+   * C-3 d(스펙 13): 이번 달 남은 TTS 문자 수 + 상한.
+   *
+   * 비용($/₩/토큰)이 아니라 **한도**를 보여주는 것이라 planning/05 §1.1 의 비용 표시
+   * 금지와 충돌하지 않는다(§1.1 이 허용하는 "편수 한도" 와 같은 성격). 상한 비활성
+   * (`ttsCharsMax` 0/미전달)이면 아무것도 그리지 않는다.
+   */
+  ttsCharsRemaining?: number;
+  ttsCharsMax?: number;
   // ── 음성·자막 ──────────────────────────────────────────────────────────────
   /** 영상 음성(TTS) 언어. */
   voiceLang: LangCode;
@@ -393,6 +402,8 @@ export default function SettingsPanel({
   voiceLang,
   subtitleLang,
   voiceSpeed = 1.0,
+  ttsCharsRemaining = 0,
+  ttsCharsMax = 0,
   voiceLangRegenerating = false,
   onChangeVoiceLang,
   onChangeSubtitleLang,
@@ -578,6 +589,16 @@ export default function SettingsPanel({
                 onChange={(v) => onChangeVoiceSpeed?.(v)}
               />
             </div>
+
+            {/* ── 이번 달 남은 문자 수 (C-3 d · 스펙 13) ──
+                쿼터는 **미리** 보여야 의미가 있다 — 다 쓰고 나서 알면 이미 강의를
+                못 만든다. 비용이 아니라 한도 표시라 planning/05 §1.1 과 충돌하지 않는다. */}
+            {ttsCharsMax > 0 && (
+              <>
+                <div style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />
+                <TtsQuotaRow remaining={ttsCharsRemaining} max={ttsCharsMax} />
+              </>
+            )}
 
             <div style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />
 
@@ -1333,6 +1354,66 @@ const SPEED_MIN = 0.7;
 const SPEED_MAX = 1.2;
 const SPEED_STEP = 0.05;
 const SPEED_DEFAULT = 1.0;
+
+/**
+ * 이번 달 남은 문자 수 — C-3 d(스펙 13).
+ *
+ * 남은 양이 20% 아래로 떨어지면 색으로 알린다. 그 위는 중립색이다 — 평소에 경고색을
+ * 띄우면 "마음껏 써도 된다"는 구독제 전제와 어긋난다(planning/05 §1.1).
+ */
+const TTS_LOW_RATIO = 0.2;
+
+function TtsQuotaRow({ remaining, max }: { remaining: number; max: number }) {
+  const safeRemaining = Math.max(0, Math.min(remaining, max));
+  const ratio = max > 0 ? safeRemaining / max : 0;
+  const low = ratio <= TTS_LOW_RATIO;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div style={subSectionLabelStyle}>
+        <span style={subTagStyle("gold")}>음성</span>
+        <span>이번 달 남은 문자 수</span>
+      </div>
+      <div
+        className="flex items-center justify-between"
+        style={{ fontSize: 12, fontWeight: 600, color: "var(--text-subtle)" }}
+      >
+        <span
+          style={{
+            color: low ? "var(--warning)" : "var(--text)",
+            fontWeight: 700,
+            fontVariantNumeric: "tabular-nums",
+          }}
+        >
+          {safeRemaining.toLocaleString()}자
+        </span>
+        <span style={{ fontVariantNumeric: "tabular-nums" }}>
+          / {max.toLocaleString()}자
+        </span>
+      </div>
+      <div
+        style={{
+          height: 4,
+          borderRadius: 3,
+          background: "var(--line)",
+          overflow: "hidden",
+        }}
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={max}
+        aria-valuenow={safeRemaining}
+        aria-label="이번 달 남은 문자 수"
+      >
+        <div
+          style={{
+            width: `${Math.round(ratio * 100)}%`,
+            height: "100%",
+            background: low ? "var(--warning)" : "var(--gold-on-light)",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 function SpeedSlider({
   value,

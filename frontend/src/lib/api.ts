@@ -459,3 +459,87 @@ export const auditApi = {
       { params },
     ),
 };
+
+/** 파생 3분기 상태 — 백엔드가 `triaged_at` + 이후 성공 렌더로 계산한다(resolved 컬럼 없음). */
+export type IssueStatus = "new" | "triaged" | "resolved";
+
+/** 실패 렌더 1건 = **강의 + 렌더 패스** 하나. 슬라이드 N개가 한 줄로 묶여 온다. */
+export interface IssueItem {
+  /** 대표 렌더 id — 드로어 열기·triage 대상. */
+  id: string;
+  render_ids: string[];
+  lecture_id: string;
+  lecture_title: string | null;
+  course_title: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  user_email: string | null;
+  cohort: string | null;
+  /** 아바타 제공자. 현재 본문 렌더는 전부 heygen. */
+  provider: string;
+  tts_provider: string | null;
+  error_message: string | null;
+  /** 한 패스 안에서 서로 달랐던 메시지 전부(드로어용). */
+  error_messages: string[];
+  affected_slides: number[];
+  affected_count: number;
+  created_at: string | null;
+  last_failed_at: string | null;
+  status: IssueStatus;
+  triaged_at: string | null;
+  triage_note: string | null;
+}
+
+export interface IssueListResponse {
+  total: number;
+  page: number;
+  limit: number;
+  since_days: number;
+  counts: { new: number; triaged: number; resolved: number };
+  /** 스캔 상한에 걸려 잘렸는지 — true 면 화면이 그 사실을 알린다. */
+  truncated: boolean;
+  issues: IssueItem[];
+}
+
+export interface IssueDetail {
+  id: string;
+  lecture_id: string;
+  lecture_title: string | null;
+  course_title: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  user_email: string | null;
+  provider: string;
+  tts_provider: string | null;
+  avatar_id: string | null;
+  slide_number: number | null;
+  status: string;
+  error_message: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+  triaged_at: string | null;
+  triage_note: string | null;
+}
+
+// 이슈 인박스(스펙 14 · C) — require_admin. 목록은 강의+패스 단위로 묶여 온다.
+export const issuesApi = {
+  list: (params: {
+    status?: string;
+    since?: string;
+    cohort?: string;
+    user_id?: string;
+    page?: number;
+    limit?: number;
+  }) =>
+    api.get<IssueListResponse>("/api/v1/admin/renders", {
+      params: { status: "failed", ...params },
+    }),
+  detail: (renderId: string) =>
+    api.get<IssueDetail>(`/api/v1/admin/renders/${encodeURIComponent(renderId)}`),
+  /** 확인함 표시. 감사 로그 `render.triage` 1행이 남는다. */
+  triage: (renderId: string, note?: string) =>
+    api.patch<{ id: string; triaged_at: string; triage_note: string | null }>(
+      `/api/v1/admin/renders/${encodeURIComponent(renderId)}/triage`,
+      { note: note ?? null },
+    ),
+};

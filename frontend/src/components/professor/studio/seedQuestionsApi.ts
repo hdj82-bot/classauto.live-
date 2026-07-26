@@ -77,6 +77,9 @@ interface SeedQuestionsWire {
   avatar_render_count?: number;
   avatar_rerender_remaining?: number;
   avatar_rerender_max?: number;
+  // C-3 d(스펙 13): 교수자 월 TTS 문자 쿼터. 재제작 잔여 횟수와 같은 자리에 실려 온다.
+  tts_chars_remaining?: number;
+  tts_chars_max?: number;
 }
 
 export interface SeedQuestionsResult {
@@ -93,6 +96,10 @@ export interface SeedQuestionsResult {
   avatarRerenderRemaining: number;
   /** C-2: 강의당 아바타 제작 횟수 상한(설정값). */
   avatarRerenderMax: number;
+  /** C-3 d: 이번 달 남은 TTS 문자 수. */
+  ttsCharsRemaining: number;
+  /** C-3 d: 교수자 월 TTS 문자 상한. 0 = 상한 비활성 → 화면이 표시를 생략한다. */
+  ttsCharsMax: number;
   /** 백엔드 미응답/404 로 빈 목록을 쓰는 중인지. */
   deferred: boolean;
   /** 현재 아바타/음성이 이미 렌더된 클립과 달라 '다시 제작' 시 새로 만들어야 하는지. */
@@ -108,6 +115,8 @@ function _parse(data: SeedQuestionsWire, deferred: boolean): SeedQuestionsResult
     avatarRenderCount: data.avatar_render_count ?? 0,
     avatarRerenderRemaining: data.avatar_rerender_remaining ?? 0,
     avatarRerenderMax: data.avatar_rerender_max ?? 0,
+    ttsCharsRemaining: data.tts_chars_remaining ?? 0,
+    ttsCharsMax: data.tts_chars_max ?? 0,
     deferred,
     qaAvatarStale: !!data.qa_avatar_stale,
   };
@@ -130,6 +139,8 @@ export async function getSeedQuestions(
       avatarRenderCount: 0,
       avatarRerenderRemaining: 0,
       avatarRerenderMax: 0,
+      ttsCharsRemaining: 0,
+      ttsCharsMax: 0,
       deferred: true,
       qaAvatarStale: false,
     };

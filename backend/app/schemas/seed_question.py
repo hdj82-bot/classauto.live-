@@ -90,6 +90,15 @@ class SeedQuestionsResponse(BaseModel):
     avatar_rerender_max: int = Field(
         default=0, description="강의당 아바타 제작 횟수 상한(설정값)"
     )
+    # C-3 d(스펙 13): 교수자 월 TTS 문자 쿼터. 재제작 잔여 횟수와 **같은 자리**에
+    # 실어 보낸다 — 쿼터는 미리 보여야 의미가 있다(다 쓰고 나서 알면 이미 늦다).
+    # 상한 비활성(0/음수)이면 max 가 0 으로 와서 프론트가 표시를 생략한다.
+    tts_chars_remaining: int = Field(
+        default=0, description="이번 달 남은 TTS 문자 수(상한 − 사용)"
+    )
+    tts_chars_max: int = Field(
+        default=0, description="교수자 월 TTS 문자 상한(설정값). 0 = 상한 비활성"
+    )
 
 
 class GenerateSeedAnswerRequest(BaseModel):
