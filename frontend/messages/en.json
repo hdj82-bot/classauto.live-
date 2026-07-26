@@ -592,7 +592,9 @@
     "auditFilterActionPlaceholder": "Filter by action",
     "auditPrev": "Prev",
     "auditNext": "Next",
-    "auditPageInfo": "Page {page} · {total} total"
+    "auditPageInfo": "Page {page} · {total} total",
+    "feedbackLectureLabel": "Lecture",
+    "feedbackLectureDeleted": "(deleted lecture)"
   },
   "feedback": {
     "buttonLabel": "Feedback",

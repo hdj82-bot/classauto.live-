@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, require_admin
 from app.db.session import get_db
 from app.models.feedback import Feedback
+from app.models.lecture import Lecture
 from app.models.user import User
 from app.schemas.feedback import (
     FeedbackCreateRequest,
@@ -27,7 +28,9 @@ from app.schemas.feedback import (
 router = APIRouter(tags=["feedback"])
 
 
-def _to_response(fb: Feedback) -> FeedbackResponse:
+def _to_response(
+    fb: Feedback, lecture_title: str | None = None
+) -> FeedbackResponse:
     return FeedbackResponse(
         id=str(fb.id),
         user_id=str(fb.user_id) if fb.user_id else None,
@@ -36,6 +39,7 @@ def _to_response(fb: Feedback) -> FeedbackResponse:
         category=fb.category,
         message=fb.message,
         lecture_id=str(fb.lecture_id) if fb.lecture_id else None,
+        lecture_title=lecture_title,
         page=fb.page,
         status=fb.status,
         created_at=fb.created_at,
@@ -98,14 +102,25 @@ async def list_feedback(
         count_stmt = count_stmt.where(f)
 
     total = (await db.execute(count_stmt)).scalar() or 0
-    stmt = stmt.order_by(Feedback.created_at.desc()).offset((page - 1) * limit).limit(limit)
-    rows = (await db.execute(stmt)).scalars().all()
+    # 강의 제목은 LEFT JOIN 으로 함께 가져온다. 행마다 조회하면 페이지당 N+1 이고,
+    # 강의가 삭제된 피드백(FK SET NULL)은 INNER JOIN 이면 목록에서 통째로 사라진다.
+    stmt = (
+        stmt.add_columns(Lecture.title)
+        .outerjoin(Lecture, Lecture.id == Feedback.lecture_id)
+        .order_by(Feedback.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+    rows = (await db.execute(stmt)).all()
 
     return {
         "total": total,
         "page": page,
         "limit": limit,
-        "feedback": [_to_response(fb).model_dump() for fb in rows],
+        "feedback": [
+            _to_response(fb, lecture_title).model_dump()
+            for fb, lecture_title in rows
+        ],
     }
 
 
@@ -129,4 +144,11 @@ async def update_feedback_status(
     fb.status = body.status
     await db.commit()
     await db.refresh(fb)
-    return _to_response(fb)
+    # 목록 응답과 같은 모양으로 돌려준다 — 제목을 비워 보내면 상태를 토글한 카드만
+    # 강의 맥락이 사라진 것처럼 보인다.
+    lecture_title = None
+    if fb.lecture_id is not None:
+        lecture_title = (
+            await db.execute(select(Lecture.title).where(Lecture.id == fb.lecture_id))
+        ).scalar_one_or_none()
+    return _to_response(fb, lecture_title)

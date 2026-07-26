@@ -21,6 +21,7 @@ import OnboardingFlowV2 from "@/components/student/v2/OnboardingFlowV2";
 import PlayerSurfaceDark from "./PlayerSurfaceDark";
 import AttentionWarningV2 from "./AttentionWarningV2";
 import ShareLinks from "@/components/professor/studio/ShareLinks";
+import { useRegisterLecture } from "@/contexts/LectureContext";
 import {
   getPlaybackQuizzes,
   submitInterstitialAnswer,
@@ -136,6 +137,9 @@ export default function PlayerV2({ slug, preview = false }: PlayerV2Props) {
   const [capPos, setCapPos] = useState<SubtitlePosition | null>(null);
 
   const [lecture, setLecture] = useState<LectureData | null>(null);
+  // 피드백에 "어느 강의였는지"를 붙이기 위한 등록(스펙 14 §D). provider 밖이면
+  // 아무 일도 하지 않으므로 플레이어가 어디에 놓이든 안전하다.
+  useRegisterLecture(lecture?.id, lecture?.title);
   const [loading, setLoading] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
 

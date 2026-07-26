@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { feedbackApi, type FeedbackItem } from "@/lib/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useI18n } from "@/contexts/I18nContext";
@@ -134,6 +135,30 @@ export default function AdminFeedbackPage() {
               </div>
 
               <p className="mt-2 text-sm whitespace-pre-wrap text-text">{fb.message}</p>
+
+              {/* 제보 맥락 — 어느 강의에서 났는지가 재현의 출발점이다(스펙 14 §D).
+                  `page` 만으로는 /lecture/[slug] 하나에 모든 강의가 모여 특정이 안 된다. */}
+              {(fb.lecture_title || fb.lecture_id) && (
+                <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-text-subtle">
+                    {t("admin.feedbackLectureLabel")}
+                  </span>
+                  {fb.user_id ? (
+                    <Link
+                      href={`/admin/testers/${fb.user_id}`}
+                      className="font-semibold text-gold-on-light underline-offset-2 hover:underline"
+                      data-testid={`feedback-lecture-${fb.id}`}
+                    >
+                      {fb.lecture_title || t("admin.feedbackLectureDeleted")}
+                    </Link>
+                  ) : (
+                    // 유저가 삭제되면 갈 곳이 없다 — 링크 대신 텍스트로 남긴다.
+                    <span className="font-semibold text-text">
+                      {fb.lecture_title || t("admin.feedbackLectureDeleted")}
+                    </span>
+                  )}
+                </p>
+              )}
 
               <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs text-text-muted">
