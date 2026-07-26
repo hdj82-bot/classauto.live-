@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import { useI18n } from "@/contexts/I18nContext";
 import Header from "@/components/Header";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import FeedbackLauncher from "@/components/feedback/FeedbackLauncher";
 
 interface Course { id: string; title: string; description: string | null; is_published: boolean; }
 interface Lecture { id: string; title: string; slug: string; is_published: boolean; video_url: string | null; thumbnail_url: string | null; }
@@ -146,6 +147,16 @@ export default function DashboardPage() {
                 )}
               </section>
             ))}
+          </div>
+        )}
+
+        {/* 학생 제보 경로 — 시청 화면이 아니라 여기 둔다. 플레이어에 버튼을 띄우면
+            집중도 모니터링이 있는 서비스에서 방해가 되고 컨트롤과 겹칠 위험도 있다
+            (결정 2026-07-27). "퀴즈 뒤 영상이 안 나옴" 같은 제보는 시청을 끝내거나
+            빠져나온 뒤 이 화면에서 낸다. */}
+        {user.role === "student" && !loading && (
+          <div className="mt-10">
+            <FeedbackLauncher variant="card" />
           </div>
         )}
       </main>

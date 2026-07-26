@@ -4,7 +4,7 @@ import { I18nProvider } from "@/contexts/I18nContext";
 import { LectureProvider, useRegisterLecture } from "@/contexts/LectureContext";
 
 /**
- * 피드백에 강의 맥락 붙이기 — 스펙 14 §D.
+ * 피드백 진입점 + 강의 맥락 — 스펙 13 §F · 14 §D.
  *
  * 회귀 가드:
  *   1. 강의 화면에서 누르면 `lecture_id` 가 함께 간다
@@ -30,7 +30,7 @@ vi.mock("@/lib/api", () => ({
   feedbackApi: { submit: mocks.submit },
 }));
 
-import GlobalFeedbackButton from "@/components/feedback/GlobalFeedbackButton";
+import FeedbackLauncher from "@/components/feedback/FeedbackLauncher";
 
 /** 플레이어가 강의를 받아온 뒤 스스로 등록하는 동작을 흉내낸다. */
 function LectureRegistrar({ id, title }: { id?: string; title?: string }) {
@@ -46,7 +46,7 @@ async function submitFeedback(message: string) {
   fireEvent.submit(form);
 }
 
-describe("GlobalFeedbackButton — 강의 맥락", () => {
+describe("FeedbackLauncher — 강의 맥락", () => {
   beforeEach(() => {
     mocks.submit.mockReset();
     mocks.submit.mockResolvedValue({ data: {} });
@@ -59,7 +59,7 @@ describe("GlobalFeedbackButton — 강의 맥락", () => {
       <I18nProvider>
         <LectureProvider>
           <LectureRegistrar id="lec-1" title="1주차 — 어순" />
-          <GlobalFeedbackButton />
+          <FeedbackLauncher variant="sidebar" />
         </LectureProvider>
       </I18nProvider>,
     );
@@ -82,7 +82,7 @@ describe("GlobalFeedbackButton — 강의 맥락", () => {
     mocks.pathname = "/professor/dashboard";
     render(
       <I18nProvider>
-        <GlobalFeedbackButton />
+        <FeedbackLauncher variant="sidebar" />
       </I18nProvider>,
     );
 
@@ -98,7 +98,7 @@ describe("GlobalFeedbackButton — 강의 맥락", () => {
       <I18nProvider>
         <LectureProvider>
           <LectureRegistrar id={undefined} />
-          <GlobalFeedbackButton />
+          <FeedbackLauncher variant="sidebar" />
         </LectureProvider>
       </I18nProvider>,
     );
@@ -113,7 +113,7 @@ describe("GlobalFeedbackButton — 강의 맥락", () => {
       <I18nProvider>
         <LectureProvider>
           <LectureRegistrar id="lec-1" />
-          <GlobalFeedbackButton />
+          <FeedbackLauncher variant="sidebar" />
         </LectureProvider>
       </I18nProvider>,
     );
@@ -122,7 +122,7 @@ describe("GlobalFeedbackButton — 강의 맥락", () => {
     rerender(
       <I18nProvider>
         <LectureProvider>
-          <GlobalFeedbackButton />
+          <FeedbackLauncher variant="sidebar" />
         </LectureProvider>
       </I18nProvider>,
     );
@@ -137,7 +137,7 @@ describe("GlobalFeedbackButton — 강의 맥락", () => {
     mocks.user = null;
     render(
       <I18nProvider>
-        <GlobalFeedbackButton />
+        <FeedbackLauncher variant="sidebar" />
       </I18nProvider>,
     );
     expect(screen.queryByRole("button")).toBeNull();

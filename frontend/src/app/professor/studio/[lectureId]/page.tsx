@@ -18,6 +18,7 @@ import { useStudioI18n } from "@/components/professor/studio/useStudioI18n";
 import { langLabel } from "@/components/professor/studio/studioTypes";
 import StudioTitleEditor from "@/components/professor/studio/StudioTitleEditor";
 import { useShell } from "@/components/professor/shell/ShellContext";
+import { useRegisterLecture } from "@/contexts/LectureContext";
 import {
   deleteQuiz,
   listAuthoredQuizzes,
@@ -135,6 +136,9 @@ export default function StudioWizardPage() {
 
   // ── 강의 + 비디오 ID ─────────────────────────────────────────────────────────
   const [lecture, setLecture] = useState<LectureWithAvatar | null>(null);
+  // 이 화면에서 낸 제보에 어느 강의였는지를 붙인다(스펙 14 §D). id 는 라우트에서
+  // 곧바로 알 수 있으므로 강의 로딩을 기다리지 않는다 — 제목만 나중에 채워진다.
+  useRegisterLecture(lectureId, lecture?.title);
   const [lectureLoading, setLectureLoading] = useState(true);
   const [videoId, setVideoId] = useState<string | null>(null);
 

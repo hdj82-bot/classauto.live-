@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { tabularStyle, PrimaryButton } from "@/components/professor/shell";
+import FeedbackLauncher from "@/components/feedback/FeedbackLauncher";
 
 /**
  * Studio v2 — 하단 action-bar.
@@ -70,7 +71,7 @@ export default function ActionBar({
 }: ActionBarProps) {
   return (
     <div style={barStyle}>
-      <div className="justify-self-start">
+      <div className="justify-self-start flex items-center gap-2">
         <button
           type="button"
           onClick={onPrev}
@@ -87,6 +88,11 @@ export default function ActionBar({
           </svg>
           이전 슬라이드
         </button>
+        {/* 스튜디오는 몰입 화면이라 사이드바가 없다(professor/layout.tsx). 교수자가
+            가장 오래 머물고 가장 많이 막히는 화면이므로 진입점을 여기 둔다.
+            우하단 고정 버튼이 바로 이 바의 CTA 를 덮어 철회됐으므로(#575), 덮지 않고
+            **같은 바 안**에 형제로 놓는다 — 겹침의 원인은 고정 위치였다. */}
+        <FeedbackLauncher variant="bar" />
       </div>
       <div
         className="hidden sm:block"
