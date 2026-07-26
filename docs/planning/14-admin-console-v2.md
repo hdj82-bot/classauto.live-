@@ -174,9 +174,14 @@
 
 **목표**: 실패한 렌더를 `error_message` 원문까지 펼쳐 보고, 확인/해결 상태를 남긴다.
 
+---
+
+#### C-1. 본문 렌더 실패 인박스 ✅ *(구현 완료 — PR #612, 마이그레이션 `0075`)*
+
 **마이그레이션 `<head+1>_add_render_triage.py`** *(착수 시점의 `alembic heads` 를 확인하고
 그 다음 번호를 쓸 것. 기획 문서에 구체 번호를 적지 않는다 — 미구현 작업에 번호를 예약해
-두면 먼저 머지되는 쪽과 계속 어긋난다. 이 프로젝트에서 이미 두 번 어긋났다.)*
+두면 먼저 머지되는 쪽과 계속 어긋난다. 이 프로젝트에서 이미 두 번 어긋났다.
+→ 착수 시점 head 가 `0074` 였으므로 실제 번호는 `0075`.)*
 ```
 video_renders.triaged_at   TIMESTAMPTZ NULL   -- 운영자가 확인한 시각
 video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
@@ -186,18 +191,86 @@ video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
 > `triaged_at IS NULL` → 미확인 / `triaged_at` 있고 이후 같은 강의의 성공 렌더 존재 → 해결 /
 > 그 외 → 확인함. 컬럼을 늘리는 대신 파생으로 두는 편이 상태 동기화 버그를 줄인다.
 
+##### 제공자 판별 — 실코드 기준 *(2026-07-26 정정)*
+
+**`video_renders` 는 본문 렌더 전용이며 HeyGen `create_video` 단일 경로다. VisionStory 는
+Q&A 답변 클립(`qa_answer_caches`)에만 쓰인다. `provider` 는 job id 접두로 판별하되,
+이 테이블에서 실제로 갈리는 것은 `tts_provider` 다.**
+
+- 본문 렌더 파이프라인 `app/tasks/render.py` 에는 VisionStory 분기가 **없다**.
+- 표식은 `heygen_job_id` 의 `visionstory:` 접두 하나뿐이다(별도 컬럼 없음 —
+  `app/tasks/qa_batch.py::_VS_JOB_PREFIX`, `app/services/pipeline/budget.py`).
+  본문에 VisionStory 가 붙는 날 스키마 변경 없이 값이 맞도록 접두 검사는 남겨 둔다.
+- 실제로 갈리는 값은 `tts_provider`(elevenlabs | google)다. ElevenLabs 와 Google 의
+  문자 단가가 약 19배 차이라(스펙 13 §C-3) 폴백 여부가 비용·자수 판정을 바꾼다.
+
+> **각주 — 같은 전제를 쓰는 곳.** `budget.inflight_heygen_spend_usd` 는 `VideoRender` 의
+> `status=rendering` 행 **전량**을 HeyGen 단가로 곱해 in-flight 비용을 추정한다. 즉 이
+> 함수도 "`video_renders` = HeyGen 전용" 을 전제로 성립한다. 본문 파이프라인에 VisionStory
+> 를 도입하는 작업은 **이 인박스의 `provider` 판별과 저 브레이커 추정치를 함께** 고쳐야
+> 한다. 둘 중 하나만 고치면 브레이커가 조용히 틀린 값을 쓴다.
+
+##### 렌더 패스 그룹핑의 한계 *(알려진 제약)*
+
+**패스 id 컬럼이 없어 시간 간격 30분으로 끊는다. 한 패스의 제출이 30분을 넘게 벌어지면
+두 사고로 보이고, 서로 다른 사고가 30분 안에 붙으면 한 사고로 보인다. 패스 id 컬럼이
+생기면 그것으로 바꾼다.**
+
+- 설정값은 `app/services/admin_issues.py::PASS_GAP_SECONDS` 상수다(기본 1800).
+  운영하며 오분류가 보이면 이 값만 조정한다.
+- 에러 문구로는 나누지 않는다 — 한 패스 안에서도 슬라이드마다 다른 메시지가 나올 수 있고
+  (TTS 는 성공했는데 병합에서 깨지는 식) 그건 여전히 사고 하나다.
+- 페이지네이션은 **묶은 뒤**에 적용한다. 행 단위로 자르면 한 패스가 페이지 경계에 걸려
+  같은 사고가 두 페이지로 쪼개진다.
+
 **신규 엔드포인트**
 - `GET /api/v1/admin/renders?status=failed&since=7d&cohort=&user_id=&page=&limit=`
   → 실패 렌더 목록. **강의 + 렌더 패스 단위로 묶어서** 반환한다(같은 사고의 N개 슬라이드 행이
   N줄로 보이면 안 됨 — §1.1 참조). 각 행에 `user_id/name/email`, `lecture_id/title`,
-  `provider`(heygen | visionstory, `avatar_id`·`tts_provider` 로 판별), `error_message`,
-  `created_at`, `affected_slides`, 파생 상태.
+  `provider`·`tts_provider`, `error_message`, `created_at`, `affected_slides`, 파생 상태.
 - `PATCH /api/v1/admin/renders/{render_id}/triage` → `{ "note": "..." }`, `triaged_at = now()`.
   **감사 로그 `render.triage` 1행 기록.**
+- `GET /api/v1/admin/renders/{render_id}` → 드로어용 단일 상세(`error_message` 원문).
 
 **프론트** `/admin/issues` — 프로토타입 08 의 이슈 인박스. 행 클릭 시 우측 드로어:
 `error_message` 원문 → 파이프라인 추적(있는 로그만; 없으면 이 블록 생략) → 재현 경로 링크 →
 하단 액션 바(§5).
+
+---
+
+#### C-2. Q&A 아바타 클립 실패 합류 ⬜ *(8월 베타 전 **필수**)*
+
+**Q&A 아바타 클립(`qa_answer_caches`) 실패를 같은 이슈 인박스에 합류시킨다.**
+
+**왜 필수인가.** 본인 얼굴 아바타 온보딩 실패는 교수자가 8월에 **실제로 겪을** 문제다.
+프로토타입 08 의 e2 예시가 정확히 그 케이스다 —
+`VisionStory: source portrait rejected — face not detected (confidence 0.31)`.
+C-1 은 `video_renders` 만 보므로 이 실패가 인박스에 **뜨지 않는다**. 그러면 "버그를 눈으로
+확인한다"는 §C 의 목적이 반쪽이 된다.
+
+**테이블이 달라도 운영자가 보는 화면은 하나여야 한다.** 인박스를 두 개로 나누면 운영자가
+어느 쪽을 봐야 하는지 매번 판단해야 하고, 결국 한쪽을 안 보게 된다.
+
+**범위**
+- `qa_answer_caches` 의 실패 행을 같은 목록에 합류. 원천(`render` | `qa_clip`)을 행에 표시.
+- triage 대상이 두 테이블로 갈리므로 `PATCH .../triage` 의 대상 지정 방식을 정해야 한다
+  (렌더 id 만 받는 현재 시그니처로는 Q&A 클립을 가리킬 수 없다).
+  → `qa_answer_caches` 에도 `triaged_at`/`triage_note` 를 추가할지, 아니면 triage 를
+  별도 테이블로 뽑을지 결정 필요. **전자를 권함** — C-1 과 대칭이고 조인이 늘지 않는다.
+- 여기서는 `provider` 가 실제로 heygen | visionstory 로 갈린다(C-1 과 달리 의미가 있다).
+- 감사 로그 action 은 `render.triage` 를 재사용하되 `detail.source` 로 구분한다
+  (새 action 을 만들면 §5 화이트리스트가 늘어난다).
+
+**선행 확인 완료** *(2026-07-26)* — `qa_answer_cache` 는 인박스에 필요한 걸 이미 다 갖고 있다:
+`error_message`(Text) · `status` · `lecture_id` · `instructor_id` · `heygen_job_id` ·
+`cluster_key` · `created_at`. 따라서 **원문 표시용 컬럼 추가는 불필요**하고, 신규 컬럼은
+triage 2개(`triaged_at`·`triage_note`)뿐이다. 규모는 C-1 보다 작다.
+
+그룹핑도 C-1 보다 쉽다 — `cluster_key` 가 **이미 패스 id 역할**을 한다(같은 cluster_key =
+같은 클립 공유). C-1 의 30분 시간 간격 휴리스틱이 여기서는 필요 없다.
+
+> 규모가 C-1 과 비슷하면 **별도 PR** 로 쪼갠다. C-1 이 이미 머지된 뒤이므로 목록·드로어는
+> 재사용하고 데이터 소스만 넓히는 형태가 된다.
 
 ---
 
