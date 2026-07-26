@@ -253,17 +253,35 @@ export default function AdminTesterDetailPage() {
               <ul className="space-y-2">
                 {withErrors.map((lec) => (
                   <li key={lec.id} className="text-sm">
-                    <span className="text-text">{lec.title}</span>
-                    <span className="ml-2 tabular-nums text-warning">
-                      {t("admin.testerFailedCount", { count: lec.failed_render_count })}
-                    </span>
+                    {/* 이 테스터로 좁힌 이슈 인박스로 넘긴다 — 원문·triage 는 거기 몫(§C).
+                        강의별 render_id 를 여기서 알 수 없어(artifacts 응답에 없다)
+                        user_id 필터까지만 걸고, 드로어는 운영자가 해당 행에서 연다. */}
+                    <Link
+                      href={`/admin/issues?user_id=${id}`}
+                      className="group flex items-center gap-2 transition"
+                    >
+                      <span className="text-text group-hover:text-gold-on-light">
+                        {lec.title}
+                      </span>
+                      <span className="tabular-nums text-warning">
+                        {t("admin.testerFailedCount", { count: lec.failed_render_count })}
+                      </span>
+                    </Link>
                   </li>
                 ))}
               </ul>
             )}
             {/* 오류 원문(error_message)과 triage 는 스펙 §C 이슈 인박스의 몫이다.
-                여기서는 어느 강의가 깨졌는지까지만 보여준다. */}
+                여기서는 어느 강의가 깨졌는지까지 + 인박스로 가는 경로만 준다. */}
             <p className="mt-3 text-xs text-text-faint">{t("admin.testerErrorsHint")}</p>
+            {withErrors.length > 0 && (
+              <Link
+                href={`/admin/issues?user_id=${id}`}
+                className="mt-1.5 inline-block text-xs font-semibold text-gold-on-light transition hover:underline"
+              >
+                {t("admin.navIssues")} →
+              </Link>
+            )}
           </div>
         </div>
       </div>

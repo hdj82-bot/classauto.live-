@@ -18,8 +18,8 @@ from app.models.admin_audit_log import AdminAuditLog
 from app.models.course import Course
 from app.models.lecture import Lecture
 from app.models.user import User, UserRole
-from app.models.video_render import VideoRender
-from app.services import admin_analytics, admin_artifacts, admin_budget
+from app.models.video_render import RenderStatus, VideoRender
+from app.services import admin_analytics, admin_artifacts, admin_budget, admin_issues
 from app.services.admin_audit import log_admin_action
 
 logger = logging.getLogger(__name__)
@@ -29,6 +29,26 @@ router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
 # I: 관리자 통계 Redis 캐시
 _STATS_CACHE_KEY = "admin:stats"
 _STATS_CACHE_TTL_SECONDS = 300  # 5분
+
+# C: 이슈 인박스 조회 기간 기본값·상한 (일).
+_SINCE_DEFAULT_DAYS = 7
+_SINCE_MAX_DAYS = 365
+
+
+def _parse_since_days(value: str | None) -> int:
+    """``"7d"`` · ``"30"`` 같은 조회 기간을 일수로. 해석 실패는 기본값으로 떨어진다.
+
+    잘못 적힌 파라미터 하나로 목록이 500 이 되면 안 된다 — 인박스는 사고를 보는
+    화면이라 자기가 먼저 죽으면 곤란하다.
+    """
+    if not value:
+        return _SINCE_DEFAULT_DAYS
+    raw = str(value).strip().lower().removesuffix("d")
+    try:
+        days = int(raw)
+    except ValueError:
+        return _SINCE_DEFAULT_DAYS
+    return max(1, min(days, _SINCE_MAX_DAYS))
 
 
 # ── GET /api/v1/admin/stats ──────────────────────────────────────────────────
@@ -682,3 +702,116 @@ async def reset_avatar_rerender(
         "avatar_render_count": 0,
         "detail": "아바타 제작 횟수가 초기화되었습니다.",
     }
+
+
+# ── C: GET /api/v1/admin/renders ─────────────────────────────────────────────
+
+
+@router.get("/renders")
+async def list_failed_renders(
+    status_filter: str = Query(default="failed", alias="status"),
+    since: str = Query(default="7d", description="조회 기간 — '7d' 형식 또는 일수"),
+    cohort: str | None = Query(default=None),
+    user_id: uuid.UUID | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """이슈 인박스 목록 (스펙 14 §C) — **강의 + 렌더 패스 단위로 묶어서** 반환.
+
+    같은 사고의 N개 슬라이드가 N줄로 보이면 안 된다(§1.1 — `video_renders` 는 강의당
+    여러 행이다). 묶는 규칙과 파생 3분기 상태는 `admin_issues` 참조.
+    """
+    try:
+        render_status = RenderStatus(status_filter)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"알 수 없는 렌더 상태입니다: {status_filter}",
+        ) from None
+
+    return await admin_issues.failed_render_groups(
+        db,
+        since_days=_parse_since_days(since),
+        cohort=cohort,
+        user_id=user_id,
+        page=page,
+        limit=limit,
+        render_status=render_status,
+    )
+
+
+# ── C: PATCH /api/v1/admin/renders/{render_id}/triage ─────────────────────────
+
+
+@router.patch("/renders/{render_id}/triage")
+async def triage_render(
+    render_id: uuid.UUID,
+    payload: dict | None = None,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """실패 렌더를 '확인함'으로 표시 (§C). **감사 로그 `render.triage` 1행.**
+
+    `resolved` 는 받지 않는다 — 해결 여부는 "이후 같은 강의의 성공 렌더가 있는가"로
+    파생한다(§C). 운영자가 표시할 수 있는 건 "내가 봤다"까지다.
+
+    이미 triage 된 행에 다시 부르면 시각과 메모를 갱신한다(§5 화이트리스트의 쓰기 1종).
+    """
+    render = await db.get(VideoRender, render_id)
+    if render is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="렌더를 찾을 수 없습니다."
+        )
+
+    note = None
+    if payload:
+        raw = payload.get("note")
+        if raw is not None:
+            note = str(raw).strip() or None
+
+    previous_triaged_at = render.triaged_at
+    render.triaged_at = datetime.now(timezone.utc)
+    if note is not None:
+        render.triage_note = note
+    await db.flush()
+    await db.commit()
+
+    await log_admin_action(
+        db,
+        _admin,
+        "render.triage",
+        target_type="render",
+        target_id=str(render_id),
+        detail={
+            "lecture_id": str(render.lecture_id),
+            "note": note,
+            "retriage": previous_triaged_at is not None,
+            "error_message": (render.error_message or "")[:500] or None,
+        },
+    )
+
+    return {
+        "id": str(render_id),
+        "triaged_at": render.triaged_at.isoformat(),
+        "triage_note": render.triage_note,
+    }
+
+
+# ── C: GET /api/v1/admin/renders/{render_id} ─────────────────────────────────
+
+
+@router.get("/renders/{render_id}")
+async def get_render_detail(
+    render_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """드로어가 여는 단일 렌더 상세 (§C) — `error_message` 원문 포함."""
+    detail = await admin_issues.render_detail(db, render_id)
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="렌더를 찾을 수 없습니다."
+        )
+    return detail

@@ -218,6 +218,12 @@ export default function StudioWizardPage() {
   // 현재 강의 아바타/음성이 이미 렌더된 Q&A 클립과 달라 '다시 제작' 시 새로 만들어야
   // 하는지(백엔드 점검). '다시 제작' 점검창이 ready 클립도 재작업 대상으로 표시한다.
   const [qaAvatarStale, setQaAvatarStale] = useState(false);
+  // C-3 d(스펙 13): 이번 달 남은 TTS 문자 수 + 상한. 사전 질문 응답이 재제작 잔여
+  // 횟수와 같은 자리에서 함께 내려 준다. max=0 이면 상한 비활성이라 표시를 생략한다.
+  const [ttsChars, setTtsChars] = useState<{ remaining: number; max: number }>({
+    remaining: 0,
+    max: 0,
+  });
   // "AI 질문 승인 — 아바타 미리 생성" 클릭 후 렌더가 끝날 때까지 true. 렌더는 celery
   // 비동기라 클립이 pending→rendering→ready 로 가는데, 폴링을 'rendering' 에만 걸면
   // pending 구간에서 폴링이 멈춰 버튼이 idle 로 되돌아가 "실패했나?" 오해를 준다.
@@ -413,10 +419,17 @@ export default function StudioWizardPage() {
     if (!lectureId) return;
     let cancelled = false;
     (async () => {
-      const { seedQuestions: loaded, qaAvatarStale: stale } =
-        await getSeedQuestions(lectureId);
+      const {
+        seedQuestions: loaded,
+        qaAvatarStale: stale,
+        ttsCharsRemaining,
+        ttsCharsMax,
+      } = await getSeedQuestions(lectureId);
       if (cancelled) return;
       setQaAvatarStale(stale);
+      // C-3 d(스펙 13): 남은 문자 수는 미리 보여야 의미가 있다. 사전 질문 응답이
+      // 이미 같은 자리에서 실어 오므로 별도 호출 없이 여기서 받는다.
+      setTtsChars({ remaining: ttsCharsRemaining, max: ttsCharsMax });
       if (loaded.length > 0) {
         setSeedQuestions(
           loaded.map((q) => ({
@@ -890,9 +903,15 @@ export default function StudioWizardPage() {
   > => {
     if (!lectureId || seedSaveRef.current) return null;
     try {
-      const { seedQuestions: fresh, qaAvatarStale: stale } =
-        await getSeedQuestions(lectureId);
+      const {
+        seedQuestions: fresh,
+        qaAvatarStale: stale,
+        ttsCharsRemaining,
+        ttsCharsMax,
+      } = await getSeedQuestions(lectureId);
       setQaAvatarStale(stale);
+      // 렌더가 돌면 문자 수가 줄어든다 — 폴링이 이 값을 계속 최신으로 유지한다.
+      setTtsChars({ remaining: ttsCharsRemaining, max: ttsCharsMax });
       const mapped: SeedQuestionDraft[] = fresh.map((q) => ({
         id: q.id,
         question: q.question,
@@ -1343,6 +1362,11 @@ export default function StudioWizardPage() {
       if (res.avatarRerenderMax > 0 && res.avatarRerenderRemaining < 100) {
         toast(`아바타 제작 ${res.avatarRerenderRemaining}회 남았습니다.`, "info");
       }
+      // C-3 d(스펙 13): 재제작 잔여 횟수와 같은 자리에서 남은 문자 수도 알린다.
+      // 상한 비활성(max=0)이면 알리지 않는다.
+      if (res.ttsCharsMax > 0) {
+        setTtsChars({ remaining: res.ttsCharsRemaining, max: res.ttsCharsMax });
+      }
       setSeedAwaitingRender(true);
       void reloadSeedQuestions();
       // 슬라이드는 이미 완성 — 모달은 Q&A 진행만 보인다.
@@ -1732,6 +1756,8 @@ export default function StudioWizardPage() {
         avatarName={lecture.avatar_name ?? "기본 아바타"}
         avatarPreviewImageUrl={lecture.avatar_preview_url ?? null}
         ttsProvider="elevenlabs"
+        ttsCharsRemaining={ttsChars.remaining}
+        ttsCharsMax={ttsChars.max}
         voiceGender={voiceGender}
         voiceLang={voiceLang}
         subtitleLang={subtitleLang}

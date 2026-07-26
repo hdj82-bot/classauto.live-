@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,6 +29,13 @@ class RenderStatus(str, enum.Enum):
 class VideoRender(Base):
     """HeyGen 아바타 렌더링 작업 추적 테이블."""
     __tablename__ = "video_renders"
+    __table_args__ = (
+        # 이슈 인박스(스펙 14 §C)의 유일한 핫 쿼리 — "status=failed 를 최신순으로".
+        # status 단독 색인(아래 status 컬럼 index=True)만으로는 정렬이 남는다.
+        # alembic 0075 와 같은 이름·같은 컬럼 순서. 테스트는 create_all 로 스키마를
+        # 만들므로(마이그레이션 미실행) 여기에도 선언해야 양쪽이 일치한다.
+        Index("ix_video_renders_status_created", "status", text("created_at DESC")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     lecture_id: Mapped[uuid.UUID] = mapped_column(
@@ -83,6 +90,12 @@ class VideoRender(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # 운영자 triage (스펙 14 §C — 이슈 인박스). NULL = 아직 아무도 안 본 실패.
+    # `resolved` 컬럼은 두지 않는다 — "해결"은 triaged_at 이후 같은 강의의 성공 렌더가
+    # 있는지로 파생한다. 상태를 두 곳에 적어 두면 동기화가 어긋난다.
+    triaged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    triage_note: Mapped[str | None] = mapped_column(Text)
 
     # 관계
     # T7: Lecture.video_renders 와 양방향 — back_populates 로 명시.

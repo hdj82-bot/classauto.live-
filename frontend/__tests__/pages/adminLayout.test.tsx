@@ -8,10 +8,11 @@ vi.mock("@/components/ProtectedRoute", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-const mocks = vi.hoisted(() => ({ adminList: vi.fn() }));
+const mocks = vi.hoisted(() => ({ adminList: vi.fn(), issuesList: vi.fn() }));
 
 vi.mock("@/lib/api", () => ({
   feedbackApi: { adminList: mocks.adminList },
+  issuesApi: { list: mocks.issuesList },
 }));
 
 import AdminLayout from "@/app/admin/layout";
@@ -32,10 +33,16 @@ const navHrefs = () =>
     .map((a) => a.getAttribute("href"))
     .filter((h): h is string => !!h);
 
-describe("AdminLayout — 스펙 14 §E 사이드바", () => {
+const issueCounts = (n: number) => ({
+  data: { counts: { new: n, triaged: 0, resolved: 0 }, issues: [], total: 0 },
+});
+
+describe("AdminLayout — 스펙 14 §E 사이드바 + §C 이슈 인박스", () => {
   beforeEach(() => {
     mocks.adminList.mockReset();
     mocks.adminList.mockResolvedValue({ data: { total: 0, feedback: [] } });
+    mocks.issuesList.mockReset();
+    mocks.issuesList.mockResolvedValue(issueCounts(0));
   });
 
   it("운영·품질·감시 3그룹으로 묶인다", async () => {
@@ -45,7 +52,7 @@ describe("AdminLayout — 스펙 14 §E 사이드바", () => {
     expect(screen.getByText("감시")).toBeTruthy();
   });
 
-  it("E 시점 항목은 8개다 — 이슈 인박스는 C 에서 추가하므로 아직 없다", async () => {
+  it("최종 항목은 9개다 — 이슈 인박스가 품질 그룹 맨 앞에 붙는다", async () => {
     renderLayout();
     await screen.findByText("운영");
 
@@ -53,14 +60,13 @@ describe("AdminLayout — 스펙 14 §E 사이드바", () => {
       "/admin",
       "/admin/invites",
       "/admin/beta",
+      "/admin/issues",
       "/admin/feedback",
       "/admin/applications",
       "/admin/costs",
       "/admin/audit",
       "/admin/system",
     ]);
-    // C 머지 전까지 링크를 걸면 404 다.
-    expect(navHrefs()).not.toContain("/admin/issues");
   });
 
   it("/admin/users 는 사이드바에서 빠진다(라우트 자체는 유지)", async () => {
@@ -78,6 +84,15 @@ describe("AdminLayout — 스펙 14 §E 사이드바", () => {
     expect(mocks.adminList).toHaveBeenCalledWith({ status: "open" });
   });
 
+  it("미확인 이슈 수를 배지로 노출한다 — 행 수가 아니라 counts.new(패스 수)", async () => {
+    mocks.issuesList.mockResolvedValue(issueCounts(4));
+    renderLayout();
+
+    await waitFor(() => expect(screen.getByText("4")).toBeTruthy());
+    // 목록과 같은 기준(7일)으로 세야 배지와 화면이 어긋나지 않는다.
+    expect(mocks.issuesList).toHaveBeenCalledWith({ since: "7d", limit: 1 });
+  });
+
   it("미처리가 0이면 배지를 그리지 않는다", async () => {
     renderLayout();
     await screen.findByText("운영");
@@ -86,10 +101,20 @@ describe("AdminLayout — 스펙 14 §E 사이드바", () => {
 
   it("배지 조회가 실패해도 콘솔은 그대로 렌더된다", async () => {
     mocks.adminList.mockRejectedValue(new Error("500"));
+    mocks.issuesList.mockRejectedValue(new Error("500"));
     renderLayout();
 
     expect(await screen.findByText("운영")).toBeTruthy();
     expect(screen.getByText("child")).toBeTruthy();
+  });
+
+  it("이슈 배지가 죽어도 피드백 배지는 살아 있다", async () => {
+    // 두 조회를 하나로 묶어 await 하면 한쪽 장애가 다른 배지까지 0 으로 만든다.
+    mocks.adminList.mockResolvedValue({ data: { total: 2, feedback: [] } });
+    mocks.issuesList.mockRejectedValue(new Error("500"));
+    renderLayout();
+
+    await waitFor(() => expect(screen.getByText("2")).toBeTruthy());
   });
 
   it("하드코딩 한국어가 아니라 i18n 키를 쓴다", async () => {
@@ -97,6 +122,7 @@ describe("AdminLayout — 스펙 14 §E 사이드바", () => {
     expect(await screen.findByText("ClassAuto")).toBeTruthy();
     expect(screen.getByText("개요")).toBeTruthy();
     expect(screen.getByText("베타 현황")).toBeTruthy();
+    expect(screen.getByText("이슈 인박스")).toBeTruthy();
     expect(screen.getByText("비용")).toBeTruthy();
     expect(screen.getByText("시스템")).toBeTruthy();
   });

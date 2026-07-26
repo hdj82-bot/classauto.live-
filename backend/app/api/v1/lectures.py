@@ -266,6 +266,7 @@ def _seed_questions_response(
     from app.services.pipeline.budget import (  # noqa: PLC0415
         avatar_render_count,
         avatar_rerender_remaining,
+        tts_quota_remaining,
     )
 
     rerender_count = (
@@ -276,6 +277,13 @@ def _seed_questions_response(
         if lecture_id is not None
         else 0
     )
+    # C-3 d(스펙 13): 이번 달 남은 문자 수. 집계 실패가 사전질문 화면을 통째로 깨뜨리면
+    # 안 되므로(쿼터는 보조 정보다) 실패 시 0 으로 떨어뜨린다 — budget 쪽 집계 함수들이
+    # 이미 같은 fail-soft 원칙을 따른다.
+    try:
+        chars_remaining = tts_quota_remaining(sdb, instructor_id)
+    except Exception:  # noqa: BLE001
+        chars_remaining = 0
     return SeedQuestionsResponse(
         questions=items,
         max=qa_avatar.SEED_QUESTIONS_MAX,
@@ -284,6 +292,8 @@ def _seed_questions_response(
         avatar_render_count=rerender_count,
         avatar_rerender_remaining=rerender_remaining,
         avatar_rerender_max=settings.AVATAR_RERENDER_MAX_PER_LECTURE,
+        tts_chars_remaining=chars_remaining,
+        tts_chars_max=settings.TTS_MONTHLY_CHARS_PER_INSTRUCTOR,
     )
 
 
