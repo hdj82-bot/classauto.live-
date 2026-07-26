@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { issuesApi, type IssueItem, type IssueStatus } from "@/lib/api";
+import {
+  issuesApi,
+  type IssueItem,
+  type IssueSource,
+  type IssueStatus,
+} from "@/lib/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useI18n } from "@/contexts/I18nContext";
 
@@ -196,19 +201,26 @@ export default function AdminIssuesPage() {
                       {issue.lecture_title || "—"}
                     </td>
                     <td className="px-3 py-2">
-                      <span className="rounded bg-text/5 px-1.5 py-0.5 text-[11px] font-semibold text-text-subtle">
-                        {issue.provider}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <SourceChip source={issue.source} t={t} />
+                        <span className="rounded bg-text/5 px-1.5 py-0.5 text-[11px] font-semibold text-text-subtle">
+                          {issue.provider}
+                        </span>
+                      </div>
                     </td>
-                    <td className="max-w-[280px] truncate px-3 py-2 font-mono text-[12px] text-text-muted">
+                    <td className="max-w-[280px] truncate px-3 py-2 text-[12px] text-text-muted">
                       {issue.error_message || "—"}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap tabular-nums text-text-subtle">
-                      {issue.affected_slides.length > 0
-                        ? t("admin.issues.slidesCount", {
-                            count: issue.affected_slides.length,
-                          })
-                        : t("admin.issues.slidesNone")}
+                      {/* Q&A 클립은 슬라이드가 아니라 질문 단위다 — "슬라이드 3개"로
+                          보이면 운영자가 없는 슬라이드를 찾는다. */}
+                      {issue.source === "qa_clip"
+                        ? t("admin.issues.clipsCount", { count: issue.affected_count })
+                        : issue.affected_slides.length > 0
+                          ? t("admin.issues.slidesCount", {
+                              count: issue.affected_slides.length,
+                            })
+                          : t("admin.issues.slidesNone")}
                     </td>
                     <td className="px-3 py-2">
                       <StatusChip status={issue.status} t={t} />
@@ -324,6 +336,28 @@ function StatusChip({
   );
 }
 
+/**
+ * 사고 출처 칩 (스펙 14 §C-2).
+ *
+ * 운영자에게 화면은 하나지만 어디서 난 사고인지는 보여야 한다 — 본문 렌더 실패와
+ * 본인 얼굴 아바타 실패는 대응이 다르다(전자는 재시도, 후자는 교수자에게 사진 재업로드
+ * 안내). 색은 중립으로 둔다: 의미 컬러는 상태 칩이 이미 쓰고 있어(§0-6) 여기까지
+ * 색을 주면 어느 쪽이 심각도인지 흐려진다.
+ */
+function SourceChip({
+  source,
+  t,
+}: {
+  source: IssueSource;
+  t: (k: string, v?: Record<string, string | number>) => string;
+}) {
+  return (
+    <span className="rounded bg-text/5 px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-text-muted">
+      {t(source === "qa_clip" ? "admin.issues.sourceQaClip" : "admin.issues.sourceBodyRender")}
+    </span>
+  );
+}
+
 /** 발생 시각 — 목록은 좁으므로 날짜+시각만(초 제외). */
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -433,21 +467,38 @@ function IssueDrawer({
               {issue.user_name || issue.user_email || "—"}
             </Kv>
             <Kv label={t("admin.issues.kvCourse")}>{issue.course_title || "—"}</Kv>
+            <Kv label={t("admin.issues.kvSource")}>
+              <SourceChip source={issue.source} t={t} />
+            </Kv>
             <Kv label={t("admin.issues.kvProvider")}>{issue.provider}</Kv>
-            <Kv label={t("admin.issues.kvTts")}>{issue.tts_provider || "—"}</Kv>
+            {/* Q&A 클립은 아바타 제공자가 음성까지 합성한다 — 별도 TTS 기록이 없다. */}
+            {issue.source === "body_render" && (
+              <Kv label={t("admin.issues.kvTts")}>{issue.tts_provider || "—"}</Kv>
+            )}
             <Kv label={t("admin.issues.kvStatus")}>
               <StatusChip status={issue.status} t={t} />
             </Kv>
             <Kv label={t("admin.issues.kvWhen")}>{formatWhen(issue.created_at)}</Kv>
-            <Kv label={t("admin.issues.kvSlides")}>
-              {issue.affected_slides.length > 0
-                ? issue.affected_slides.join(", ")
-                : t("admin.issues.slidesNone")}
-            </Kv>
+            {issue.source === "qa_clip" ? (
+              <>
+                <Kv label={t("admin.issues.kvQuestion")}>
+                  {issue.question_text || "—"}
+                </Kv>
+                <Kv label={t("admin.issues.kvCluster")}>
+                  {issue.cluster_key || t("admin.issues.clusterNone")}
+                </Kv>
+              </>
+            ) : (
+              <Kv label={t("admin.issues.kvSlides")}>
+                {issue.affected_slides.length > 0
+                  ? issue.affected_slides.join(", ")
+                  : t("admin.issues.slidesNone")}
+              </Kv>
+            )}
           </dl>
 
           <SecTitle>{t("admin.issues.sectionError")}</SecTitle>
-          <pre className="overflow-x-auto rounded-lg bg-text/[0.04] p-3 font-mono text-[12px] leading-relaxed whitespace-pre-wrap text-warning">
+          <pre className="overflow-x-auto rounded-lg bg-text/[0.04] p-3 text-[12px] leading-relaxed tracking-tight whitespace-pre-wrap text-warning">
             {issue.error_message || "—"}
           </pre>
 
@@ -455,7 +506,7 @@ function IssueDrawer({
           {issue.error_messages.length > 1 && (
             <>
               <SecTitle>{t("admin.issues.sectionTrace")}</SecTitle>
-              <div className="overflow-x-auto rounded-lg bg-text/[0.04] p-3 font-mono text-[12px] leading-relaxed">
+              <div className="overflow-x-auto rounded-lg bg-text/[0.04] p-3 text-[12px] leading-relaxed tracking-tight">
                 {issue.error_messages.map((line, i) => (
                   <div key={`${line}-${i}`} className="whitespace-pre-wrap text-text-muted">
                     {line}
@@ -484,7 +535,9 @@ function IssueDrawer({
 
           <SecTitle>{t("admin.issues.sectionRepro")}</SecTitle>
           <p className="text-[12.5px] leading-relaxed text-text-muted">
-            {t("admin.issues.reproHint")}
+            {issue.source === "qa_clip"
+              ? t("admin.issues.reproHintQaClip")
+              : t("admin.issues.reproHint")}
           </p>
           {issue.user_id && (
             <Link

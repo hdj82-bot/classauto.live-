@@ -463,9 +463,19 @@ export const auditApi = {
 /** 파생 3분기 상태 — 백엔드가 `triaged_at` + 이후 성공 렌더로 계산한다(resolved 컬럼 없음). */
 export type IssueStatus = "new" | "triaged" | "resolved";
 
-/** 실패 렌더 1건 = **강의 + 렌더 패스** 하나. 슬라이드 N개가 한 줄로 묶여 온다. */
+/**
+ * 사고의 출처 (스펙 14 §C-2).
+ * - `body_render` — 본문 슬라이드 렌더(`video_renders`). 패스는 30분 간격으로 끊는다.
+ * - `qa_clip` — Q&A 아바타 답변 클립(`qa_answer_cache`). `cluster_key` 가 패스 id다.
+ *
+ * 운영자에게 화면은 하나지만, 어디서 난 사고인지는 구분·검증할 수 있어야 한다.
+ */
+export type IssueSource = "body_render" | "qa_clip";
+
+/** 사고 1건. 본문 렌더는 슬라이드 N개, Q&A 클립은 같은 클러스터 N개가 한 줄로 묶인다. */
 export interface IssueItem {
-  /** 대표 렌더 id — 드로어 열기·triage 대상. */
+  source: IssueSource;
+  /** 대표 행 id — 드로어 열기·triage 대상. */
   id: string;
   render_ids: string[];
   lecture_id: string;
@@ -481,8 +491,13 @@ export interface IssueItem {
   error_message: string | null;
   /** 한 패스 안에서 서로 달랐던 메시지 전부(드로어용). */
   error_messages: string[];
+  /** 본문 렌더만 채워진다. Q&A 클립은 슬라이드가 아니라 질문 단위라 빈 배열. */
   affected_slides: number[];
   affected_count: number;
+  /** Q&A 클립 전용 — 같은 클립을 공유하는 클러스터 식별자. */
+  cluster_key?: string | null;
+  /** Q&A 클립 전용 — 어떤 질문의 답변 클립이 깨졌는지. */
+  question_text?: string | null;
   created_at: string | null;
   last_failed_at: string | null;
   status: IssueStatus;
@@ -496,12 +511,15 @@ export interface IssueListResponse {
   limit: number;
   since_days: number;
   counts: { new: number; triaged: number; resolved: number };
+  /** 소스별 사고 수 — 합쳐 놓고도 어디서 나는 사고인지 볼 수 있어야 한다. */
+  by_source?: Record<IssueSource, number>;
   /** 스캔 상한에 걸려 잘렸는지 — true 면 화면이 그 사실을 알린다. */
   truncated: boolean;
   issues: IssueItem[];
 }
 
 export interface IssueDetail {
+  source: IssueSource;
   id: string;
   lecture_id: string;
   lecture_title: string | null;
@@ -513,6 +531,11 @@ export interface IssueDetail {
   tts_provider: string | null;
   avatar_id: string | null;
   slide_number: number | null;
+  /** Q&A 클립 전용. */
+  cluster_key?: string | null;
+  question_text?: string | null;
+  origin?: string | null;
+  sibling_count?: number | null;
   status: string;
   error_message: string | null;
   created_at: string | null;

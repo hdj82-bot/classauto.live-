@@ -486,7 +486,15 @@
       "actionSaving": "저장 중...",
       "actionError": "확인 처리에 실패했습니다.",
       "triagedAt": "{when} 확인함",
-      "affectedCount": "실패 {count}건"
+      "affectedCount": "실패 {count}건",
+      "sourceBodyRender": "본문 렌더",
+      "sourceQaClip": "Q&A 클립",
+      "kvSource": "출처",
+      "kvQuestion": "질문",
+      "kvCluster": "클러스터",
+      "clusterNone": "단독 (사전 질문)",
+      "clipsCount": "클립 {count}개",
+      "reproHintQaClip": "이 교수자의 강의에서 해당 질문을 다시 물어 클립 재생성을 유도하면 재현됩니다. 본인 얼굴 아바타 실패라면 아바타 온보딩에서 사진을 다시 업로드하도록 안내하세요."
     },
     "testerLoadError": "테스터 정보를 불러오지 못했습니다.",
     "testerLoadingLabel": "테스터 정보 로딩 중...",
