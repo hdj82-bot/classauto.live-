@@ -112,7 +112,10 @@ export default function AdminAuditPage() {
                     </td>
                     <td className="px-3 py-2 text-text-muted">{a.actor_email || "—"}</td>
                     <td className="px-3 py-2">
-                      <span className="rounded bg-bg-subtle px-1.5 py-0.5 font-mono text-xs text-text-muted">
+                      {/* action 은 `user.update_role` 같은 식별자다. v2 는 모노 폰트를
+                          폐기했으므로(typography.md — "코드·모노 (제거됨)") 칩 배경과
+                          자간으로 구분한다. */}
+                      <span className="rounded bg-bg-subtle px-1.5 py-0.5 text-xs tracking-tight text-text-muted">
                         {a.action}
                       </span>
                     </td>

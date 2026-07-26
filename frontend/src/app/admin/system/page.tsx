@@ -115,7 +115,7 @@ export default function AdminSystemPage() {
               {item.metrics.map((m) => (
                 <div key={m.label} className="flex justify-between text-sm">
                   <span className="text-text-muted">{m.label}</span>
-                  <span className="font-mono tabular-nums text-text">{m.value}</span>
+                  <span className="tabular-nums text-text">{m.value}</span>
                 </div>
               ))}
             </div>

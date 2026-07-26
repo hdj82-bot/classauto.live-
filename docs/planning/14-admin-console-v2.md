@@ -279,6 +279,10 @@ override 되면 전제가 깨진다(스펙 13 §C-1a).
   `border-line` …). Tailwind v4 `@theme inline` 매핑이 `globals.css` 에 이미 있으므로
   유틸리티 이름만 바꾸면 된다.
 - 폰트: 제목 `font-display`(Paperlogy), 본문·숫자 `font-body`(Pretendard). 숫자는 `tabular-nums`.
+  **`font-mono` 는 쓰지 않는다** — v2 는 모노 폰트를 폐기했다(`design-system/typography.md`:
+  "코드 · 모노 (제거됨) — 더 이상 사용 안 함"). 금액·통계는 `tabular-nums` 로 정렬하고,
+  `user.update_role` 같은 식별자는 칩 배경 + `tracking-tight` 로 구분한다.
+  (2026-07-26: E 1차 전환이 색 토큰만 바꾸고 `font-mono` 9곳을 남겨 뒤늦게 정리했다.)
 - 이모지 금지 — 인라인 SVG로. 같은 의미는 같은 SVG 재사용(`docs/design-system/icons.md`).
 - `prefers-reduced-motion` 지원, 진입 stagger 80ms.
 - **프로토타입 08 의 CSS 를 그대로 복붙하지 말 것.** 프로토타입은 토큰을 하드코딩한 단일 HTML이다.

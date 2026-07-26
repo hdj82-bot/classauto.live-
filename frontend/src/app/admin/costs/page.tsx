@@ -87,7 +87,7 @@ export default function AdminCostsPage() {
                     style={{ width: `${(item.cost_usd / maxServiceCost) * 100}%` }}
                   />
                 </div>
-                <span className="w-20 text-right font-mono text-sm tabular-nums text-text-muted">
+                <span className="w-20 text-right text-sm tabular-nums text-text-muted">
                   ${item.cost_usd.toFixed(4)}
                 </span>
               </div>
@@ -116,7 +116,7 @@ export default function AdminCostsPage() {
                     <td className="px-4 py-2 tabular-nums text-text-muted">
                       {t("admin.yearMonth", { year: item.year, month: item.month })}
                     </td>
-                    <td className="px-4 py-2 text-right font-mono tabular-nums text-text">
+                    <td className="px-4 py-2 text-right tabular-nums text-text">
                       ${item.cost_usd.toFixed(4)}
                     </td>
                   </tr>

@@ -212,7 +212,7 @@ function BudgetMeter({
             </span>
           )}
         </span>
-        <span className="font-mono text-xs tabular-nums text-text-muted">
+        <span className="text-xs tabular-nums text-text-muted">
           ${data.spent_month_usd.toFixed(2)} / ${data.monthly_budget_usd.toFixed(0)}
           <span className={`ml-2 font-semibold ${warn ? "text-warning" : "text-text-subtle"}`}>
             {pct.toFixed(1)}%
