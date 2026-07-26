@@ -212,3 +212,42 @@ async def test_pct_is_none_when_limit_disabled(db, monkeypatch):
     heygen = next(s for s in data["services"] if s["service"] == "heygen")
     assert heygen["month_pct"] is None
     assert heygen["day_pct"] is None
+
+
+# ── 부팅 시 단가 로그 (스펙 13 §C-1a) ─────────────────────────────────────────
+
+
+def test_celery_signals_log_unit_costs(caplog):
+    """worker/beat 부팅에서도 유효 단가가 로그로 남아야 한다.
+
+    비용을 실제로 계산하는 건 worker 다. 여기 로그가 없으면 어느 단가로 돌고 있는지
+    보려고 Railway Variables 탭을 서비스마다 눌러야 한다.
+    """
+    import logging
+
+    from app.celery_app import (
+        _log_unit_costs_on_beat_init,
+        _log_unit_costs_on_worker_ready,
+    )
+
+    with caplog.at_level(logging.INFO, logger="app.core.cost_rates"):
+        _log_unit_costs_on_worker_ready()
+        _log_unit_costs_on_beat_init()
+
+    cost_lines = [r for r in caplog.records if "[COST]" in r.getMessage()]
+    assert len(cost_lines) == 2  # worker 1 + beat 1
+    # 메시지 본문에 값이 들어 있어야 Celery 기본 포맷에서도 읽을 수 있다.
+    assert str(settings.HEYGEN_COST_USD_PER_SECOND) in cost_lines[0].getMessage()
+
+
+def test_unit_cost_log_warns_on_ratio_drift(caplog, monkeypatch):
+    """비율이 깨지면 WARNING 이 함께 나와야 한다 — 조용히 지나가면 안 된다."""
+    import logging
+
+    from app.core.cost_rates import log_effective_unit_costs
+
+    monkeypatch.setattr(settings, "HEYGEN_COST_USD_PER_SECOND", 0.0083)
+    with caplog.at_level(logging.INFO, logger="app.core.cost_rates"):
+        log_effective_unit_costs()
+
+    assert any(r.levelno == logging.WARNING for r in caplog.records)

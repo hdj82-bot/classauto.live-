@@ -128,6 +128,26 @@ async def spend_by_instructor(db, since=None) -> dict[uuid.UUID, float]:
 - **확정 사실(2026-06 점검)**: Railway 3개 서비스(backend/celery-worker/celery-beat) 모두
   `HEYGEN_*_BUDGET_USD` **미설정** → `app/core/config.py` 기본값이 그대로 적용된다.
   `HEYGEN_COST_USD_PER_SECOND` 는 세 서비스 모두 **`0.0083`**(실측 ≈ $0.50/분)으로 일치.
+
+> **2026-07-26 재확인 — 단가 현황과 미확정 사항**
+>
+> | 값 | 출처 | 현재 |
+> |---|---|---|
+> | `HEYGEN_COST_USD_PER_SECOND` | Railway env (web·worker·beat **3개 모두**) | **0.0083** |
+> | 〃 | `config.py` 기본값 | 0.0167 |
+> | `VISIONSTORY_COST_USD_PER_SECOND` | env **없음** → 코드값 | 0.0334 |
+> | 비율 (VS / HeyGen) | 실제 적용값 기준 | **4.02** (기대 2.0) |
+>
+> - **서비스 간 드리프트는 없다.** 세 서비스에 일관 적용됐다는 건 의도한 값이라는 뜻이고,
+>   위 2026-06 기록도 이 값을 "실측 ≈ $0.50/분"으로 남겼다. `config.py` 의 0.0167 은
+>   주석 근거뿐이라 **0.0083 이 진짜일 가능성이 높다.**
+> - **그렇다면 틀린 쪽은 VisionStory 다.** 0.0083 이 맞다면 "HeyGen 의 정확히 2배"
+>   (2026-06-19 확인)에 따라 `0.0166` 이어야 하는데 `0.0334` 다 — 코드 작성자가 HeyGen 을
+>   0.0167 로 잡고 2를 곱한 결과로 보인다. 다만 **브레이커가 일찍 터지는 방향**이라 급하지 않다.
+> - **청구서 확인 전까지 값은 아무것도 바꾸지 않는다.** `config.py` 도 Railway env 도 그대로
+>   둔다. HeyGen 대시보드로 실측 단가를 확정한 뒤(§C-1b), **코드 기본값을 실측에 맞추고
+>   env 를 제거해 `ratio=2.0` 으로 정렬**한다.
+> - 그때까지 §C-1a 의 인원 산정은 보수적인 0.0167 기준을 유지한다.
 - **조치(완료)**: `config.py` 기본값
   `HEYGEN_DAILY_BUDGET_USD = 250.0`, `HEYGEN_MONTHLY_BUDGET_USD = 600.0`.
   단가 0.0083 기준이라 월 600 은 약 1,200분 여유 → 20명 베타에 충분.
@@ -160,6 +180,19 @@ async def spend_by_instructor(db, since=None) -> dict[uuid.UUID, float]:
 `config.py` 의 VisionStory 단가 주석("HeyGen 0.0167 의 정확히 2배 — 2026-06-19 사용자
 확인")은 그 뒤다.
 
+##### 조정 원칙 — 무엇을 env 로 바꾸고 무엇을 코드로 바꾸나
+
+| 대상 | 어디서 바꾸나 | 이유 |
+|---|---|---|
+| **예산 금액** (`*_BUDGET_USD`) | **Railway env** | 인원이 늘 때마다 조정한다. 코드 재배포 없이 올려야 한다. |
+| **단가** (`*_COST_USD_PER_SECOND`) | **`config.py` 기본값** | 공급자 가격이 바뀔 때만 움직이는 사실값이다. **개별 env override 금지.** |
+
+- **단가 두 값은 반드시 함께 조정한다.** `VISIONSTORY_COST_USD_PER_SECOND` 는
+  `HEYGEN_COST_USD_PER_SECOND` 의 2배로 유도된 값이라, 하나만 바꾸면 전제가 깨진다.
+- **단가를 env 로 덮지 않는다.** 덮으면 코드값과 갈리는데, 그 상태가 로그 이전에는
+  드러나지 않았다(실제로 갈려 있었고 아무도 몰랐다). 값이 바뀌면 코드를 고쳐 배포한다.
+- 예산 금액은 반대다 — 인원 확대마다 조정하므로 env 가 맞다(§C-1a 적용 절차).
+
 ##### ⚠️ 두 단가는 결합돼 있다 — 하나만 env override 금지
 
 `VISIONSTORY_COST_USD_PER_SECOND`(0.0334)는 `HEYGEN_COST_USD_PER_SECOND`(0.0167)의
@@ -170,8 +203,11 @@ async def spend_by_instructor(db, since=None) -> dict[uuid.UUID, float]:
 - 비율이 2.0 에서 벗어나면 **부팅 로그 경고**와 **콘솔 개요 예산 미터의 경고**가 뜬다
   (`app/core/cost_rates.py`, 스펙 14 §E). 그 경고가 보이면 env 를 먼저 정리한다.
 - 지금 어느 단가로 돌고 있는지는 **부팅 로그 1행**(`[COST] 유효 단가 …`)과
-  `GET /api/v1/admin/budget` 의 `unit_costs` 로 확인한다. 서비스가 셋이라
-  **한 서비스만 env 가 다른 상황**도 이 로그로 드러난다.
+  `GET /api/v1/admin/budget` 의 `unit_costs` 로 확인한다.
+  **web·celery-worker·celery-beat 세 서비스가 각자 부팅 시 1행씩 남긴다**
+  (`main.py` lifespan · `celery_app.py` 의 `worker_ready`/`beat_init` 시그널) —
+  비용을 실제로 계산하는 건 worker 이므로 거기 로그가 특히 중요하고, 서비스 간
+  드리프트도 Variables 탭을 뒤질 필요 없이 로그만으로 드러난다.
 
 ##### 권장 월 예산 계산식
 

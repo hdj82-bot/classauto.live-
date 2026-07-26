@@ -1,9 +1,10 @@
 """Celery 인스턴스 설정."""
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import task_failure, task_retry, task_success
+from celery.signals import beat_init, task_failure, task_retry, task_success, worker_ready
 
 from app.core.config import settings
+from app.core.cost_rates import log_effective_unit_costs
 from app.core.metrics import CELERY_TASK_COUNT
 
 celery = Celery(
@@ -110,6 +111,26 @@ celery.conf.beat_schedule = {
 }
 
 # autodiscover_tasks 제거됨 — 위 include= 로 대체 (Django 스타일 tasks.py 탐색 회피)
+
+
+# ── 유효 아바타 단가 로그 (스펙 13 §C-1a) ────────────────────────────────────
+# **비용을 실제로 계산하는 건 worker 다.** 종전엔 이 로그가 FastAPI(web) 부팅에만
+# 있어서, 워커가 어느 단가로 돌고 있는지 보려면 Railway Variables 탭을 서비스마다
+# 일일이 눌러야 했다. 세 서비스(web/worker/beat)가 각자 부팅 시 1행씩 남기면
+# **서비스 간 드리프트가 로그만 보고 드러난다.**
+#
+# 참고: setup_logging() 은 FastAPI lifespan 에서만 호출되므로 워커 로그는 Celery
+# 기본 포맷이다. 그래도 메시지 본문에 값이 다 들어가 있어 읽는 데 지장은 없다.
+
+
+@worker_ready.connect
+def _log_unit_costs_on_worker_ready(**_kwargs) -> None:
+    log_effective_unit_costs()
+
+
+@beat_init.connect
+def _log_unit_costs_on_beat_init(**_kwargs) -> None:
+    log_effective_unit_costs()
 
 
 # ── Prometheus: 태스크 결과 계측 ─────────────────────────────────────────────
