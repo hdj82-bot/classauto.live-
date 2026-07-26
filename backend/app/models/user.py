@@ -120,6 +120,12 @@ class User(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # 운영자가 TTS 월 문자 쿼터를 개별 상향한 시각(스펙 13 §C-3 b).
+    # 쿼터는 카운터가 아니라 비용 로그에서 계산되므로, 0 으로 되돌릴 대상이 없다.
+    # 대신 집계 시작점을 여기로 옮긴다 — 달 시작과 이 값 중 더 늦은 쪽부터 센다.
+    tts_quota_reset_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

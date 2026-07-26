@@ -11,6 +11,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
+from app.core.config import settings
 from app.core.redis import get_redis
 from app.db.session import get_db
 from app.models.admin_audit_log import AdminAuditLog
@@ -581,6 +582,63 @@ async def list_audit_logs(
             }
             for a in rows
         ],
+    }
+
+
+# ── C-3: POST /api/v1/admin/users/{user_id}/reset-tts-quota ──────────────────
+
+
+@router.post("/users/{user_id}/reset-tts-quota")
+async def reset_tts_quota(
+    user_id: uuid.UUID,
+    _admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """교수자의 이번 달 TTS 문자 쿼터를 초기화 (§C-3 b 운영자 오버라이드).
+
+    쿼터는 카운터가 아니라 비용 로그에서 계산되므로 0 으로 되돌릴 값이 없다. 대신
+    **집계 시작점**을 지금으로 옮겨 이후 사용분만 세게 한다 — 결과는 리셋과 같다.
+
+    8월 베타 기본 쿼터가 30,000자(강의 약 3편)로 좁다. 좁게 시작해 필요한 사람만 풀어
+    주는 편이 ElevenLabs 계정 한도를 지키므로(§C-0 — 계정에 하드캡이 없다) 이 오버라이드가
+    실제로 자주 쓰인다. 이 행위는 감사 로그에 1행 남는다.
+    """
+    from app.services.pipeline.budget import tts_chars_used_this_month  # noqa: PLC0415
+
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="사용자를 찾을 수 없습니다."
+        )
+
+    # 리셋 직전 사용량을 감사 로그에 남긴다 — 얼마를 면제해 줬는지가 기록의 핵심이다.
+    def _used_sync(sync_session):
+        return tts_chars_used_this_month(sync_session, user_id)
+
+    previous_chars = await db.run_sync(_used_sync)
+
+    target.tts_quota_reset_at = datetime.now(timezone.utc)
+    await db.flush()
+    await db.commit()
+
+    await log_admin_action(
+        db,
+        _admin,
+        "user.reset_tts_quota",
+        target_type="user",
+        target_id=str(user_id),
+        detail={
+            "email": target.email,
+            "previous_chars": previous_chars,
+            "cap": settings.TTS_MONTHLY_CHARS_PER_INSTRUCTOR,
+        },
+    )
+
+    return {
+        "id": str(user_id),
+        "email": target.email,
+        "previous_chars": previous_chars,
+        "reset_at": target.tts_quota_reset_at.isoformat(),
     }
 
 
