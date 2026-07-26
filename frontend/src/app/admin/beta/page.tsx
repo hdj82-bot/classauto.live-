@@ -369,9 +369,9 @@ function RowWithDrilldown({
         <td className="px-3 py-2 text-right tabular-nums text-text-muted">{row.lectures_count}</td>
         <td className="px-3 py-2 text-right tabular-nums text-text-muted">{row.published_lectures_count}</td>
         <td className="px-3 py-2 text-right tabular-nums text-text-muted">{row.renders_count}</td>
-        <td className="px-3 py-2 text-right font-mono tabular-nums text-text-muted">${row.spend_this_month_usd.toFixed(2)}</td>
-        <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums text-text">${row.spend_total_usd.toFixed(2)}</td>
-        <td className="px-3 py-2 text-right font-mono tabular-nums text-text-muted">${row.spend_monthly_avg_usd.toFixed(2)}</td>
+        <td className="px-3 py-2 text-right tabular-nums text-text-muted">${row.spend_this_month_usd.toFixed(2)}</td>
+        <td className="px-3 py-2 text-right font-semibold tabular-nums text-text">${row.spend_total_usd.toFixed(2)}</td>
+        <td className="px-3 py-2 text-right tabular-nums text-text-muted">${row.spend_monthly_avg_usd.toFixed(2)}</td>
         <td className="px-3 py-2 tabular-nums text-text-muted">{fmtDate(row.last_active_at)}</td>
 
         {/* 오버플로 메뉴 — 행 클릭(드릴다운)과 충돌하지 않게 전파를 끊는다. */}
@@ -479,7 +479,7 @@ function RowWithDrilldown({
                       {detail.monthly_spend.map((m) => (
                         <li key={`${m.year}-${m.month}`} className="flex max-w-xs justify-between text-sm text-text-muted">
                           <span className="tabular-nums">{t("admin.yearMonth", { year: m.year, month: m.month })}</span>
-                          <span className="font-mono tabular-nums">${m.cost_usd.toFixed(2)}</span>
+                          <span className="tabular-nums">${m.cost_usd.toFixed(2)}</span>
                         </li>
                       ))}
                     </ul>
