@@ -51,6 +51,10 @@ from sqlalchemy import func, select
 
 from app.core.config import settings
 from app.db.session import SyncSessionLocal
+from app.services.cost_tracker import (
+    ELEVENLABS_USD_PER_1K_CHARS,
+    GOOGLE_TTS_USD_PER_1K_CHARS,
+)
 from app.models.cost_log import CostLog
 from app.models.video_render import RenderCostLog
 
@@ -59,6 +63,23 @@ GUARDED = {
     "heygen": "assert_heygen_budget (일/월 $)",
     "visionstory": "assert_visionstory_budget (일/월 $)",
 }
+
+# TTS 는 cost_usd = chars × rate/1000 으로 저장된다 → 역산하면 실제 자수가 나온다.
+# 프롬프트에 자수 목표가 없어(§C-4 — "1~2분 분량") 실측이 유일한 근거다.
+TTS_RATES = {
+    "elevenlabs": ELEVENLABS_USD_PER_1K_CHARS,
+    "google_tts": GOOGLE_TTS_USD_PER_1K_CHARS,
+}
+
+
+def _estimated_chars(row: dict) -> tuple[float, float] | None:
+    """(총 자수, 건당 평균 자수). TTS 가 아니면 None."""
+    rate = TTS_RATES.get(row["name"])
+    if not rate or row["cost_usd"] <= 0:
+        return None
+    total = row["cost_usd"] / rate * 1000.0
+    per = total / row["count"] if row["count"] else 0.0
+    return total, per
 
 
 def _months_ago(n: int) -> datetime:
@@ -143,14 +164,17 @@ def _print_table(rows: list[dict]) -> None:
         print("   (기록 없음)")
         return
     print(
-        f"   {'월':>8}  {'항목':<24} {'건수':>6} {'duration(s)':>12} {'$':>10}  {'상한':<32}"
+        f"   {'월':>8}  {'항목':<24} {'건수':>6} {'자수(실측)':>12} {'건당 자수':>10} "
+        f"{'$':>10}  {'상한':<32}"
     )
     for r in sorted(rows, key=lambda x: (-x["year"], -x["month"], x["name"])):
         guard = _guard_for(r) or "⚠️  없음"
-        dur = f"{r['duration_sec']:.1f}" if r["duration_sec"] else "—"
+        chars = _estimated_chars(r)
+        chars_s = f"{chars[0]:,.0f}" if chars else "—"
+        per_s = f"{chars[1]:,.0f}" if chars else "—"
         print(
             f"   {r['year']}-{r['month']:02d}  {r['name']:<24} {r['count']:>6} "
-            f"{dur:>12} {r['cost_usd']:>10.4f}  {guard:<32}"
+            f"{chars_s:>12} {per_s:>10} {r['cost_usd']:>10.4f}  {guard:<32}"
         )
 
 
