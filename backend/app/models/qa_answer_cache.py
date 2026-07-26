@@ -3,7 +3,18 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -28,6 +39,13 @@ class QAAnswerCache(Base):
     시 같은 s3_video_url 을 공유한다(형제 행의 heygen_job_id 는 NULL).
     """
     __tablename__ = "qa_answer_cache"
+    __table_args__ = (
+        # 이슈 인박스(스펙 14 §C-2)의 핫 쿼리 — "status=failed 를 최신순으로".
+        # status 단독 색인(아래 status 컬럼 index=True)만으로는 정렬이 남는다.
+        # alembic 0076 과 같은 이름·같은 컬럼 순서. 테스트는 create_all 로 스키마를
+        # 만들므로(마이그레이션 미실행) 여기에도 선언해야 양쪽이 일치한다.
+        Index("ix_qa_answer_cache_status_created", "status", text("created_at DESC")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     lecture_id: Mapped[uuid.UUID] = mapped_column(
@@ -64,6 +82,15 @@ class QAAnswerCache(Base):
 
     # 캐시 적중 횟수(질문 겹침 측정 — 클러스터 대표 선정·투명성).
     hit_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    # 운영자 이슈 인박스 triage (스펙 14 §C-2). video_renders 와 대칭 —
+    # 테이블이 달라도 운영자가 보는 화면은 하나여야 하므로 같은 컬럼을 둔다.
+    # `resolved` 는 두지 않는다: 이후 같은 cluster_key 의 ready 행이 생기면 파생으로
+    # 해결이 된다(재렌더가 성공하면 아무도 손대지 않아도 넘어간다).
+    triaged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    triage_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import Course
 from app.models.lecture import Lecture
+from app.models.qa_answer_cache import QAAnswerCache
 from app.models.user import User
 from app.models.video_render import RenderStatus, VideoRender
 
@@ -46,6 +47,14 @@ _MAX_SCAN_ROWS = 5000
 # 그래도 접두 검사를 남겨 두면 본문 파이프라인에 VisionStory 가 붙는 날 스키마 변경
 # 없이 이 필드가 곧바로 맞는 값을 준다.
 _VS_JOB_PREFIX = "visionstory:"
+
+# Q&A 클립 상태(qa_avatar.STATUS_*). 문자열 컬럼이라 여기서 상수로 고정한다.
+_QA_STATUS_READY = "ready"
+_QA_STATUS_FAILED = "failed"
+
+# 합친 목록에서 사고의 출처. 운영자에게는 화면이 하나지만 검증은 가능해야 한다.
+_SOURCE_BODY = "body_render"
+_SOURCE_QA = "qa_clip"
 
 
 def _provider(job_id: str | None) -> str:
@@ -203,6 +212,9 @@ async def failed_render_groups(
 
             groups.append(
                 {
+                    # 합친 목록에서 어디서 난 사고인지 구분(§C-2). 테이블이 둘이라는 건
+                    # 구현 사정이지 운영자 사정이 아니지만, 검증은 가능해야 한다.
+                    "source": _SOURCE_BODY,
                     "id": str(representative.id),
                     "render_ids": [str(r.id) for r in pass_rows],
                     "lecture_id": str(lecture_id),
@@ -252,12 +264,15 @@ async def failed_render_groups(
 
 
 async def unresolved_count(db: AsyncSession, *, since_days: int = 7) -> int:
-    """사이드바 배지용 — 미확인(triaged_at IS NULL) 실패 **패스** 수.
+    """사이드바 배지용 — 미확인(triaged_at IS NULL) 실패 **사고** 수.
+
+    §C-2 이후 두 소스(본문 렌더 + Q&A 클립)를 합쳐 센다. 배지가 목록과 다른 수를
+    가리키면 운영자가 인박스를 신뢰하지 않게 된다.
 
     배지는 보조 정보이므로 목록과 같은 그룹핑을 다시 돌린다. 베타 규모에선 충분하고,
     행 수를 세면 슬라이드 수만큼 부풀어 배지가 목록과 어긋난다.
     """
-    result = await failed_render_groups(db, since_days=since_days, page=1, limit=1)
+    result = await failed_issue_groups(db, since_days=since_days, page=1, limit=1)
     return result["counts"]["new"]
 
 
@@ -287,6 +302,7 @@ async def render_detail(db: AsyncSession, render_id: uuid.UUID) -> dict | None:
 
     render, lec_title, course_title, uid, uname, uemail = row
     return {
+        "source": _SOURCE_BODY,
         "id": str(render.id),
         "lecture_id": str(render.lecture_id),
         "lecture_title": lec_title,
@@ -304,4 +320,330 @@ async def render_detail(db: AsyncSession, render_id: uuid.UUID) -> dict | None:
         "completed_at": _iso(render.completed_at),
         "triaged_at": _iso(render.triaged_at),
         "triage_note": render.triage_note,
+    }
+
+
+# ── C-2: Q&A 아바타 클립 실패 합류 ────────────────────────────────────────────
+#
+# **왜 같은 목록인가.** 교수자가 8월에 실제로 겪을 실패는 본인 얼굴 아바타 온보딩이고,
+# 그건 `video_renders` 가 아니라 `qa_answer_cache` 에서 난다(프로토타입 08 e2:
+# "VisionStory: source portrait rejected"). 인박스를 두 개로 나누면 운영자가 매번
+# 어느 쪽을 봐야 하는지 판단해야 하고 결국 한쪽을 안 보게 된다.
+#
+# **그룹핑 규칙이 소스마다 다르다.**
+#   · 본문 렌더 — 패스 id 가 없어 시간 간격 30분으로 끊는다(_split_passes).
+#   · Q&A 클립 — `cluster_key` 가 **이미 패스 id 역할**을 한다(같은 cluster_key = 같은
+#     클립 공유). 야간 배치라 제출 시각이 넓게 흩어져서 30분 휴리스틱을 쓰면 한 클러스터가
+#     여러 사고로 쪼개진다. 그래서 여기서는 시간을 아예 보지 않는다.
+#   · `cluster_key` 가 NULL 인 행(교수자 사전 질문 `instructor_seed` — 클러스터링을
+#     거치지 않고 즉시 렌더)은 **행 자체가 한 사고**다.
+
+
+
+def _qa_group_key(row) -> str:
+    """Q&A 클립의 패스 식별자.
+
+    `cluster_key` 가 있으면 그것이 곧 패스다. 없으면(instructor_seed) 행 id 를 써서
+    그 행 하나가 독립 사고가 되게 한다 — NULL 을 한 덩어리로 묶으면 서로 무관한
+    사전 질문 실패들이 한 사고로 뭉친다.
+    """
+    return row.cluster_key or f"row:{row.id}"
+
+
+async def _latest_ready_by_cluster(
+    db: AsyncSession, lecture_ids: list[uuid.UUID]
+) -> dict[tuple[uuid.UUID, str], datetime]:
+    """(강의, cluster_key) 별 '가장 최근 ready' 시각 — 3분기의 '해결' 판정.
+
+    본문 렌더는 강의 단위로 성공을 보지만(어느 슬라이드든 성공하면 그 패스는 넘어간
+    것으로 본다), Q&A 클립은 **클립 단위**로 봐야 한다. 다른 클러스터가 성공했다고
+    이 클립의 실패가 해결된 건 아니다.
+    """
+    if not lecture_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(
+                QAAnswerCache.lecture_id,
+                QAAnswerCache.cluster_key,
+                func.max(QAAnswerCache.updated_at),
+            )
+            .where(
+                QAAnswerCache.lecture_id.in_(lecture_ids),
+                QAAnswerCache.status == _QA_STATUS_READY,
+            )
+            .group_by(QAAnswerCache.lecture_id, QAAnswerCache.cluster_key)
+        )
+    ).all()
+    return {
+        (r[0], r[1] or ""): r[2] for r in rows if r[2] is not None
+    }
+
+
+async def failed_qa_clip_groups(
+    db: AsyncSession,
+    *,
+    since_days: int = 7,
+    cohort: str | None = None,
+    user_id: uuid.UUID | None = None,
+) -> tuple[list[dict], bool]:
+    """실패한 Q&A 클립을 클러스터 단위로 묶는다. (그룹 목록, 잘림 여부).
+
+    페이지네이션은 하지 않는다 — 호출자가 본문 렌더 그룹과 합친 **뒤**에 자른다.
+    소스별로 따로 자르면 합친 목록의 페이지 경계가 어긋난다.
+    """
+    since = datetime.now(timezone.utc) - timedelta(days=max(1, since_days))
+
+    stmt = (
+        select(
+            QAAnswerCache,
+            Lecture.title,
+            Course.title,
+            User.id,
+            User.name,
+            User.email,
+            User.cohort,
+        )
+        .join(Lecture, QAAnswerCache.lecture_id == Lecture.id)
+        .outerjoin(Course, Lecture.course_id == Course.id)
+        .outerjoin(User, QAAnswerCache.instructor_id == User.id)
+        .where(
+            QAAnswerCache.status == _QA_STATUS_FAILED,
+            QAAnswerCache.created_at >= since,
+        )
+    )
+    if user_id is not None:
+        stmt = stmt.where(QAAnswerCache.instructor_id == user_id)
+    if cohort:
+        stmt = stmt.where(User.cohort == cohort)
+
+    # 색인 ix_qa_answer_cache_status_created (status, created_at DESC) 가 받는 정렬.
+    stmt = stmt.order_by(QAAnswerCache.created_at.desc()).limit(_MAX_SCAN_ROWS + 1)
+    rows = (await db.execute(stmt)).all()
+
+    truncated = len(rows) > _MAX_SCAN_ROWS
+    if truncated:
+        rows = rows[:_MAX_SCAN_ROWS]
+
+    # (강의, cluster_key) 로 모은다 — 시간 간격을 보지 않는다.
+    by_key: dict[tuple[uuid.UUID, str], list] = {}
+    meta: dict[tuple[uuid.UUID, str], tuple] = {}
+    for cache, lec_title, course_title, uid, uname, uemail, ucohort in rows:
+        key = (cache.lecture_id, _qa_group_key(cache))
+        by_key.setdefault(key, []).append(cache)
+        meta[key] = (lec_title, course_title, uid, uname, uemail, ucohort)
+
+    lecture_ids = list({k[0] for k in by_key})
+    latest_ready = await _latest_ready_by_cluster(db, lecture_ids)
+
+    groups: list[dict] = []
+    for (lecture_id, group_key), clip_rows in by_key.items():
+        clip_rows.sort(
+            key=lambda r: _aware(r.created_at) or datetime.min.replace(tzinfo=timezone.utc)
+        )
+        lec_title, course_title, uid, uname, uemail, ucohort = meta[(lecture_id, group_key)]
+
+        # 대표 행 = 그 클러스터에서 가장 최근 실패. triage 는 이 id 로 건다.
+        representative = clip_rows[-1]
+
+        triaged_values = [_aware(r.triaged_at) for r in clip_rows if r.triaged_at]
+        triaged_at = max(triaged_values) if triaged_values else None
+
+        # 해결 판정은 **같은 클러스터**의 ready 로만 한다(§ 위 주석).
+        cluster_key = representative.cluster_key or ""
+        ready_at = _aware(latest_ready.get((lecture_id, cluster_key)))
+
+        if triaged_at is None:
+            derived = "new"
+        elif ready_at is not None and ready_at > triaged_at:
+            derived = "resolved"
+        else:
+            derived = "triaged"
+
+        note = next((r.triage_note for r in reversed(clip_rows) if r.triage_note), None)
+
+        distinct_errors: list[str] = []
+        for r in reversed(clip_rows):
+            msg = (r.error_message or "").strip()
+            if msg and msg not in distinct_errors:
+                distinct_errors.append(msg)
+
+        # provider — **여기서는 실제로 갈린다**(C-1 과 달리 의미가 있다).
+        # 클러스터 형제 중 **대표 행만** heygen_job_id 를 가지므로, 대표 행이 아닌
+        # 행에서 읽으면 항상 heygen 으로 잘못 나온다. 그룹 안에서 job id 를 가진
+        # 행을 찾아 판별한다.
+        job_id = next((r.heygen_job_id for r in reversed(clip_rows) if r.heygen_job_id), None)
+
+        groups.append(
+            {
+                "source": _SOURCE_QA,
+                "id": str(representative.id),
+                "render_ids": [str(r.id) for r in clip_rows],
+                "lecture_id": str(lecture_id),
+                "lecture_title": lec_title,
+                "course_title": course_title,
+                "user_id": str(uid) if uid else None,
+                "user_name": uname,
+                "user_email": uemail,
+                "cohort": ucohort,
+                "provider": _provider(job_id),
+                # Q&A 클립은 TTS 를 따로 기록하지 않는다 — 아바타 제공자가 함께 합성한다.
+                "tts_provider": None,
+                "error_message": distinct_errors[0] if distinct_errors else None,
+                "error_messages": distinct_errors,
+                # 슬라이드가 아니라 질문 단위다. 화면이 "영향 슬라이드"로 오해하지
+                # 않도록 빈 목록을 주고 개수는 affected_count 로 전달한다.
+                "affected_slides": [],
+                "affected_count": len(clip_rows),
+                "cluster_key": representative.cluster_key,
+                "question_text": representative.question_text,
+                "created_at": _iso(clip_rows[0].created_at),
+                "last_failed_at": _iso(representative.created_at),
+                "status": derived,
+                "triaged_at": _iso(triaged_at),
+                "triage_note": note,
+            }
+        )
+
+    return groups, truncated
+
+
+async def failed_issue_groups(
+    db: AsyncSession,
+    *,
+    since_days: int = 7,
+    cohort: str | None = None,
+    user_id: uuid.UUID | None = None,
+    page: int = 1,
+    limit: int = 50,
+    source: str | None = None,
+) -> dict:
+    """**인박스의 단일 진입점** — 본문 렌더 + Q&A 클립 실패를 한 목록으로 (§C-2).
+
+    테이블이 둘이라는 건 구현 사정이지 운영자 사정이 아니다. 각 행에 ``source``
+    (``body_render`` | ``qa_clip``)를 남겨 나중에 검증할 수 있게 한다.
+
+    ``source`` 인자로 한쪽만 볼 수도 있다(필터). 기본은 둘 다.
+
+    페이지네이션은 **합친 뒤**에 적용한다 — 소스별로 먼저 자르면 합친 목록의 페이지
+    경계가 어긋나 같은 페이지에서 어떤 사고는 빠지고 어떤 사고는 중복된다.
+    """
+    body_groups: list[dict] = []
+    qa_groups: list[dict] = []
+    truncated = False
+
+    if source in (None, _SOURCE_BODY):
+        body = await failed_render_groups(
+            db,
+            since_days=since_days,
+            cohort=cohort,
+            user_id=user_id,
+            page=1,
+            limit=_MAX_SCAN_ROWS,
+        )
+        body_groups = body["issues"]
+        truncated = truncated or body["truncated"]
+
+    if source in (None, _SOURCE_QA):
+        qa_groups, qa_truncated = await failed_qa_clip_groups(
+            db, since_days=since_days, cohort=cohort, user_id=user_id
+        )
+        truncated = truncated or qa_truncated
+
+    groups = body_groups + qa_groups
+    groups.sort(key=lambda g: g["last_failed_at"] or "", reverse=True)
+
+    counts = {
+        "new": sum(1 for g in groups if g["status"] == "new"),
+        "triaged": sum(1 for g in groups if g["status"] == "triaged"),
+        "resolved": sum(1 for g in groups if g["status"] == "resolved"),
+    }
+    # 소스별 내역 — 합쳐 놓고도 "어디서 나는 사고인지"를 볼 수 있어야 한다.
+    by_source = {
+        _SOURCE_BODY: len(body_groups),
+        _SOURCE_QA: len(qa_groups),
+    }
+
+    start = (page - 1) * limit
+    return {
+        "total": len(groups),
+        "page": page,
+        "limit": limit,
+        "since_days": since_days,
+        "counts": counts,
+        "by_source": by_source,
+        "truncated": truncated,
+        "issues": groups[start : start + limit],
+    }
+
+
+async def qa_clip_detail(db: AsyncSession, clip_id: uuid.UUID) -> dict | None:
+    """단일 Q&A 클립 실패 상세 — 드로어가 여는 대상(§C-2).
+
+    본문 렌더 상세(`render_detail`)와 같은 모양을 유지하되, 슬라이드가 아니라
+    **질문**이 맥락이라 `question_text` 와 `cluster_key` 를 함께 준다.
+    """
+    row = (
+        await db.execute(
+            select(
+                QAAnswerCache,
+                Lecture.title,
+                Course.title,
+                User.id,
+                User.name,
+                User.email,
+            )
+            .join(Lecture, QAAnswerCache.lecture_id == Lecture.id)
+            .outerjoin(Course, Lecture.course_id == Course.id)
+            .outerjoin(User, QAAnswerCache.instructor_id == User.id)
+            .where(QAAnswerCache.id == clip_id)
+        )
+    ).first()
+    if row is None:
+        return None
+
+    clip, lec_title, course_title, uid, uname, uemail = row
+
+    # 같은 클러스터의 형제 행 — 대표 행만 job id 를 가지므로 provider 판별에도 필요하다.
+    siblings = []
+    if clip.cluster_key:
+        siblings = (
+            (
+                await db.execute(
+                    select(QAAnswerCache).where(
+                        QAAnswerCache.lecture_id == clip.lecture_id,
+                        QAAnswerCache.cluster_key == clip.cluster_key,
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    job_id = clip.heygen_job_id or next(
+        (s.heygen_job_id for s in siblings if s.heygen_job_id), None
+    )
+
+    return {
+        "source": _SOURCE_QA,
+        "id": str(clip.id),
+        "lecture_id": str(clip.lecture_id),
+        "lecture_title": lec_title,
+        "course_title": course_title,
+        "user_id": str(uid) if uid else None,
+        "user_name": uname,
+        "user_email": uemail,
+        "provider": _provider(job_id),
+        "tts_provider": None,
+        "avatar_id": None,
+        "slide_number": None,
+        "cluster_key": clip.cluster_key,
+        "question_text": clip.question_text,
+        "origin": clip.origin,
+        "sibling_count": len(siblings),
+        "status": clip.status,
+        "error_message": clip.error_message,
+        "created_at": _iso(clip.created_at),
+        "completed_at": _iso(clip.updated_at),
+        "triaged_at": _iso(clip.triaged_at),
+        "triage_note": clip.triage_note,
     }

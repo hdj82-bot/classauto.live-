@@ -486,7 +486,15 @@
       "actionSaving": "Saving...",
       "actionError": "Failed to mark as triaged.",
       "triagedAt": "Triaged {when}",
-      "affectedCount": "{count} failures"
+      "affectedCount": "{count} failures",
+      "sourceBodyRender": "Body render",
+      "sourceQaClip": "Q&A clip",
+      "kvSource": "Source",
+      "kvQuestion": "Question",
+      "kvCluster": "Cluster",
+      "clusterNone": "Standalone (seed question)",
+      "clipsCount": "{count} clips",
+      "reproHintQaClip": "Reproduce by asking the same question again in this professor's lecture to trigger a clip rebuild. If it is an own-face avatar failure, ask the professor to re-upload their photo in avatar onboarding."
     },
     "testerLoadError": "Failed to load tester details.",
     "testerLoadingLabel": "Loading tester details...",

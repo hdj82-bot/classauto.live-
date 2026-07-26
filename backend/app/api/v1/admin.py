@@ -17,6 +17,7 @@ from app.db.session import get_db
 from app.models.admin_audit_log import AdminAuditLog
 from app.models.course import Course
 from app.models.lecture import Lecture
+from app.models.qa_answer_cache import QAAnswerCache
 from app.models.user import User, UserRole
 from app.models.video_render import RenderStatus, VideoRender
 from app.services import admin_analytics, admin_artifacts, admin_budget, admin_issues
@@ -713,32 +714,42 @@ async def list_failed_renders(
     since: str = Query(default="7d", description="조회 기간 — '7d' 형식 또는 일수"),
     cohort: str | None = Query(default=None),
     user_id: uuid.UUID | None = Query(default=None),
+    source: str | None = Query(
+        default=None, description="body_render | qa_clip. 생략하면 둘 다."
+    ),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=50, ge=1, le=200),
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """이슈 인박스 목록 (스펙 14 §C) — **강의 + 렌더 패스 단위로 묶어서** 반환.
+    """이슈 인박스 목록 (스펙 14 §C) — **사고 단위로 묶어서** 반환.
 
-    같은 사고의 N개 슬라이드가 N줄로 보이면 안 된다(§1.1 — `video_renders` 는 강의당
-    여러 행이다). 묶는 규칙과 파생 3분기 상태는 `admin_issues` 참조.
+    §C-2 부터 **두 소스를 합친다** — 본문 렌더(`video_renders`)와 Q&A 아바타 클립
+    (`qa_answer_cache`). 테이블이 둘이라는 건 구현 사정이지 운영자 사정이 아니다.
+    각 행의 `source`(`body_render` | `qa_clip`)로 구분한다.
+
+    묶는 규칙이 소스마다 다르다 — 본문은 패스 id 가 없어 30분 간격, Q&A 는
+    `cluster_key` 가 이미 패스 id 역할을 한다(`admin_issues` 참조).
+
+    `status` 는 `failed` 만 의미가 있다. 다른 값을 주면 400 — 인박스는 실패를 보는
+    화면이고, 성공 렌더를 여기 섞으면 사고 수가 왜곡된다.
     """
-    try:
-        render_status = RenderStatus(status_filter)
-    except ValueError:
+    if status_filter != RenderStatus.failed.value:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"알 수 없는 렌더 상태입니다: {status_filter}",
-        ) from None
+            detail=(
+                f"이슈 인박스는 실패만 조회합니다(status=failed). 받은 값: {status_filter}"
+            ),
+        )
 
-    return await admin_issues.failed_render_groups(
+    return await admin_issues.failed_issue_groups(
         db,
         since_days=_parse_since_days(since),
         cohort=cohort,
         user_id=user_id,
         page=page,
         limit=limit,
-        render_status=render_status,
+        source=source,
     )
 
 
@@ -758,23 +769,65 @@ async def triage_render(
     파생한다(§C). 운영자가 표시할 수 있는 건 "내가 봤다"까지다.
 
     이미 triage 된 행에 다시 부르면 시각과 메모를 갱신한다(§5 화이트리스트의 쓰기 1종).
-    """
-    render = await db.get(VideoRender, render_id)
-    if render is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="렌더를 찾을 수 없습니다."
-        )
 
+    **§C-2 — 대상이 두 테이블이다.** 본문 렌더(`video_renders`)와 Q&A 클립
+    (`qa_answer_cache`) 양쪽을 받는다. URL 을 바꾸지 않고 id 로 순서대로 찾는다 —
+    운영자에게 화면이 하나인데 URL 이 둘이면 프론트가 소스를 판단해 분기해야 하고,
+    그 분기가 틀리면 triage 가 조용히 실패한다.
+
+    감사 로그 action 은 `render.triage` 를 **재사용**하고 `detail.source` 로 구분한다.
+    새 action 을 만들면 §5 화이트리스트가 늘어난다.
+    """
     note = None
     if payload:
         raw = payload.get("note")
         if raw is not None:
             note = str(raw).strip() or None
 
-    previous_triaged_at = render.triaged_at
-    render.triaged_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+
+    # 본문 렌더 먼저. 두 테이블의 id 는 서로 다른 UUID 공간이라 충돌하지 않는다.
+    render = await db.get(VideoRender, render_id)
+    if render is not None:
+        previous_triaged_at = render.triaged_at
+        render.triaged_at = now
+        if note is not None:
+            render.triage_note = note
+        await db.flush()
+        await db.commit()
+
+        await log_admin_action(
+            db,
+            _admin,
+            "render.triage",
+            target_type="render",
+            target_id=str(render_id),
+            detail={
+                "source": "body_render",
+                "lecture_id": str(render.lecture_id),
+                "note": note,
+                "retriage": previous_triaged_at is not None,
+                "error_message": (render.error_message or "")[:500] or None,
+            },
+        )
+        return {
+            "id": str(render_id),
+            "source": "body_render",
+            "triaged_at": render.triaged_at.isoformat(),
+            "triage_note": render.triage_note,
+        }
+
+    clip = await db.get(QAAnswerCache, render_id)
+    if clip is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="렌더 또는 Q&A 클립을 찾을 수 없습니다.",
+        )
+
+    previous_triaged_at = clip.triaged_at
+    clip.triaged_at = now
     if note is not None:
-        render.triage_note = note
+        clip.triage_note = note
     await db.flush()
     await db.commit()
 
@@ -782,20 +835,22 @@ async def triage_render(
         db,
         _admin,
         "render.triage",
-        target_type="render",
+        target_type="qa_clip",
         target_id=str(render_id),
         detail={
-            "lecture_id": str(render.lecture_id),
+            "source": "qa_clip",
+            "lecture_id": str(clip.lecture_id),
+            "cluster_key": clip.cluster_key,
             "note": note,
             "retriage": previous_triaged_at is not None,
-            "error_message": (render.error_message or "")[:500] or None,
+            "error_message": (clip.error_message or "")[:500] or None,
         },
     )
-
     return {
         "id": str(render_id),
-        "triaged_at": render.triaged_at.isoformat(),
-        "triage_note": render.triage_note,
+        "source": "qa_clip",
+        "triaged_at": clip.triaged_at.isoformat(),
+        "triage_note": clip.triage_note,
     }
 
 
@@ -808,10 +863,16 @@ async def get_render_detail(
     _admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """드로어가 여는 단일 렌더 상세 (§C) — `error_message` 원문 포함."""
+    """드로어가 여는 단일 사고 상세 (§C) — `error_message` 원문 포함.
+
+    §C-2 — 본문 렌더와 Q&A 클립 둘 다 받는다(triage 와 같은 이유로 URL 을 나누지 않는다).
+    """
     detail = await admin_issues.render_detail(db, render_id)
     if detail is None:
+        detail = await admin_issues.qa_clip_detail(db, render_id)
+    if detail is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="렌더를 찾을 수 없습니다."
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="렌더 또는 Q&A 클립을 찾을 수 없습니다.",
         )
     return detail

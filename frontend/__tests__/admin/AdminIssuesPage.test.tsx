@@ -36,6 +36,7 @@ const RAW_ERROR = "HeyGen 429 Too Many Requests — rate limit exceeded (retry-a
 
 /** 슬라이드 5개가 깨진 사고 하나 — 서버가 이미 한 줄로 묶어 준 모양. */
 const ISSUE = {
+  source: "body_render" as const,
   id: "r-rep",
   render_ids: ["r1", "r2", "r3", "r4", "r5"],
   lecture_id: "lec-1",
@@ -190,5 +191,90 @@ describe("AdminIssuesPage — 스펙 14 §C", () => {
     await waitFor(() =>
       expect(screen.getByText("이슈 목록을 불러오지 못했습니다.")).toBeTruthy(),
     );
+  });
+});
+
+
+// ── §C-2: Q&A 클립 합류 ──────────────────────────────────────────────────────
+
+/** 본인 얼굴 아바타 온보딩 실패 — 프로토타입 08 e2 케이스. */
+const QA_ERROR =
+  "VisionStory: source portrait rejected — face not detected (confidence 0.31)";
+
+const QA_ISSUE = {
+  ...ISSUE,
+  source: "qa_clip" as const,
+  id: "clip-1",
+  render_ids: ["clip-1", "clip-2"],
+  provider: "visionstory",
+  tts_provider: null,
+  error_message: QA_ERROR,
+  error_messages: [QA_ERROR],
+  // Q&A 클립은 슬라이드가 아니라 질문 단위다.
+  affected_slides: [] as number[],
+  affected_count: 2,
+  cluster_key: "cluster-a",
+  question_text: "把자문에서 목적어는 어디에 오나요?",
+};
+
+describe("AdminIssuesPage — Q&A 클립 합류 (§C-2)", () => {
+  beforeEach(() => {
+    mocks.list.mockReset();
+    mocks.detail.mockReset();
+    mocks.triage.mockReset();
+    mocks.searchParams = new URLSearchParams();
+  });
+
+  it("Q&A 클립 실패가 같은 목록에 뜨고 출처가 구분된다", async () => {
+    mocks.list.mockResolvedValue(listPayload({ issues: [QA_ISSUE] }));
+    renderPage();
+
+    expect(await screen.findByText("Q&A 클립")).toBeTruthy();
+    expect(screen.getByText("visionstory")).toBeTruthy();
+  });
+
+  it("두 소스가 섞여도 각각의 출처가 표시된다", async () => {
+    mocks.list.mockResolvedValue(
+      listPayload({ total: 2, issues: [QA_ISSUE, ISSUE] }),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Q&A 클립")).toBeTruthy();
+    expect(screen.getByText("본문 렌더")).toBeTruthy();
+  });
+
+  it("Q&A 클립은 '슬라이드 N개'가 아니라 '클립 N개'로 센다", async () => {
+    mocks.list.mockResolvedValue(listPayload({ issues: [QA_ISSUE] }));
+    renderPage();
+
+    // 없는 슬라이드를 찾게 만들면 안 된다.
+    expect(await screen.findByText("클립 2개")).toBeTruthy();
+    expect(screen.queryByText(/슬라이드 \d+개/)).toBeNull();
+  });
+
+  it("드로어가 질문·클러스터를 보여주고 TTS 행은 숨긴다", async () => {
+    mocks.list.mockResolvedValue(listPayload({ issues: [QA_ISSUE] }));
+    mocks.detail.mockResolvedValue({ data: QA_ISSUE });
+    renderPage();
+
+    fireEvent.click(await screen.findByText(QA_ERROR));
+
+    expect(
+      await screen.findByText("把자문에서 목적어는 어디에 오나요?"),
+    ).toBeTruthy();
+    expect(screen.getByText("cluster-a")).toBeTruthy();
+    // Q&A 클립은 아바타 제공자가 음성까지 합성한다 — 별도 TTS 기록이 없다.
+    expect(screen.queryByText("TTS")).toBeNull();
+  });
+
+  it("재현 경로 문구가 Q&A 케이스를 안내한다", async () => {
+    mocks.list.mockResolvedValue(listPayload({ issues: [QA_ISSUE] }));
+    mocks.detail.mockResolvedValue({ data: QA_ISSUE });
+    renderPage();
+
+    fireEvent.click(await screen.findByText(QA_ERROR));
+    expect(
+      await screen.findByText(/아바타 온보딩에서 사진을 다시 업로드/),
+    ).toBeTruthy();
   });
 });
