@@ -592,7 +592,9 @@
     "auditFilterActionPlaceholder": "행위(action) 필터",
     "auditPrev": "이전",
     "auditNext": "다음",
-    "auditPageInfo": "{page} 페이지 · 총 {total}건"
+    "auditPageInfo": "{page} 페이지 · 총 {total}건",
+    "feedbackLectureLabel": "강의",
+    "feedbackLectureDeleted": "(삭제된 강의)"
   },
   "feedback": {
     "buttonLabel": "피드백",

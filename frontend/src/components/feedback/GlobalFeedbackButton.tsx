@@ -4,6 +4,7 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { useOptionalAuth } from "@/contexts/AuthContext";
 import { useI18n } from "@/contexts/I18nContext";
+import { useOptionalLecture } from "@/contexts/LectureContext";
 import { feedbackApi } from "@/lib/api";
 
 /**
@@ -19,6 +20,9 @@ export default function GlobalFeedbackButton() {
   const auth = useOptionalAuth();
   const pathname = usePathname();
   const { t } = useI18n();
+  // 강의 화면에서 눌렀으면 어느 강의였는지 함께 보낸다(스펙 14 §D). 없으면 undefined —
+  // `page` 만으로는 `/lecture/[slug]` 하나에 모든 강의가 모여 운영자가 특정하지 못한다.
+  const lecture = useOptionalLecture();
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<string>("idea");
   const [message, setMessage] = useState("");
@@ -52,6 +56,8 @@ export default function GlobalFeedbackButton() {
         category,
         message: message.trim(),
         page: pathname || undefined,
+        // 맥락이 없다고 제보를 막지 않는다 — 베타에서 가장 필요한 신호를 잃는다.
+        lecture_id: lecture?.lectureId,
       });
       setDone(true);
       setMessage("");

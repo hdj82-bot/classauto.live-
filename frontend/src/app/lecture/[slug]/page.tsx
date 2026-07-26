@@ -4,6 +4,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import PlayerV2 from "@/components/player/PlayerV2";
 import AccessibilityPanel from "@/components/student/accessibility/AccessibilityPanel";
 import { A11yProvider } from "@/components/student/accessibility/A11yContext";
+import { LectureProvider } from "@/contexts/LectureContext";
 
 /**
  * /lecture/[slug] — 영상 시청 페이지 (v2 다크 톤).
@@ -33,10 +34,14 @@ export default function LectureViewerPage() {
     return null;
   }
 
+  // LectureProvider — 플레이어가 강의를 받아오면 스스로 등록한다. 여기 밖에서
+  // 렌더되는 피드백 UI 가 "어느 강의였는지"를 읽어 제보에 붙일 수 있다(스펙 14 §D).
   return (
-    <A11yProvider>
-      <PlayerV2 slug={slug} preview={preview} />
-      <AccessibilityPanel />
-    </A11yProvider>
+    <LectureProvider>
+      <A11yProvider>
+        <PlayerV2 slug={slug} preview={preview} />
+        <AccessibilityPanel />
+      </A11yProvider>
+    </LectureProvider>
   );
 }

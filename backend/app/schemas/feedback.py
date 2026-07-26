@@ -51,6 +51,10 @@ class FeedbackResponse(BaseModel):
     category: str
     message: str
     lecture_id: str | None = None
+    # 운영자 콘솔 표시용. `page` 는 `/lecture/[slug]` 하나로 모여 어느 강의인지
+    # 알려주지 못하고, UUID 만 봐서도 알 수 없다(스펙 14 §D).
+    # 강의가 삭제되면 FK 가 NULL 이 되므로 이 값도 비는 게 정상이다.
+    lecture_title: str | None = None
     page: str | None = None
     status: str
     created_at: datetime

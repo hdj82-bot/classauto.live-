@@ -331,6 +331,8 @@ export interface FeedbackItem {
   category: string;
   message: string;
   lecture_id: string | null;
+  /** 운영자 콘솔 표시용 강의 제목. 강의가 삭제되면 null(스펙 14 §D). */
+  lecture_title?: string | null;
   page: string | null;
   status: "open" | "triaged" | "resolved";
   created_at: string;
