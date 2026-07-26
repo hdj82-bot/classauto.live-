@@ -1,46 +1,45 @@
 #!/usr/bin/env python
-"""아바타 렌더 단가 감사 — DB 실적 vs 실제 청구서 대조용 (스펙 13 §C-1a).
+"""비용 감사 — 브레이커 커버리지 vs 실제 지출 (스펙 13 §C-1b / §C-3).
 
 사용법:
     docker compose exec backend python -m scripts.cost_audit
     docker compose exec backend python -m scripts.cost_audit --months 6
     docker compose exec backend python -m scripts.cost_audit --csv > audit.csv
 
-왜 필요한가
------------
-`HEYGEN_COST_USD_PER_SECOND` 가 코드 기본값(0.0167)과 Railway env(0.0083 로 기록됨)에서
-갈려 있었고 아무도 몰랐다. 추정치를 다른 추정치로 바꾸지 않으려면 **실제 청구서**와
-대조해야 한다. 이 스크립트는 그 대조에 필요한 DB 측 실적을 뽑는다.
+이 스크립트가 답하는 두 질문
+---------------------------
+1. **실제로 어디에 돈이 나가는가** — 서비스별 월 지출.
+2. **그중 어디에 $ 상한이 걸려 있는가** — 브레이커 커버리지.
 
-⚠️ 읽는 법 — "추정 단가"는 순환 참조다
---------------------------------------
-`render_cost_logs.cost_usd` 는 이미 `duration × 설정단가` 로 계산해 저장한 값이다.
-따라서 `SUM(cost) / SUM(duration)` 은 **설정단가를 그대로 되돌려줄 뿐** 진짜 단가가
-아니다. 이 컬럼의 쓸모는 두 가지다.
+둘이 다르다는 게 요점이다. 2026-07 시점 기준으로 **본문 렌더는 HeyGen 을 쓰지 않는다**
+(`LECTURE_BODY_PROVIDER="slideshow"` — 슬라이드 이미지 + TTS 음성). 그래서 실제 지출의
+대부분은 **ElevenLabs TTS** 인데, 브레이커 4개는 전부 아바타 계열이라 **TTS 에는 $ 상한이
+없다.**
 
-  1. 그 달에 설정단가가 일관되게 적용됐는지 확인 (중간에 바뀌었으면 혼합값이 나온다)
-  2. 진짜 단가를 구하는 **분모**를 얻는 것
+비용이 쌓이는 곳 (2026-07-26 조사)
+----------------------------------
+    render_cost_logs                     duration  단가 출처
+      service='elevenlabs'  TTS 본문      O         cost_tracker.ELEVENLABS_USD_PER_1K_CHARS
+      service='google_tts'  TTS 폴백      O         cost_tracker.GOOGLE_TTS_USD_PER_1K_CHARS
+      service='heygen'      본문 렌더     O         settings.HEYGEN_COST_USD_PER_SECOND
+      service='s3'          업로드        X         (0 기록)
 
-진짜 단가는 이렇게 구한다:
+    platform_cost_logs                   duration  단가 출처
+      category=AVATAR_QA    Q&A 아바타    X         settings.*_COST_USD_PER_SECOND
+      category=LLM_*        Claude        X         호출부 추정
+      category=TTS          (미사용)      —         **enum 만 있고 쓰이지 않는다**
 
-    실제 단가 = (그 달 HeyGen 청구액 USD) / (그 달 SUM(duration_seconds))
+⚠️ `CostCategory.tts` 는 **한 번도 기록되지 않는다.** enum 에 있어서 platform_cost_logs
+에 TTS 가 쌓인다고 착각하기 쉽다. TTS 는 전부 render_cost_logs 쪽이다.
 
-⚠️ 커버리지 한계 — 청구서와 1:1 이 아니다
-------------------------------------------
-비용은 두 테이블에 나뉘어 적재되고, **duration 이 있는 쪽은 하나뿐**이다.
+⚠️ TTS 단가는 **코드 상수**(`services/cost_tracker.py`)라 env 로 조정할 수 없다.
+아바타 단가(settings.*)와 정책이 다르다 — 스펙 13 §C-1a 조정 원칙 참조.
 
-  render_cost_logs      본문 렌더(HeyGen)          duration 실측 O   → 대조 가능
-  platform_cost_logs    Q&A 아바타 렌더            duration 미기록   → 대조 불가
-                        (HeyGen Q&A · VisionStory)
-
-즉 **HeyGen 청구액에는 Q&A 렌더분도 포함**되는데 그쪽 duration 을 모르므로,
-청구액 ÷ 본문 duration 으로 나눈 값은 실제보다 **과대**해진다. 아래 출력의
-`qa_cost_usd` 를 청구액에서 먼저 빼고 나눠야 근사가 맞는다.
-
-**VisionStory 는 단가 역산이 아예 불가능하다.** 비용이 전부 platform_cost_logs 에만
-쌓이고 duration 이 없으며, 게다가 VisionStory 상태 응답은 duration 을 주지 않아
-답변 길이로 **추정**한 값으로 비용을 기록한다(`qa_batch._estimate_qa_render_seconds`).
-VisionStory 단가는 크레딧 명세로 직접 확인해야 한다.
+단가 확정은 이 스크립트로 하지 않는다 (§C-1b)
+---------------------------------------------
+`cost_usd` 는 `duration × 설정단가` 로 저장된 값이라 역산하면 순환이다. 진짜 단가는
+**공급자 대시보드**에서 (청구액 ÷ 공급자 집계 총량) 으로 구하고, 이 스크립트는 그 뒤
+**계측 검증용**으로 쓴다 — 공급자 총량과 우리 합계가 크게 다르면 계측 버그 신호다.
 """
 from __future__ import annotations
 
@@ -52,139 +51,142 @@ from sqlalchemy import func, select
 
 from app.core.config import settings
 from app.db.session import SyncSessionLocal
-from app.models.cost_log import CostCategory, CostLog
+from app.models.cost_log import CostLog
 from app.models.video_render import RenderCostLog
 
-HEYGEN = "heygen"
-VISIONSTORY = "visionstory"
+# 브레이커가 감시하는 서비스 — 여기 없는 항목은 $ 상한이 없다는 뜻이다.
+GUARDED = {
+    "heygen": "assert_heygen_budget (일/월 $)",
+    "visionstory": "assert_visionstory_budget (일/월 $)",
+}
 
 
 def _months_ago(n: int) -> datetime:
     return datetime.now(timezone.utc) - timedelta(days=31 * n)
 
 
-def _render_rows(db, since: datetime, service: str) -> list[dict]:
-    """render_cost_logs — 본문 렌더. duration 실측이 있어 대조 가능."""
+def _render_rows(db, since: datetime) -> list[dict]:
+    """render_cost_logs — 서비스별 월별. duration 실측이 있는 유일한 곳."""
     year = func.extract("year", RenderCostLog.created_at)
     month = func.extract("month", RenderCostLog.created_at)
     rows = db.execute(
         select(
+            RenderCostLog.service,
             year.label("y"),
             month.label("m"),
             func.count(RenderCostLog.id),
             func.coalesce(func.sum(RenderCostLog.duration_seconds), 0.0),
             func.coalesce(func.sum(RenderCostLog.cost_usd), 0.0),
         )
-        .where(RenderCostLog.service == service, RenderCostLog.created_at >= since)
-        .group_by(year, month)
-        .order_by(year.desc(), month.desc())
+        .where(RenderCostLog.created_at >= since)
+        .group_by(RenderCostLog.service, year, month)
+        .order_by(year.desc(), month.desc(), RenderCostLog.service)
     ).all()
     return [
         {
-            "year": int(r[0]),
-            "month": int(r[1]),
-            "renders": int(r[2]),
-            "duration_sec": float(r[3] or 0.0),
-            "cost_usd": float(r[4] or 0.0),
+            "table": "render_cost_logs",
+            "name": r[0],
+            "year": int(r[1]),
+            "month": int(r[2]),
+            "count": int(r[3]),
+            "duration_sec": float(r[4] or 0.0),
+            "cost_usd": float(r[5] or 0.0),
         }
         for r in rows
     ]
 
 
-def _qa_rows(db, since: datetime, model: str) -> list[dict]:
-    """platform_cost_logs(category=AVATAR_QA) — Q&A 렌더. duration 컬럼이 없다."""
+def _platform_rows(db, since: datetime) -> list[dict]:
+    """platform_cost_logs — 카테고리(+model)별 월별. duration 컬럼이 없다."""
     year = func.extract("year", CostLog.created_at)
     month = func.extract("month", CostLog.created_at)
     rows = db.execute(
         select(
+            CostLog.category,
+            CostLog.model,
             year.label("y"),
             month.label("m"),
             func.count(CostLog.id),
             func.coalesce(func.sum(CostLog.cost_usd), 0.0),
         )
-        .where(
-            CostLog.category == CostCategory.avatar_qa,
-            CostLog.model == model,
-            CostLog.created_at >= since,
-        )
-        .group_by(year, month)
-        .order_by(year.desc(), month.desc())
+        .where(CostLog.created_at >= since)
+        .group_by(CostLog.category, CostLog.model, year, month)
+        .order_by(year.desc(), month.desc(), CostLog.category)
     ).all()
-    return [
-        {
-            "year": int(r[0]),
-            "month": int(r[1]),
-            "renders": int(r[2]),
-            "cost_usd": float(r[3] or 0.0),
-        }
-        for r in rows
-    ]
-
-
-def _implied_rate(cost: float, duration: float) -> float | None:
-    if duration <= 0:
-        return None
-    return cost / duration
-
-
-def _merge(render_rows: list[dict], qa_rows: list[dict]) -> list[dict]:
-    """월 키로 두 테이블을 합친다(한쪽에만 있는 달도 남긴다)."""
-    by_key: dict[tuple[int, int], dict] = {}
-    for r in render_rows:
-        by_key[(r["year"], r["month"])] = {
-            **r,
-            "qa_renders": 0,
-            "qa_cost_usd": 0.0,
-        }
-    for q in qa_rows:
-        key = (q["year"], q["month"])
-        entry = by_key.setdefault(
-            key,
+    out = []
+    for r in rows:
+        category = r[0].value if hasattr(r[0], "value") else str(r[0])
+        model = r[1] or "—"
+        out.append(
             {
-                "year": q["year"],
-                "month": q["month"],
-                "renders": 0,
+                "table": "platform_cost_logs",
+                "name": f"{category}/{model}",
+                "guard_key": model if category == "AVATAR_QA" else None,
+                "year": int(r[2]),
+                "month": int(r[3]),
+                "count": int(r[4]),
                 "duration_sec": 0.0,
-                "cost_usd": 0.0,
-                "qa_renders": 0,
-                "qa_cost_usd": 0.0,
-            },
+                "cost_usd": float(r[5] or 0.0),
+            }
         )
-        entry["qa_renders"] = q["renders"]
-        entry["qa_cost_usd"] = q["cost_usd"]
-    return sorted(by_key.values(), key=lambda e: (e["year"], e["month"]), reverse=True)
+    return out
 
 
-def _print_service(name: str, rows: list[dict], configured_rate: float, csv: bool) -> None:
-    if csv:
-        for r in rows:
-            rate = _implied_rate(r["cost_usd"], r["duration_sec"])
-            print(
-                f"{name},{r['year']}-{r['month']:02d},{r['renders']},"
-                f"{r['duration_sec']:.1f},{r['cost_usd']:.4f},"
-                f"{'' if rate is None else f'{rate:.6f}'},"
-                f"{r['qa_renders']},{r['qa_cost_usd']:.4f}"
-            )
-        return
+def _guard_for(row: dict) -> str | None:
+    """이 지출 항목에 걸린 브레이커. None 이면 **상한 없음**."""
+    key = row.get("guard_key") or row["name"]
+    return GUARDED.get(key)
 
-    print(f"\n── {name} ─────────────────────────────────────────────────────────")
-    print(f"   설정 단가: {configured_rate} USD/sec  (= ${configured_rate * 60:.2f}/분)")
+
+def _print_table(rows: list[dict]) -> None:
     if not rows:
         print("   (기록 없음)")
         return
-
     print(
-        f"   {'월':>8}  {'본문':>5} {'duration(s)':>12} {'본문 $':>10} "
-        f"{'추정단가':>10}  {'Q&A':>5} {'Q&A $':>10}  {'합계 $':>10}"
+        f"   {'월':>8}  {'항목':<24} {'건수':>6} {'duration(s)':>12} {'$':>10}  {'상한':<32}"
     )
-    for r in rows:
-        rate = _implied_rate(r["cost_usd"], r["duration_sec"])
-        rate_str = "—" if rate is None else f"{rate:.6f}"
-        total = r["cost_usd"] + r["qa_cost_usd"]
+    for r in sorted(rows, key=lambda x: (-x["year"], -x["month"], x["name"])):
+        guard = _guard_for(r) or "⚠️  없음"
+        dur = f"{r['duration_sec']:.1f}" if r["duration_sec"] else "—"
         print(
-            f"   {r['year']}-{r['month']:02d}  {r['renders']:>5} "
-            f"{r['duration_sec']:>12.1f} {r['cost_usd']:>10.4f} {rate_str:>10}  "
-            f"{r['qa_renders']:>5} {r['qa_cost_usd']:>10.4f}  {total:>10.4f}"
+            f"   {r['year']}-{r['month']:02d}  {r['name']:<24} {r['count']:>6} "
+            f"{dur:>12} {r['cost_usd']:>10.4f}  {guard:<32}"
+        )
+
+
+def _print_summary(rows: list[dict]) -> None:
+    """서비스별 총액 + 상한 유무. '실제 지출'과 '브레이커 대상'을 나눠 본다."""
+    totals: dict[str, float] = {}
+    for r in rows:
+        totals[r["name"]] = totals.get(r["name"], 0.0) + r["cost_usd"]
+    if not totals:
+        return
+
+    grand = sum(totals.values())
+    guarded_sum = sum(
+        v for k, v in totals.items()
+        if _guard_for({"name": k, "guard_key": k.split("/")[-1] if "/" in k else None})
+    )
+
+    print("\n── 요약: 실제 지출 vs 브레이커 커버리지 ──────────────────────")
+    for name, total in sorted(totals.items(), key=lambda kv: -kv[1]):
+        guard = _guard_for({"name": name, "guard_key": name.split("/")[-1] if "/" in name else None})
+        share = (total / grand * 100) if grand else 0
+        mark = "  " if guard else "⚠️"
+        print(f"   {mark} {name:<24} ${total:>10.4f}  ({share:>5.1f}%)  {guard or '상한 없음'}")
+
+    uncovered = grand - guarded_sum
+    print(f"\n   총 지출        ${grand:.4f}")
+    print(f"   브레이커 대상  ${guarded_sum:.4f}")
+    print(
+        f"   ⚠️  상한 없음   ${uncovered:.4f}"
+        f"  ({(uncovered / grand * 100) if grand else 0:.1f}%)"
+    )
+    if uncovered > 0:
+        print(
+            "\n   상한 없는 지출이 있다. 재시도 루프·대량 재생성 사고가 나면 막을 장치가 없다.\n"
+            "   특히 TTS(elevenlabs)는 본문이 slideshow 모드라 실제 지출의 주축인데\n"
+            "   브레이커가 아바타 계열뿐이다 — 스펙 13 §C-3 참조."
         )
 
 
@@ -195,53 +197,33 @@ def main() -> int:
     args = parser.parse_args()
 
     since = _months_ago(args.months)
-
     with SyncSessionLocal() as db:
-        heygen = _merge(
-            _render_rows(db, since, HEYGEN), _qa_rows(db, since, HEYGEN)
-        )
-        # VisionStory 는 본문 렌더가 없다(Q&A 전용) — render_cost_logs 쪽은 비어 있다.
-        visionstory = _merge(
-            _render_rows(db, since, VISIONSTORY), _qa_rows(db, since, VISIONSTORY)
-        )
+        rows = _render_rows(db, since) + _platform_rows(db, since)
 
     if args.csv:
-        print("service,month,renders,duration_sec,cost_usd,implied_rate,qa_renders,qa_cost_usd")
-        _print_service(HEYGEN, heygen, settings.HEYGEN_COST_USD_PER_SECOND, csv=True)
-        _print_service(
-            VISIONSTORY, visionstory, settings.VISIONSTORY_COST_USD_PER_SECOND, csv=True
-        )
+        print("table,service,month,count,duration_sec,cost_usd,guard")
+        for r in sorted(rows, key=lambda x: (-x["year"], -x["month"], x["name"])):
+            print(
+                f"{r['table']},{r['name']},{r['year']}-{r['month']:02d},{r['count']},"
+                f"{r['duration_sec']:.1f},{r['cost_usd']:.4f},"
+                f"{_guard_for(r) or 'NONE'}"
+            )
         return 0
 
-    print("=" * 78)
-    print("아바타 렌더 단가 감사 — DB 실적 (스펙 13 §C-1a)")
-    print("=" * 78)
+    print("=" * 92)
+    print("비용 감사 — 실제 지출 vs 브레이커 커버리지 (스펙 13 §C)")
+    print("=" * 92)
+    print(f"   본문 렌더 모드: LECTURE_BODY_PROVIDER={settings.LECTURE_BODY_PROVIDER}")
+    if settings.LECTURE_BODY_PROVIDER == "slideshow":
+        print("   → 본문은 HeyGen 을 쓰지 않는다(슬라이드 + TTS). HeyGen 지출은 Q&A 아바타뿐.")
 
-    _print_service(HEYGEN, heygen, settings.HEYGEN_COST_USD_PER_SECOND, csv=False)
-    _print_service(
-        VISIONSTORY, visionstory, settings.VISIONSTORY_COST_USD_PER_SECOND, csv=False
-    )
+    _print_table(rows)
+    _print_summary(rows)
 
-    ratio = (
-        settings.VISIONSTORY_COST_USD_PER_SECOND / settings.HEYGEN_COST_USD_PER_SECOND
-        if settings.HEYGEN_COST_USD_PER_SECOND
-        else None
-    )
-    print("\n── 단가 정합성 ──────────────────────────────────────────────────")
-    print(f"   VisionStory / HeyGen = {ratio if ratio is None else round(ratio, 3)}")
-    if ratio is not None and abs(ratio - 2.0) > 0.01:
-        print("   ⚠️  코드는 VisionStory = HeyGen × 2 를 전제한다(config.py 주석).")
-        print("       비율이 2.0 이 아니면 한쪽만 env override 된 상태일 수 있다.")
-        print("       두 단가는 반드시 함께 조정한다(스펙 13 §C-1).")
-
-    print("\n── 청구서와 대조하는 법 ─────────────────────────────────────────")
-    print("   1. 'duration(s)' 는 본문 렌더의 **실측 합계**다. 이게 분모다.")
-    print("   2. '추정단가' 는 cost/duration 이라 설정단가를 되돌려줄 뿐이다(순환).")
-    print("      값이 설정단가와 다르면 그 달 중간에 단가가 바뀐 것이다.")
-    print("   3. 진짜 단가 ≈ (HeyGen 청구액 − Q&A 렌더 추정분) ÷ duration(s)")
-    print("      Q&A 렌더는 duration 이 기록되지 않아 분모에 넣을 수 없다.")
-    print("   4. VisionStory 는 duration 자체가 답변 길이 기반 **추정치**라")
-    print("      단가 역산이 불가능하다 — 크레딧 명세로 직접 확인할 것.")
+    print("\n── 단가 확정은 이 출력으로 하지 않는다 (§C-1b) ────────────────")
+    print("   cost_usd 는 duration × 설정단가라 역산하면 순환이다.")
+    print("   진짜 단가는 공급자 대시보드에서 (청구액 ÷ 공급자 집계 총량).")
+    print("   이 스크립트는 그 뒤 계측 검증용 — 공급자 총량과 크게 다르면 계측 버그다.")
     return 0
 
 

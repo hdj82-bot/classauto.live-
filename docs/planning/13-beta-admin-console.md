@@ -120,7 +120,45 @@ async def spend_by_instructor(db, since=None) -> dict[uuid.UUID, float]:
 - **성능**: `platform_cost_logs.created_at` 에 인덱스가 없으면 월별 GROUP BY 핫패스용으로
   마이그레이션 `0056` 에서 `ix_platform_cost_logs_created_at` 추가(선택, 행 많아지면 필수).
 
-### C. 아바타 비용 가드레일  *(배포 전 필수)*
+### C. 비용 가드레일  *(배포 전 필수)*
+
+#### C-0. 브레이커 커버리지 — 어디에 상한이 있고 어디가 비어 있나  *(2026-07-26 신설)*
+
+**이 표가 없어서 HeyGen 단가만 몇 시간 다듬었다.** 정작 실제 지출의 주축에는 상한이 없다.
+
+| 비용 항목 | 쌓이는 곳 | $ 상한 | 다른 상한 |
+|---|---|---|---|
+| **TTS 본문**(ElevenLabs) | `render_cost_logs` `service='elevenlabs'` | ❌ **없음** | ❌ 없음 |
+| **TTS 폴백**(Google) | `render_cost_logs` `service='google_tts'` | ❌ **없음** | ❌ 없음 |
+| 본문 렌더(HeyGen) | `render_cost_logs` `service='heygen'` | ✅ `assert_heygen_budget` | — |
+| Q&A 아바타(HeyGen) | `platform_cost_logs` `AVATAR_QA/heygen` | ✅ `assert_heygen_budget` | 월 렌더 쿼터·재렌더 상한 |
+| Q&A 아바타(VisionStory) | `platform_cost_logs` `AVATAR_QA/visionstory` | ✅ `assert_visionstory_budget` | 재렌더 상한 |
+| LLM(Claude 스크립트·문제·요약) | `platform_cost_logs` `LLM_*` | ❌ **없음** | 월 쿼터 일부 |
+| 임베딩(OpenAI) | (미기록) | ❌ **없음** | — |
+| S3 | `render_cost_logs` `service='s3'` | — | 비용 0 기록 |
+
+> ⚠️ **본문 렌더는 HeyGen 을 쓰지 않는다.** `LECTURE_BODY_PROVIDER` 기본값이 `"slideshow"`
+> 라 `tasks/render.py` 가 슬라이드 이미지 + TTS 음성까지만 만들고 조기 반환한다. 그래서
+> **HeyGen 브레이커가 지키는 건 Q&A 아바타뿐**이고, **실제 지출의 주축인 TTS 는 무방비**다.
+>
+> 규모 감: 교수 20명 × 강의 12편 × 슬라이드 20장 × 발화 300자 ≈ 144만 자.
+> ElevenLabs 단가 `$0.30/1k chars` 로 **≈ $432/월** — HeyGen 월 예산 $600 에 맞먹는데
+> 재시도 루프나 대량 재생성 사고를 막을 장치가 하나도 없다.
+
+**TTS 단가는 코드 상수다** — `services/cost_tracker.py` 의
+`ELEVENLABS_USD_PER_1K_CHARS = 0.30` / `GOOGLE_TTS_USD_PER_1K_CHARS = 0.016`.
+`settings` 가 아니라 env 로 조정할 수 없고, 둘의 단가 차이가 **약 19배**다(폴백이 훨씬 싸다).
+
+**`CostCategory.tts` 는 enum 에만 있고 한 번도 기록되지 않는다.** platform_cost_logs 에
+TTS 가 쌓인다고 착각하기 쉬운 함정이라 여기 적어 둔다 — TTS 는 전부 `render_cost_logs` 다.
+
+→ **조치: §C-3 TTS 브레이커 신설**(8월 베타 전 필수).
+
+현재 상태는 `python -m scripts.cost_audit` 이 "실제 지출 vs 브레이커 대상"으로 나눠 보여준다.
+
+---
+
+### C-1~C-2. 아바타 비용 가드레일  *(배포 전 필수)*
 
 #### C-1. 예산 서킷브레이커 값 상향  *(설정 — 확인/완료)*
 기존 기본값이 베타에 치명적으로 낮았음(`HEYGEN_DAILY=3 / MONTHLY=15`) → 그대로면 전역 $ 한도에
@@ -356,6 +394,25 @@ duration 으로 그냥 나누면 **과대 추정**된다. 스크립트가 출력
   성공한 제작만 카운트되니 신중히 진행해 주세요." + 남은 횟수 표시.
 - **상한 도달**(차단): "이 강의의 아바타 제작 횟수를 모두 사용했습니다. 추가 제작이 필요하면 운영자에게
   문의해 주세요."
+
+#### C-3. TTS 예산 브레이커  *(신설 예정 — 8월 베타 전 필수)*
+
+§C-0 이 드러낸 공백. **실제 지출의 주축인 TTS 에 $ 상한이 없다.**
+
+`assert_tts_budget` 을 기존 두 $ 브레이커와 **같은 패턴**으로 만든다.
+- 일/월 한도(`TTS_DAILY_BUDGET_USD` / `TTS_MONTHLY_BUDGET_USD`), 0 이면 비활성
+- 합산 = 완료분(`render_cost_logs` `service IN ('elevenlabs','google_tts')`) + in-flight 추정
+- 검사 지점: TTS 합성 직전(`tasks/render.py` 의 `record_tts_cost` 호출 앞)
+- mock 모드는 건너뛴다
+
+**기본값은 실측을 보고 정한다.** `scripts/cost_audit` 의 최근 3개월 TTS 지출을 확인한 뒤
+§C-1a 계산식과 같은 방식(1인당 실측 × 목표 인원 × 안전계수)으로 잡는다. 착수 순서상
+스펙 14 §C(이슈 인박스) 다음이다.
+
+> 폴백 단가가 19배 싸다는 점(ElevenLabs $0.30 vs Google $0.016 / 1k chars)을 이용해,
+> 한도에 근접하면 **차단 대신 Google TTS 로 강제 폴백**하는 선택지도 있다. 브레이커가
+> 터져 전원이 멈추는 것보다 품질을 낮춰 계속 돌리는 편이 수업 운영에는 낫다 — 다만
+> 교수자에게 그 사실을 알려야 하므로 별도 판단이 필요하다.
 
 ### D. 활성화 퍼널  *(read only, 마이그레이션 없음)*
 **신규 엔드포인트** `GET /api/v1/admin/funnel` — 단계별 카운트(코호트 필터 선택):
