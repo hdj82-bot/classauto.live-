@@ -251,3 +251,55 @@ def test_unit_cost_log_warns_on_ratio_drift(caplog, monkeypatch):
         log_effective_unit_costs()
 
     assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+# ── ElevenLabs 계정 한도 (스펙 13 §C-0) ───────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_tts_account_usage_reported(client, db, owner_factory, lecture, professor):
+    """TTS 문자 수를 cost_usd 에서 역산해 계정 한도 대비 배수를 낸다.
+
+    구독 크레딧은 **하드캡이 아니다**(usage-based billing ON) — 이 배수가 1을 넘기
+    시작하면 초과분이 그대로 청구되므로 플랜 업그레이드 신호다.
+    """
+    import uuid as _uuid
+
+    from app.models.video_render import RenderCostLog, RenderStatus, VideoRender
+    from app.services.cost_tracker import ELEVENLABS_USD_PER_1K_CHARS
+
+    owner = await owner_factory()
+    render = VideoRender(
+        id=_uuid.uuid4(),
+        lecture_id=lecture.id,
+        instructor_id=professor.id,
+        avatar_id="a",
+        slide_number=1,
+        status=RenderStatus.ready,
+    )
+    db.add(render)
+    await db.flush()
+    # 정확히 10,000자에 해당하는 비용을 심는다.
+    db.add(
+        RenderCostLog(
+            id=_uuid.uuid4(),
+            video_render_id=render.id,
+            service="elevenlabs",
+            operation="tts_synthesize",
+            cost_usd=10_000 / 1000 * ELEVENLABS_USD_PER_1K_CHARS,
+        )
+    )
+    await db.flush()
+
+    data = (
+        await client.get("/api/v1/admin/budget", headers=make_auth_header(owner))
+    ).json()
+    account = data["tts_account"]
+
+    assert account["chars_this_month"] == pytest.approx(10_000, rel=0.01)
+    assert account["monthly_credit_limit"] == settings.ELEVENLABS_MONTHLY_CREDITS
+    assert account["over_limit"] is False
+    # 크레딧 = 문자 수(1:1) 이므로 배수는 chars / limit 이다.
+    assert account["usage_ratio"] == pytest.approx(
+        10_000 / settings.ELEVENLABS_MONTHLY_CREDITS, abs=0.001
+    )

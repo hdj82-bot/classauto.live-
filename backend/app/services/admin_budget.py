@@ -66,6 +66,37 @@ async def _qa_log_spend(db: AsyncSession, model: str, since: datetime) -> float:
     return float(total or 0.0)
 
 
+async def _tts_chars_this_month(db: AsyncSession, since: datetime) -> float:
+    """이번 달 TTS 문자 수 — cost_usd 역산 (스펙 13 §C-0).
+
+    TTS 는 `cost_usd = chars × rate / 1000` 으로 저장되므로 역산하면 자수가 나온다.
+    ElevenLabs 크레딧은 **1 크레딧 = 1자**라 이 값이 곧 크레딧 소모량이다.
+    """
+    from app.services.cost_tracker import (
+        ELEVENLABS_USD_PER_1K_CHARS,
+        GOOGLE_TTS_USD_PER_1K_CHARS,
+    )
+
+    rates = {
+        "elevenlabs": ELEVENLABS_USD_PER_1K_CHARS,
+        "google_tts": GOOGLE_TTS_USD_PER_1K_CHARS,
+    }
+    total_chars = 0.0
+    for service, rate in rates.items():
+        if not rate:
+            continue
+        spent = (
+            await db.execute(
+                select(func.coalesce(func.sum(RenderCostLog.cost_usd), 0.0)).where(
+                    RenderCostLog.service == service,
+                    RenderCostLog.created_at >= since,
+                )
+            )
+        ).scalar()
+        total_chars += float(spent or 0.0) / rate * 1000.0
+    return total_chars
+
+
 async def _active_professor_count(db: AsyncSession) -> int:
     total = (
         await db.execute(
@@ -76,6 +107,26 @@ async def _active_professor_count(db: AsyncSession) -> int:
         )
     ).scalar()
     return int(total or 0)
+
+
+def _tts_account(chars_this_month: float, professors: int) -> dict:
+    """ElevenLabs 계정 한도 대비 현황.
+
+    크레딧 = 문자 수(1:1). 대시보드의 "분"은 영어 기준이라 한국어엔 약 3배 유리한데,
+    우리는 문자 수로 재므로 환산이 필요 없다.
+    """
+    limit = settings.ELEVENLABS_MONTHLY_CREDITS
+    ratio = (chars_this_month / limit) if limit else None
+    per_prof = (chars_this_month / professors) if professors else 0.0
+    return {
+        "monthly_credit_limit": limit,
+        "chars_this_month": round(chars_this_month),
+        # 1.0 을 넘으면 초과분이 그대로 청구된다(계정 하드캡 없음).
+        "usage_ratio": None if ratio is None else round(ratio, 3),
+        "chars_per_professor": round(per_prof),
+        # 이 소모율이 유지되면 한도의 몇 배가 되는가 — 플랜 업그레이드 신호.
+        "over_limit": bool(ratio and ratio > 1.0),
+    }
 
 
 def _pct(spent: float, limit: float) -> float | None:
@@ -111,6 +162,7 @@ async def budget_overview(db: AsyncSession, now: datetime | None = None) -> dict
     day0 = _day_start(now)
     month0 = _month_start(now)
     professors = await _active_professor_count(db)
+    tts_chars = await _tts_chars_this_month(db, month0)
 
     # HeyGen — 본문 렌더 + Q&A 아바타 렌더(브레이커와 동일 정의).
     hg_day = await _render_log_spend(db, HEYGEN, day0) + await _qa_log_spend(db, HEYGEN, day0)
@@ -157,6 +209,9 @@ async def budget_overview(db: AsyncSession, now: datetime | None = None) -> dict
         # 한쪽만 env override 되면 코드가 전제하는 2배 관계가 깨진다.
         # 콘솔이 ratio_consistent=false 면 경고를 띄운다.
         "unit_costs": effective_unit_costs(),
+        # ElevenLabs 계정 한도 대비 소모 — **하드캡이 아니다**(usage-based billing ON).
+        # 배수가 1을 넘기 시작하면 플랜 업그레이드 시점이다(§C-0).
+        "tts_account": _tts_account(tts_chars, professors),
         "services": [
             _entry(
                 HEYGEN,
