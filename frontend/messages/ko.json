@@ -1766,6 +1766,21 @@
       "scoreFormat": "정답률 {pct}%",
       "scoreDetail": "{correct} / {total} 정답",
       "backToPlayer": "강의로 돌아가기"
+    },
+    "courseEntry": {
+      "loading": "강좌를 확인하는 중...",
+      "notFoundTitle": "강좌를 찾을 수 없습니다",
+      "notFoundDesc": "링크가 잘못됐거나 강좌가 삭제되었을 수 있습니다. 담당 교수님께 링크를 다시 요청하세요.",
+      "withdrawnTitle": "수강이 종료된 강좌입니다",
+      "withdrawnDesc": "담당 교수님께 문의하세요. 다시 수강하려면 교수님이 수강 명단에 되돌려 주셔야 합니다.",
+      "goHome": "홈으로",
+      "loginPrompt": "이 강좌의 영상을 보려면 로그인하세요. 한 번 등록하면 이후 올라오는 강의가 이 화면에 자동으로 나타납니다.",
+      "loginCta": "Google로 시작하기",
+      "loginNote": "학교 이메일 계정을 사용하시면 담당 교수님이 수강 명단에서 확인하기 쉽습니다.",
+      "joining": "수강 등록 중...",
+      "lecturesTitle": "강의 목록",
+      "noLectures": "아직 발행된 강의가 없습니다. 교수님이 영상을 올리면 여기에 나타납니다.",
+      "lectureExpired": "시청 기간이 끝났습니다"
     }
   },
   "ownerCosts": {
