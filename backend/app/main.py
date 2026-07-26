@@ -53,6 +53,11 @@ async def lifespan(app: FastAPI):
     from app.core.sentry import init_sentry
     init_sentry()
     init_app_info(version="1.0.0", environment=settings.ENVIRONMENT)
+    # 유효 아바타 단가를 1행 남긴다 — 코드 기본값과 Railway env 가 갈렸는데 아무도
+    # 모르던 게 실제로 있었다(스펙 13 §C-1a). 서비스가 셋(web/worker/beat)이라
+    # 한 서비스만 env 가 다른 상황도 이 로그로 드러난다.
+    from app.core.cost_rates import log_effective_unit_costs
+    log_effective_unit_costs()
     yield
 
 

@@ -255,6 +255,12 @@ video_renders.triage_note  TEXT NULL          -- 운영자 메모(선택)
 - 막대 색은 골드 시퀀셜(§0-6)이되 **경고 임계 초과 시에만** 의미 컬러로 바꾼다 —
   카테고리 구분이 아니라 상태 인디케이터이므로 §0-6 이 허용하는 용례다.
 
+**단가 드리프트 표시** — 각 막대 옆에 **지금 적용 중인 단가**(`effective_unit_cost_usd_per_second`)
+를 작게 적는다. 어느 값으로 계산된 숫자인지 화면에서 바로 보여야 드리프트가 숨지 않는다.
+`unit_costs.ratio_consistent` 가 `false` 면(= VisionStory/HeyGen 비율이 2.0 이 아니면)
+카드 상단에 경고를 띄운다 — VisionStory 단가는 HeyGen 에서 유도된 값이라 한쪽만 env
+override 되면 전제가 깨진다(스펙 13 §C-1a).
+
 > **집계 정의는 브레이커와 반드시 같아야 한다.** HeyGen 비용은 본문 렌더
 > (`render_cost_logs`)와 Q&A 아바타 렌더(`platform_cost_logs`, category=`avatar_qa`)
 > 두 곳에 나뉘어 적재된다. 하나만 세면 미터는 0% 인데 브레이커가 터지는 상태가 되고,

@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.cost_rates import effective_unit_costs
 from app.models.cost_log import CostCategory, CostLog
 from app.models.user import User, UserRole
 from app.models.video_render import RenderCostLog
@@ -132,7 +133,9 @@ async def budget_overview(db: AsyncSession, now: datetime | None = None) -> dict
         return {
             "service": service,
             "mock": mock,  # mock 이면 실비용 0 — 브레이커도 건너뛴다.
-            "unit_cost_usd_per_second": unit_cost,
+            # 지금 실제로 적용 중인 단가. 코드 기본값과 env override 가 갈려도
+            # 이 값으로 드러난다(스펙 13 §C-1a).
+            "effective_unit_cost_usd_per_second": unit_cost,
             "daily_budget_usd": daily_limit,
             "spent_today_usd": round(spent_day, 4),
             "day_pct": _pct(spent_day, daily_limit),
@@ -150,6 +153,10 @@ async def budget_overview(db: AsyncSession, now: datetime | None = None) -> dict
         "active_professor_count": professors,
         # 미터가 이 임계를 넘으면 콘솔이 경고를 띄운다(스펙 14 §E).
         "warn_threshold_pct": 80,
+        # 단가 드리프트 감시 — VisionStory 단가는 HeyGen 에서 유도된 값이라
+        # 한쪽만 env override 되면 코드가 전제하는 2배 관계가 깨진다.
+        # 콘솔이 ratio_consistent=false 면 경고를 띄운다.
+        "unit_costs": effective_unit_costs(),
         "services": [
             _entry(
                 HEYGEN,

@@ -370,6 +370,8 @@
     "budgetActiveProfessors": "활성 교수자 {count}명",
     "budgetPerProfessor": "1인당 ${amount}",
     "budgetHeadroom": "이 소진율이면 {count}명 더 감당",
+    "budgetUnitCost": "단가 ${rate}/초",
+    "budgetRatioWarning": "단가 비율이 {expected}배가 아닙니다(현재 {ratio}배). VisionStory 단가는 HeyGen에서 유도된 값이라 한쪽만 환경변수로 덮으면 전제가 깨집니다. 두 값을 함께 확인하세요.",
     "budgetDisabled": "{service} — 한도 미설정(브레이커 비활성)",
     "budgetNearWarning": "{service} 예산이 {pct}%를 넘었습니다. 추가 초대 전에 한도를 올리세요.",
     "budgetOverWarning": "{service} 월 예산을 초과했습니다. 모든 교수자의 아바타 제작이 차단됩니다.",
