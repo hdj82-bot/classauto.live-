@@ -518,3 +518,184 @@ def release_avatar_render_slot(
         .execution_options(synchronize_session=False)
     )
     db.commit()
+
+
+# ── TTS 상한 (스펙 13 §C-3) ────────────────────────────────────────────────────
+#
+# 본문이 slideshow 모드라 HeyGen 을 쓰지 않으므로 **실제 지출의 주축은 TTS** 인데,
+# 기존 브레이커 4개는 전부 아바타 계열이라 TTS 에는 상한이 하나도 없었다(§C-0).
+#
+# 1차는 **교수자별 월 문자 쿼터**다. 전역 $ 를 1차로 쓰면 한 명이 태울 때 나머지 전원이
+# 학기 중에 강의를 못 만든다 — 수업 운영을 망가뜨린다. 전역 $ 는 2차(사고 전용).
+
+_TTS_SERVICES = ("elevenlabs", "google_tts")
+
+
+class TTSQuotaError(BudgetExceededError):
+    """교수자 월 TTS 문자 쿼터 초과 — 그 교수자만 차단."""
+
+
+def _as_float(value) -> float:
+    """SUM 결과를 float 로. 숫자가 아니면 0.0.
+
+    Mock 세션(단위 테스트)이나 드라이버 이상으로 숫자가 아닌 값이 오면 ``float()`` 가
+    엉뚱한 값을 만들어 쿼터가 잘못 걸린다. 실제 숫자일 때만 받아들인다.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0.0
+    return float(value)
+
+
+def _tts_rate(service: str) -> float:
+    from app.services.cost_tracker import (  # noqa: PLC0415
+        ELEVENLABS_USD_PER_1K_CHARS,
+        GOOGLE_TTS_USD_PER_1K_CHARS,
+    )
+
+    return {
+        "elevenlabs": ELEVENLABS_USD_PER_1K_CHARS,
+        "google_tts": GOOGLE_TTS_USD_PER_1K_CHARS,
+    }.get(service, 0.0)
+
+
+def tts_spend_usd(db: Session, since: datetime) -> float:
+    """``since`` 이후 TTS 비용 합계(USD, render_cost_logs).
+
+    TTS 는 platform_cost_logs 가 아니라 render_cost_logs 에 쌓인다
+    (`CostCategory.tts` 는 enum 에만 있고 쓰이지 않는다 — §C-0).
+    """
+    try:
+        total = db.execute(
+            select(func.coalesce(func.sum(RenderCostLog.cost_usd), 0.0)).where(
+                RenderCostLog.service.in_(_TTS_SERVICES),
+                RenderCostLog.created_at >= since,
+            )
+        ).scalar()
+    except Exception:  # noqa: BLE001
+        total = None
+    return _as_float(total)
+
+
+def tts_chars_used_this_month(
+    db: Session, instructor_id, *, now: datetime | None = None
+) -> int:
+    """교수자의 이번 달 TTS 문자 수.
+
+    `cost_usd = chars × rate / 1000` 으로 저장되므로 역산한다. provider 별 단가가
+    다르므로(ElevenLabs 가 Google 의 약 19배) 서비스별로 나눠 더한다 — 한 번에
+    합산하면 폴백이 섞였을 때 자수가 크게 틀어진다.
+    """
+    now = now or datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # 운영자가 개별 상향(리셋)했으면 그 시각부터 다시 센다 — 둘 중 더 늦은 쪽.
+    # 조회 실패·비정상 값은 무시하고 달 시작을 쓴다 — 쿼터 계산이 렌더를 통째로
+    # 실패시켜선 안 된다(초기 구현이 그러지 않아 기존 렌더 테스트가 깨졌다).
+    try:
+        reset_at = db.execute(
+            select(User.tts_quota_reset_at).where(User.id == instructor_id)
+        ).scalar()
+    except Exception:  # noqa: BLE001
+        reset_at = None
+    if isinstance(reset_at, datetime):
+        if reset_at.tzinfo is None:
+            reset_at = reset_at.replace(tzinfo=timezone.utc)
+        month_start = max(month_start, reset_at)
+
+    total_chars = 0.0
+    for service in _TTS_SERVICES:
+        rate = _tts_rate(service)
+        if not rate:
+            continue
+        try:
+            spent = db.execute(
+                select(func.coalesce(func.sum(RenderCostLog.cost_usd), 0.0))
+                .select_from(RenderCostLog)
+                .join(VideoRender, RenderCostLog.video_render_id == VideoRender.id)
+                .where(
+                    VideoRender.instructor_id == instructor_id,
+                    RenderCostLog.service == service,
+                    RenderCostLog.created_at >= month_start,
+                )
+            ).scalar()
+        except Exception:  # noqa: BLE001 — 집계 실패가 렌더를 막으면 안 된다.
+            spent = None
+        total_chars += _as_float(spent) / rate * 1000.0
+    return int(round(total_chars))
+
+
+def tts_quota_remaining(
+    db: Session, instructor_id, *, now: datetime | None = None
+) -> int:
+    """이번 달 남은 문자 수(0 이상). 한도 0/음수면 0(비활성 취급).
+
+    교수자 화면이 "남은 문자 수"로 보여준다 — 쿼터는 미리 보여야 의미가 있다.
+    다 쓰고 나서 알면 이미 강의를 못 만든다.
+    """
+    cap = settings.TTS_MONTHLY_CHARS_PER_INSTRUCTOR
+    if not cap or cap <= 0:
+        return 0
+    used = tts_chars_used_this_month(db, instructor_id, now=now)
+    return max(0, cap - used)
+
+
+def assert_tts_quota(
+    db: Session, instructor_id, *, pending_chars: int = 0, now: datetime | None = None
+) -> None:
+    """**1차** — 교수자 월 문자 쿼터. 초과하면 그 교수자만 차단한다.
+
+    ``pending_chars`` 는 지금 합성하려는 텍스트 길이. 이걸 더해서 판정해야 한도를
+    넘겨 놓고 나서 막는 일이 없다.
+
+    한도 0/음수면 검사 비활성. mock 모드에서도 적용한다 — 문자 "수" 통제이므로
+    실비용 발생 여부와 무관하다($ 브레이커만 mock 면제).
+    """
+    cap = settings.TTS_MONTHLY_CHARS_PER_INSTRUCTOR
+    if not cap or cap <= 0:
+        return
+
+    used = tts_chars_used_this_month(db, instructor_id, now=now)
+    if used + pending_chars > cap:
+        logger.warning(
+            "[BUDGET] TTS 월 문자 쿼터 초과로 차단: instructor=%s used=%d pending=%d cap=%d",
+            instructor_id, used, pending_chars, cap,
+        )
+        raise TTSQuotaError(
+            f"이번 달 음성 생성 한도({cap:,}자)를 모두 사용했습니다. "
+            f"(사용 {used:,}자) 다음 달에 초기화되며, 급하시면 운영자에게 요청하세요."
+        )
+
+
+def assert_tts_budget(db: Session, *, now: datetime | None = None) -> None:
+    """**2차** — 전역 일/월 $ 한도. 재시도 루프 같은 사고만 끊는다.
+
+    정상 사용에서는 ``assert_tts_quota`` 가 먼저 걸리므로 이 한도에 닿지 않아야 정상이다.
+    `assert_heygen_budget` 과 같은 패턴(완료분 + in-flight 추정). 한도 0 이면 비활성.
+    """
+    now = now or datetime.now(timezone.utc)
+    daily_limit = settings.TTS_DAILY_BUDGET_USD
+    monthly_limit = settings.TTS_MONTHLY_BUDGET_USD
+
+    if daily_limit and daily_limit > 0:
+        day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        spent = tts_spend_usd(db, day_start)
+        if spent >= daily_limit:
+            logger.error(
+                "[BUDGET] TTS 일 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
+                spent, daily_limit,
+            )
+            raise BudgetExceededError(
+                f"TTS 일 예산 초과: ${spent:.2f} / ${daily_limit:.2f}"
+            )
+
+    if monthly_limit and monthly_limit > 0:
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        spent = tts_spend_usd(db, month_start)
+        if spent >= monthly_limit:
+            logger.error(
+                "[BUDGET] TTS 월 한도 초과로 차단: spent=$%.4f >= limit=$%.2f",
+                spent, monthly_limit,
+            )
+            raise BudgetExceededError(
+                f"TTS 월 예산 초과: ${spent:.2f} / ${monthly_limit:.2f}"
+            )

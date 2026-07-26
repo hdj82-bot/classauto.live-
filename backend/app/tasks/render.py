@@ -89,7 +89,12 @@ def render_slide(
     from app.models.user import User
     from app.services.pipeline.tts import build_subtitle_cues_for_audio, synthesize
     from app.services.pipeline.heygen import create_video
-    from app.services.pipeline.budget import assert_heygen_budget, BudgetExceededError
+    from app.services.pipeline.budget import (
+        BudgetExceededError,
+        assert_heygen_budget,
+        assert_tts_budget,
+        assert_tts_quota,
+    )
     from app.services.cost_tracker import estimate_tts_cost_usd
 
     db = SyncSessionLocal()
@@ -218,6 +223,15 @@ def render_slide(
                 )
 
         if not tts_already_done:
+            # ── §C-3: TTS 상한 ──
+            # 1차는 **교수자별 월 문자 쿼터** — 초과해도 그 교수자만 막힌다.
+            # 전역 $ 를 1차로 쓰면 한 명이 태울 때 나머지가 학기 중에 강의를 못 만든다.
+            # 재사용으로 이미 해결된 경우(tts_already_done)는 여기 오지 않는다 —
+            # 실제로 provider 를 호출할 때만 검사한다.
+            assert_tts_quota(db, render.instructor_id, pending_chars=len(tts_text))
+            # 2차 — 재시도 루프·대량 생성 같은 사고만 끊는 전역 한도.
+            assert_tts_budget(db)
+
             tts_result = loop.run_until_complete(
                 synthesize(
                     tts_text,
