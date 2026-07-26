@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/components/ui/Toast";
@@ -12,8 +13,7 @@ import { useI18n } from "@/contexts/I18nContext";
 //   GET /api/v1/admin/users/{id}/usage (드릴다운)
 //
 // 스펙 14 §E — v2 토큰 전환 + 행 오버플로 메뉴.
-//   · 드릴다운은 **인라인 확장을 유지**한다. /admin/testers/[id] 라우트로의 교체는
-//     그 화면을 만드는 B 의 몫이고, 여기서 먼저 링크를 걸면 B 전까지 404 다.
+//   · 드릴다운은 B 에서 /admin/testers/[id] 라우트로 교체됐다(종전 인라인 확장 제거).
 //   · 오버플로 메뉴에는 PRO 분석 토글만 둔다. 역할 변경·유저 삭제는 /admin/users
 //     에 남기고 메뉴의 딥링크로 도달 경로를 유지한다(§5 후단).
 
@@ -36,23 +36,6 @@ interface FunnelStep {
   step: string;
   count: number;
   conversion_from_prev_pct: number;
-}
-
-interface UsageDetail {
-  id: string;
-  email: string;
-  cohort: string | null;
-  beta_consented_at: string | null;
-  lectures_count: number;
-  lectures: {
-    id: string;
-    title: string;
-    is_published: boolean;
-    course_title: string;
-    updated_at: string | null;
-  }[];
-  spend_total_usd: number;
-  monthly_spend: { year: number; month: number; cost_usd: number }[];
 }
 
 const FUNNEL_LABELS: Record<string, string> = {
@@ -82,10 +65,6 @@ export default function AdminBetaPage() {
   const [funnel, setFunnel] = useState<FunnelStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // 드릴다운 — 행 클릭 시 펼침. id → 상세(또는 "loading"/"error").
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [detail, setDetail] = useState<Record<string, UsageDetail | "loading" | "error">>({});
 
   // PRO 분석 토글 상태. beta-overview 응답에 analytics_pro_enabled 가 없고 단일 유저
   // 조회 엔드포인트도 없어서, /admin/users 목록(교수자 필터)을 훑어 id 로 조인한다.
@@ -189,23 +168,6 @@ export default function AdminBetaPage() {
     };
   }, [menuOpen]);
 
-  const toggleRow = async (id: string) => {
-    if (expanded === id) {
-      setExpanded(null);
-      return;
-    }
-    setExpanded(id);
-    if (!detail[id] || detail[id] === "error") {
-      setDetail((d) => ({ ...d, [id]: "loading" }));
-      try {
-        const { data } = await api.get(`/api/v1/admin/users/${id}/usage`);
-        setDetail((d) => ({ ...d, [id]: data }));
-      } catch {
-        setDetail((d) => ({ ...d, [id]: "error" }));
-      }
-    }
-  };
-
   // §5 기존 쓰기 — 감사 로그 user.set_analytics_pro 1행이 남는다.
   const toggleAnalyticsPro = async (id: string, current: boolean) => {
     setProBusy(id);
@@ -307,12 +269,9 @@ export default function AdminBetaPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {instructors.map((r) => (
-                  <RowWithDrilldown
+                  <InstructorRowView
                     key={r.id}
                     row={r}
-                    expanded={expanded === r.id}
-                    detail={detail[r.id]}
-                    onToggle={() => toggleRow(r.id)}
                     proEnabled={proMap ? (proMap[r.id] ?? false) : null}
                     proBusy={proBusy === r.id}
                     menuOpen={menuOpen === r.id}
@@ -330,11 +289,8 @@ export default function AdminBetaPage() {
   );
 }
 
-function RowWithDrilldown({
+function InstructorRowView({
   row,
-  expanded,
-  detail,
-  onToggle,
   proEnabled,
   proBusy,
   menuOpen,
@@ -343,9 +299,6 @@ function RowWithDrilldown({
   t,
 }: {
   row: InstructorRow;
-  expanded: boolean;
-  detail: UsageDetail | "loading" | "error" | undefined;
-  onToggle: () => void;
   /** null = 상태를 알 수 없음(조인 실패/모집단 초과) → 토글을 숨긴다. */
   proEnabled: boolean | null;
   proBusy: boolean;
@@ -354,14 +307,25 @@ function RowWithDrilldown({
   onToggleAnalyticsPro: (id: string, current: boolean) => void;
   t: (k: string, v?: Record<string, string | number>) => string;
 }) {
+  const router = useRouter();
+
   return (
     <>
+      {/* 행 클릭 → 테스터 상세(스펙 §B). 종전엔 같은 표 안에서 펼쳐지는 인라인
+          드릴다운이었고, 그 화면이 생기면서 라우트로 교체했다. */}
       <tr
-        className={`cursor-pointer transition hover:bg-bg-hover ${expanded ? "bg-gold/10" : ""}`}
-        onClick={onToggle}
+        className="cursor-pointer transition hover:bg-bg-hover"
+        onClick={() => router.push(`/admin/testers/${row.id}`)}
       >
         <td className="px-3 py-2">
-          <div className="font-medium text-text">{row.name || "—"}</div>
+          {/* 새 탭·북마크가 되도록 이름은 실제 링크로 둔다(행 클릭은 편의). */}
+          <Link
+            href={`/admin/testers/${row.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="font-medium text-text hover:text-gold-on-light hover:underline"
+          >
+            {row.name || row.email}
+          </Link>
           <div className="text-xs text-text-subtle">{row.email}</div>
         </td>
         <td className="px-3 py-2 tabular-nums text-text-muted">{row.cohort || "—"}</td>
@@ -428,68 +392,6 @@ function RowWithDrilldown({
         </td>
       </tr>
 
-      {expanded && (
-        <tr className="bg-bg-subtle">
-          <td colSpan={11} className="px-4 py-4">
-            {detail === "loading" || detail === undefined ? (
-              <p className="text-sm text-text-subtle">…</p>
-            ) : detail === "error" ? (
-              <p className="text-sm text-warning">{t("admin.betaDrilldownLoadError")}</p>
-            ) : (
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <div>
-                  <div className="mb-2 flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-text-muted">{t("admin.betaDrilldownLectures")}</h3>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        detail.beta_consented_at
-                          ? "bg-success/10 text-success"
-                          : "bg-warning/10 text-warning"
-                      }`}
-                    >
-                      {t("admin.betaDrilldownConsent")}:{" "}
-                      {detail.beta_consented_at
-                        ? t("admin.betaDrilldownConsentYes")
-                        : t("admin.betaDrilldownConsentNo")}
-                    </span>
-                  </div>
-                  {detail.lectures.length === 0 ? (
-                    <p className="text-sm text-text-subtle">{t("admin.betaDrilldownEmpty")}</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {detail.lectures.map((l) => (
-                        <li key={l.id} className="flex items-center gap-2 text-sm text-text-muted">
-                          <span
-                            aria-hidden
-                            className={`h-1.5 w-1.5 rounded-full ${l.is_published ? "bg-success" : "bg-text-faint"}`}
-                          />
-                          <span className="truncate">{l.title}</span>
-                          <span className="text-xs text-text-subtle">· {l.course_title}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                <div>
-                  <h3 className="mb-2 text-sm font-bold text-text-muted">{t("admin.betaDrilldownMonthly")}</h3>
-                  {detail.monthly_spend.length === 0 ? (
-                    <p className="text-sm text-text-subtle">—</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {detail.monthly_spend.map((m) => (
-                        <li key={`${m.year}-${m.month}`} className="flex max-w-xs justify-between text-sm text-text-muted">
-                          <span className="tabular-nums">{t("admin.yearMonth", { year: m.year, month: m.month })}</span>
-                          <span className="tabular-nums">${m.cost_usd.toFixed(2)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            )}
-          </td>
-        </tr>
-      )}
     </>
   );
 }

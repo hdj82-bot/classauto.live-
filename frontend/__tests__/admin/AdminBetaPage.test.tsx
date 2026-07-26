@@ -3,11 +3,11 @@ import { render, screen, waitFor, fireEvent, within } from "@testing-library/rea
 import { I18nProvider } from "@/contexts/I18nContext";
 
 /**
- * 스펙 14 §E — /admin/beta 의 행 오버플로 메뉴.
+ * 스펙 14 §E(행 오버플로 메뉴) + §B(드릴다운 라우트 교체).
  *
  * 여기서 지켜야 하는 두 가지:
- *   1. 드릴다운은 **인라인 확장**이다. /admin/testers/[id] 라우트 교체는 그 화면을
- *      만드는 B 의 몫이고, 먼저 링크를 걸면 B 전까지 404 다.
+ *   1. 드릴다운은 `/admin/testers/[id]` **라우트**다. E 시점엔 인라인 확장이었고
+ *      B 가 그 화면을 만들면서 교체했다.
  *   2. 메뉴에는 PRO 분석 토글만 둔다. 역할 변경·유저 삭제는 /admin/users 에 남고
  *      메뉴의 딥링크로 도달한다.
  */
@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   patch: vi.fn(),
   toast: vi.fn(),
+  push: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({
@@ -24,6 +25,14 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/components/ui/Toast", () => ({
   useToast: () => ({ toast: mocks.toast }),
+}));
+
+// 전역 setup 의 useRouter 는 호출마다 새 vi.fn 을 돌려줘 push 를 추적할 수 없다.
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mocks.push, replace: vi.fn(), back: vi.fn(), prefetch: vi.fn() }),
+  usePathname: () => "/admin/beta",
+  useParams: () => ({}),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 import AdminBetaPage from "@/app/admin/beta/page";
@@ -92,21 +101,25 @@ describe("AdminBetaPage — 행 오버플로 메뉴", () => {
     mocks.get.mockReset();
     mocks.patch.mockReset();
     mocks.toast.mockReset();
+    mocks.push.mockReset();
     mockApi();
   });
 
-  it("행 클릭은 라우트 이동이 아니라 인라인 확장이다(B 전까지 유지)", async () => {
+  it("행 클릭은 테스터 상세로 이동한다(B — 인라인 확장 대체)", async () => {
     renderPage();
-    const nameCell = await screen.findByText("하두진");
+    const nameLink = await screen.findByText("하두진");
 
-    // /admin/testers/[id] 링크가 있으면 B 완료 전까지 404 다.
-    screen.queryAllByRole("link").forEach((a) => {
-      expect(a.getAttribute("href")).not.toMatch(/^\/admin\/testers\//);
-    });
+    // 이름은 실제 링크여야 새 탭·북마크가 된다.
+    expect(nameLink.getAttribute("href")).toBe("/admin/testers/u1");
 
-    fireEvent.click(nameCell);
-    // 같은 표 안에서 드릴다운 내용이 펼쳐진다.
-    expect(await screen.findByText("把자문의 이해")).toBeTruthy();
+    // 행 아무 데나 클릭해도 같은 곳으로 간다(편의).
+    fireEvent.click(screen.getByText("prof@k.ac.kr"));
+    await waitFor(() =>
+      expect(mocks.push).toHaveBeenCalledWith("/admin/testers/u1"),
+    );
+
+    // 인라인 확장은 더 이상 없다 — usage 를 이 화면에서 부르지 않는다.
+    expect(screen.queryByText("把자문의 이해")).toBeNull();
   });
 
   it("메뉴에 PRO 토글과 사용자 관리 딥링크가 있다", async () => {
@@ -127,13 +140,14 @@ describe("AdminBetaPage — 행 오버플로 메뉴", () => {
     ).toBe("/admin/users");
   });
 
-  it("메뉴 버튼 클릭은 드릴다운을 펼치지 않는다", async () => {
+  it("메뉴 버튼 클릭은 테스터 상세로 이동하지 않는다", async () => {
     renderPage();
     await screen.findByText("하두진");
 
     fireEvent.click(screen.getByRole("button", { name: "행 메뉴" }));
     await screen.findByRole("menu");
-    expect(screen.queryByText("把자문의 이해")).toBeNull();
+    // 행 클릭 이동과 충돌하면 메뉴를 열 때마다 화면이 넘어간다.
+    expect(mocks.push).not.toHaveBeenCalled();
   });
 
   it("PRO 토글은 analytics_pro_enabled 를 뒤집어 PATCH 한다", async () => {

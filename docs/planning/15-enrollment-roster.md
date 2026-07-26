@@ -332,12 +332,73 @@ Course QR 이 여는 화면. 강좌 제목·교수자·학기·수강 안내 →
 | 2 | 프론트(Vercel) — `join` 호출 | 진입 시 등록이 쌓이기 시작 | 없음 |
 | 3 | Railway 에서 `ENROLLMENT_GATE_ENABLED=true` | 게이트 실제 작동 | 미등록·제적자만 차단 |
 
-**3단계 전에 확인할 것**: `enrollments` 에 행이 실제로 쌓이고 있는지. 안 쌓이는데 켜면
-전원이 막힌다.
+##### 3단계(게이트 ON) 전 확인 체크리스트
+
+**하나라도 어긋나면 켜지 않는다.** 켜는 순간 미등록 학생이 전부 403 이 된다.
+
+**A. 등록이 실제로 쌓이고 있는가** — 가장 중요하다. 안 쌓이는데 켜면 전원이 막힌다.
 
 ```sql
-SELECT count(*), min(joined_at), max(joined_at) FROM enrollments;
+-- 최근 24시간에 새 등록이 있는가? (프론트 join 배포 후 학생 진입이 있었다면 있어야 한다)
+SELECT count(*) AS total,
+       count(*) FILTER (WHERE joined_at > now() - interval '24 hours') AS last_24h,
+       min(joined_at), max(joined_at)
+FROM enrollments;
 ```
+
+- `total = 0` → **켜지 마라.** 프론트 join 이 안 나가고 있다(2단계 배포 확인).
+- `last_24h = 0` 인데 그 사이 학생 진입이 있었다면 → 마찬가지로 켜지 마라.
+
+**B. 세션이 있는데 등록이 없는 학생이 남아 있지 않은가** — 게이트를 켜는 순간 이들이
+막힌다. 프론트 join 배포 이전부터 보던 기존 학생이 여기 걸린다.
+
+```sql
+-- 활성 세션 이력이 있는데 해당 강좌 등록이 없는 (학생, 강좌) 조합
+SELECT u.email, c.title, count(*) AS sessions
+FROM learning_sessions s
+JOIN lectures l ON l.id = s.lecture_id
+JOIN courses  c ON c.id = l.course_id
+JOIN users    u ON u.id = s.user_id
+LEFT JOIN enrollments e
+       ON e.course_id = c.id AND e.student_id = s.user_id
+WHERE e.id IS NULL
+GROUP BY u.email, c.title
+ORDER BY sessions DESC;
+```
+
+- **0행이어야 켠다.** 행이 있으면 그 학생들은 다음 진입 때 join 이 자동으로 만들어 주므로
+  며칠 더 기다리거나, 목록을 확인한 뒤 백필한다:
+
+```sql
+-- (선택) 기존 시청자 백필 — 게이트를 빨리 켜야 할 때만.
+INSERT INTO enrollments (id, course_id, student_id, status, source, joined_at)
+SELECT gen_random_uuid(), c.id, s.user_id, 'active', 'manual', min(s.created_at)
+FROM learning_sessions s
+JOIN lectures l ON l.id = s.lecture_id
+JOIN courses  c ON c.id = l.course_id
+GROUP BY c.id, s.user_id
+ON CONFLICT (course_id, student_id) DO NOTHING;
+```
+
+**C. 제적자가 의도한 사람뿐인가** — 켜면 이들만 정확히 막힌다.
+
+```sql
+SELECT u.email, c.title, e.withdrawn_at, e.note
+FROM enrollments e
+JOIN users u ON u.id = e.student_id
+JOIN courses c ON c.id = e.course_id
+WHERE e.status = 'withdrawn';
+```
+
+**D. 프론트가 실제로 join 을 부르고 있는가** — 배포 확인. 브라우저 개발자도구
+Network 에서 `/v/[slug]` 진입 시 `POST /api/v1/enrollments/join` 이 200 으로 나가는지.
+(`/lecture/[slug]` 북마크 진입에서도 나가야 한다 — PlayerV2 가 세션 생성 직전에 부른다.)
+
+**E. 롤백 경로 확인** — `ENROLLMENT_GATE_ENABLED=false` 로 되돌리면 즉시 원복된다.
+재배포도 마이그레이션 되돌리기도 필요 없다. 등록 데이터는 그대로 쌓이므로 원인을 고친 뒤
+다시 켜면 된다.
+
+**켠 직후 볼 것**: 학생 문의·오류 로그에서 403 이 급증하는지. 급증하면 B 를 다시 확인한다.
 
 **롤백은 환경변수 하나로 끝난다** — `ENROLLMENT_GATE_ENABLED=false`. 재배포도, 마이그레이션
 되돌리기도 필요 없다. 등록 데이터는 그대로 쌓이므로 원인을 고친 뒤 다시 켜면 된다.
