@@ -1766,6 +1766,21 @@
       "scoreFormat": "Accuracy {pct}%",
       "scoreDetail": "{correct} / {total} correct",
       "backToPlayer": "Back to lecture"
+    },
+    "courseEntry": {
+      "loading": "Loading course...",
+      "notFoundTitle": "Course not found",
+      "notFoundDesc": "The link may be wrong or the course has been removed. Please ask your professor for the link again.",
+      "withdrawnTitle": "Your enrollment in this course has ended",
+      "withdrawnDesc": "Please contact your professor. To take the course again, your professor needs to restore you to the roster.",
+      "goHome": "Go home",
+      "loginPrompt": "Sign in to watch this course. Once enrolled, new lectures appear here automatically.",
+      "loginCta": "Continue with Google",
+      "loginNote": "Using your school email makes it easier for your professor to find you on the roster.",
+      "joining": "Enrolling...",
+      "lecturesTitle": "Lectures",
+      "noLectures": "No lectures published yet. They will appear here once your professor uploads them.",
+      "lectureExpired": "Viewing period has ended"
     }
   },
   "ownerCosts": {

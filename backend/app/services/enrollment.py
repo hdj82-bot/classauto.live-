@@ -48,8 +48,8 @@ async def resolve_course_id(
     `/c/[slug]` 는 course_slug, `/v/[slug]` 는 lecture_slug, 세션 시작은 lecture_id 로
     들어오지만 등록은 모두 강좌 단위다.
 
-    NOTE: `courses` 에는 아직 slug 컬럼이 없다(스펙 15 2단계에서 `/c/[slug]` 라우트와
-    함께 추가). 그때까지 course_slug 는 강좌 UUID 문자열을 받는다.
+    `course_slug` 는 `courses.slug` 로 찾되, 1단계에서 쓰던 강좌 UUID 문자열도 계속
+    받아 준다(그때 만들어진 링크가 깨지지 않게).
     """
     if lecture_id is not None:
         row = await db.execute(
@@ -64,10 +64,16 @@ async def resolve_course_id(
         return row.scalar_one_or_none()
 
     if course_slug:
-        # 2단계에서 courses.slug 가 생기면 여기서 slug 조회로 바꾼다.
+        # `/c/[slug]` 는 slug 로 들어온다(스펙 15 2단계 — courses.slug 신설).
+        row = await db.execute(select(Course.id).where(Course.slug == course_slug))
+        found = row.scalar_one_or_none()
+        if found is not None:
+            return found
+        # 과도기 호환 — 1단계에서는 course_slug 자리에 강좌 UUID 를 받았다.
+        # 그때 만들어진 링크·북마크가 깨지지 않게 UUID 도 계속 받아 준다.
         try:
             course_uuid = uuid.UUID(course_slug)
-        except (ValueError, AttributeError):
+        except (ValueError, AttributeError, TypeError):
             return None
         row = await db.execute(select(Course.id).where(Course.id == course_uuid))
         return row.scalar_one_or_none()

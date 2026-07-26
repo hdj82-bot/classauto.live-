@@ -32,6 +32,8 @@ async def create_course(db: AsyncSession, instructor: User, data: CourseCreate) 
         title=data.title,
         description=data.description,
         instructor_id=instructor.id,
+        # slug(학생 진입 주소 `/c/[slug]`)는 모델 기본값이 제목에서 만든다 — 여기서
+        # 한 번 더 넣으면 생성 경로마다 규칙이 갈린다.
     )
     db.add(course)
     await db.commit()
