@@ -1780,7 +1780,10 @@
       "joining": "Enrolling...",
       "lecturesTitle": "Lectures",
       "noLectures": "No lectures published yet. They will appear here once your professor uploads them.",
-      "lectureExpired": "Viewing period has ended"
+      "lectureExpired": "Viewing period has ended",
+      "previewTitle": "Preview — this is what students see",
+      "previewDesc": "You opened this with an instructor account. No enrollment is created; open a lecture in the studio rather than the student player.",
+      "previewOpenStudio": "Open in studio"
     }
   },
   "ownerCosts": {

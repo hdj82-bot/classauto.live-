@@ -9,7 +9,6 @@
     "lectureLabel": "강의",
     "publishedBadge": "공개",
     "unpublishedBadge": "비공개",
-
     "tableTitle": "수강생 목록",
     "tableSubtitle": "{lecture} · 총 {total}명",
     "backToList": "강의 목록으로 돌아가기",
@@ -24,7 +23,6 @@
     "filterInProgress": "진행 중",
     "searchPlaceholder": "이름·학번 검색",
     "searchAriaLabel": "학습자 이름 또는 학번으로 검색",
-
     "colName": "이름",
     "colStudentNumber": "학번",
     "colProgress": "진행률",
@@ -34,12 +32,10 @@
     "colRisk": "상태",
     "colLastActivity": "최근 활동",
     "actionViewDetail": "상세",
-
     "selectionLabel": "선택됨",
     "selectAll": "전체 선택",
     "deselectAll": "전체 해제",
     "selectRow": "{name} 선택",
-
     "riskHigh": "고위험",
     "riskMedium": "주의",
     "riskLow": "양호",
@@ -48,7 +44,6 @@
     "riskTooltipMedium": "진행률 30~70% 또는 집중도 50% 미만",
     "riskTooltipLow": "진행률 70% 이상이며 집중도 양호",
     "riskTooltipCompleted": "강의를 모두 시청 완료",
-
     "bulkTitle": "선택한 학습자에 대한 일괄 작업",
     "bulkPickPrompt": "테이블에서 학습자를 선택하면 일괄 작업이 활성화됩니다.",
     "bulkSendNudge": "시청 독려 알림 보내기",
@@ -56,7 +51,6 @@
     "bulkExportSelected": "선택 항목 CSV",
     "bulkBackendPending": "이 작업은 백엔드 엔드포인트가 준비되는 대로 활성화됩니다.",
     "bulkBackendPendingShort": "준비 중",
-
     "detailBack": "수강생 목록으로",
     "detailLoading": "학습자 상세 정보를 불러오는 중...",
     "detailNotFound": "이 학습자의 시청 기록을 찾을 수 없습니다.",
@@ -79,20 +73,44 @@
     "detailQaCount": "보낸 질문",
     "detailRespondedCount": "응답 받음",
     "detailNoResponseCnt": "무반응 횟수",
-
     "privacyHeading": "학생 데이터 보호",
     "privacyBullet1": "학생 데이터는 학습 분석 목적 외에 사용되지 않습니다. 광고·외부 마케팅 공유는 수행하지 않습니다.",
     "privacyBullet2": "졸업 또는 강의 종료 후 보존 기간이 경과하면 개인 식별 데이터가 자동 삭제됩니다.",
     "privacyBullet3": "교수자는 본인 강의의 수강생 데이터에만 접근할 수 있습니다.",
     "privacyMoreLink": "학생 데이터 보호 정책 자세히 보기",
     "privacyMoreHref": "/trust",
-
     "toastNotImplemented": "이 작업은 아직 백엔드에서 지원되지 않습니다. BACKEND_ASKS.LEARNERS.md 참조.",
-
     "minutesUnit": "{count}분",
     "secondsUnit": "{count}초",
     "daysAgo": "{count}일 전",
     "today": "오늘",
-    "never": "기록 없음"
+    "never": "기록 없음",
+    "courseQrButton": "강좌 QR",
+    "courseRosterButton": "수강 명단",
+    "courseNoLectures": "아직 강의가 없습니다. 강좌 QR 로 수강 등록을 먼저 받아 두어도 됩니다.",
+    "qrHelp": "학기 초 첫 수업 슬라이드에 띄워 전원이 한 번에 스캔하게 하세요. 한 번 등록하면 이후 발행되는 강의가 학생 화면에 자동으로 나타나 매주 링크를 다시 뿌릴 필요가 없습니다.",
+    "qrAlt": "강좌 수강 등록 QR 코드",
+    "qrLinkLabel": "학생 진입 링크",
+    "qrDownload": "PNG 내려받기",
+    "qrCopy": "링크 복사",
+    "qrPreview": "학생 화면 미리보기",
+    "rosterLoading": "명단을 불러오는 중...",
+    "rosterLoadError": "명단을 불러오지 못했습니다.",
+    "rosterEmpty": "아직 등록한 학생이 없습니다. 강좌 QR 을 수업에서 띄워 보세요.",
+    "rosterActive": "수강 중",
+    "rosterWithdrawn": "제적",
+    "rosterNeverWatched": "미시청",
+    "rosterNeverWatchedCell": "시청 기록 없음",
+    "rosterColName": "이름",
+    "rosterColNumber": "학번",
+    "rosterColJoined": "등록일",
+    "rosterColLastWatched": "최근 시청",
+    "rosterColAction": "관리",
+    "rosterWithdraw": "제적",
+    "rosterWithdrawConfirm": "제적 확인",
+    "rosterCancel": "취소",
+    "rosterReactivate": "재등록",
+    "rosterWithdrawnBadge": "제적됨",
+    "rosterWithdrawNote": "제적해도 기록은 지워지지 않습니다. 학생은 스스로 되돌릴 수 없으니 필요하면 재등록으로 복구하세요."
   }
 }

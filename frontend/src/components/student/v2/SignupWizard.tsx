@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/contexts/I18nContext";
 import { startGoogleLogin } from "@/lib/auth";
+import { stashAuthNext } from "@/lib/authNext";
 import tokens from "./tokens-v2.module.css";
 import styles from "./SignupV2.module.css";
 
@@ -123,20 +124,11 @@ export default function SignupWizard({ next }: SignupWizardProps) {
 
   const completeSignup = () => {
     if (!agree || redirecting) return;
-    // OAuth 라운드트립을 건너 살아남도록 딥링크(next)만 sessionStorage 에 보관한다
-    // (same-tab 이라 프론트 origin 의 sessionStorage 는 왕복 후에도 유지된다).
-    // complete-profile 이 가입 완료 후 이 값을 읽어 안전한 내부 경로면 그리로 보낸다.
+    // OAuth 라운드트립을 건너 살아남도록 딥링크(next)만 보관한다(`lib/authNext`).
+    // 복귀 지점에서 안전한 내부 경로면 그리로 보낸다.
     // 나머지 프로필 필드는 complete-profile 이 다시 수집하므로 stash 하지 않는다
     // (종전엔 email/name/major 등을 통째로 저장했으나 아무도 읽지 않는 죽은 쓰기였다).
-    try {
-      if (next) {
-        window.sessionStorage.setItem("ifl_student_signup_next", next);
-      } else {
-        window.sessionStorage.removeItem("ifl_student_signup_next");
-      }
-    } catch {
-      /* ignore */
-    }
+    stashAuthNext(next);
     setShowSuccess(true);
     setRedirecting(true);
     // 1.4초 후 toast 가 보이고 OAuth 라운드트립 시작 — UX 부드럽게.
