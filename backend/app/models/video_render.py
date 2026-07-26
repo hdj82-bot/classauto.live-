@@ -67,6 +67,12 @@ class VideoRender(Base):
     heygen_video_url: Mapped[str | None] = mapped_column(String(1024))
     s3_video_url: Mapped[str | None] = mapped_column(String(1024))
     error_message: Mapped[str | None] = mapped_column(Text)
+    # 음원의 **내용 기반 키** — (강의, 슬라이드, 발화 텍스트, 보이스, 속도)의 SHA-256.
+    # "다시 제작"은 승인할 때마다 VideoRender 를 새로 만들어서 render_id 기반
+    # idempotency 가 무력했다(새 id → 새 S3 키 → 전량 재합성). 이 키가 같으면 이전
+    # 렌더의 음원을 그대로 재사용해, 아바타만 바꾸는 재제작의 TTS 비용이 0 이 된다
+    # (스펙 13 §C-5). 기존 행은 NULL — 첫 재제작 때 한 번 합성되며 채워진다.
+    tts_cache_key: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
 
     # 타임스탬프
     created_at: Mapped[datetime] = mapped_column(

@@ -8,6 +8,7 @@ from app.celery_app import celery
 from app.core.config import settings
 from app.db.session import SyncSessionLocal
 from app.models.video_render import RenderStatus, VideoRender
+from app.services import tts_reuse
 from app.services.pipeline import cost_log, s3 as s3_svc
 
 logger = logging.getLogger(__name__)
@@ -181,6 +182,41 @@ def render_slide(
         s3_audio_key = _audio_s3_key(render_id)
         tts_already_done = bool(audio_url) and s3_svc.file_exists(s3_audio_key)
 
+        # ── §C-5: 내용 기반 음원 재사용 ──
+        # 위 idempotency 는 render_id 로 S3 키를 만든다. 그런데 approve_video 는 승인마다
+        # VideoRender 를 새로 만들어서(새 id → 새 키) "아무것도 안 바꾸고 다시 제작"해도
+        # 전 슬라이드가 재합성·재과금됐다. 같은 (강의, 슬라이드, 텍스트, 보이스, 속도)면
+        # 이전 음원을 그대로 쓴다 — 아바타만 바꾸는 재제작은 TTS 비용 0.
+        cache_key = tts_reuse.build_cache_key(
+            lecture_id=render.lecture_id,
+            slide_number=render.slide_number,
+            script_text=tts_text,
+            voice_id=voice_id,
+            voice_speed=voice_speed,
+        )
+
+        if not tts_already_done:
+            reusable = tts_reuse.find_reusable_render(
+                db,
+                cache_key=cache_key,
+                exclude_render_id=render.id,
+                script_text=tts_text,
+                voice_id=voice_id,
+                voice_speed=voice_speed,
+                # S3 객체 존재 확인을 주입 — DB 에만 남은 유령이면 재합성으로 폴백한다.
+                audio_exists=lambda c: s3_svc.file_exists(_audio_s3_key(str(c.id))),
+            )
+            if reusable is not None:
+                tts_reuse.apply_reuse(render, reusable)
+                render.tts_cache_key = cache_key
+                db.commit()
+                tts_already_done = True
+                # 비용을 기록하지 않는다 — provider 를 호출하지 않았다.
+                logger.info(
+                    "TTS 재사용(합성·과금 없음) — render_id=%s, source=%s, key=%s",
+                    render_id, reusable.id, cache_key[:12],
+                )
+
         if not tts_already_done:
             tts_result = loop.run_until_complete(
                 synthesize(
@@ -219,12 +255,18 @@ def render_slide(
             # 그대로 두어 플레이어가 글자수 균등분배로 폴백한다. 음원과 같은 트랜잭션에
             # 커밋해 audio_url 과 cue 가 항상 짝을 이루게 한다.
             render.subtitle_cues = tts_result.subtitle_cues
+            # 다음 재제작이 이 음원을 찾을 수 있게 키를 남긴다.
+            render.tts_cache_key = cache_key
             db.commit()
         else:
             logger.info(
                 "TTS idempotent skip — audio_url 및 S3 객체 존재: render_id=%s, key=%s",
                 render_id, s3_audio_key,
             )
+            # 캐시 키 백필 — 이 렌더도 다음 재제작의 재사용 후보가 된다.
+            if render.tts_cache_key != cache_key:
+                render.tts_cache_key = cache_key
+                db.commit()
             # ── 자막 정밀 싱크 cue 백필(재합성 없음) ──
             # 음원은 이미 있으나 cue 가 비면(정렬 기능 도입 전 렌더·정렬 일시 실패·
             # '다시 제작'에서 텍스트 그대로라 TTS 건너뜀) 기존 음원으로 Forced
