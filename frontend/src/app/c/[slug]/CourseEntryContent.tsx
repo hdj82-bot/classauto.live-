@@ -10,6 +10,7 @@ import { useI18n } from "@/contexts/I18nContext";
 import { startGoogleLogin } from "@/lib/auth";
 import { stashAuthNext } from "@/lib/authNext";
 import StudentSurfaceLight from "@/components/student/v2/StudentSurfaceLight";
+import FeedbackLauncher from "@/components/feedback/FeedbackLauncher";
 
 /**
  * `/c/[slug]` 본문 — 강좌 정보 → 로그인 → 자동 등록 → 발행 강의 목록.
@@ -300,6 +301,16 @@ export default function CourseEntryContent() {
             </ul>
           )}
         </section>
+
+        {/* 학생 제보 경로 — 학기 초 QR 로 등록한 학생은 이 주소가 학기 내내 홈이라
+            `/dashboard` 를 한 번도 안 볼 수 있다. 시청 화면(플레이어)에는 두지
+            않으므로 머무는 화면 두 곳에 같이 둔다(결정 2026-07-27).
+            미리보기(교수자)에는 띄우지 않는다 — 학생에게 보이는 화면이 아니다. */}
+        {!isPreview && user?.role === "student" && (
+          <div className="mt-8">
+            <FeedbackLauncher variant="card" />
+          </div>
+        )}
       </div>
     </StudentSurfaceLight>
   );

@@ -3,10 +3,14 @@ import "./globals.css";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nProvider } from "@/contexts/I18nContext";
 import { ToastProvider } from "@/components/ui/Toast";
-// 우하단 글로벌 피드백 버튼은 제거됨(2026-06-27) — 스튜디오 ActionBar CTA 와 겹쳐
-// 보였고, 베타 의견 수집 창구를 대문 nav 의 공개 "자유게시판"(/board)으로 일원화했다.
-// 운영자 비공개 피드백 콘솔(/admin/feedback)과 백엔드(POST /api/v1/feedback)는 그대로
-// 유지되므로, 특정 페이지에서 다시 띄우고 싶으면 GlobalFeedbackButton 을 직접 import 한다.
+// 우하단 고정 피드백 버튼은 **복원하지 않는다**(2026-06-27 철회 → 2026-07-27 재확인).
+// 스튜디오 하단 ActionBar CTA 를 덮었던 게 원인이고, 원인은 버튼의 존재가 아니라
+// `position: fixed` 였다. 그래서 고정 위치만 버리고 진입점은 각 화면의 레이아웃
+// 흐름 안으로 옮겼다 — `components/feedback/FeedbackLauncher`:
+//   교수자 일반 화면 → 사이드바 하단 슬롯 / 스튜디오 → ActionBar 좌측 슬롯
+//   학생 → /dashboard · /c/[slug] (시청 화면에는 두지 않는다 — 집중도 방해)
+// 공개 자유게시판(/board)은 별개 목적(테스터 커뮤니티)으로 그대로 두고, 운영자
+// 비공개 인박스(/admin/feedback)와 합치지 않는다. 근거는 스펙 13 §F.
 // 사용자 결정 2026-05-13 PM: 글로벌 OfflineBanner 제거 (모든 페이지에서 상단
 // 빨간 띠 노출 차단). 컴포넌트 파일(`@/components/OfflineBanner`) 자체는 보존
 // 하므로 특정 페이지에서 다시 켜고 싶으면 그쪽에서 직접 import 하면 된다.

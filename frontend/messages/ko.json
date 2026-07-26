@@ -611,7 +611,9 @@
       "idea": "아이디어",
       "confusing": "헷갈려요",
       "other": "기타"
-    }
+    },
+    "studentPrompt": "시청 중에 문제가 있었나요? 알려 주시면 바로 확인합니다.",
+    "lectureContext": "이 제보는 \"{title}\" 강의와 함께 전달됩니다."
   },
   "board": {
     "title": "자유게시판",

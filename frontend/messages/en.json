@@ -611,7 +611,9 @@
       "idea": "Idea",
       "confusing": "Confusing",
       "other": "Other"
-    }
+    },
+    "studentPrompt": "Ran into a problem while watching? Tell us and we'll look into it.",
+    "lectureContext": "This report will be sent with the lecture \"{title}\"."
   },
   "board": {
     "title": "Community board",

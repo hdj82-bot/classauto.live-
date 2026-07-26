@@ -35,6 +35,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/api", () => ({
   api: { get: mocks.get },
   enrollmentApi: { join: mocks.join },
+  feedbackApi: { submit: vi.fn() },
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -47,6 +48,8 @@ vi.mock("@/lib/authNext", () => ({
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: mocks.user, isLoading: mocks.authLoading }),
+  // 학생 화면 하단의 피드백 진입점이 쓴다(스펙 13 §F — 결정 2026-07-27).
+  useOptionalAuth: () => (mocks.user ? { user: mocks.user } : null),
 }));
 
 import CourseEntryContent from "@/app/c/[slug]/CourseEntryContent";

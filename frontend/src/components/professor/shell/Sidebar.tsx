@@ -8,6 +8,7 @@ import { useOptionalAuth } from "@/contexts/AuthContext";
 import { canSeeAnalyticsPro } from "@/lib/analyticsProAccess";
 import { isOwnerEmail } from "@/lib/ownerAccess";
 import { fetchProfessorData } from "@/lib/professorData";
+import FeedbackLauncher from "@/components/feedback/FeedbackLauncher";
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 
 /**
@@ -259,6 +260,13 @@ const sidebarStyle: CSSProperties = {
   minHeight: 0,
 };
 
+/** 프로토타입 `.sidebar-footer` — margin-top:auto 로 바닥 고정 + 상단 구분선. */
+const sidebarFootStyle: CSSProperties = {
+  marginTop: "auto",
+  padding: "10px 12px 14px",
+  borderTop: "1px solid var(--line)",
+};
+
 const sectionHeaderStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
@@ -363,6 +371,14 @@ export default function ProfessorSidebar() {
           );
         })}
       </nav>
+
+      {/* 하단 유틸리티 슬롯 — 프로토타입 07·08 의 `.sidebar-footer` 구조.
+          `margin-top: auto` 로 바닥에 붙이고 구분선으로 내비게이션과 떼어 놓는다.
+          피드백은 **페이지가 아니라 동작**이라 위 8개 메뉴에 9번째로 끼우지 않는다
+          (스펙 13 §F — 결정 2026-07-27). */}
+      <div style={sidebarFootStyle}>
+        <FeedbackLauncher variant="sidebar" />
+      </div>
     </aside>
   );
 }

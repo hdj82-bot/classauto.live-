@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ProfessorAppShell from "@/components/professor/shell/AppShell";
+import { LectureProvider } from "@/contexts/LectureContext";
 
 /**
  * /professor/* layout — v2 디자인.
@@ -42,8 +43,11 @@ export default function ProfessorLayout({
     ? "hidden"
     : "auto";
 
+  // LectureProvider — 강의를 아는 화면(스튜디오 마법사)이 스스로 등록하면, 셸 어디에
+  // 놓인 피드백 진입점이든 그 강의를 제보에 붙일 수 있다(스펙 14 §D).
   return (
     <ProtectedRoute allowedRoles={["professor"]}>
+      <LectureProvider>
       <ProfessorAppShell
         variant={isFocused ? "focused" : "default"}
         mainScroll={mainScroll}
@@ -53,6 +57,7 @@ export default function ProfessorLayout({
       >
         {children}
       </ProfessorAppShell>
+      </LectureProvider>
     </ProtectedRoute>
   );
 }
